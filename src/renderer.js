@@ -29,7 +29,6 @@ export default class Renderer {
         this.showForce = false;
         this.showForceComponents = false;
         this.isLight = false;
-        this.spinAngle = 0;
         this.trailHistory = new Map();
     }
 
@@ -45,8 +44,6 @@ export default class Renderer {
     render(particles, dt = 0.016, camera) {
         const ctx = this.ctx;
         const isLight = this.isLight;
-
-        this.spinAngle += dt * 3;
 
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, this.width, this.height);
@@ -246,27 +243,29 @@ export default class Renderer {
         if (mag < 0.01) return;
 
         const dir = Math.sign(torque);
-        const scaled = Math.min(mag * 10, 50);
         const radius = p.radius + 8;
-        const arcLen = Math.min(0.3 + scaled * 0.04, Math.PI * 1.2);
-        const baseAngle = this.spinAngle * 0.5 + angleOffset;
+        const arcLen = Math.min(mag * 0.4, Math.PI * 2);
+        const startAngle = -HALF_PI + angleOffset;
+        const endAngle = startAngle - dir * arcLen;
 
         ctx.strokeStyle = color;
         ctx.lineWidth = 1.5 * invZoom;
         ctx.beginPath();
-        ctx.arc(p.pos.x, p.pos.y, radius, baseAngle, baseAngle + arcLen);
+        ctx.arc(p.pos.x, p.pos.y, radius, startAngle, endAngle, dir > 0);
         ctx.stroke();
 
-        // Arrowhead at arc tip
-        const endAngle = baseAngle + arcLen;
+        // Arrowhead extending past arc end in sweep direction
         const ax = p.pos.x + Math.cos(endAngle) * radius;
         const ay = p.pos.y + Math.sin(endAngle) * radius;
-        const arrowAngle = endAngle + (dir > 0 ? HALF_PI : -HALF_PI);
+        const sweepDir = endAngle - dir * HALF_PI;
         const h = 4 * invZoom;
+        const tipX = ax + Math.cos(sweepDir) * h;
+        const tipY = ay + Math.sin(sweepDir) * h;
+        const spread = h * 0.4;
         ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(ax + Math.cos(arrowAngle - 0.5) * h, ay + Math.sin(arrowAngle - 0.5) * h);
-        ctx.lineTo(ax + Math.cos(arrowAngle + 0.5) * h, ay + Math.sin(arrowAngle + 0.5) * h);
+        ctx.moveTo(tipX, tipY);
+        ctx.lineTo(ax + Math.cos(endAngle) * spread, ay + Math.sin(endAngle) * spread);
+        ctx.lineTo(ax - Math.cos(endAngle) * spread, ay - Math.sin(endAngle) * spread);
         ctx.closePath();
         ctx.fillStyle = color;
         ctx.fill();
@@ -310,11 +309,10 @@ export default class Renderer {
 
     drawSpinRing(ctx, p, isLight, blendMode) {
         ctx.shadowBlur = 0;
-        const spinDir = Math.sign(p.angVel);
-        const spinMag = Math.min(Math.abs(p.angVel), 50);
-        const ringRadius = p.radius + 3 + spinMag * 0.05;
-        const arcLen = Math.min(0.4 + spinMag * 0.03, Math.PI * 1.5);
-        const baseAngle = this.spinAngle * spinDir * (0.5 + spinMag * 0.05);
+        const dir = Math.sign(p.angVel);
+        // Surface velocity |ω·r| < c=1, so this naturally caps at 2π
+        const arcLen = Math.min(Math.abs(p.angVel) * p.radius * Math.PI * 2, Math.PI * 2);
+        const ringRadius = p.radius + 3;
         const colors = p.angVel > 0 ? _spinColors.pos : _spinColors.neg;
         const style = isLight ? colors.light : colors.dark;
 
@@ -323,23 +321,26 @@ export default class Renderer {
         ctx.fillStyle = style;
         ctx.lineWidth = 1.5;
 
-        for (let a = 0; a < 2; a++) {
-            const startAngle = baseAngle + a * Math.PI;
-            ctx.beginPath();
-            ctx.arc(p.pos.x, p.pos.y, ringRadius, startAngle, startAngle + arcLen);
-            ctx.stroke();
+        const startAngle = -HALF_PI;
+        const endAngle = startAngle - dir * arcLen;
+        ctx.beginPath();
+        ctx.arc(p.pos.x, p.pos.y, ringRadius, startAngle, endAngle, dir > 0);
+        ctx.stroke();
 
-            const endAngle = startAngle + arcLen;
-            const arrowX = p.pos.x + Math.cos(endAngle) * ringRadius;
-            const arrowY = p.pos.y + Math.sin(endAngle) * ringRadius;
-            const arrowAngle = endAngle + (spinDir > 0 ? HALF_PI : -HALF_PI);
-            ctx.beginPath();
-            ctx.moveTo(arrowX, arrowY);
-            ctx.lineTo(arrowX + Math.cos(arrowAngle - 0.5) * 4, arrowY + Math.sin(arrowAngle - 0.5) * 4);
-            ctx.lineTo(arrowX + Math.cos(arrowAngle + 0.5) * 4, arrowY + Math.sin(arrowAngle + 0.5) * 4);
-            ctx.closePath();
-            ctx.fill();
-        }
+        const ax = p.pos.x + Math.cos(endAngle) * ringRadius;
+        const ay = p.pos.y + Math.sin(endAngle) * ringRadius;
+        const sweepDir = endAngle - dir * HALF_PI;
+        const h = 4;
+        const tipX = ax + Math.cos(sweepDir) * h;
+        const tipY = ay + Math.sin(sweepDir) * h;
+        const spread = h * 0.4;
+        ctx.beginPath();
+        ctx.moveTo(tipX, tipY);
+        ctx.lineTo(ax + Math.cos(endAngle) * spread, ay + Math.sin(endAngle) * spread);
+        ctx.lineTo(ax - Math.cos(endAngle) * spread, ay - Math.sin(endAngle) * spread);
+        ctx.closePath();
+        ctx.fill();
+
         ctx.globalCompositeOperation = blendMode;
     }
 }

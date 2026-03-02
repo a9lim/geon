@@ -12,15 +12,16 @@ A high-performance, interactive physics simulation that models gravity, electrom
   - **Coulomb** — Electrostatic repulsion/attraction between charged particles
   - **Magnetic Dipole** — Interaction between spinning, charged particles
   - **Gravitomagnetic** — Relativistic correction coupling mass and angular momentum
-- **Barnes-Hut Optimization** — QuadTree spatial partitioning approximates long-range forces at O(N log N)
+- **Barnes-Hut Optimization** — QuadTree spatial partitioning approximates long-range forces at O(N log N). Toggleable — disable for exact O(N²) pairwise forces that preserve Newton's 3rd law exactly
 - **Interaction Modes** — Place (spawn at rest), Shoot (drag to set velocity), Orbit (auto-calculates circular orbit around nearest massive body)
-- **Collision Modes** — Pass-through, elastic bounce with spin-friction transfer, or merge (conserves mass/charge/momentum)
+- **Collision Modes** — Pass-through, elastic bounce with spin-friction transfer (configurable friction), or merge (conserves mass, charge, momentum, and angular momentum)
 - **Boundary Modes** — Despawn off-screen, toroidal wrap, or bounce off edges
 - **Presets** — Solar System, Binary Star, Galaxy, Collision, Magnetic Spin
 - **Visuals** — Particle trails, charge-based dynamic coloring, spin rings, additive glow in dark mode, light/dark theme toggle
 - **Velocity Verlet Integration** — Kick-drift-kick scheme for time-symmetric, energy-conserving integration
 - **Independent Force Toggles** — Enable/disable gravity, Coulomb, magnetic, gravitomagnetic, and relativity independently via sidebar switches
-- **Energy Conservation Display** — Real-time tracking of linear KE (relativistic or classical), rotational KE, gravitational and Coulomb PE, total energy, and drift percentage
+- **Energy Conservation Display** — Real-time tracking of linear KE (relativistic or classical), rotational KE (I=mr² thin shell), gravitational PE, Coulomb PE, magnetic and gravitomagnetic dipole PE, total energy, and drift percentage
+- **Conserved Quantities** — Real-time momentum (|Σmw|) and angular momentum (orbital + spin, computed about COM) tracking
 - **Force Component Vectors** — Per-force-type arrows (gravity, Coulomb, magnetic, gravitomagnetic) in distinct colors alongside net force and velocity vectors
 - **Particle Inspection** — Hover for compact tooltip (mass, charge, spin, speed); click to select and see live stats in sidebar (gamma, force breakdown)
 - **Keyboard Shortcuts** — Space (pause), R (reset), `.` (step), P (presets), 1-5 (load preset), V (velocity vectors), F (force vectors), T (theme), S (sidebar); press `?` for help overlay

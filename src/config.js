@@ -7,9 +7,6 @@ export const QUADTREE_CAPACITY = 4;
 // Force softening
 export const MIN_DIST_SQ = 25;
 
-// Collision
-export const BOUNCE_FRICTION = 0.4;
-
 // Boundary
 export const DESPAWN_MARGIN = 100;
 

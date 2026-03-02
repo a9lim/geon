@@ -19,15 +19,14 @@ export const PRESETS = {
         const dist = 100;
         const starMass = 50;
         const speed = Math.sqrt(starMass / (2 * dist));
-        const spin = 0.8 / Math.cbrt(starMass); // 80% of surface-velocity cap
-        sim.addParticle(cx - dist, cy, 0, speed, { mass: starMass, charge: 0, spin });
-        sim.addParticle(cx + dist, cy, 0, -speed, { mass: starMass, charge: 0, spin });
+        sim.addParticle(cx - dist, cy, 0, speed, { mass: starMass, charge: 0, spin: 0.8 });
+        sim.addParticle(cx + dist, cy, 0, -speed, { mass: starMass, charge: 0, spin: 0.8 });
     },
 
     galaxy(sim) {
         const cx = sim.width / 2, cy = sim.height / 2;
         const coreMass = 150;
-        sim.addParticle(cx, cy, 0, 0, { mass: coreMass, charge: 0, spin: 0.8 / Math.cbrt(coreMass) });
+        sim.addParticle(cx, cy, 0, 0, { mass: coreMass, charge: 0, spin: 0.8 });
         for (let i = 0; i < 200; i++) {
             const dist = 150 + Math.random() * 300;
             const angle = Math.random() * Math.PI * 2;
@@ -37,7 +36,7 @@ export const PRESETS = {
             sim.addParticle(cx + cos * dist, cy + sin * dist, -sin * speed, cos * speed, {
                 mass: m,
                 charge: (Math.random() - 0.5) * 5,
-                spin: (Math.random() - 0.5) * 1.5 / Math.cbrt(m)
+                spin: (Math.random() - 0.5) * 0.9
             });
         }
     },
@@ -61,7 +60,7 @@ export const PRESETS = {
                     cy + j * spacing + (Math.random() - 0.5) * 20,
                     (Math.random() - 0.5) * 0.1,
                     (Math.random() - 0.5) * 0.1,
-                    { mass: m, charge: 5 + Math.random() * 5, spin: 0.8 / Math.cbrt(m) }
+                    { mass: m, charge: 5 + Math.random() * 5, spin: 0.8 }
                 );
             }
         }

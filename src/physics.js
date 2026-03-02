@@ -1,6 +1,6 @@
 import Vec2 from './vec2.js';
 import QuadTree, { Rect } from './quadtree.js';
-import { BH_THETA, QUADTREE_CAPACITY, MIN_DIST_SQ, BOUNCE_FRICTION, DESPAWN_MARGIN } from './config.js';
+import { BH_THETA, QUADTREE_CAPACITY, MIN_DIST_SQ, DESPAWN_MARGIN } from './config.js';
 import { setVelocity, spinToAngVel } from './relativity.js';
 
 function setVelocityFromVel(p, vn, vt, nx, ny, tx, ty) {
@@ -18,6 +18,8 @@ export default class Physics {
         this.gravitomagEnabled = true;
         this.relativityEnabled = true;
         this.spinOrbitEnabled = true;
+        this.barnesHutEnabled = true;
+        this.bounceFriction = 0.4;
 
         // Accumulated potential energy (set during force calculation)
         this.potentialEnergy = 0;
@@ -41,21 +43,9 @@ export default class Physics {
             for (const p of particles) {
                 p.angVel = this.relativityEnabled ? spinToAngVel(p.spin, p.radius) : p.spin;
             }
-            const qt0 = new QuadTree(this.boundary, QUADTREE_CAPACITY);
-            for (const p of particles) qt0.insert(p);
-            qt0.calculateMassDistribution();
             this.potentialEnergy = 0;
-            for (const p of particles) {
-                p.force.set(0, 0);
-                p.forceGravity.set(0, 0);
-                p.forceCoulomb.set(0, 0);
-                p.forceMagnetic.set(0, 0);
-                p.forceGravitomag.set(0, 0);
-                p.torque = 0;
-                p.torqueMagnetic = 0;
-                p.torqueGravitomag = 0;
-                this.calculateForce(p, qt0, BH_THETA, p.force);
-            }
+            this._resetForces(particles);
+            this._computeAllForces(particles);
             this._forcesInit = true;
         }
 
@@ -93,17 +83,8 @@ export default class Physics {
 
         // Step 5: Calculate new forces and accumulate PE
         this.potentialEnergy = 0;
-        for (const p of particles) {
-            p.force.set(0, 0);
-            p.forceGravity.set(0, 0);
-            p.forceCoulomb.set(0, 0);
-            p.forceMagnetic.set(0, 0);
-            p.forceGravitomag.set(0, 0);
-            p.torque = 0;
-            p.torqueMagnetic = 0;
-            p.torqueGravitomag = 0;
-            this.calculateForce(p, qt, BH_THETA, p.force);
-        }
+        this._resetForces(particles);
+        this._computeAllForces(particles, qt);
 
         // Step 6: Half-kick with new forces
         for (let i = particles.length - 1; i >= 0; i--) {
@@ -149,6 +130,43 @@ export default class Physics {
         }
     }
 
+    _resetForces(particles) {
+        for (const p of particles) {
+            p.force.set(0, 0);
+            p.forceGravity.set(0, 0);
+            p.forceCoulomb.set(0, 0);
+            p.forceMagnetic.set(0, 0);
+            p.forceGravitomag.set(0, 0);
+            p.torque = 0;
+            p.torqueMagnetic = 0;
+            p.torqueGravitomag = 0;
+        }
+    }
+
+    _computeAllForces(particles, qt) {
+        if (this.barnesHutEnabled) {
+            if (!qt) {
+                qt = new QuadTree(this.boundary, QUADTREE_CAPACITY);
+                for (const p of particles) qt.insert(p);
+                qt.calculateMassDistribution();
+            }
+            for (const p of particles) {
+                this.calculateForce(p, qt, BH_THETA, p.force);
+            }
+        } else {
+            for (let i = 0; i < particles.length; i++) {
+                const p = particles[i];
+                for (let j = 0; j < particles.length; j++) {
+                    if (i === j) continue;
+                    const o = particles[j];
+                    this._pairForce(p, o.pos.x, o.pos.y, o.vel.x, o.vel.y,
+                        o.mass, o.charge, o.angVel,
+                        o.charge * o.angVel, o.mass * o.angVel, p.force);
+                }
+            }
+        }
+    }
+
     handleCollisions(particles, qt, mode) {
         for (const p1 of particles) {
             if (p1.mass === 0) continue;
@@ -185,18 +203,28 @@ export default class Physics {
 
     resolveMerge(p1, p2) {
         const totalMass = p1.mass + p2.mass;
-        // Conserve momentum: p = m*w, so w_new = (m1*w1 + m2*w2) / totalMass
+        // Conserve linear momentum: p = m*w, so w_new = (m1*w1 + m2*w2) / totalMass
         const newWx = (p1.mass * p1.w.x + p2.mass * p2.w.x) / totalMass;
         const newWy = (p1.mass * p1.w.y + p2.mass * p2.w.y) / totalMass;
         const newX = (p1.pos.x * p1.mass + p2.pos.x * p2.mass) / totalMass;
         const newY = (p1.pos.y * p1.mass + p2.pos.y * p2.mass) / totalMass;
 
+        // Conserve angular momentum: orbital(about pair COM) + spin → merged spin
+        const dx1 = p1.pos.x - newX, dy1 = p1.pos.y - newY;
+        const dx2 = p2.pos.x - newX, dy2 = p2.pos.y - newY;
+        const Lorb = dx1 * (p1.mass * p1.w.y) - dy1 * (p1.mass * p1.w.x)
+                   + dx2 * (p2.mass * p2.w.y) - dy2 * (p2.mass * p2.w.x);
+        const Lspin = p1.mass * p1.radius * p1.radius * p1.spin
+                    + p2.mass * p2.radius * p2.radius * p2.spin;
+
         p1.mass = totalMass;
         p1.charge = p1.charge + p2.charge;
-        p1.spin = p1.spin + p2.spin;
         p1.w.set(newWx, newWy);
         p1.pos.set(newX, newY);
-        p1.updateColor();
+        p1.updateColor(); // updates radius = cbrt(totalMass)
+
+        const newI = totalMass * p1.radius * p1.radius;
+        p1.spin = (Lorb + Lspin) / newI;
         p1.angVel = this.relativityEnabled ? spinToAngVel(p1.spin, p1.radius) : p1.spin;
 
         // Re-derive velocity from proper velocity
@@ -239,7 +267,7 @@ export default class Physics {
         const surfaceV1 = v1t + p1.angVel * p1.radius;
         const surfaceV2 = v2t - p2.angVel * p2.radius;
         const effectiveMass = (m1 * m2) / mSum;
-        const tangentialImpulse = BOUNCE_FRICTION * (surfaceV1 - surfaceV2) * effectiveMass;
+        const tangentialImpulse = this.bounceFriction * (surfaceV1 - surfaceV2) * effectiveMass;
 
         const v1tFinal = v1t - tangentialImpulse / m1;
         const v2tFinal = v2t + tangentialImpulse / m2;
@@ -332,6 +360,8 @@ export default class Physics {
             out.y += ry * fDir;
             p.forceMagnetic.x += rx * fDir;
             p.forceMagnetic.y += ry * fDir;
+            // Magnetic dipole PE: -(q₁ω₁)(q₂ω₂) / (3r³)
+            this.potentialEnergy -= (p.charge * p.angVel * sMagMoment) * invR * invRSq / 3 * 0.5;
 
             // Lorentz force: F = q_test × v_test × B, where B_z = q_s * crossSV / r³
             const Bz = sCharge * crossSV * invR * invRSq;
@@ -357,6 +387,8 @@ export default class Physics {
             out.y += ry * fDir;
             p.forceGravitomag.x += rx * fDir;
             p.forceGravitomag.y += ry * fDir;
+            // Gravitomagnetic dipole PE: (m₁ω₁)(m₂ω₂) / (3r³)
+            this.potentialEnergy += (p.mass * p.angVel * sAngMomentum) * invR * invRSq / 3 * 0.5;
 
             // Linear gravitomagnetism: opposite sign (co-moving repels)
             const Bgz = sMass * crossSV * invR * invRSq;
