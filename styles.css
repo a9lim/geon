@@ -82,8 +82,7 @@ body {
 #control-panel {
     top: calc(var(--inset) + var(--toolbar-h) + var(--inset));
     right: var(--inset);
-    bottom: auto;
-    max-height: calc(100dvh - var(--toolbar-h) - var(--inset) * 3);
+    bottom: var(--inset);
     max-width: calc(100vw - var(--inset) * 2);
     pointer-events: none;
 }

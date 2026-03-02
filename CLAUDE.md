@@ -48,8 +48,8 @@ index.html
 - **Proper velocity integration**: Physics uses proper velocity `w = γv` (celerity) as the primary linear state variable. Velocity is derived via `v = w / √(1 + w²)`, naturally enforcing the speed-of-light limit without mass in the derivation. Kicks use `Δw = F/m · Δt`. In the classical limit (`w ≈ v`), the derivation becomes identity. Spin uses the same pattern: `p.spin` stores proper angular velocity (unbounded), angular velocity is derived via `angVel = spin / √(1 + spin² · radius²)`, naturally capping surface velocity at c.
 - **Velocity Verlet integration**: Kick-drift-kick scheme for time-symmetric, energy-conserving integration. Each step: half-kick proper velocity (old forces, F/m) → drift position → recalculate forces → half-kick proper velocity (new forces). Stored forces in `particle.force` Vec2. Lorentz factor computed as `γ = √(1 + w²)` — no NaN risk unlike `1/√(1-v²)`.
 - **Force gating**: Each force type (gravity, Coulomb, magnetic, gravitomagnetic, spin-orbit) can be independently toggled via `Physics` boolean flags. Magnetic toggle gates both dipole and Lorentz forces; gravitomagnetic toggle gates both dipole and linear GM forces. Relativity toggle switches between relativistic (`1/√(1+w²)`/`spinToAngVel`) and classical (identity) proper-velocity-to-velocity and spin-to-angVel conversion.
-- **Barnes-Hut approximation**: QuadTree stores aggregate mass, charge, angular velocity (magnetic moment, angular momentum), momentum, and center-of-mass per node. `BH_THETA` (0.5) controls accuracy vs. performance tradeoff. Aggregate nodes use average velocity (`totalMomentum/totalMass`) for velocity-dependent forces.
-- **Softening parameter**: `MIN_DIST_SQ` (25) prevents force singularities at close range. Other named constants: `BOUNCE_FRICTION` (0.4), `DESPAWN_MARGIN` (100).
+- **Barnes-Hut approximation**: Toggleable via `barnesHutEnabled` (default on). QuadTree stores aggregate mass, charge, angular velocity (magnetic moment, angular momentum), momentum, and center-of-mass per node. `BH_THETA` (0.5) controls accuracy vs. performance tradeoff. Aggregate nodes use average velocity (`totalMomentum/totalMass`) for velocity-dependent forces. When off, computes exact O(N²) pairwise forces — preserves Newton's 3rd law exactly, improving conservation of momentum and angular momentum.
+- **Softening parameter**: `MIN_DIST_SQ` (25) prevents force singularities at close range. Other named constants: `DESPAWN_MARGIN` (100). Bounce friction (`Physics.bounceFriction`, default 0.4) is an instance property adjustable via sidebar slider.
 - **Zoom range**: Clamped to 1x–3x in all input paths (mouse wheel, pinch-to-zoom, and zoom buttons).
 - **Minimal global state**: The `Simulation` instance owns all runtime state (`window.sim` for console debugging). Design tokens (`window._PALETTE`, `window._FONT`, `window._r`) are frozen globals set by `colors.js` and consumed by ES modules via `window._PALETTE`.
 
@@ -67,7 +67,11 @@ index.html
 
 ### Energy Conservation
 
-Energy stats computed per frame: linear KE (relativistic `(γ-1)mc²` or classical `½mv²`), rotational KE (`½m·spin²`), gravitational PE (`-Gm₁m₂/r`), Coulomb PE (`kq₁q₂/r`). Total energy and drift percentage displayed in sidebar.
+Energy stats computed per frame: linear KE (relativistic `(γ-1)mc²` or classical `½mv²`), rotational KE (relativistic `(√(1+S²r²)-1)·m` or classical `½mr²ω²`, using moment of inertia I=mr² consistent with thin shell), gravitational PE (`-Gm₁m₂/r`), Coulomb PE (`kq₁q₂/r`), magnetic dipole PE (`-(q₁ω₁)(q₂ω₂)/(3r³)`), gravitomagnetic dipole PE (`+(m₁ω₁)(m₂ω₂)/(3r³)`). Total energy and drift percentage displayed in sidebar.
+
+### Conserved Quantities
+
+Momentum and angular momentum stats computed per frame. Momentum is `|Σ(mᵢwᵢ)|` (magnitude of total relativistic proper momentum). Angular momentum is computed about the center of mass: orbital `Σ(rᵢ × mᵢwᵢ)` plus spin `Σ(mᵢrᵢ²Sᵢ)`. Both are conserved in closed systems with no external forces. Turning off Barnes-Hut improves conservation by ensuring exact Newton's 3rd law symmetry.
 
 ### Force Types
 
@@ -87,7 +91,7 @@ Six force components per particle pair, organized under five toggles:
 
 ### Collision Modes
 
-Three modes in physics.js: `pass` (no-op), `merge` (conserves mass/charge/momentum), `bounce` (elastic with spin-friction transfer, friction coefficient 0.4).
+Three modes in physics.js: `pass` (no-op), `merge` (conserves mass, charge, momentum, and angular momentum — orbital angular momentum about the pair's COM plus spin angular momentum maps to merged particle's spin via I=mr²), `bounce` (elastic with spin-friction transfer, configurable friction coefficient via `Physics.bounceFriction` slider).
 
 ### Input Modes
 
@@ -138,7 +142,7 @@ JS modules alias as `const _PAL = window._PALETTE`.
 ### Keyboard Shortcuts & Info Tips
 
 - **Shortcuts** via `initShortcuts()` from `shared-shortcuts.js`: Space (pause), R (reset), `.` (step), P (presets), 1-5 (load preset), V (velocity vectors), F (force vectors), C (force components), T (theme), S (sidebar), O (spin-orbit toggle), Esc (close/deselect).
-- **Info tips** via `createInfoTip()` from `shared-info.js`: `?` buttons next to Energy, Particle Properties, each force toggle, Interaction mode, Collision mode, Boundary mode. Data defined inline in `ui.js`.
+- **Info tips** via `createInfoTip()` from `shared-info.js`: `?` buttons next to Energy, Conserved Quantities, Particle Properties (spin), each force toggle (gravity, Coulomb, magnetic, gravitomagnetic, spin-orbit, Barnes-Hut), Interaction mode, Collision mode, Boundary mode. Data defined inline in `ui.js`.
 
 ### CSS Patterns
 

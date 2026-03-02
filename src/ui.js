@@ -105,6 +105,7 @@ export function setupUI(sim) {
         { id: 'gravitomag-toggle', prop: 'gravitomagEnabled' },
         { id: 'relativity-toggle', prop: 'relativityEnabled' },
         { id: 'spinorbit-toggle', prop: 'spinOrbitEnabled' },
+        { id: 'barneshut-toggle', prop: 'barnesHutEnabled' },
     ];
     forceToggles.forEach(({ id, prop }) => {
         const el = document.getElementById(id);
@@ -135,10 +136,16 @@ export function setupUI(sim) {
     const chargeLabel = document.getElementById('chargeValue');
     const spinSlider = document.getElementById('spinInput');
     const spinLabel = document.getElementById('spinValue');
+    const frictionSlider = document.getElementById('frictionInput');
+    const frictionLabel = document.getElementById('frictionValue');
 
     massSlider.addEventListener('input', () => { massLabel.textContent = massSlider.value; });
     chargeSlider.addEventListener('input', () => { chargeLabel.textContent = chargeSlider.value; });
-    spinSlider.addEventListener('input', () => { spinLabel.textContent = parseFloat(spinSlider.value).toFixed(2); });
+    spinSlider.addEventListener('input', () => { spinLabel.textContent = parseFloat(spinSlider.value).toFixed(2) + 'c'; });
+    frictionSlider.addEventListener('input', () => {
+        sim.physics.bounceFriction = parseFloat(frictionSlider.value);
+        frictionLabel.textContent = parseFloat(frictionSlider.value).toFixed(2);
+    });
 
     sim.dom.speedInput.addEventListener('input', () => {
         const val = parseFloat(sim.dom.speedInput.value);
@@ -239,7 +246,8 @@ export function setupUI(sim) {
 
     // ─── Info tips ───
     const infoData = {
-        energy: { title: 'Energy Conservation', body: 'Total energy should remain constant in a closed system. Drift indicates numerical integration error.' },
+        energy: { title: 'Energy Conservation', body: 'Total energy should remain constant in a closed system. Drift indicates numerical integration error. Rotational KE uses I = mr\u00B2 (thin shell).' },
+        conserved: { title: 'Conserved Quantities', body: 'Momentum is the magnitude of total relativistic momentum \u03A3(m\u1D62w\u1D62). Angular momentum is computed about the center of mass: orbital \u03A3(r\u1D62 \u00D7 m\u1D62w\u1D62) plus spin \u03A3(m\u1D62r\u1D62\u00B2S\u1D62). Both are conserved in closed systems with no external forces.' },
         spin: { title: 'Spin', body: 'Intrinsic spin of the particle. Affects magnetic and gravitomagnetic forces. Evolves via spin-orbit coupling when enabled. Positive = counter-clockwise, negative = clockwise.' },
         gravity: { title: 'Gravity', body: 'Attractive force between all massive particles. Proportional to m\u2081m\u2082/r\u00B2. In natural units, G=1.' },
         coulomb: { title: 'Coulomb Force', body: 'Electric force between charged particles. Like charges repel, opposites attract. Proportional to q\u2081q\u2082/r\u00B2.' },
@@ -248,6 +256,7 @@ export function setupUI(sim) {
         spinorbit: { title: 'Spin-Orbit Coupling', body: 'Magnetic and gravitomagnetic fields from moving sources exert torques on particle spin. Enables spin evolution: d(spin)/dt = (q/m)\u00B7B from EM fields, minus Bg from gravitomagnetic fields.' },
         relativity: { title: 'Relativity', body: 'When enabled, uses proper velocity (w = \u03B3v) and derives v = w/\u221A(1+w\u00B2), naturally enforcing the speed-of-light limit. When off, v = w (classical Newtonian mechanics).' },
         interaction: { title: 'Interaction Modes', body: '<b>Place</b> \u2014 spawn a particle at rest.<br><b>Shoot</b> \u2014 drag to set velocity (drag distance \u00D7 0.1).<br><b>Orbit</b> \u2014 spawn in circular orbit around the nearest massive body.' },
+        barneshut: { title: 'Barnes-Hut Approximation', body: 'When on, uses a quadtree to approximate distant particle groups as single bodies (O(N log N)). When off, computes exact pairwise forces (O(N\u00B2)) \u2014 slower but preserves Newton\u2019s third law exactly, improving conservation of momentum and angular momentum.' },
         collision: { title: 'Collision Modes', body: '<b>Pass</b> \u2014 particles pass through each other.<br><b>Bounce</b> \u2014 elastic collision with spin-friction transfer.<br><b>Merge</b> \u2014 particles combine, conserving mass, charge, and momentum.' },
         boundary: { title: 'Boundary Modes', body: '<b>Despawn</b> \u2014 particles are removed when they leave the viewport.<br><b>Loop</b> \u2014 particles wrap around to the opposite side.<br><b>Bounce</b> \u2014 particles reflect off the viewport edges.' },
     };
