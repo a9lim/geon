@@ -758,21 +758,36 @@ export default class Physics {
         for (const p of particles) {
             if (p.mass < MIN_FRAGMENT_MASS * FRAGMENT_COUNT) continue;
 
-            // Find strongest gravitational neighbor
+            const rSq = p.radius * p.radius;
+
+            // Self-gravity binding force at surface: F_bind = m / r²
+            const selfGravity = p.mass / rSq;
+
+            // Per-particle self-disruption forces (no neighbor needed)
+            // Centrifugal: F = ω² · r
+            const centrifugal = p.angVel * p.angVel * p.radius;
+            // Coulomb self-repulsion: uniform charge sphere surface field
+            // F = q² / (4·r²) in natural units (k=1)
+            const coulombSelf = (p.charge * p.charge) / (4 * rSq);
+
+            if (centrifugal + coulombSelf > selfGravity) {
+                fragments.push(p);
+                continue;
+            }
+
+            // Tidal stretching from nearby bodies
             let maxTidal = 0;
             for (const other of particles) {
                 if (other === p) continue;
                 const dx = other.pos.x - p.pos.x, dy = other.pos.y - p.pos.y;
-                const rSq = dx * dx + dy * dy;
-                const r = Math.sqrt(rSq);
-                const tidalAccel = TIDAL_STRENGTH * other.mass * p.radius / (r * rSq);
+                const distSq = dx * dx + dy * dy;
+                const r = Math.sqrt(distSq);
+                const tidalAccel = TIDAL_STRENGTH * other.mass * p.radius / (r * distSq);
                 if (tidalAccel > maxTidal) maxTidal = tidalAccel;
             }
 
-            // Self-gravity at surface: g_self = m / r²
-            const selfGravity = p.mass / (p.radius * p.radius);
-
-            if (maxTidal > selfGravity) {
+            // Combined: all outward forces vs binding
+            if (maxTidal + centrifugal + coulombSelf > selfGravity) {
                 fragments.push(p);
             }
         }
