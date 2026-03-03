@@ -1,6 +1,6 @@
 import Vec2 from './vec2.js';
 import QuadTree, { Rect } from './quadtree.js';
-import { BH_THETA, QUADTREE_CAPACITY, SOFTENING_SQ, SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, LARMOR_K, RADIATION_THRESHOLD, MAX_PHOTONS, TIDAL_STRENGTH, MIN_FRAGMENT_MASS, FRAGMENT_COUNT, HISTORY_SIZE } from './config.js';
+import { BH_THETA, QUADTREE_CAPACITY, SOFTENING_SQ, SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, LARMOR_K, RADIATION_THRESHOLD, MAX_PHOTONS, LL_FORCE_CLAMP, TIDAL_STRENGTH, MIN_FRAGMENT_MASS, FRAGMENT_COUNT, HISTORY_SIZE } from './config.js';
 import Photon from './photon.js';
 import { setVelocity, spinToAngVel } from './relativity.js';
 
@@ -143,58 +143,92 @@ export default class Physics {
                 }
             }
 
-            // Larmor radiation: accelerating charges radiate energy
+            // Abraham-Lorentz radiation reaction via Landau-Lifshitz approximation
+            // Replaces direct KE drain with a proper force: jerk + Schott damping terms
             if (this.radiationEnabled && this.sim) {
                 for (let i = 0; i < n; i++) {
                     const p = particles[i];
                     if (Math.abs(p.charge) < 1e-10) continue;
-                    const ax = p.force.x / p.mass;
-                    const ay = p.force.y / p.mass;
-                    const aSq = ax * ax + ay * ay;
-                    if (aSq < 1e-20) continue;
-                    const gamma = relOn ? Math.sqrt(1 + p.w.x * p.w.x + p.w.y * p.w.y) : 1;
-                    const P = LARMOR_K * p.charge * p.charge * aSq;
-                    const dE = relOn ? P * dtSub / (gamma * gamma * gamma) : P * dtSub;
 
-                    if (dE > 0) {
-                        // Reduce |w| to drain kinetic energy
-                        const wMag = Math.sqrt(p.w.x * p.w.x + p.w.y * p.w.y);
-                        if (wMag > 1e-10) {
-                            if (relOn) {
-                                const KE = (gamma - 1) * p.mass;
-                                const newKE = Math.max(0, KE - dE);
-                                const newGamma = newKE / p.mass + 1;
-                                const newWSq = newGamma * newGamma - 1;
-                                const newWMag = Math.sqrt(Math.max(0, newWSq));
-                                const scale = newWMag / wMag;
-                                p.w.x *= scale;
-                                p.w.y *= scale;
-                            } else {
-                                // Classical: KE = ½mv², reduce speed
-                                const speedSq = p.vel.x * p.vel.x + p.vel.y * p.vel.y;
-                                const KE = 0.5 * p.mass * speedSq;
-                                const newKE = Math.max(0, KE - dE);
-                                const newSpeed = Math.sqrt(2 * newKE / p.mass);
-                                const speed = Math.sqrt(speedSq);
-                                if (speed > 1e-10) {
-                                    const scale = newSpeed / speed;
-                                    p.w.x *= scale;
-                                    p.w.y *= scale;
-                                }
-                            }
-                        }
-                        this.sim.totalRadiated += dE;
-
-                        // Spawn photon if energy exceeds threshold
-                        if (dE > RADIATION_THRESHOLD && this.sim.photons.length < MAX_PHOTONS) {
-                            const angle = Math.atan2(ay, ax) + Math.PI + (Math.random() - 0.5) * 1.0;
-                            this.sim.photons.push(new Photon(
-                                p.pos.x, p.pos.y,
-                                Math.cos(angle), Math.sin(angle),
-                                dE
-                            ));
-                        }
+                    const wMagSq = p.w.x * p.w.x + p.w.y * p.w.y;
+                    if (wMagSq < 1e-20) {
+                        p.prevForce.x = p.force.x;
+                        p.prevForce.y = p.force.y;
+                        continue;
                     }
+
+                    const gamma = relOn ? Math.sqrt(1 + wMagSq) : 1;
+                    const qSq = p.charge * p.charge;
+                    const tau = 2 * LARMOR_K * qSq / p.mass;
+
+                    // Jerk term: τ · dF/dt ≈ τ · (F - F_prev) / dt
+                    const invDt = 1 / dtSub;
+                    const jerkX = (p.force.x - p.prevForce.x) * invDt;
+                    const jerkY = (p.force.y - p.prevForce.y) * invDt;
+
+                    // Schott damping term: τ · |F|² · v / m
+                    const Fsq = p.force.x * p.force.x + p.force.y * p.force.y;
+                    const schottScale = Fsq / p.mass;
+                    const schottX = schottScale * p.vel.x;
+                    const schottY = schottScale * p.vel.y;
+
+                    // Total LL radiation reaction force
+                    let fRadX = tau * (jerkX + schottX);
+                    let fRadY = tau * (jerkY + schottY);
+
+                    // Relativistic correction: divide by γ³
+                    if (relOn && gamma > 1) {
+                        const invG3 = 1 / (gamma * gamma * gamma);
+                        fRadX *= invG3;
+                        fRadY *= invG3;
+                    }
+
+                    // Clamp to prevent instability: |F_rad · dt / m| ≤ LL_FORCE_CLAMP · |w|
+                    const impulseX = fRadX * dtSub / p.mass;
+                    const impulseY = fRadY * dtSub / p.mass;
+                    const impulseMag = Math.sqrt(impulseX * impulseX + impulseY * impulseY);
+                    const wMag = Math.sqrt(wMagSq);
+                    const maxImpulse = LL_FORCE_CLAMP * wMag;
+
+                    if (impulseMag > maxImpulse && impulseMag > 1e-20) {
+                        const scale = maxImpulse / impulseMag;
+                        fRadX *= scale;
+                        fRadY *= scale;
+                    }
+
+                    // Measure KE before applying
+                    const keBefore = relOn ? (gamma - 1) * p.mass : 0.5 * p.mass * (p.vel.x * p.vel.x + p.vel.y * p.vel.y);
+
+                    // Apply as kick to proper velocity
+                    p.w.x += fRadX * dtSub / p.mass;
+                    p.w.y += fRadY * dtSub / p.mass;
+
+                    // NaN guard
+                    if (isNaN(p.w.x) || isNaN(p.w.y)) {
+                        p.w.x = 0; p.w.y = 0;
+                    }
+
+                    // Measure KE after for energy tracking
+                    const wMagSqAfter = p.w.x * p.w.x + p.w.y * p.w.y;
+                    const gammaAfter = relOn ? Math.sqrt(1 + wMagSqAfter) : 1;
+                    const keAfter = relOn ? (gammaAfter - 1) * p.mass : 0.5 * p.mass * wMagSqAfter / (gammaAfter * gammaAfter);
+                    const dE = Math.max(0, keBefore - keAfter);
+                    this.sim.totalRadiated += dE;
+
+                    // Spawn photon if energy exceeds threshold
+                    if (dE > RADIATION_THRESHOLD && this.sim.photons.length < MAX_PHOTONS) {
+                        const ax = p.force.x / p.mass, ay = p.force.y / p.mass;
+                        const angle = Math.atan2(ay, ax) + Math.PI + (Math.random() - 0.5) * 1.0;
+                        this.sim.photons.push(new Photon(
+                            p.pos.x, p.pos.y,
+                            Math.cos(angle), Math.sin(angle),
+                            dE
+                        ));
+                    }
+
+                    // Store force for next step's jerk computation
+                    p.prevForce.x = p.force.x;
+                    p.prevForce.y = p.force.y;
                 }
             }
 
