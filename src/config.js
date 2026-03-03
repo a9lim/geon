@@ -37,6 +37,7 @@ export const LARMOR_K = 1 / (6 * Math.PI); // q²a²/(6π) in natural units (c=G
 export const PHOTON_LIFETIME = 300;          // frames before despawn
 export const RADIATION_THRESHOLD = 0.01;     // min energy per frame to emit visible photon
 export const MAX_PHOTONS = 500;              // photon pool cap
+export const LL_FORCE_CLAMP = 0.5;           // max |F_rad·dt/m| as fraction of |w|
 
 // Retarded potentials
 export const HISTORY_SIZE = 512;    // circular buffer capacity per particle

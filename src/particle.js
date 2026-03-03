@@ -12,6 +12,7 @@ export default class Particle {
         this.vel = new Vec2(0, 0);
         this.w = new Vec2(0, 0);    // proper velocity (γv, unbounded state variable)
         this.force = new Vec2(0, 0);
+        this.prevForce = new Vec2(0, 0);
         this.forceGravity = new Vec2(0, 0);
         this.forceCoulomb = new Vec2(0, 0);
         this.forceMagnetic = new Vec2(0, 0);
