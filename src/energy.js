@@ -94,8 +94,8 @@ export function computeEnergies(particles, physics, sim) {
                     const mmInvR = pi.mass * pj.mass * invR;
                     fieldEnergy += 0.5 * mmInvR * velTerm;
                     const coeff = mmInvR * 0.5;
-                    fieldPx += coeff * (svx + rx * svDotR);
-                    fieldPy += coeff * (svy + ry * svDotR);
+                    fieldPx -= coeff * (svx + rx * svDotR);
+                    fieldPy -= coeff * (svy + ry * svDotR);
                 }
             }
         }
