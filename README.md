@@ -27,7 +27,7 @@ Natural units throughout: *c* = 1, *G* = 1.
 
 ### Additional effects
 
-- **Signal delay** — Forces use source positions from the light cone, solved via Newton-Raphson on per-particle history buffers. Pairwise mode only.
+- **Signal delay** — Forces use source positions from the light cone (three-phase solver: Newton-Raphson segment search, exact quadratic solve, constant-velocity extrapolation beyond the buffer). Pairwise mode only.
 - **Spin-orbit coupling** — Energy transfer between translational and rotational KE via field gradients.
 - **Tidal breakup** — Roche-limit fragmentation when tidal + centrifugal + Coulomb self-stress exceeds self-gravity.
 - **Radiation** — Accelerating charges emit photons (Larmor dipole pattern with relativistic aberration). Photons carry energy and momentum, and are absorbed on contact.
