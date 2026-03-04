@@ -1,6 +1,9 @@
 // ─── Potential Energy Computation ───
 
 import { BH_THETA, SOFTENING_SQ, INERTIA_K, MAG_MOMENT_K } from './config.js';
+import { TORUS, minImage } from './topology.js';
+
+const _miOut = { x: 0, y: 0 };
 
 /**
  * Compute total potential energy using same tree/pairwise method as forces.
@@ -15,12 +18,14 @@ import { BH_THETA, SOFTENING_SQ, INERTIA_K, MAG_MOMENT_K } from './config.js';
  * @param {number} bhTheta - Barnes-Hut opening angle (typically BH_THETA)
  * @returns {number} Total potential energy
  */
-export function computePE(particles, toggles, pool, root, barnesHutEnabled, bhTheta) {
+export function computePE(particles, toggles, pool, root, barnesHutEnabled, bhTheta, periodic, domW, domH, topology = TORUS) {
     let pe = 0;
+    const halfDomW = domW * 0.5;
+    const halfDomH = domH * 0.5;
 
     if (barnesHutEnabled && root >= 0) {
         for (const p of particles) {
-            pe += treePE(p, pool, root, bhTheta, toggles);
+            pe += treePE(p, pool, root, bhTheta, toggles, periodic, domW, domH, halfDomW, halfDomH, topology);
         }
         pe *= 0.5; // Each pair counted from both sides
     } else {
@@ -32,7 +37,8 @@ export function computePE(particles, toggles, pool, root, barnesHutEnabled, bhTh
                 pe += pairPE(p, o.pos.x, o.pos.y, o.vel.x, o.vel.y,
                     o.mass, o.charge, o.angVel,
                     MAG_MOMENT_K * o.charge * o.angVel * oRSq,
-                    INERTIA_K * o.mass * o.angVel * oRSq, toggles);
+                    INERTIA_K * o.mass * o.angVel * oRSq, toggles,
+                    periodic, domW, domH, halfDomW, halfDomH, topology);
             }
         }
     }
@@ -49,11 +55,17 @@ export function computePE(particles, toggles, pool, root, barnesHutEnabled, bhTh
  * @param {Object} toggles - { gravityEnabled, coulombEnabled, magneticEnabled, gravitomagEnabled }
  * @returns {number} PE contribution
  */
-export function treePE(particle, pool, nodeIdx, theta, toggles) {
+export function treePE(particle, pool, nodeIdx, theta, toggles, periodic, domW, domH, halfDomW, halfDomH, topology = TORUS) {
     if (pool.totalMass[nodeIdx] === 0) return 0;
 
-    const dx = pool.comX[nodeIdx] - particle.pos.x;
-    const dy = pool.comY[nodeIdx] - particle.pos.y;
+    let dx, dy;
+    if (periodic) {
+        minImage(particle.pos.x, particle.pos.y, pool.comX[nodeIdx], pool.comY[nodeIdx], topology, domW, domH, halfDomW, halfDomH, _miOut);
+        dx = _miOut.x; dy = _miOut.y;
+    } else {
+        dx = pool.comX[nodeIdx] - particle.pos.x;
+        dy = pool.comY[nodeIdx] - particle.pos.y;
+    }
     const dSq = dx * dx + dy * dy;
     const d = Math.sqrt(dSq);
     const size = pool.bw[nodeIdx] * 2;
@@ -65,11 +77,13 @@ export function treePE(particle, pool, nodeIdx, theta, toggles) {
             for (let i = 0; i < pool.pointCount[nodeIdx]; i++) {
                 const other = pool.points[base + i];
                 if (other === particle) continue;
+                if (other.isGhost && other.original === particle) continue;
                 const oRSq = other.radius * other.radius;
                 pe += pairPE(particle, other.pos.x, other.pos.y, other.vel.x, other.vel.y,
                     other.mass, other.charge, other.angVel,
                     MAG_MOMENT_K * other.charge * other.angVel * oRSq,
-                    INERTIA_K * other.mass * other.angVel * oRSq, toggles);
+                    INERTIA_K * other.mass * other.angVel * oRSq, toggles,
+                    periodic, domW, domH, halfDomW, halfDomH, topology);
             }
             return pe;
         } else {
@@ -78,13 +92,14 @@ export function treePE(particle, pool, nodeIdx, theta, toggles) {
             const avgVy = nodeMass > 0 ? pool.totalMomentumY[nodeIdx] / nodeMass : 0;
             return pairPE(particle, pool.comX[nodeIdx], pool.comY[nodeIdx], avgVx, avgVy,
                 nodeMass, pool.totalCharge[nodeIdx], 0,
-                pool.totalMagneticMoment[nodeIdx], pool.totalAngularMomentum[nodeIdx], toggles);
+                pool.totalMagneticMoment[nodeIdx], pool.totalAngularMomentum[nodeIdx], toggles,
+                periodic, domW, domH, halfDomW, halfDomH, topology);
         }
     } else if (pool.divided[nodeIdx]) {
-        return treePE(particle, pool, pool.nw[nodeIdx], theta, toggles)
-            + treePE(particle, pool, pool.ne[nodeIdx], theta, toggles)
-            + treePE(particle, pool, pool.sw[nodeIdx], theta, toggles)
-            + treePE(particle, pool, pool.se[nodeIdx], theta, toggles);
+        return treePE(particle, pool, pool.nw[nodeIdx], theta, toggles, periodic, domW, domH, halfDomW, halfDomH, topology)
+            + treePE(particle, pool, pool.ne[nodeIdx], theta, toggles, periodic, domW, domH, halfDomW, halfDomH, topology)
+            + treePE(particle, pool, pool.sw[nodeIdx], theta, toggles, periodic, domW, domH, halfDomW, halfDomH, topology)
+            + treePE(particle, pool, pool.se[nodeIdx], theta, toggles, periodic, domW, domH, halfDomW, halfDomH, topology);
     }
     return 0;
 }
@@ -104,9 +119,14 @@ export function treePE(particle, pool, nodeIdx, theta, toggles) {
  * @param {Object} toggles - { gravityEnabled, coulombEnabled, magneticEnabled, gravitomagEnabled }
  * @returns {number} PE contribution
  */
-export function pairPE(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMoment, sAngMomentum, toggles) {
-    const rx = sx - p.pos.x;
-    const ry = sy - p.pos.y;
+export function pairPE(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMoment, sAngMomentum, toggles, periodic, domW, domH, halfDomW, halfDomH, topology = TORUS) {
+    let rx, ry;
+    if (periodic) {
+        minImage(p.pos.x, p.pos.y, sx, sy, topology, domW, domH, halfDomW, halfDomH, _miOut);
+        rx = _miOut.x; ry = _miOut.y;
+    } else {
+        rx = sx - p.pos.x; ry = sy - p.pos.y;
+    }
     const rSq = rx * rx + ry * ry + SOFTENING_SQ;
     const r = Math.sqrt(rSq);
     const invR = 1 / r;

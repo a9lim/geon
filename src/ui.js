@@ -99,7 +99,11 @@ export function setupUI(sim) {
     };
 
     bindToggleGroup('collision-toggles', 'collision', (v) => { sim.collisionMode = v; });
-    bindToggleGroup('boundary-toggles', 'boundary', (v) => { sim.boundaryMode = v; });
+    bindToggleGroup('boundary-toggles', 'boundary', (v) => {
+        sim.boundaryMode = v;
+        document.getElementById('topology-group').style.display = v === 'loop' ? '' : 'none';
+    });
+    bindToggleGroup('topology-toggles', 'topology', (v) => { sim.topology = v; });
     bindToggleGroup('interaction-toggles', 'mode', (v) => { sim.input.mode = v; });
 
     // ─── Force toggles ───
@@ -127,9 +131,9 @@ export function setupUI(sim) {
         });
     });
 
-    // ─── Relativity dependency: Radiation + Signal Delay require Relativity ───
+    // ─── Relativity dependency: Signal Delay + Spin-Orbit require Relativity ───
     const relativityEl = document.getElementById('relativity-toggle');
-    const relDepIds = ['radiation-toggle', 'spinorbit-toggle'];
+    const relDepIds = ['spinorbit-toggle'];
     const updateRelDeps = () => {
         const on = relativityEl.checked;
         relDepIds.forEach(id => {
@@ -213,12 +217,8 @@ export function setupUI(sim) {
     // ─── Step button ───
     document.getElementById('stepBtn').addEventListener('click', () => {
         if (!sim.running) {
-            const cam = sim.camera;
-            const halfW = sim.width / (2 * cam.zoom);
-            const halfH = sim.height / (2 * cam.zoom);
-            const dt = PHYSICS_DT;
-            sim.physics.update(sim.particles, dt, sim.collisionMode, sim.boundaryMode, halfW * 2, halfH * 2, cam.x - halfW, cam.y - halfH);
-            sim.renderer.render(sim.particles, 0, cam, sim.photons);
+            sim.physics.update(sim.particles, PHYSICS_DT, sim.collisionMode, sim.boundaryMode, sim.topology, sim.domainW, sim.domainH, 0, 0);
+            sim.renderer.render(sim.particles, 0, sim.camera, sim.photons);
         }
     });
 
@@ -250,12 +250,8 @@ export function setupUI(sim) {
 
     const stepSim = () => {
         if (!sim.running) {
-            const cam = sim.camera;
-            const halfW = sim.width / (2 * cam.zoom);
-            const halfH = sim.height / (2 * cam.zoom);
-            const dt = PHYSICS_DT;
-            sim.physics.update(sim.particles, dt, sim.collisionMode, sim.boundaryMode, halfW * 2, halfH * 2, cam.x - halfW, cam.y - halfH);
-            sim.renderer.render(sim.particles, 0, cam, sim.photons);
+            sim.physics.update(sim.particles, PHYSICS_DT, sim.collisionMode, sim.boundaryMode, sim.topology, sim.domainW, sim.domainH, 0, 0);
+            sim.renderer.render(sim.particles, 0, sim.camera, sim.photons);
         }
     };
 
@@ -310,7 +306,8 @@ export function setupUI(sim) {
         interaction: { title: 'Interaction Modes', body: '<b>Place</b> \u2014 spawn a particle at rest.<br><b>Shoot</b> \u2014 drag to set velocity (drag distance \u00D7 0.1).<br><b>Orbit</b> \u2014 spawn in circular orbit around the nearest massive body.' },
         barneshut: { title: 'Barnes-Hut Approximation', body: 'When on, uses a quadtree to approximate distant particle groups as single bodies (O(N log N)). When off, computes exact pairwise forces (O(N\u00B2)) \u2014 slower but preserves Newton\u2019s third law exactly, improving conservation of momentum and angular momentum.' },
         collision: { title: 'Collision Modes', body: '<b>Pass</b> \u2014 particles pass through each other.<br><b>Bounce</b> \u2014 elastic collision with spin-friction transfer.<br><b>Merge</b> \u2014 particles combine, conserving mass, charge, and momentum.' },
-        boundary: { title: 'Boundary Modes', body: '<b>Despawn</b> \u2014 particles are removed when they leave the viewport.<br><b>Loop</b> \u2014 particles wrap around to the opposite side.<br><b>Bounce</b> \u2014 particles reflect off the viewport edges.' },
+        boundary: { title: 'Boundary Modes', body: '<b>Despawn</b> \u2014 particles are removed when they leave the viewport.<br><b>Loop</b> \u2014 particles wrap around to the opposite side (topology selector appears).<br><b>Bounce</b> \u2014 particles reflect off the viewport edges.' },
+        topology: { title: 'Topology', body: '<b>Torus (T\u00B2)</b> \u2014 both axes wrap normally. Standard periodic boundaries.<br><b>Klein bottle (K)</b> \u2014 x wraps normally; y-wrap mirrors x-position and reverses horizontal velocity.<br><b>RP\u00B2</b> \u2014 both axes wrap with a flip: x-wrap mirrors y, y-wrap mirrors x. A non-orientable closed surface.' },
         onepn: { title: '1PN Correction', body: 'First post-Newtonian correction to gravity (Einstein\u2013Infeld\u2013Hoffmann equations). Adds O(v\u00B2/c\u00B2) velocity- and mass-dependent terms to the gravitational force. Produces perihelion precession (~6\u03C0M/a(1\u2212e\u00B2) rad/orbit). Integrated with velocity-Verlet for second-order accuracy on velocity-dependent terms. Requires Gravity and Relativity.' },
     };
 

@@ -16,6 +16,7 @@ Must serve from parent `a9lim.github.io/` directory — shared files (`/shared-b
 main.js (Simulation class, window.sim)
 ├── src/config.js          — named constants (BH_THETA, SOFTENING_SQ, PHYSICS_DT, INERTIA_K, MAG_MOMENT_K, LARMOR_K, etc.)
 ├── src/relativity.js      — angwToAngVel, angVelToAngw, setVelocity
+├── src/topology.js        — TORUS/KLEIN/RP2 constants, minImage(), wrapPosition()
 ├── src/energy.js          — computeEnergies(): KE, spin KE, momentum, angular momentum, Darwin field energy
 ├── src/integrator.js      — Physics class: adaptive Boris substep loop, spin-orbit, frame-drag, radiation, tidal breakup
 │     ├── src/forces.js        — resetForces, computeAllForces, compute1PNPairwise, pairForce, calculateForce (BH walk)
@@ -23,6 +24,7 @@ main.js (Simulation class, window.sim)
 │     ├── src/potential.js     — computePE, treePE, pairPE
 │     ├── src/signal-delay.js  — getDelayedState, interpolateHistory (signal delay)
 │     ├── src/quadtree.js      — QuadTreePool: SoA pool-based Barnes-Hut quadtree (zero per-frame allocation)
+│     ├── src/topology.js      — topology-aware minimum-image separation and boundary wrapping
 │     └── src/photon.js        — radiation photon entity
 ├── src/stats-display.js   — StatsDisplay: energy/momentum/drift DOM updates, selected particle info
 │     └── src/energy.js
@@ -118,6 +120,22 @@ Conserved exactly with gravity+Coulomb only, pairwise mode (BH off). Velocity-de
 - **Merge**: conserves mass, charge, momentum, angular momentum. Orbital L about pair COM + spin L → merged `angw` via `I = (2/5)mr²`.
 - **Bounce**: elastic (relativistic: Lorentz boost to COM, classical: standard). Spin friction `Δω = J/I` where `I = INERTIA_K·m·r²`. Relativistic path converts through `angVelToAngw()`. Configurable friction via `Physics.bounceFriction` (0.4 default, sidebar slider).
 
+### Topology (`src/topology.js`)
+
+When boundary mode is "loop", a **topology selector** chooses the identification map for periodic wrapping:
+
+- **Torus (T²)**: Both axes wrap normally. `(x,y) ~ (x+W,y)` and `(x,y) ~ (x,y+H)`. Standard periodic boundaries. 1 minimum-image candidate.
+- **Klein bottle (K)**: x wraps normally; y-wrap flips x. `(x,y) ~ (x+W,y)` and `(x,y) ~ (W−x,y+H)`. When crossing top/bottom, x-position mirrors and `w.x`, `vel.x`, `angw`, `angVel` negate. 2 minimum-image candidates.
+- **Real projective plane (RP²)**: Both axes wrap with perpendicular-coordinate flip. `(x,y) ~ (x+W,H−y)` and `(x,y) ~ (W−x,y+H)`. Both boundaries flip. 4 minimum-image candidates.
+
+**`minImage(ox, oy, sx, sy, topology, W, H, halfW, halfH, out)`**: Computes minimum-image separation from observer to source. For Klein/RP², needs absolute positions (not just dx/dy) because glide reflections depend on source coordinates. Enumerates all candidate images, picks shortest. Zero-alloc via `out` parameter.
+
+**`wrapPosition(p, topology, W, H)`**: Wraps particle position into domain, applying velocity/spin flips for non-orientable crossings.
+
+**Ghost generation** (`_generateGhosts` in integrator.js): Topology-aware. Torus: 8 neighbours, no flips. Klein: left/right normal, top/bottom flip x + `flipVx`. RP²: left/right flip y + `flipVy`, top/bottom flip x + `flipVx`. `_addGhost()` accepts `flipVx`/`flipVy` flags to negate velocity and spin on ghost particles.
+
+**Threading**: `sim.topology` string ('torus'/'klein'/'rp2') → `physics._topologyConst` integer (TORUS=0/KLEIN=1/RP2=2). Passed through all force, PE, collision, signal-delay, and energy functions. All former inline min-image patterns (`if (dx > halfW) dx -= W`) replaced with `minImage()` calls.
+
 ### Barnes-Hut
 
 Toggleable (`barnesHutEnabled`). QuadTreePool (SoA, pre-allocated, zero per-frame GC) aggregates mass, charge, angVel, magnetic moment, angular momentum, momentum, COM. `BH_THETA = 0.5`. When off: exact pairwise, better conservation. Adaptive substepping: `dtSafe = min(√(ε/a_max), T_cyclotron/8)`, `nSteps = min(ceil(dt/dtSafe), MAX_SUBSTEPS)`.
@@ -142,7 +160,7 @@ Disabled toggles get `.ctrl-disabled` (opacity 0.4, pointer-events none). Toggle
 
 ## UI
 
-- **4-tab sidebar**: Settings (particle props, interaction mode, forces, physics), Engine (BH, collision, boundary, visuals, speed), Stats (energy bar chart + numbers), Particle (selected particle details, phase plot)
+- **4-tab sidebar**: Settings (particle props, interaction mode, forces, physics), Engine (BH, collision, boundary, topology, visuals, speed), Stats (energy bar chart + numbers), Particle (selected particle details, phase plot)
 - **Topbar**: Presets | Pause/Step/Reset | Theme/Settings
 - **Preset dialog**: modal card grid, keyboard `P` or `1-5`
 - **Intro screen**: themed splash with shared CSS

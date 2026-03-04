@@ -2,6 +2,9 @@
 
 import { INERTIA_K } from './config.js';
 import { setVelocity, angwToAngVel, angVelToAngw } from './relativity.js';
+import { TORUS, minImage, wrapPosition } from './topology.js';
+
+const _miOut = { x: 0, y: 0 };
 
 /**
  * Helper: set particle velocity from normal/tangential components.
@@ -21,23 +24,40 @@ function setVelocityFromVel(p, vn, vt, nx, ny, tx, ty) {
  * @param {number} bounceFriction - Tangential friction coefficient
  * @param {boolean} relativityEnabled
  */
-export function handleCollisions(particles, pool, root, mode, bounceFriction, relativityEnabled) {
+export function handleCollisions(particles, pool, root, mode, bounceFriction, relativityEnabled, periodic, domW, domH, topology = TORUS) {
+    const halfDomW = domW * 0.5;
+    const halfDomH = domH * 0.5;
+
     for (const p1 of particles) {
         if (p1.mass === 0) continue;
 
         const candidates = pool.query(root, p1.pos.x, p1.pos.y, p1.radius * 2, p1.radius * 2);
 
         for (const p2 of candidates) {
-            if (p1 === p2 || p2.mass === 0 || p1.id >= p2.id) continue;
+            // Ghost resolution: collide with the original, not the ghost
+            const real2 = p2.isGhost ? p2.original : p2;
+            if (p1 === real2 || real2.mass === 0 || p1.id >= real2.id) continue;
 
-            const dist = p1.pos.dist(p2.pos);
-            const minDist = p1.radius + p2.radius;
+            // Minimum-image distance
+            let dx, dy;
+            if (periodic) {
+                minImage(p1.pos.x, p1.pos.y, p2.pos.x, p2.pos.y, topology, domW, domH, halfDomW, halfDomH, _miOut);
+                dx = _miOut.x; dy = _miOut.y;
+            } else {
+                dx = p2.pos.x - p1.pos.x; dy = p2.pos.y - p1.pos.y;
+            }
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const minDist = p1.radius + real2.radius;
 
             if (dist < minDist) {
                 if (mode === 'merge') {
-                    resolveMerge(p1, p2, relativityEnabled);
+                    resolveMerge(p1, real2, relativityEnabled, periodic, dx, dy);
+                    // Wrap merged position to keep inside domain
+                    if (periodic) {
+                        wrapPosition(p1, topology, domW, domH);
+                    }
                 } else if (mode === 'bounce') {
-                    resolveBounce(p1, p2, minDist, dist, bounceFriction, relativityEnabled);
+                    resolveBounce(p1, real2, minDist, dist, bounceFriction, relativityEnabled, dx, dy);
                 }
             }
         }
@@ -61,18 +81,21 @@ export function handleCollisions(particles, pool, root, mode, bounceFriction, re
  * @param {Object} p2 - Absorbed particle (mass set to 0)
  * @param {boolean} relativityEnabled
  */
-export function resolveMerge(p1, p2, relativityEnabled) {
+export function resolveMerge(p1, p2, relativityEnabled, periodic, miDx, miDy) {
     const totalMass = p1.mass + p2.mass;
     // Conserve linear momentum: p = m*w, so w_new = (m1*w1 + m2*w2) / totalMass
     const newWx = (p1.mass * p1.w.x + p2.mass * p2.w.x) / totalMass;
     const newWy = (p1.mass * p1.w.y + p2.mass * p2.w.y) / totalMass;
-    const newX = (p1.pos.x * p1.mass + p2.pos.x * p2.mass) / totalMass;
-    const newY = (p1.pos.y * p1.mass + p2.pos.y * p2.mass) / totalMass;
+    // Use minimum-image offset for p2 relative to p1
+    const p2miX = p1.pos.x + miDx;
+    const p2miY = p1.pos.y + miDy;
+    const newX = (p1.pos.x * p1.mass + p2miX * p2.mass) / totalMass;
+    const newY = (p1.pos.y * p1.mass + p2miY * p2.mass) / totalMass;
 
     // Conserve angular momentum: orbital(about pair COM) + spin → merged spin
     // I = INERTIA_K * m * r² (uniform-density solid sphere)
     const dx1 = p1.pos.x - newX, dy1 = p1.pos.y - newY;
-    const dx2 = p2.pos.x - newX, dy2 = p2.pos.y - newY;
+    const dx2 = p2miX - newX, dy2 = p2miY - newY;
     const Lorb = dx1 * (p1.mass * p1.w.y) - dy1 * (p1.mass * p1.w.x)
         + dx2 * (p2.mass * p2.w.y) - dy2 * (p2.mass * p2.w.x);
     const Lspin = INERTIA_K * p1.mass * p1.radius * p1.radius * p1.angw
@@ -107,7 +130,7 @@ export function resolveMerge(p1, p2, relativityEnabled) {
  * @param {number} bounceFriction - Tangential friction coefficient
  * @param {boolean} relativityEnabled
  */
-export function resolveBounce(p1, p2, minDist, dist, bounceFriction, relativityEnabled) {
+export function resolveBounce(p1, p2, minDist, dist, bounceFriction, relativityEnabled, miDx, miDy) {
     const safeDist = dist === 0 ? 0.0001 : dist;
 
     let nx, ny;
@@ -117,8 +140,8 @@ export function resolveBounce(p1, p2, minDist, dist, bounceFriction, relativityE
         const m = Math.sqrt(nx * nx + ny * ny);
         nx /= m; ny /= m;
     } else {
-        nx = (p2.pos.x - p1.pos.x) / safeDist;
-        ny = (p2.pos.y - p1.pos.y) / safeDist;
+        nx = miDx / safeDist;
+        ny = miDy / safeDist;
     }
 
     const tx = -ny, ty = nx;

@@ -15,6 +15,7 @@ N-body simulation where particles interact through gravity, electromagnetism, an
 - **Tidal breakup** — Roche limit fragmentation when tidal/centrifugal/Coulomb stress exceeds self-gravity
 - **Barnes-Hut** — Toggleable O(N log N) quadtree approximation vs exact O(N²) pairwise forces. Pool-based SoA quadtree eliminates per-frame GC pressure.
 - **Collisions** — Pass-through, elastic bounce with spin-friction transfer, or merge (conserves mass, charge, momentum, angular momentum)
+- **Topology** — Periodic boundaries support three topologies: flat torus (standard), Klein bottle (y-wrap flips x), and real projective plane (both axes flip). Topology-aware minimum-image separation, ghost generation, and boundary wrapping.
 - **5 presets** — Solar System, Binary Star, Galaxy, Collision, Magnetic Spin
 - **Real-time diagnostics** — Energy breakdown (KE, spin KE, PE, field, radiated), momentum (particle + field + radiated), angular momentum (orbital + spin), all with drift tracking
 - **Visuals** — Trails, force component vectors, charge-based coloring, spin rings, additive glow, light/dark theme
@@ -49,6 +50,7 @@ main.js                    — Simulation class (entry point)
 │     ├── src/collisions.js    — collision resolution (merge, bounce)
 │     ├── src/potential.js     — potential energy computation
 │     ├── src/signal-delay.js  — signal delay (finite-speed force propagation)
+│     ├── src/topology.js      — topology constants, minimum-image separation, boundary wrapping
 │     ├── src/quadtree.js      — pool-based Barnes-Hut quadtree (zero per-frame GC)
 │     └── src/photon.js        — radiation photon entity
 ├── src/stats-display.js   — energy/momentum/drift stats, selected particle info
