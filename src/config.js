@@ -43,7 +43,8 @@ export const MAX_PHOTONS = 500;              // photon pool cap
 export const LL_FORCE_CLAMP = 0.5;           // max |F_rad·dt/m| as fraction of |w|
 
 // Signal delay
-export const HISTORY_SIZE = 512;    // circular buffer capacity per particle
+export const HISTORY_SIZE = 1024;   // circular buffer capacity per particle
+export const HISTORY_STRIDE = 30;   // record once per N physics.update() calls (extends buffer reach ~30×)
 
 // Tidal breakup
 export const FRAME_DRAG_K = 0.1;             // frame-dragging spin alignment strength

@@ -4,7 +4,7 @@
 // to focused modules.
 
 import QuadTreePool, { Rect } from './quadtree.js';
-import { SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, LARMOR_K, RADIATION_THRESHOLD, MAX_PHOTONS, LL_FORCE_CLAMP, TIDAL_STRENGTH, MIN_FRAGMENT_MASS, FRAGMENT_COUNT, SOFTENING_SQ, QUADTREE_CAPACITY, BH_THETA, HISTORY_SIZE } from './config.js';
+import { SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, LARMOR_K, RADIATION_THRESHOLD, MAX_PHOTONS, LL_FORCE_CLAMP, TIDAL_STRENGTH, MIN_FRAGMENT_MASS, FRAGMENT_COUNT, SOFTENING_SQ, QUADTREE_CAPACITY, BH_THETA, HISTORY_SIZE, HISTORY_STRIDE } from './config.js';
 import Photon from './photon.js';
 import { angwToAngVel } from './relativity.js';
 
@@ -46,6 +46,9 @@ export default class Physics {
 
         // Track whether forces have been initialized
         this._forcesInit = false;
+
+        // History recording stride counter (record every HISTORY_STRIDE updates)
+        this._histStride = 0;
 
         // Reusable toggles object passed to extracted force/PE functions (avoids per-frame allocation)
         this._toggles = {
@@ -505,18 +508,7 @@ export default class Physics {
                 p.pos.x += p.vel.x * dtSub;
                 p.pos.y += p.vel.y * dtSub;
 
-                // Record history for signal delay
-                if (this.signalDelayEnabled) {
-                    p._initHistory();
-                    const h = p.histHead;
-                    p.histX[h] = p.pos.x;
-                    p.histY[h] = p.pos.y;
-                    p.histVx[h] = p.vel.x;
-                    p.histVy[h] = p.vel.y;
-                    p.histTime[h] = this.simTime;
-                    p.histHead = (h + 1) % HISTORY_SIZE;
-                    if (p.histCount < HISTORY_SIZE) p.histCount++;
-                }
+                // History recording moved to strided post-loop (see below substep loop)
             }
             this.simTime += dtSub;
 
@@ -592,6 +584,23 @@ export default class Physics {
             // Step 7: Calculate new forces and B fields
             resetForces(particles);
             computeAllForces(particles, toggles, this.pool, root, this.barnesHutEnabled, this.signalDelayEnabled, this.relativityEnabled, this.simTime, this.periodic, this.domainW, this.domainH, this._topologyConst);
+        }
+
+        // Record history for signal delay (strided: once every HISTORY_STRIDE updates)
+        if (this.signalDelayEnabled && n > 0 && ++this._histStride >= HISTORY_STRIDE) {
+            this._histStride = 0;
+            for (let i = 0; i < n; i++) {
+                const p = particles[i];
+                p._initHistory();
+                const h = p.histHead;
+                p.histX[h] = p.pos.x;
+                p.histY[h] = p.pos.y;
+                p.histVx[h] = p.vel.x;
+                p.histVy[h] = p.vel.y;
+                p.histTime[h] = this.simTime;
+                p.histHead = (h + 1) % HISTORY_SIZE;
+                if (p.histCount < HISTORY_SIZE) p.histCount++;
+            }
         }
 
         // Compute PE (once per frame, using last substep's tree)

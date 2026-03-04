@@ -1,4 +1,4 @@
-import { MAX_TRAIL_LENGTH, PHOTON_LIFETIME, HISTORY_SIZE, INERTIA_K } from './config.js';
+import { MAX_TRAIL_LENGTH, PHOTON_LIFETIME, INERTIA_K } from './config.js';
 
 const TWO_PI = Math.PI * 2;
 const HALF_PI = Math.PI / 2;
@@ -35,7 +35,6 @@ export default class Renderer {
         this.showVelocity = false;
         this.showForce = false;
         this.showForceComponents = false;
-        this.showSignalDelay = true;
         this.accelScaling = false;
         this.isLight = false;
         this.trailHistory = new Map();
@@ -74,7 +73,7 @@ export default class Renderer {
             this.trailHistory.clear();
         }
 
-        if (this.showSignalDelay) this.drawDelayedPositions(ctx, particles, isLight);
+
         this.drawParticles(ctx, particles, isLight);
         if (photons && photons.length) this.drawPhotons(ctx, photons, isLight);
 
@@ -220,35 +219,6 @@ export default class Renderer {
         }
     }
 
-    drawDelayedPositions(ctx, particles, isLight) {
-        // Draw ghost circles at each particle's most recent delayed position
-        // (using its own history to show where it "was" when the force was emitted)
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = 0.3;
-        for (const p of particles) {
-            if (p.histCount < 2) continue;
-            // Show oldest recorded position as ghost
-            const oldest = (p.histHead - p.histCount + HISTORY_SIZE) % HISTORY_SIZE;
-            const gx = p.histX[oldest], gy = p.histY[oldest];
-
-            // Ghost circle (filled, transparency via globalAlpha)
-            ctx.beginPath();
-            ctx.arc(gx, gy, p.radius, 0, TWO_PI);
-            ctx.fillStyle = p.color;
-            ctx.fill();
-
-            // Connecting line from ghost to current
-            ctx.beginPath();
-            ctx.moveTo(gx, gy);
-            ctx.lineTo(p.pos.x, p.pos.y);
-            ctx.strokeStyle = isLight ? _r(_PAL.light.textMuted, 0.3) : _r(_PAL.dark.textMuted, 0.3);
-            ctx.lineWidth = 0.5;
-            ctx.setLineDash([2, 4]);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
-        ctx.globalAlpha = 1.0;
-    }
 
     drawArrow(ctx, x1, y1, x2, y2, invZoom, color) {
         ctx.beginPath();

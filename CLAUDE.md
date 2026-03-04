@@ -179,9 +179,12 @@ Requires Relativity + Barnes-Hut off (pairwise only).
 
 Light-cone equation: |x_source(t_ret) − x_obs(now)| = now − t_ret (c = 1).
 
-Newton-Raphson (3 iterations) on per-particle circular history buffers (Float64Array[HISTORY_SIZE=512] each for x, y, vx, vy, time). Linear interpolation at converged t_ret.
+Three-phase solver on per-particle circular history buffers (Float64Array[HISTORY_SIZE=1024] each for x, y, vx, vy, time; recorded every HISTORY_STRIDE=30 physics updates, covering ~256 time units):
+1. **Newton-Raphson** (up to 6 iterations) on g(t) = |x_s(t)−x_obs| − (now−t) to locate the correct history segment. Guaranteed convergent for subluminal sources (g' = d̂·v + 1 > 0).
+2. **Exact quadratic solve** on the converged segment ± 1 neighbor. Piecewise-linear trajectory makes the light-cone equation a quadratic with closed-form roots.
+3. **Constant-velocity extrapolation** from the oldest buffer entry when t_ret predates recorded history. Same quadratic with s ≤ 0.
 
-Visual: ghost circles at oldest recorded position with dashed line to current.
+Early rejection: pairs with current distance > 2×buffer time span skip straight to extrapolation (O(1)).
 
 ### Spin-Orbit Coupling
 
@@ -340,7 +343,6 @@ Canvas 2D. Dark mode uses additive blending (`globalCompositeOperation: 'lighter
 - **Force vectors**: scale=5 (÷mass if acceleration scaling on). Total (accent) or per-type components (colored by force type)
 - **Torque arcs**: spin-orbit (orange, inner), frame-drag (purple, outer), total (accent). Arc length ∝ |power|
 - **Photons**: yellow circles, size = 1.5 + energy×20 (cap 5px), glow in dark mode
-- **Signal delay ghosts**: 30% alpha circles at oldest history position, dashed line to current
 
 Particle color: neutral = `_PAL.neutral` (slate). Charged: hue from `chargePos` (201, blue) / `chargeNeg` (7, red), intensity from |q|/20.
 
