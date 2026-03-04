@@ -52,8 +52,9 @@ export default class Physics {
         // Steps per sub-step: half-kick(E) → Boris rotate(B) → half-kick(E) →
         //        drift → rebuild tree → collisions → new forces+fields
         //
-        // Substep count is determined by max acceleration: dt_safe = √(ε / a_max),
-        // nSteps = ceil(dt / dt_safe), capped at MAX_SUBSTEPS.
+        // Substep count is determined by max acceleration (dt_safe = √(ε / a_max))
+        // and cyclotron frequency (≥8 steps per orbit). nSteps = ceil(dt / dt_safe),
+        // capped at MAX_SUBSTEPS.
 
         // First frame: compute initial forces + B fields if not yet done
         if (!this._forcesInit && n > 0) {
@@ -65,20 +66,35 @@ export default class Physics {
             this._forcesInit = true;
         }
 
-        // ─── Determine substep count from max acceleration ───
+        const hasMagnetic = this.magneticEnabled;
+        const hasGM = this.gravitomagEnabled;
+
+        // ─── Determine substep count from max acceleration + cyclotron frequency ───
         let maxAccelSq = 0;
+        let maxCyclotron = 0;
         for (let i = 0; i < n; i++) {
             const p = particles[i];
             const aSq = p.force.magSq() / (p.mass * p.mass);
             if (aSq > maxAccelSq) maxAccelSq = aSq;
+            // Cyclotron frequency: ω_c = |qBz/m| for EM, |4Bgz| for GM
+            if (hasMagnetic && Math.abs(p.Bz) > 0) {
+                const wc = Math.abs(p.charge * p.Bz / p.mass);
+                if (wc > maxCyclotron) maxCyclotron = wc;
+            }
+            if (hasGM && Math.abs(p.Bgz) > 0) {
+                const wc = 4 * Math.abs(p.Bgz);
+                if (wc > maxCyclotron) maxCyclotron = wc;
+            }
         }
         const aMax = Math.sqrt(maxAccelSq);
-        const dtSafe = aMax > 0 ? Math.sqrt(SOFTENING / aMax) : dt;
+        let dtSafe = aMax > 0 ? Math.sqrt(SOFTENING / aMax) : dt;
+        // Ensure at least 8 steps per cyclotron orbit
+        if (maxCyclotron > 0) {
+            const dtCyclotron = (2 * Math.PI / maxCyclotron) / 8;
+            if (dtCyclotron < dtSafe) dtSafe = dtCyclotron;
+        }
         const nSteps = Math.min(Math.ceil(dt / dtSafe), MAX_SUBSTEPS);
         const dtSub = dt / nSteps;
-
-        const hasMagnetic = this.magneticEnabled;
-        const hasGM = this.gravitomagEnabled;
 
         let lastQt = null;
         for (let step = 0; step < nSteps; step++) {
