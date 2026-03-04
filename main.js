@@ -303,6 +303,10 @@ class Simulation {
                             p.w.x += ph.vel.x * impulse;
                             p.w.y += ph.vel.y * impulse;
                             ph.alive = false;
+                            // Subtract absorbed energy from radiated totals
+                            this.totalRadiated = Math.max(0, this.totalRadiated - ph.energy);
+                            this.totalRadiatedPx -= ph.vel.x * ph.energy;
+                            this.totalRadiatedPy -= ph.vel.y * ph.energy;
                             break;
                         }
                     }
