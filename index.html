@@ -189,7 +189,7 @@
                             <div class="tog-wrap"><input type="checkbox" id="gravitomag-toggle" checked role="switch" aria-checked="true">
                             <label for="gravitomag-toggle" class="tog tog-gravitomag"><span class="tog-thumb"></span></label></div></div>
                         <div class="ctrl-row ctrl-sub"><label for="onepn-toggle">1PN <button class="info-trigger" data-info="onepn" aria-label="1PN info">?</button></label>
-                            <div class="tog-wrap"><input type="checkbox" id="onepn-toggle" role="switch" aria-checked="false">
+                            <div class="tog-wrap"><input type="checkbox" id="onepn-toggle" checked role="switch" aria-checked="true">
                             <label for="onepn-toggle" class="tog tog-onepn"><span class="tog-thumb"></span></label></div></div>
                         <div class="ctrl-row"><label for="coulomb-toggle">Coulomb <button class="info-trigger" data-info="coulomb" aria-label="Coulomb info">?</button></label>
                             <div class="tog-wrap"><input type="checkbox" id="coulomb-toggle" checked role="switch" aria-checked="true">
@@ -203,18 +203,15 @@
                         <div class="ctrl-row"><label for="relativity-toggle">Relativity <button class="info-trigger" data-info="relativity" aria-label="Relativity info">?</button></label>
                             <div class="tog-wrap"><input type="checkbox" id="relativity-toggle" checked role="switch" aria-checked="true">
                             <label for="relativity-toggle" class="tog tog-relativity"><span class="tog-thumb"></span></label></div></div>
-                        <div class="ctrl-row ctrl-sub"><label for="radiation-toggle">Radiation <button class="info-trigger" data-info="radiation" aria-label="Radiation info">?</button></label>
-                            <div class="tog-wrap"><input type="checkbox" id="radiation-toggle" role="switch" aria-checked="false">
-                            <label for="radiation-toggle" class="tog tog-radiation"><span class="tog-thumb"></span></label></div></div>
                         <div class="ctrl-row ctrl-sub"><label for="signaldelay-toggle">Signal Delay <button class="info-trigger" data-info="signaldelay" aria-label="Signal delay info">?</button></label>
-                            <div class="tog-wrap"><input type="checkbox" id="signaldelay-toggle" role="switch" aria-checked="false">
+                            <div class="tog-wrap"><input type="checkbox" id="signaldelay-toggle" checked role="switch" aria-checked="true">
                             <label for="signaldelay-toggle" class="tog tog-signaldelay"><span class="tog-thumb"></span></label></div></div>
                         <div class="ctrl-row ctrl-sub"><label for="spinorbit-toggle">Spin-Orbit <button class="info-trigger" data-info="spinorbit" aria-label="Spin-orbit coupling info">?</button></label>
-                            <div class="tog-wrap"><input type="checkbox" id="spinorbit-toggle" role="switch" aria-checked="false">
+                            <div class="tog-wrap"><input type="checkbox" id="spinorbit-toggle" checked role="switch" aria-checked="true">
                             <label for="spinorbit-toggle" class="tog tog-spinorbit"><span class="tog-thumb"></span></label></div></div>
-                        <div class="ctrl-row"><label for="tidal-toggle">Tidal Forces <button class="info-trigger" data-info="tidal" aria-label="Tidal forces info">?</button></label>
-                            <div class="tog-wrap"><input type="checkbox" id="tidal-toggle" role="switch" aria-checked="false">
-                            <label for="tidal-toggle" class="tog tog-tidal"><span class="tog-thumb"></span></label></div></div>
+                        <div class="ctrl-row"><label for="radiation-toggle">Radiation <button class="info-trigger" data-info="radiation" aria-label="Radiation info">?</button></label>
+                            <div class="tog-wrap"><input type="checkbox" id="radiation-toggle" role="switch" aria-checked="false">
+                            <label for="radiation-toggle" class="tog tog-radiation"><span class="tog-thumb"></span></label></div></div>
                     </div>
                 </div>
                 <!-- ── Engine ── -->
@@ -243,6 +240,17 @@
                                 <button class="mode-btn" data-boundary="loop">Loop</button>
                                 <button class="mode-btn" data-boundary="bounce">Bounce</button>
                             </div>
+                        </div>
+                        <div class="control-group" id="topology-group" style="display:none">
+                            <label><span>Topology <button class="info-trigger" data-info="topology" aria-label="Topology info">?</button></span></label>
+                            <div class="mode-toggles" id="topology-toggles">
+                                <button class="mode-btn active" data-topology="torus">Torus</button>
+                                <button class="mode-btn" data-topology="klein">Klein</button>
+                                <button class="mode-btn" data-topology="rp2">RP²</button>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="checkbox-label"><span>Disintegration <button class="info-trigger" data-info="tidal" aria-label="Disintegration info">?</button></span> <input type="checkbox" id="tidal-toggle"></label>
                         </div>
                     </div>
                     <div class="panel-section">

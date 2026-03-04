@@ -4,6 +4,10 @@
 
 import { BH_THETA, SOFTENING_SQ, INERTIA_K, MAG_MOMENT_K, FRAME_DRAG_K } from './config.js';
 import { getDelayedState } from './signal-delay.js';
+import { TORUS, minImage } from './topology.js';
+
+// Module-level reusable object for minImage output (zero alloc)
+const _miOut = { x: 0, y: 0 };
 
 /**
  * Reset all per-particle force accumulators and field values to zero.
@@ -44,11 +48,13 @@ export function resetForces(particles) {
  * @param {boolean} relativityEnabled
  * @param {number} simTime - Current simulation time (for signal delay)
  */
-export function computeAllForces(particles, toggles, pool, root, barnesHutEnabled, signalDelayEnabled, relativityEnabled, simTime) {
+export function computeAllForces(particles, toggles, pool, root, barnesHutEnabled, signalDelayEnabled, relativityEnabled, simTime, periodic, domW, domH, topology = TORUS) {
+    const halfDomW = domW * 0.5;
+    const halfDomH = domH * 0.5;
     if (barnesHutEnabled) {
         if (root < 0) return; // No tree available
         for (const p of particles) {
-            calculateForce(p, pool, root, BH_THETA, p.force, toggles);
+            calculateForce(p, pool, root, BH_THETA, p.force, toggles, periodic, domW, domH, halfDomW, halfDomH, topology);
         }
     } else {
         const useSignalDelay = signalDelayEnabled && relativityEnabled;
@@ -60,7 +66,7 @@ export function computeAllForces(particles, toggles, pool, root, barnesHutEnable
 
                 let sx, sy, svx, svy, sAngVel;
                 if (useSignalDelay && o.histCount >= 2) {
-                    const ret = getDelayedState(o, p, simTime);
+                    const ret = getDelayedState(o, p, simTime, periodic, domW, domH, halfDomW, halfDomH, topology);
                     if (ret) {
                         sx = ret.x; sy = ret.y; svx = ret.vx; svy = ret.vy;
                         sAngVel = o.angVel; // angular velocity not history-tracked
@@ -77,7 +83,8 @@ export function computeAllForces(particles, toggles, pool, root, barnesHutEnable
                 pairForce(p, sx, sy, svx, svy,
                     o.mass, o.charge, sAngVel,
                     MAG_MOMENT_K * o.charge * sAngVel * oRSq,
-                    INERTIA_K * o.mass * sAngVel * oRSq, p.force, toggles);
+                    INERTIA_K * o.mass * sAngVel * oRSq, p.force, toggles,
+                    periodic, domW, domH, halfDomW, halfDomH, topology);
             }
         }
     }
@@ -106,9 +113,14 @@ export function computeAllForces(particles, toggles, pool, root, barnesHutEnable
  * @param {Object} out - Vec2 to accumulate force into
  * @param {Object} toggles - { gravityEnabled, coulombEnabled, magneticEnabled, gravitomagEnabled }
  */
-export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMoment, sAngMomentum, out, toggles) {
-    const rx = sx - p.pos.x;
-    const ry = sy - p.pos.y;
+export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMoment, sAngMomentum, out, toggles, periodic, domW, domH, halfDomW, halfDomH, topology = TORUS) {
+    let rx, ry;
+    if (periodic) {
+        minImage(p.pos.x, p.pos.y, sx, sy, topology, domW, domH, halfDomW, halfDomH, _miOut);
+        rx = _miOut.x; ry = _miOut.y;
+    } else {
+        rx = sx - p.pos.x; ry = sy - p.pos.y;
+    }
     const rawRSq = rx * rx + ry * ry;
     // Plummer softening: rSq_eff = r² + ε², keeps F = -dU/dr consistent
     const rSq = rawRSq + SOFTENING_SQ;
@@ -235,7 +247,7 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
  * Used by the velocity-Verlet correction step — only needs 1PN, not all forces.
  * Resets force1PN before accumulating.
  */
-export function compute1PNPairwise(particles, SOFTENING_SQ_VAL) {
+export function compute1PNPairwise(particles, SOFTENING_SQ_VAL, periodic, domW, domH, halfDomW, halfDomH, topology = TORUS) {
     for (let i = 0; i < particles.length; i++) {
         particles[i].force1PN.set(0, 0);
     }
@@ -244,8 +256,13 @@ export function compute1PNPairwise(particles, SOFTENING_SQ_VAL) {
         for (let j = 0; j < particles.length; j++) {
             if (i === j) continue;
             const o = particles[j];
-            const rx = o.pos.x - p.pos.x;
-            const ry = o.pos.y - p.pos.y;
+            let rx, ry;
+            if (periodic) {
+                minImage(p.pos.x, p.pos.y, o.pos.x, o.pos.y, topology, domW, domH, halfDomW, halfDomH, _miOut);
+                rx = _miOut.x; ry = _miOut.y;
+            } else {
+                rx = o.pos.x - p.pos.x; ry = o.pos.y - p.pos.y;
+            }
             const rSq = rx * rx + ry * ry + SOFTENING_SQ_VAL;
             const r = Math.sqrt(rSq);
             const invR = 1 / r;
@@ -279,11 +296,17 @@ export function compute1PNPairwise(particles, SOFTENING_SQ_VAL) {
  * @param {Object} out - Vec2 to accumulate force into
  * @param {Object} toggles - { gravityEnabled, coulombEnabled, magneticEnabled, gravitomagEnabled }
  */
-export function calculateForce(particle, pool, nodeIdx, theta, out, toggles) {
+export function calculateForce(particle, pool, nodeIdx, theta, out, toggles, periodic, domW, domH, halfDomW, halfDomH, topology = TORUS) {
     if (pool.totalMass[nodeIdx] === 0) return;
 
-    const dx = pool.comX[nodeIdx] - particle.pos.x;
-    const dy = pool.comY[nodeIdx] - particle.pos.y;
+    let dx, dy;
+    if (periodic) {
+        minImage(particle.pos.x, particle.pos.y, pool.comX[nodeIdx], pool.comY[nodeIdx], topology, domW, domH, halfDomW, halfDomH, _miOut);
+        dx = _miOut.x; dy = _miOut.y;
+    } else {
+        dx = pool.comX[nodeIdx] - particle.pos.x;
+        dy = pool.comY[nodeIdx] - particle.pos.y;
+    }
     const dSq = dx * dx + dy * dy;
     const d = Math.sqrt(dSq);
     const size = pool.bw[nodeIdx] * 2;
@@ -294,18 +317,19 @@ export function calculateForce(particle, pool, nodeIdx, theta, out, toggles) {
             for (let i = 0; i < pool.pointCount[nodeIdx]; i++) {
                 const other = pool.points[base + i];
                 if (other === particle) continue;
+                if (other.isGhost && other.original === particle) continue;
                 const otherRSq = other.radius * other.radius;
-                pairForce(particle, other.pos.x, other.pos.y, other.vel.x, other.vel.y, other.mass, other.charge, other.angVel, MAG_MOMENT_K * other.charge * other.angVel * otherRSq, INERTIA_K * other.mass * other.angVel * otherRSq, out, toggles);
+                pairForce(particle, other.pos.x, other.pos.y, other.vel.x, other.vel.y, other.mass, other.charge, other.angVel, MAG_MOMENT_K * other.charge * other.angVel * otherRSq, INERTIA_K * other.mass * other.angVel * otherRSq, out, toggles, periodic, domW, domH, halfDomW, halfDomH, topology);
             }
         } else {
             const avgVx = pool.totalMass[nodeIdx] > 0 ? pool.totalMomentumX[nodeIdx] / pool.totalMass[nodeIdx] : 0;
             const avgVy = pool.totalMass[nodeIdx] > 0 ? pool.totalMomentumY[nodeIdx] / pool.totalMass[nodeIdx] : 0;
-            pairForce(particle, pool.comX[nodeIdx], pool.comY[nodeIdx], avgVx, avgVy, pool.totalMass[nodeIdx], pool.totalCharge[nodeIdx], 0, pool.totalMagneticMoment[nodeIdx], pool.totalAngularMomentum[nodeIdx], out, toggles);
+            pairForce(particle, pool.comX[nodeIdx], pool.comY[nodeIdx], avgVx, avgVy, pool.totalMass[nodeIdx], pool.totalCharge[nodeIdx], 0, pool.totalMagneticMoment[nodeIdx], pool.totalAngularMomentum[nodeIdx], out, toggles, periodic, domW, domH, halfDomW, halfDomH, topology);
         }
     } else if (pool.divided[nodeIdx]) {
-        calculateForce(particle, pool, pool.nw[nodeIdx], theta, out, toggles);
-        calculateForce(particle, pool, pool.ne[nodeIdx], theta, out, toggles);
-        calculateForce(particle, pool, pool.sw[nodeIdx], theta, out, toggles);
-        calculateForce(particle, pool, pool.se[nodeIdx], theta, out, toggles);
+        calculateForce(particle, pool, pool.nw[nodeIdx], theta, out, toggles, periodic, domW, domH, halfDomW, halfDomH, topology);
+        calculateForce(particle, pool, pool.ne[nodeIdx], theta, out, toggles, periodic, domW, domH, halfDomW, halfDomH, topology);
+        calculateForce(particle, pool, pool.sw[nodeIdx], theta, out, toggles, periodic, domW, domH, halfDomW, halfDomH, topology);
+        calculateForce(particle, pool, pool.se[nodeIdx], theta, out, toggles, periodic, domW, domH, halfDomW, halfDomH, topology);
     }
 }

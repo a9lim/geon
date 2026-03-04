@@ -11,6 +11,7 @@ import { angwToAngVel } from './relativity.js';
 import { resetForces, computeAllForces, compute1PNPairwise } from './forces.js';
 import { handleCollisions } from './collisions.js';
 import { computePE } from './potential.js';
+import { TORUS, KLEIN, RP2, minImage, wrapPosition } from './topology.js';
 
 export default class Physics {
     constructor() {
@@ -27,12 +28,18 @@ export default class Physics {
         this.bounceFriction = 0.4;
         this.radiationEnabled = false;
         this.tidalEnabled = false;
-        this.signalDelayEnabled = false;
-        this.spinOrbitEnabled = false;
-        this.onePNEnabled = false;
+        this.signalDelayEnabled = true;
+        this.spinOrbitEnabled = true;
+        this.onePNEnabled = true;
 
         this.sim = null; // set externally by Simulation
         this.simTime = 0; // accumulated simulation time for history
+
+        // Periodic boundary state (set each update())
+        this.domainW = 0;
+        this.domainH = 0;
+        this.periodic = false;
+        this._topologyConst = TORUS;
 
         // Accumulated potential energy (set during force calculation)
         this.potentialEnergy = 0;
@@ -46,8 +53,13 @@ export default class Physics {
             coulombEnabled: true,
             magneticEnabled: true,
             gravitomagEnabled: true,
-            onePNEnabled: false,
+            onePNEnabled: true,
         };
+
+        // Ghost particle pool for periodic BH
+        this._ghostPool = [];
+        this._ghostCount = 0;
+        this._treeParticles = [];
     }
 
     /** Sync cached toggles object with current toggle state. Call once per update(). */
@@ -59,11 +71,109 @@ export default class Physics {
         this._toggles.onePNEnabled = this.onePNEnabled;
     }
 
-    update(particles, dt, collisionMode, boundaryMode, width, height, offX = 0, offY = 0) {
+    /** Create or reuse a ghost particle shifted to (sx, sy) from original p. */
+    _addGhost(p, sx, sy, flipVx = false, flipVy = false) {
+        let g;
+        if (this._ghostCount < this._ghostPool.length) {
+            g = this._ghostPool[this._ghostCount];
+        } else {
+            g = { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, w: { x: 0, y: 0, magSq() { return this.x * this.x + this.y * this.y; } }, mass: 0, charge: 0, angVel: 0, angw: 0, radius: 0, id: -1, isGhost: true, original: null };
+            this._ghostPool.push(g);
+        }
+        g.pos.x = sx; g.pos.y = sy;
+        g.vel.x = flipVx ? -p.vel.x : p.vel.x;
+        g.vel.y = flipVy ? -p.vel.y : p.vel.y;
+        g.w.x = flipVx ? -p.w.x : p.w.x;
+        g.w.y = flipVy ? -p.w.y : p.w.y;
+        g.mass = p.mass; g.charge = p.charge;
+        g.angVel = (flipVx || flipVy) ? -p.angVel : p.angVel;
+        g.angw = (flipVx || flipVy) ? -p.angw : p.angw;
+        g.radius = p.radius; g.id = -1;
+        g.original = p;
+        this._ghostCount++;
+        return g;
+    }
+
+    /** Generate ghosts for all particles near domain edges. */
+    _generateGhosts(particles) {
+        this._ghostCount = 0;
+        const W = this.domainW, H = this.domainH;
+        const margin = Math.max(W, H) * BH_THETA;
+        const topo = this._topologyConst;
+
+        for (let i = 0; i < particles.length; i++) {
+            const p = particles[i];
+            const x = p.pos.x, y = p.pos.y;
+            const nearL = x < margin, nearR = x > W - margin;
+            const nearT = y < margin, nearB = y > H - margin;
+
+            if (topo === TORUS) {
+                // Standard torus: 8 neighbours, no flips
+                if (nearL) this._addGhost(p, x + W, y);
+                if (nearR) this._addGhost(p, x - W, y);
+                if (nearT) this._addGhost(p, x, y + H);
+                if (nearB) this._addGhost(p, x, y - H);
+                if (nearL && nearT) this._addGhost(p, x + W, y + H);
+                if (nearL && nearB) this._addGhost(p, x + W, y - H);
+                if (nearR && nearT) this._addGhost(p, x - W, y + H);
+                if (nearR && nearB) this._addGhost(p, x - W, y - H);
+            } else if (topo === KLEIN) {
+                // Klein bottle: x wraps normally, y-wrap flips x (and vx)
+                // Left/right edges: normal shift
+                if (nearL) this._addGhost(p, x + W, y);
+                if (nearR) this._addGhost(p, x - W, y);
+                // Top/bottom edges: y-glide (x → W-x), flipVx
+                if (nearT) this._addGhost(p, W - x, y + H, true, false);
+                if (nearB) this._addGhost(p, W - x, y - H, true, false);
+                // Corners: combine x-shift with y-glide
+                if (nearL && nearT) this._addGhost(p, W - x + W, y + H, true, false);
+                if (nearL && nearB) this._addGhost(p, W - x + W, y - H, true, false);
+                if (nearR && nearT) this._addGhost(p, W - x - W, y + H, true, false);
+                if (nearR && nearB) this._addGhost(p, W - x - W, y - H, true, false);
+            } else {
+                // RP²: x-wrap flips y (flipVy), y-wrap flips x (flipVx)
+                // Left/right edges: x-glide (y → H-y), flipVy
+                if (nearL) this._addGhost(p, x + W, H - y, false, true);
+                if (nearR) this._addGhost(p, x - W, H - y, false, true);
+                // Top/bottom edges: y-glide (x → W-x), flipVx
+                if (nearT) this._addGhost(p, W - x, y + H, true, false);
+                if (nearB) this._addGhost(p, W - x, y - H, true, false);
+                // Corners: combine both glides
+                if (nearL && nearT) this._addGhost(p, W - x + W, y + H, true, false);
+                if (nearL && nearB) this._addGhost(p, W - x + W, y - H, true, false);
+                if (nearR && nearT) this._addGhost(p, W - x - W, y + H, true, false);
+                if (nearR && nearB) this._addGhost(p, W - x - W, y - H, true, false);
+            }
+        }
+    }
+
+    /** Build tree, adding ghosts if periodic. Returns root index. */
+    _buildTree(particles) {
+        if (this.periodic) {
+            this._generateGhosts(particles);
+            // Combine real + ghost into _treeParticles
+            const tp = this._treeParticles;
+            const nReal = particles.length;
+            const nGhost = this._ghostCount;
+            const total = nReal + nGhost;
+            tp.length = total;
+            for (let i = 0; i < nReal; i++) tp[i] = particles[i];
+            for (let i = 0; i < nGhost; i++) tp[nReal + i] = this._ghostPool[i];
+            return this.pool.build(this.boundary.x, this.boundary.y, this.boundary.w, this.boundary.h, tp);
+        }
+        return this.pool.build(this.boundary.x, this.boundary.y, this.boundary.w, this.boundary.h, particles);
+    }
+
+    update(particles, dt, collisionMode, boundaryMode, topology, width, height, offX = 0, offY = 0) {
         this.boundary.x = offX + width / 2;
         this.boundary.y = offY + height / 2;
         this.boundary.w = width * 2;
         this.boundary.h = height * 2;
+
+        this.domainW = width;
+        this.domainH = height;
+        this.periodic = (boundaryMode === 'loop');
+        this._topologyConst = topology === 'klein' ? KLEIN : topology === 'rp2' ? RP2 : TORUS;
 
         const n = particles.length;
         const relOn = this.relativityEnabled;
@@ -90,9 +200,9 @@ export default class Physics {
             resetForces(particles);
             // Build tree for BH mode (subsequent substeps rebuild in the loop)
             const initRoot = this.barnesHutEnabled
-                ? this.pool.build(this.boundary.x, this.boundary.y, this.boundary.w, this.boundary.h, particles)
+                ? this._buildTree(particles)
                 : -1;
-            computeAllForces(particles, toggles, this.pool, initRoot, this.barnesHutEnabled, this.signalDelayEnabled, this.relativityEnabled, this.simTime);
+            computeAllForces(particles, toggles, this.pool, initRoot, this.barnesHutEnabled, this.signalDelayEnabled, this.relativityEnabled, this.simTime, this.periodic, this.domainW, this.domainH, this._topologyConst);
             this._forcesInit = true;
         }
 
@@ -106,9 +216,9 @@ export default class Physics {
         if ((hasMagnetic || hasGM) && this._forcesInit) {
             resetForces(particles);
             const prelimRoot = this.barnesHutEnabled
-                ? this.pool.build(this.boundary.x, this.boundary.y, this.boundary.w, this.boundary.h, particles)
+                ? this._buildTree(particles)
                 : -1;
-            computeAllForces(particles, toggles, this.pool, prelimRoot, this.barnesHutEnabled, this.signalDelayEnabled, this.relativityEnabled, this.simTime);
+            computeAllForces(particles, toggles, this.pool, prelimRoot, this.barnesHutEnabled, this.signalDelayEnabled, this.relativityEnabled, this.simTime, this.periodic, this.domainW, this.domainH, this._topologyConst);
         }
 
         // ─── Adaptive substepping with per-step re-evaluation ───
@@ -278,7 +388,7 @@ export default class Physics {
             }
 
             // Abraham-Lorentz radiation reaction via Landau-Lifshitz approximation
-            // Replaces direct KE drain with a proper force: jerk + Schott damping terms
+            // Jerk term only: τ · dF/dt / γ³ (missing Schott damping −τ·F²v/m²)
             if (this.radiationEnabled && this.sim) {
                 for (let i = 0; i < n; i++) {
                     const p = particles[i];
@@ -421,7 +531,7 @@ export default class Physics {
                     p.vel.y = p.w.y * invG;
                 }
                 // Recompute 1PN forces at new state (always pairwise for correction)
-                compute1PNPairwise(particles, SOFTENING_SQ);
+                compute1PNPairwise(particles, SOFTENING_SQ, this.periodic, this.domainW, this.domainH, this.domainW * 0.5, this.domainH * 0.5, this._topologyConst);
                 // Apply correction kick: w += (F_1PN_new - F_1PN_old) * dt/2 / m
                 for (let i = 0; i < n; i++) {
                     const p = particles[i];
@@ -432,12 +542,12 @@ export default class Physics {
             }
 
             // Step 5: Rebuild QuadTree with new positions
-            const root = this.pool.build(this.boundary.x, this.boundary.y, this.boundary.w, this.boundary.h, particles);
+            const root = this._buildTree(particles);
             lastRoot = root;
 
             // Step 6: Handle collisions
             if (collisionMode !== 'pass') {
-                handleCollisions(particles, this.pool, root, collisionMode, this.bounceFriction, this.relativityEnabled);
+                handleCollisions(particles, this.pool, root, collisionMode, this.bounceFriction, this.relativityEnabled, this.periodic, this.domainW, this.domainH, this._topologyConst);
             }
 
             // Photon absorption: transfer momentum from photons to particles
@@ -451,6 +561,7 @@ export default class Physics {
                     const candidates = this.pool.query(root,
                         ph.pos.x, ph.pos.y, SOFTENING, SOFTENING);
                     for (const target of candidates) {
+                        if (target.isGhost) continue;
                         // Self-absorption guard: skip emitter for first 2 substeps
                         if (target.id === ph.emitterId && ph.age < 3) continue;
                         const dx = ph.pos.x - target.pos.x;
@@ -480,11 +591,11 @@ export default class Physics {
 
             // Step 7: Calculate new forces and B fields
             resetForces(particles);
-            computeAllForces(particles, toggles, this.pool, root, this.barnesHutEnabled, this.signalDelayEnabled, this.relativityEnabled, this.simTime);
+            computeAllForces(particles, toggles, this.pool, root, this.barnesHutEnabled, this.signalDelayEnabled, this.relativityEnabled, this.simTime, this.periodic, this.domainW, this.domainH, this._topologyConst);
         }
 
         // Compute PE (once per frame, using last substep's tree)
-        this.potentialEnergy = computePE(particles, toggles, this.pool, lastRoot, this.barnesHutEnabled, BH_THETA);
+        this.potentialEnergy = computePE(particles, toggles, this.pool, lastRoot, this.barnesHutEnabled, BH_THETA, this.periodic, this.domainW, this.domainH, this._topologyConst);
 
         // Compute velocity-dependent forces for display only (after final substep).
         // These are applied via Boris rotation (not kicks), but we add them to the
@@ -557,10 +668,7 @@ export default class Physics {
                     continue; // skip — don't copy to output
                 }
             } else if (boundaryMode === 'loop') {
-                if (p.pos.x < left) p.pos.x += width;
-                else if (p.pos.x > right) p.pos.x -= width;
-                if (p.pos.y < top) p.pos.y += height;
-                else if (p.pos.y > bottom) p.pos.y -= height;
+                wrapPosition(p, this._topologyConst, width, height);
             } else if (boundaryMode === 'bounce') {
                 let bounced = false;
                 if (p.pos.x < left + p.radius) { p.pos.x = left + p.radius; p.w.x *= -1; bounced = true; }
@@ -588,7 +696,7 @@ export default class Physics {
     computePE(particles, root) {
         this._syncToggles();
         const toggles = this._toggles;
-        this.potentialEnergy = computePE(particles, toggles, this.pool, root >= 0 ? root : -1, this.barnesHutEnabled, BH_THETA);
+        this.potentialEnergy = computePE(particles, toggles, this.pool, root >= 0 ? root : -1, this.barnesHutEnabled, BH_THETA, this.periodic, this.domainW, this.domainH, this._topologyConst);
     }
 
     checkTidalBreakup(particles) {
@@ -617,9 +725,18 @@ export default class Physics {
 
             // Tidal stretching from nearby bodies
             let maxTidal = 0;
+            const _periodic = this.periodic;
+            const _halfDomW = this.domainW * 0.5, _halfDomH = this.domainH * 0.5;
+            const _domW = this.domainW, _domH = this.domainH;
+            const _topo = this._topologyConst;
+            const _miOut = { x: 0, y: 0 };
             for (const other of particles) {
                 if (other === p) continue;
-                const dx = other.pos.x - p.pos.x, dy = other.pos.y - p.pos.y;
+                let dx = other.pos.x - p.pos.x, dy = other.pos.y - p.pos.y;
+                if (_periodic) {
+                    minImage(p.pos.x, p.pos.y, other.pos.x, other.pos.y, _topo, _domW, _domH, _halfDomW, _halfDomH, _miOut);
+                    dx = _miOut.x; dy = _miOut.y;
+                }
                 const distSq = dx * dx + dy * dy + SOFTENING_SQ;
                 const r = Math.sqrt(distSq);
                 const tidalAccel = TIDAL_STRENGTH * other.mass * p.radius / (r * distSq);

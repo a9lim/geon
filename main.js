@@ -20,6 +20,8 @@ class Simulation {
         this.particles = [];
         this.physics = new Physics();
         this.renderer = new Renderer(this.ctx, this.width, this.height);
+        this.renderer.domainW = this.width;
+        this.renderer.domainH = this.height;
         this.renderer.setTheme(true);
 
         this.heatmap = new Heatmap();
@@ -63,8 +65,11 @@ class Simulation {
 
         this.collisionMode = 'pass';
         this.boundaryMode = 'despawn';
+        this.topology = 'torus';
         this.speedScale = DEFAULT_SPEED_SCALE;
         this.selectedParticle = null;
+        this.domainW = this.width;
+        this.domainH = this.height;
         this.photons = [];
         this.totalRadiated = 0;
         this.totalRadiatedPx = 0;
@@ -149,12 +154,8 @@ class Simulation {
             const maxAccum = PHYSICS_DT * MAX_SUBSTEPS * 4;
             if (this.accumulator > maxAccum) this.accumulator = maxAccum;
 
-            const cam = this.camera;
-            const halfW = this.width / (2 * cam.zoom);
-            const halfH = this.height / (2 * cam.zoom);
-
             while (this.accumulator >= PHYSICS_DT) {
-                this.physics.update(this.particles, PHYSICS_DT, this.collisionMode, this.boundaryMode, halfW * 2, halfH * 2, cam.x - halfW, cam.y - halfH);
+                this.physics.update(this.particles, PHYSICS_DT, this.collisionMode, this.boundaryMode, this.topology, this.domainW, this.domainH, 0, 0);
 
                 // Update photons (inside fixed step for time consistency)
                 // Absorption handled in integrator (quadtree + self-absorption guard)

@@ -1,5 +1,8 @@
 // ─── Energy & Momentum Computation ───
 import { INERTIA_K, SOFTENING_SQ } from './config.js';
+import { TORUS, minImage } from './topology.js';
+
+const _miOut = { x: 0, y: 0 };
 
 /**
  * Compute all energy, momentum, and angular momentum quantities.
@@ -63,13 +66,25 @@ export function computeEnergies(particles, physics, sim) {
     const hasCoulomb = physics.coulombEnabled;
     const hasGM = physics.gravitomagEnabled;
 
+    const periodic = physics.periodic;
+    const domW = physics.domainW;
+    const domH = physics.domainH;
+    const halfDomW = domW * 0.5;
+    const halfDomH = domH * 0.5;
+    const topology = physics._topologyConst !== undefined ? physics._topologyConst : TORUS;
+
     if (hasCoulomb || hasGM) {
         for (let i = 0; i < n; i++) {
             const pi = particles[i];
             for (let j = i + 1; j < n; j++) {
                 const pj = particles[j];
-                const dx = pj.pos.x - pi.pos.x;
-                const dy = pj.pos.y - pi.pos.y;
+                let dx, dy;
+                if (periodic) {
+                    minImage(pi.pos.x, pi.pos.y, pj.pos.x, pj.pos.y, topology, domW, domH, halfDomW, halfDomH, _miOut);
+                    dx = _miOut.x; dy = _miOut.y;
+                } else {
+                    dx = pj.pos.x - pi.pos.x; dy = pj.pos.y - pi.pos.y;
+                }
                 const rSq = dx * dx + dy * dy + SOFTENING_SQ;
                 const invR = 1 / Math.sqrt(rSq);
                 const rx = dx * invR, ry = dy * invR;

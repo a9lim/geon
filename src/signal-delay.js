@@ -4,6 +4,9 @@
 // Uses Newton-Raphson with 3 iterations.
 
 import { HISTORY_SIZE, SOFTENING } from './config.js';
+import { TORUS, minImage } from './topology.js';
+
+const _miOut = { x: 0, y: 0 };
 
 /**
  * Solve light-cone equation for delayed state of source as seen by observer.
@@ -12,18 +15,30 @@ import { HISTORY_SIZE, SOFTENING } from './config.js';
  * @param {number} simTime - Current simulation time
  * @returns {Object|null} Interpolated {x, y, vx, vy} or null if history insufficient
  */
-export function getDelayedState(source, observer, simTime) {
+export function getDelayedState(source, observer, simTime, periodic, domW, domH, halfDomW, halfDomH, topology = TORUS) {
     const ox = observer.pos.x, oy = observer.pos.y;
 
     // Initial guess: t_del = now - |current separation|
-    const dx0 = source.pos.x - ox, dy0 = source.pos.y - oy;
+    let dx0, dy0;
+    if (periodic) {
+        minImage(ox, oy, source.pos.x, source.pos.y, topology, domW, domH, halfDomW, halfDomH, _miOut);
+        dx0 = _miOut.x; dy0 = _miOut.y;
+    } else {
+        dx0 = source.pos.x - ox; dy0 = source.pos.y - oy;
+    }
     let tDel = simTime - Math.sqrt(dx0 * dx0 + dy0 * dy0);
 
     for (let iter = 0; iter < 3; iter++) {
         const sp = interpolateHistory(source, tDel);
         if (!sp) return null;
 
-        const dx = sp.x - ox, dy = sp.y - oy;
+        let dx, dy;
+        if (periodic) {
+            minImage(ox, oy, sp.x, sp.y, topology, domW, domH, halfDomW, halfDomH, _miOut);
+            dx = _miOut.x; dy = _miOut.y;
+        } else {
+            dx = sp.x - ox; dy = sp.y - oy;
+        }
         const dist = Math.sqrt(dx * dx + dy * dy);
         const residual = dist - (simTime - tDel);
         if (Math.abs(residual) < 0.01) break;
