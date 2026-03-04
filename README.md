@@ -1,6 +1,6 @@
-# Relativistic N-Body Physics Simulation
+# No-Hair
 
-Interactive physics simulation modeling gravity, electromagnetism, magnetic dipoles, and gravitomagnetic corrections with relativistic effects. Uses the **Barnes-Hut algorithm** for O(N log N) force calculation.
+N-body simulation where particles interact through gravity, electromagnetism, and relativistic corrections. Boris integration, **Barnes-Hut** O(N log N) force calculation, radiation reaction, and signal delay.
 
 **[Live Demo →](https://a9l.im/physsim)** · Part of the [a9l.im](https://a9l.im) portfolio
 
@@ -8,10 +8,10 @@ Interactive physics simulation modeling gravity, electromagnetism, magnetic dipo
 
 - **Relativistic mechanics** — Proper velocity `w = γv` as state variable; velocity derived via `v = w/√(1+w²)`, naturally enforcing the speed-of-light limit. Same pattern for spin: angular celerity caps surface velocity below *c*.
 - **Boris integrator** — Splits E-like (radial) and B-like (velocity-dependent) forces; Boris rotation exactly preserves |v| for long-term magnetic stability. Fixed-timestep accumulator (1/120s) decouples physics from frame rate.
-- **6 force types** — Gravity, Coulomb, magnetic dipole, gravitomagnetic dipole, Lorentz, and linear gravitomagnetic (frame-dragging)
+- **8 force types** — Gravity, Coulomb, magnetic dipole, gravitomagnetic dipole, Lorentz, linear gravitomagnetic (frame-dragging), Stern-Gerlach, and Mathisson-Papapetrou
 - **Larmor radiation** — Accelerating charges emit visible photons with orbital decay via Landau-Lifshitz force
-- **Signal delay** — Finite-speed force propagation via retarded potentials (pairwise mode only)
-- **Spin-orbit coupling** — Energy transfer between translational and rotational KE via B-field gradients
+- **Signal delay** — Finite-speed force propagation via finite-speed force propagation (pairwise mode only)
+- **Spin-orbit coupling** — Energy transfer between translational and rotational KE via B-field gradients. Stern-Gerlach (F = μ·∇B) and Mathisson-Papapetrou (F = −L·∇Bg) spin-curvature forces kick the center of mass, visible as yellow arrows in force component view.
 - **Tidal breakup** — Roche limit fragmentation when tidal/centrifugal/Coulomb stress exceeds self-gravity
 - **Barnes-Hut** — Toggleable O(N log N) quadtree approximation vs exact O(N²) pairwise forces. Pool-based SoA quadtree eliminates per-frame GC pressure.
 - **Collisions** — Pass-through, elastic bounce with spin-friction transfer, or merge (conserves mass, charge, momentum, angular momentum)
@@ -48,7 +48,7 @@ main.js                    — Simulation class (entry point)
 │     ├── src/forces.js        — force computation (pairwise + Barnes-Hut tree walk)
 │     ├── src/collisions.js    — collision resolution (merge, bounce)
 │     ├── src/potential.js     — potential energy computation
-│     ├── src/signal-delay.js  — retarded potentials (signal delay)
+│     ├── src/signal-delay.js  — signal delay (finite-speed force propagation)
 │     ├── src/quadtree.js      — pool-based Barnes-Hut quadtree (zero per-frame GC)
 │     └── src/photon.js        — radiation photon entity
 ├── src/stats-display.js   — energy/momentum/drift stats, selected particle info

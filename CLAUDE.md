@@ -51,6 +51,10 @@ Natural units: c = 1, G = 1. Both linear and rotational state use the same patte
 
 When relativity is off, derivation is identity (`v = w`, `angVel = angw`). Kicks use `Δw = F/m · Δt`. Particle radius = `cbrt(mass)` (ρ = 3/(4π)). `I = INERTIA_K·m·r²` (0.4, solid sphere). `μ = MAG_MOMENT_K·q·ω·r²` (0.2). `L = I·ω`.
 
+Per-particle display vectors: `forceGravity`, `forceCoulomb`, `forceMagnetic`, `forceGravitomag`, `force1PN`, `forceSpinCurv`. All reset each substep; `forceSpinCurv` accumulates both Stern-Gerlach (`+μ·∇Bz`) and Mathisson-Papapetrou (`-L·∇Bgz`) contributions.
+
+Per-particle torque display scalars: `torqueSpinOrbit` (EM + GM spin-orbit power, `dE/dt`), `torqueFrameDrag` (frame-drag torque). Both reset each substep. Rendered as circular arc arrows around particles when force components are visible — orange for spin-orbit, purple for frame-drag.
+
 ### Boris Integrator
 
 Per substep: half-kick(E) → Boris rotate(B) → half-kick(E) → drift → rebuild tree → collisions → new forces.
@@ -80,7 +84,7 @@ Per substep: half-kick(E) → Boris rotate(B) → half-kick(E) → drift → reb
 
 **Radiation pressure** (part of Radiation toggle): Photon absorption transfers momentum `p = E·dir` (c=1) to absorbing particles. O(P·logN) via quadtree query. Self-absorption guard: emitter skipped for 2 substeps. Energy/momentum bookkeeping corrected on absorption.
 
-**Spin-orbit** (`spinOrbitEnabled` + Relativity): `dE = -μ·(v·∇Bz)·dt` for EM (requires `magneticEnabled`), same with `L` and `∇Bgz` for GM. Gradient `∇Bz` has radial (`+3·Bz·r̂/r²`) and angular (`+q_s·v_s⊥/r³`) terms. `∇Bgz` has radial (`+3·Bgz·r̂/r²`) and angular (`-m_s·v_s⊥/r³`) terms (signs match Bgz sign flip). Frame-dragging torque: `τ = FRAME_DRAG_K·m_s·(ω_s - ω_p)/r³`. Also applies Stern-Gerlach force `F = +μ·∇Bz` (EM) and Mathisson-Papapetrou force `F = -L·∇Bgz` (GM) as center-of-mass kicks from spin-curvature coupling.
+**Spin-orbit** (`spinOrbitEnabled` + Relativity): `dE = -μ·(v·∇Bz)·dt` for EM (requires `magneticEnabled`), same with `L` and `∇Bgz` for GM. Gradient `∇Bz` has radial (`+3·Bz·r̂/r²`) and angular (`+q_s·v_s⊥/r³`) terms. `∇Bgz` has radial (`+3·Bgz·r̂/r²`) and angular (`-m_s·v_s⊥/r³`) terms (signs match Bgz sign flip). Frame-dragging torque: `τ = FRAME_DRAG_K·m_s·(ω_s - ω_p)/r³`. Also applies Stern-Gerlach force `F = +μ·∇Bz` (EM) and Mathisson-Papapetrou force `F = -L·∇Bgz` (GM) as center-of-mass kicks from spin-curvature coupling. Both accumulate into `p.forceSpinCurv` display vector (yellow in force component visualization).
 
 **Tidal breakup** (`tidalEnabled`): fragments when tidal (`M·r/d³`) + centrifugal (`ω²r`) + Coulomb self-repulsion (`q²/4r²`) > self-gravity (`m/r²`). Splits into `FRAGMENT_COUNT` (3) pieces.
 
@@ -134,7 +138,7 @@ Relativity + BH off → Signal Delay
 Tidal (independent)
 ```
 
-Disabled toggles get `.ctrl-disabled` (opacity 0.4, pointer-events none). Toggle colors: Gravity/GM = slate, Coulomb/Magnetic = blue, Relativity chain = yellow, Tidal = red.
+Disabled toggles get `.ctrl-disabled` (opacity 0.4, pointer-events none). Toggle colors: Gravity = red, GM = purple, Coulomb = blue, Magnetic = cyan, 1PN = rose, Spin-Orbit = orange, Relativity/Radiation/Signal Delay = yellow, Tidal = slate. Force arrow colors: gravity = red, GM = purple, Coulomb = blue, magnetic = cyan, 1PN = rose, spin-curvature = orange, radiation = yellow. Torque arc colors: spin-orbit = orange, frame-drag = purple. Torque arcs are circular arrows drawn at radii offset from the particle (spin-orbit inner, frame-drag outer); arc length scales with `|power|`, direction indicates CW/CCW.
 
 ## UI
 
