@@ -204,8 +204,8 @@ export default class Physics {
                     const schottY = schottScale * p.vel.y;
 
                     // Total LL radiation reaction force
-                    let fRadX = tau * (jerkX + schottX);
-                    let fRadY = tau * (jerkY + schottY);
+                    let fRadX = tau * (jerkX - schottX);
+                    let fRadY = tau * (jerkY - schottY);
 
                     // Relativistic correction: divide by γ³
                     if (relOn && gamma > 1) {
