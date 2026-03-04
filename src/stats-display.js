@@ -1,10 +1,9 @@
 import { computeEnergies } from './energy.js';
 
 export default class StatsDisplay {
-    constructor(dom, selDom, sankey) {
+    constructor(dom, selDom) {
         this.dom = dom;
         this.selDom = selDom;
-        this.sankey = sankey;
         this.initialEnergy = null;
         this.initialMomentum = null;
         this.initialAngMom = null;
@@ -48,8 +47,8 @@ export default class StatsDisplay {
         this.dom.energyDrift.textContent = fmtDrift(eDrift);
         this.dom.fieldE.textContent = fmt(e.fieldEnergy);
         this.dom.radiatedE.textContent = fmt(sim.totalRadiated);
-        this.sankey.update(e.linearKE, e.spinKE, e.pe, e.fieldEnergy, sim.totalRadiated);
         this.dom.momentum.textContent = fmt(pMag);
+        this.dom.particleMom.textContent = fmt(Math.sqrt(e.px * e.px + e.py * e.py));
         this.dom.fieldMom.textContent = fmt(Math.sqrt(e.fieldPx * e.fieldPx + e.fieldPy * e.fieldPy));
         this.dom.radiatedMom.textContent = fmt(Math.sqrt(sim.totalRadiatedPx * sim.totalRadiatedPx + sim.totalRadiatedPy * sim.totalRadiatedPy));
         this.dom.momentumDrift.textContent = fmtDrift(pDrift);

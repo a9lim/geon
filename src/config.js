@@ -22,7 +22,7 @@ export const MAX_TRAIL_LENGTH = 200;
 
 // Camera / Zoom
 export const ZOOM_MIN = 1;
-export const ZOOM_MAX = 3;
+export const ZOOM_MAX = 6;
 export const WHEEL_ZOOM_IN = 1.1;
 
 // Adaptive substepping
@@ -37,7 +37,7 @@ export const MAX_SPEED_RATIO = 0.99;
 
 // Larmor radiation
 export const LARMOR_K = 1 / 3; // τ = 2·LARMOR_K·q²/m = 2q²/(3m), P = 2q²a²/3 (c=G=1, ε₀=1/(4π))
-export const PHOTON_LIFETIME = 2.5;          // sim-time-units before despawn
+export const PHOTON_LIFETIME = 240;          // sim-time-units before despawn
 export const RADIATION_THRESHOLD = 0.01;     // min energy per frame to emit visible photon
 export const MAX_PHOTONS = 500;              // photon pool cap
 export const LL_FORCE_CLAMP = 0.5;           // max |F_rad·dt/m| as fraction of |w|

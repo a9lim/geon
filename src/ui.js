@@ -182,6 +182,9 @@ export function setupUI(sim) {
     document.getElementById('potentialToggle')?.addEventListener('change', (e) => {
         sim.heatmap.enabled = e.target.checked;
     });
+    document.getElementById('accelScalingToggle')?.addEventListener('change', (e) => {
+        sim.renderer.accelScaling = e.target.checked;
+    });
 
     // ─── Slider value displays ───
     const massSlider = document.getElementById('massInput');

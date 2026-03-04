@@ -4,7 +4,6 @@ import InputHandler from './src/input.js';
 import Particle from './src/particle.js';
 import Heatmap from './src/heatmap.js';
 import PhasePlot from './src/phase-plot.js';
-import SankeyOverlay from './src/sankey.js';
 import StatsDisplay from './src/stats-display.js';
 import { setupUI } from './src/ui.js';
 import { ZOOM_MIN, ZOOM_MAX, WHEEL_ZOOM_IN, DEFAULT_SPEED_SCALE, PHOTON_LIFETIME, FRAGMENT_COUNT, PHYSICS_DT, MAX_SUBSTEPS } from './src/config.js';
@@ -27,7 +26,6 @@ class Simulation {
         this.renderer.heatmap = this.heatmap;
 
         this.phasePlot = new PhasePlot();
-        this.sankey = new SankeyOverlay();
 
         this.camera = createCamera({
             width: this.width, height: this.height,
@@ -53,6 +51,7 @@ class Simulation {
             fieldE: document.getElementById('fieldE'),
             radiatedE: document.getElementById('radiatedE'),
             momentum: document.getElementById('momentum'),
+            particleMom: document.getElementById('particleMom'),
             fieldMom: document.getElementById('fieldMom'),
             radiatedMom: document.getElementById('radiatedMom'),
             momentumDrift: document.getElementById('momentumDrift'),
@@ -88,9 +87,8 @@ class Simulation {
 
         // Mount visualization canvases into sidebar containers
         document.getElementById('phase-plot-container').appendChild(this.phasePlot.canvas);
-        document.getElementById('energy-bars-container').appendChild(this.sankey.canvas);
 
-        this.stats = new StatsDisplay(this.dom, this.selDom, this.sankey);
+        this.stats = new StatsDisplay(this.dom, this.selDom);
 
         this.init();
     }
@@ -159,27 +157,10 @@ class Simulation {
                 this.physics.update(this.particles, PHYSICS_DT, this.collisionMode, this.boundaryMode, halfW * 2, halfH * 2, cam.x - halfW, cam.y - halfH);
 
                 // Update photons (inside fixed step for time consistency)
+                // Absorption handled in integrator (quadtree + self-absorption guard)
                 for (let i = this.photons.length - 1; i >= 0; i--) {
                     const ph = this.photons[i];
                     ph.update(PHYSICS_DT);
-
-                    if (this.physics.radiationEnabled) {
-                        for (const p of this.particles) {
-                            const dx = ph.pos.x - p.pos.x, dy = ph.pos.y - p.pos.y;
-                            const distSq = dx * dx + dy * dy;
-                            if (distSq < p.radius * p.radius) {
-                                const impulse = ph.energy / p.mass;
-                                p.w.x += ph.vel.x * impulse;
-                                p.w.y += ph.vel.y * impulse;
-                                ph.alive = false;
-                                this.totalRadiated = Math.max(0, this.totalRadiated - ph.energy);
-                                this.totalRadiatedPx -= ph.vel.x * ph.energy;
-                                this.totalRadiatedPy -= ph.vel.y * ph.energy;
-                                break;
-                            }
-                        }
-                    }
-
                     if (!ph.alive || ph.lifetime > PHOTON_LIFETIME) {
                         this.photons.splice(i, 1);
                     }
@@ -217,7 +198,6 @@ class Simulation {
         this.phasePlot.update(this.particles, this.selectedParticle);
         this.renderer.render(this.particles, PHYSICS_DT, this.camera, this.photons);
         this.phasePlot.draw(this.renderer.isLight);
-        this.sankey.draw(this.renderer.isLight);
         if (this.running) this.stats.updateEnergy(this.particles, this.physics, this);
         const sel = this.stats.updateSelected(this.selectedParticle, this.particles, this.physics);
         if (!sel && this.selectedParticle) this.selectedParticle = null;

@@ -297,18 +297,8 @@ export default class Physics {
 
                     // Jerk term: τ · dF/dt ≈ τ · (F - F_prev) / dt
                     const invDt = 1 / dtSub;
-                    const jerkX = (p.force.x - p.prevForce.x) * invDt;
-                    const jerkY = (p.force.y - p.prevForce.y) * invDt;
-
-                    // Schott damping term: τ · |F|² · v / m
-                    const Fsq = p.force.x * p.force.x + p.force.y * p.force.y;
-                    const schottScale = Fsq / p.mass;
-                    const schottX = schottScale * p.vel.x;
-                    const schottY = schottScale * p.vel.y;
-
-                    // Total LL radiation reaction force
-                    let fRadX = tau * (jerkX - schottX);
-                    let fRadY = tau * (jerkY - schottY);
+                    let fRadX = tau * (p.force.x - p.prevForce.x) * invDt;
+                    let fRadY = tau * (p.force.y - p.prevForce.y) * invDt;
 
                     // Relativistic correction: divide by γ³
                     if (relOn && gamma > 1) {
@@ -336,6 +326,8 @@ export default class Physics {
                     // Apply as kick to proper velocity
                     p.w.x += fRadX * dtSub / p.mass;
                     p.w.y += fRadY * dtSub / p.mass;
+                    p.forceRadiation.x += fRadX;
+                    p.forceRadiation.y += fRadY;
 
                     // NaN guard
                     if (isNaN(p.w.x) || isNaN(p.w.y)) {
@@ -356,14 +348,34 @@ export default class Physics {
                         this.sim.totalRadiatedPx += dE * Math.cos(radAngle);
                         this.sim.totalRadiatedPy += dE * Math.sin(radAngle);
 
-                        // Spawn photon if energy exceeds threshold (visual with jitter)
-                        if (dE > RADIATION_THRESHOLD && this.sim.photons.length < MAX_PHOTONS) {
-                            const spawnAngle = radAngle + (Math.random() - 0.5) * 1.0;
+                        // Accumulate energy for photon emission across substeps
+                        p._radAccum = (p._radAccum || 0) + dE;
+                        if (p._radAccum >= RADIATION_THRESHOLD && this.sim.photons.length < MAX_PHOTONS) {
+                            // Sample emission angle from sin²θ (Larmor pattern: peak ⊥ to accel)
+                            const accelAngle = Math.atan2(ay, ax);
+                            let theta;
+                            do { theta = Math.random() * 6.283185307; }
+                            while (Math.random() > Math.sin(theta) * Math.sin(theta));
+                            let emitAngle = accelAngle + theta;
+
+                            // Relativistic aberration: beam toward velocity direction
+                            if (gamma > 1.01) {
+                                const beta = Math.sqrt(1 - 1 / (gamma * gamma));
+                                const velAngle = Math.atan2(p.vel.y, p.vel.x);
+                                const delta = emitAngle - velAngle;
+                                const sinD = Math.sin(delta), cosD = Math.cos(delta);
+                                const denom = 1 + beta * cosD;
+                                emitAngle = velAngle + Math.atan2(sinD / (gamma * denom), (cosD + beta) / denom);
+                            }
+
+                            const cosA = Math.cos(emitAngle), sinA = Math.sin(emitAngle);
                             this.sim.photons.push(new Photon(
-                                p.pos.x, p.pos.y,
-                                Math.cos(spawnAngle), Math.sin(spawnAngle),
-                                dE, p.id
+                                p.pos.x + cosA * (p.radius + 1),
+                                p.pos.y + sinA * (p.radius + 1),
+                                cosA, sinA,
+                                p._radAccum, p.id
                             ));
+                            p._radAccum = 0;
                         }
                     }
 
@@ -459,6 +471,13 @@ export default class Physics {
                 }
             }
 
+            // Save radiation display force before reset (can't recompute from final state)
+            for (let i = 0; i < n; i++) {
+                const p = particles[i];
+                p._radDisplayX = p.forceRadiation.x;
+                p._radDisplayY = p.forceRadiation.y;
+            }
+
             // Step 7: Calculate new forces and B fields
             resetForces(particles);
             computeAllForces(particles, toggles, this.pool, root, this.barnesHutEnabled, this.signalDelayEnabled, this.relativityEnabled, this.simTime);
@@ -481,6 +500,47 @@ export default class Physics {
                     p.forceGravitomag.x += 4 * p.mass * p.vel.y * p.Bgz;
                     p.forceGravitomag.y -= 4 * p.mass * p.vel.x * p.Bgz;
                 }
+            }
+        }
+
+        // Recompute spin-orbit display values from final substep fields.
+        // Like the velocity-dependent display forces above, these were zeroed by
+        // the last resetForces() but the underlying fields are still valid.
+        if (hasMagnetic && relOn && this.spinOrbitEnabled) {
+            for (let i = 0; i < n; i++) {
+                const p = particles[i];
+                if (Math.abs(p.angVel) < 1e-10 || Math.abs(p.charge) < 1e-10) continue;
+                const pRSq = p.radius * p.radius;
+                const mu = MAG_MOMENT_K * p.charge * p.angVel * pRSq;
+                p.torqueSpinOrbit += -mu * (p.vel.x * p.dBzdx + p.vel.y * p.dBzdy);
+                p.forceSpinCurv.x += mu * p.dBzdx;
+                p.forceSpinCurv.y += mu * p.dBzdy;
+            }
+        }
+        if (hasGM && relOn && this.spinOrbitEnabled) {
+            for (let i = 0; i < n; i++) {
+                const p = particles[i];
+                if (Math.abs(p.angVel) < 1e-10) continue;
+                const pRSq = p.radius * p.radius;
+                const L = INERTIA_K * p.mass * p.angVel * pRSq;
+                p.torqueSpinOrbit += -L * (p.vel.x * p.dBgzdx + p.vel.y * p.dBgzdy);
+                p.forceSpinCurv.x -= L * p.dBgzdx;
+                p.forceSpinCurv.y -= L * p.dBgzdy;
+            }
+        }
+        if (hasGM) {
+            for (let i = 0; i < n; i++) {
+                const p = particles[i];
+                if (p._frameDragTorque) p.torqueFrameDrag = p._frameDragTorque;
+            }
+        }
+
+        // Restore radiation display force from last substep (saved before resetForces)
+        if (this.radiationEnabled) {
+            for (let i = 0; i < n; i++) {
+                const p = particles[i];
+                p.forceRadiation.x = p._radDisplayX || 0;
+                p.forceRadiation.y = p._radDisplayY || 0;
             }
         }
 

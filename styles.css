@@ -109,16 +109,16 @@ body {
 /* ═══════════════════════════════════════════════
    Force Toggle Colors
    ═══════════════════════════════════════════════ */
-.tog-gravity     { --tog-color: var(--ext-slate); }
-.tog-gravitomag  { --tog-color: var(--ext-slate); }
+.tog-gravity     { --tog-color: var(--ext-red); }
+.tog-gravitomag  { --tog-color: var(--ext-purple); }
 .tog-coulomb     { --tog-color: var(--ext-blue); }
-.tog-magnetic    { --tog-color: var(--ext-blue); }
+.tog-magnetic    { --tog-color: var(--ext-cyan); }
 .tog-relativity  { --tog-color: var(--ext-yellow); }
 .tog-radiation   { --tog-color: var(--ext-yellow); }
 .tog-signaldelay { --tog-color: var(--ext-yellow); }
-.tog-spinorbit   { --tog-color: var(--ext-yellow); }
-.tog-tidal       { --tog-color: var(--ext-red); }
-.tog-onepn      { --tog-color: var(--ext-slate); }
+.tog-spinorbit   { --tog-color: var(--ext-orange); }
+.tog-tidal       { --tog-color: var(--ext-slate); }
+.tog-onepn      { --tog-color: var(--ext-rose); }
 
 .ctrl-row {
     display: flex;
