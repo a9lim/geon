@@ -131,44 +131,64 @@ export function setupUI(sim) {
         });
     });
 
-    // ─── Relativity dependency: Signal Delay + Spin-Orbit require Relativity ───
+    // ─── Force toggle dependency helper ───
+    // When a parent is off, disable the sub-toggle AND turn it off
+    const setDepState = (el, prop, disabled) => {
+        el.disabled = disabled;
+        el.closest('.ctrl-row').classList.toggle('ctrl-disabled', disabled);
+        if (disabled && el.checked) {
+            el.checked = false;
+            el.setAttribute('aria-checked', 'false');
+            sim.physics[prop] = false;
+            if (prop === 'signalDelayEnabled') sim.renderer.showSignalDelay = false;
+        }
+    };
+
     const relativityEl = document.getElementById('relativity-toggle');
-    const relDepIds = ['spinorbit-toggle'];
+    const bhEl = document.getElementById('barneshut-toggle');
+    const gravEl = document.getElementById('gravity-toggle');
+    const coulEl = document.getElementById('coulomb-toggle');
+
+    // ─── Relativity → Spin-Orbit, Radiation ───
     const updateRelDeps = () => {
         const on = relativityEl.checked;
-        relDepIds.forEach(id => {
-            const el = document.getElementById(id);
-            el.disabled = !on;
-            el.closest('.ctrl-row').classList.toggle('ctrl-disabled', !on);
-        });
+        setDepState(document.getElementById('spinorbit-toggle'), 'spinOrbitEnabled', !on);
+        setDepState(document.getElementById('radiation-toggle'), 'radiationEnabled', !on);
     };
     relativityEl.addEventListener('change', updateRelDeps);
     updateRelDeps();
 
-    // ─── Barnes-Hut dependency: Signal Delay requires pairwise mode ───
-    const bhEl = document.getElementById('barneshut-toggle');
+    // ─── Signal Delay requires Relativity + BH off ───
     const sdEl = document.getElementById('signaldelay-toggle');
-    const updateBhDeps = () => {
-        const bhOn = bhEl.checked;
-        sdEl.disabled = bhOn || !relativityEl.checked;
-        sdEl.closest('.ctrl-row').classList.toggle('ctrl-disabled',
-            bhOn || !relativityEl.checked);
+    const updateSdDeps = () => {
+        setDepState(sdEl, 'signalDelayEnabled', bhEl.checked || !relativityEl.checked);
     };
-    bhEl.addEventListener('change', updateBhDeps);
-    relativityEl.addEventListener('change', updateBhDeps);
-    updateBhDeps();
+    bhEl.addEventListener('change', updateSdDeps);
+    relativityEl.addEventListener('change', updateSdDeps);
+    updateSdDeps();
 
-    // ─── 1PN dependency: requires Gravity + Relativity ───
-    const gravEl = document.getElementById('gravity-toggle');
+    // ─── 1PN requires Gravity + Relativity ───
     const pnEl = document.getElementById('onepn-toggle');
     const updatePnDeps = () => {
-        const ok = gravEl.checked && relativityEl.checked;
-        pnEl.disabled = !ok;
-        pnEl.closest('.ctrl-row').classList.toggle('ctrl-disabled', !ok);
+        setDepState(pnEl, 'onePNEnabled', !(gravEl.checked && relativityEl.checked));
     };
     gravEl.addEventListener('change', updatePnDeps);
     relativityEl.addEventListener('change', updatePnDeps);
     updatePnDeps();
+
+    // ─── Gravity → Gravitomagnetic ───
+    const updateGravDeps = () => {
+        setDepState(document.getElementById('gravitomag-toggle'), 'gravitomagEnabled', !gravEl.checked);
+    };
+    gravEl.addEventListener('change', updateGravDeps);
+    updateGravDeps();
+
+    // ─── Coulomb → Magnetic ───
+    const updateCoulDeps = () => {
+        setDepState(document.getElementById('magnetic-toggle'), 'magneticEnabled', !coulEl.checked);
+    };
+    coulEl.addEventListener('change', updateCoulDeps);
+    updateCoulDeps();
 
     // ─── Visual toggles ───
     document.getElementById('trailsToggle').addEventListener('change', (e) => {
