@@ -137,6 +137,38 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
         p.forceCoulomb.y += ry * fDir;
     }
 
+    if (toggles.onePNEnabled) {
+        // 1PN Einstein-Infeld-Hoffmann correction (natural units, G=c=1)
+        // Uses coordinate velocities (not proper velocity) per EIH formulation
+        const pvx = p.vel.x, pvy = p.vel.y;
+        const v1Sq = pvx * pvx + pvy * pvy;
+        const v2Sq = svx * svx + svy * svy;
+        const v1DotV2 = pvx * svx + pvy * svy;
+        const nx = rx * invR, ny = ry * invR;
+        const nDotV1 = nx * pvx + ny * pvy;
+        const nDotV2 = nx * svx + ny * svy;
+
+        // Radial term coefficient
+        const radial = -v1Sq - 2 * v2Sq + 4 * v1DotV2
+            + 1.5 * nDotV2 * nDotV2
+            + 5 * p.mass * invR + 4 * sMass * invR;
+
+        // Tangential term coefficient (along v1 - v2)
+        const tangential = 4 * nDotV1 - 3 * nDotV2;
+        const dvx = pvx - svx, dvy = pvy - svy;
+
+        // a_1PN = (m2/r^2) * { n * radial + (v1-v2) * tangential }
+        const base = sMass * invRSq * invR;
+        const fx = base * (rx * radial + dvx * tangential * r);
+        const fy = base * (ry * radial + dvy * tangential * r);
+
+        // Accumulate into total force (for kicks) and per-type display vector
+        out.x += fx;
+        out.y += fy;
+        p.force1PN.x += fx;
+        p.force1PN.y += fy;
+    }
+
     if (toggles.magneticEnabled) {
         // Dipole radial component: F = 3μ₁μ₂/r⁴ (aligned ⊥-to-plane dipoles repel)
         const fDir = -3 * (pMagMoment * sMagMoment) * invRSq * invRSq * invR;
