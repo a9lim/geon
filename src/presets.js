@@ -3,11 +3,17 @@
 // Designed to teach one physics concept by enabling only the relevant forces.
 import { WORLD_SCALE, SOFTENING_SQ } from './config.js';
 
-// Circular orbit velocity accounting for Plummer softening: v = sqrt(coupling * r / (m * (r² + ε²)))
-const _vCirc = (coupling, r, m) => Math.sqrt(Math.abs(coupling) * r / (m * (r * r + SOFTENING_SQ)));
+// Plummer-softened circular orbit velocity: F = coupling*r/(r²+ε²)^{3/2}, set F/m = v²/r
+const _vCirc = (coupling, r, m) => {
+    const rSq = r * r + SOFTENING_SQ;
+    return Math.sqrt(Math.abs(coupling) * r * r / (m * rSq * Math.sqrt(rSq)));
+};
 
-// Gravitational circular orbit velocity (softened)
-const _vGrav = (M, r) => Math.sqrt(M * r / (r * r + SOFTENING_SQ));
+// Gravitational circular orbit: _vCirc(M, r, 1)
+const _vGrav = (M, r) => {
+    const rSq = r * r + SOFTENING_SQ;
+    return Math.sqrt(M * r * r / (rSq * Math.sqrt(rSq)));
+};
 
 export const PRESETS = {
     kepler: {
@@ -213,7 +219,7 @@ export const PRESETS = {
             const coreM = 50;
             sim.addParticle(cx, cy, 0, 0, { mass: coreM, charge: 0, spin: 0.8 });
             for (let i = 0; i < 150; i++) {
-                const r = 5 + Math.random() * 25;
+                const r = 8 + Math.random() * 22;
                 const angle = Math.random() * Math.PI * 2;
                 const v = _vGrav(coreM, r);
                 const cos = Math.cos(angle), sin = Math.sin(angle);
@@ -273,8 +279,8 @@ const MODE_GROUPS = {
 };
 
 const SLIDER_MAP = {
-    speed: { input: 'speedInput', display: 'speedValue', suffix: '' },
-    friction: { input: 'frictionInput', display: 'frictionValue', suffix: '' },
+    speed: 'speedInput',
+    friction: 'frictionInput',
 };
 
 export function loadPreset(name, sim) {
@@ -316,10 +322,10 @@ export function loadPreset(name, sim) {
         }
 
         // Sliders
-        for (const [key, { input, display, suffix }] of Object.entries(SLIDER_MAP)) {
+        for (const [key, elId] of Object.entries(SLIDER_MAP)) {
             const val = preset.settings[key];
             if (val == null) continue;
-            const el = document.getElementById(input);
+            const el = document.getElementById(elId);
             if (!el) continue;
             el.value = val;
             el.dispatchEvent(new Event('input'));
