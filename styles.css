@@ -439,6 +439,9 @@ input[type="checkbox"]:checked::after {
 }
 
 /* Reference overlay */
+.reference-overlay[hidden] {
+    display: none !important;
+}
 .reference-overlay {
     position: fixed;
     inset: 0;
