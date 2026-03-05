@@ -492,16 +492,34 @@ export default class Physics {
                 }
             }
 
-            // Hawking radiation: P = HAWKING_K / M², isotropic emission, mass loss
+            // Hawking radiation: Kerr-Newman temperature
             if (this.blackHoleEnabled && this.sim) {
                 for (let i = 0; i < n; i++) {
                     const p = particles[i];
                     if (p.mass <= MIN_MASS) continue;
-                    const power = 1 / (15360 * Math.PI * p.mass * p.mass);
+                    const M = p.mass;
+                    const I = INERTIA_K * M * p.radiusSq;
+                    const a = I * Math.abs(p.angVel) / M;
+                    const Q = p.charge;
+                    const disc = M * M - a * a - Q * Q;
+                    let power;
+                    if (disc > 1e-10) {
+                        const rPlus = M + Math.sqrt(disc);
+                        const kappa = Math.sqrt(disc) / (2 * M * rPlus);
+                        const T = kappa / (2 * Math.PI);
+                        const A = 4 * Math.PI * (rPlus * rPlus + a * a);
+                        const sigma = Math.PI / 240;
+                        power = sigma * T * T * T * T * A;
+                    } else {
+                        power = 0; // extremal: no radiation
+                    }
                     const dE = power * dtSub;
+                    if (dE <= 0) continue;
                     p.mass -= dE;
                     p.invMass = 1 / p.mass;
-                    p.radius = 2 * p.mass;
+                    // Update Kerr-Newman radius
+                    const newDisc = p.mass * p.mass - a * a - Q * Q;
+                    p.radius = newDisc > 0 ? p.mass + Math.sqrt(newDisc) : p.mass * 0.5;
                     p.radiusSq = p.radius * p.radius;
                     this.sim.totalRadiated += dE;
 

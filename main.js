@@ -170,7 +170,7 @@ class Simulation {
                 let pLen = this.photons.length;
                 for (let i = pLen - 1; i >= 0; i--) {
                     const ph = this.photons[i];
-                    ph.update(PHYSICS_DT);
+                    ph.update(PHYSICS_DT, this.particles);
                     if (!ph.alive || ph.lifetime > PHOTON_LIFETIME) {
                         this.photons[i] = this.photons[--pLen];
                     }
