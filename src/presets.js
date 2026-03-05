@@ -75,15 +75,15 @@ export const PRESETS = {
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
         spawn(sim) {
             const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            const nucQ = 2;
+            const nucQ = 3;
             sim.addParticle(cx, cy, 0, 0, { mass: 5, charge: nucQ, spin: 0 });
-            // 3 electrons in circular Coulomb orbits
-            const eM = 0.5, eQ = -1;
-            const radii = [10, 14, 19];
-            for (let i = 0; i < radii.length; i++) {
-                const r = radii[i];
-                const angle = (2 * Math.PI * i) / 3;
-                const v = _vCirc(nucQ * eQ, r, eM);
+            // 2 electrons with screened Coulomb coupling (inner screens outer)
+            const eM = 1.0, eQ = -1;
+            const shells = [{ r: 12, effectiveQ: 3 }, { r: 18, effectiveQ: 2 }];
+            for (let i = 0; i < shells.length; i++) {
+                const { r, effectiveQ } = shells[i];
+                const angle = Math.PI * i;
+                const v = _vCirc(effectiveQ * Math.abs(eQ), r, eM);
                 const cos = Math.cos(angle), sin = Math.sin(angle);
                 sim.addParticle(cx + cos * r, cy + sin * r, -sin * v, cos * v,
                     { mass: eM, charge: eQ, spin: 0.3 });
@@ -122,12 +122,12 @@ export const PRESETS = {
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
         spawn(sim) {
             const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            const planetM = 20;
+            const planetM = 3;
             sim.addParticle(cx, cy, 0, 0, { mass: planetM, charge: 0, spin: 0 });
             // Moon with fast spin — watch it lock
-            const r = 18;
+            const r = 20;
             const v = _vGrav(planetM, r);
-            sim.addParticle(cx + r, cy, 0, v, { mass: 2, charge: 0, spin: 0.8 });
+            sim.addParticle(cx + r, cy, 0, v, { mass: 1, charge: 0, spin: 0.8 });
         },
     },
 
@@ -169,7 +169,7 @@ export const PRESETS = {
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
         spawn(sim) {
             const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            const starM = 20;
+            const starM = 6;
             const dist = 15;
             const v = _vGrav(starM, 2 * dist) * 0.9;
             sim.addParticle(cx - dist, cy, 0, v, { mass: starM, charge: 0, spin: 0.9 });
@@ -216,14 +216,14 @@ export const PRESETS = {
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
         spawn(sim) {
             const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            const coreM = 50;
+            const coreM = 5;
             sim.addParticle(cx, cy, 0, 0, { mass: coreM, charge: 0, spin: 0.8 });
-            for (let i = 0; i < 150; i++) {
-                const r = 8 + Math.random() * 22;
+            for (let i = 0; i < 100; i++) {
+                const r = 10 + Math.random() * 22;
                 const angle = Math.random() * Math.PI * 2;
                 const v = _vGrav(coreM, r);
                 const cos = Math.cos(angle), sin = Math.sin(angle);
-                const m = 0.05 + Math.random() * 0.15;
+                const m = 0.03 + Math.random() * 0.1;
                 sim.addParticle(cx + cos * r, cy + sin * r, -sin * v, cos * v, {
                     mass: m, charge: 0, spin: (Math.random() - 0.5) * 0.5,
                 });
