@@ -241,25 +241,27 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
     }
 
     if (toggles.magneticEnabled) {
+        // Axion modulation: all EM charge-dependent terms scale with α_eff
+        const axMod = toggles.axionModulation;
         // Dipole-dipole radial: F = −3μ₁μ₂/r⁴ (aligned ⊥-to-plane dipoles repel)
-        const fDir = -3 * (pMagMoment * sMagMoment) * invR5;
+        const fDir = -3 * (pMagMoment * sMagMoment) * invR5 * axMod;
         out.x += rx * fDir;
         out.y += ry * fDir;
         p.forceMagnetic.x += rx * fDir;
         p.forceMagnetic.y += ry * fDir;
 
         // Bz from moving charge (Biot-Savart): B_z = q_s(v_s × r̂)_z / r²
-        const BzMoving = sCharge * crossSV * invR3;
+        const BzMoving = sCharge * crossSV * invR3 * axMod;
         p.Bz += BzMoving;
 
         // ∇Bz for spin-orbit coupling (radial + angular terms)
-        p.dBzdx += 3 * BzMoving * rx * invRSq + sCharge * svy * invR3;
-        p.dBzdy += 3 * BzMoving * ry * invRSq - sCharge * svx * invR3;
+        p.dBzdx += 3 * BzMoving * rx * invRSq + sCharge * svy * invR3 * axMod;
+        p.dBzdy += 3 * BzMoving * ry * invRSq - sCharge * svx * invR3 * axMod;
 
         // Dipole-sourced Bz: equatorial field of z-aligned dipole, +μ/r³
-        p.Bz += sMagMoment * invR3;
-        p.dBzdx += 3 * sMagMoment * rx * invR5;
-        p.dBzdy += 3 * sMagMoment * ry * invR5;
+        p.Bz += sMagMoment * invR3 * axMod;
+        p.dBzdx += 3 * sMagMoment * rx * invR5 * axMod;
+        p.dBzdy += 3 * sMagMoment * ry * invR5 * axMod;
     }
 
     if (toggles.gravitomagEnabled) {
@@ -302,7 +304,7 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
         // Analytical jerk for radiation reaction
         const jBase = g2 * p.mass * sMass * expMuR;
         const term1 = (invRSq + mu * invR) * invR;
-        const jRadial = -(3 * invRSq + 2 * mu * invR + mu * mu) * rDotVr * expMuR * g2 * p.mass * sMass * invRSq * invR;
+        const jRadial = -(3 * invRSq + 2 * mu * invR + mu * mu) * rDotVr * jBase * invRSq * invR;
         p.jerk.x += vrx * jBase * term1 + rx * jRadial;
         p.jerk.y += vry * jBase * term1 + ry * jRadial;
     }

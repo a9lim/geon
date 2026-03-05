@@ -48,7 +48,7 @@ export const DEFAULT_AXION_MASS = 0.5;  // oscillation frequency (m_a)
 export const PHOTON_SOFTENING_SQ = 4;  // smaller than particle softening for tighter lensing
 
 // Gravitational wave radiation (quadrupole formula)
-export const GW_QUADRUPOLE_K = 32 / 5;  // Peters formula coefficient
+// P = (1/5)|d³I_ij/dt³|² — coefficient used inline in integrator.js as 0.2
 
 // Roche lobe overflow
 export const ROCHE_THRESHOLD = 0.9;       // overflow starts at this fraction of Roche radius
