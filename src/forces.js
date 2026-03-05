@@ -22,6 +22,7 @@ export function resetForces(particles) {
         p.force1PN.set(0, 0);
         p.forceSpinCurv.set(0, 0);
         p.forceRadiation.set(0, 0);
+        p.forceYukawa.set(0, 0);
         p.torqueSpinOrbit = 0;
         p.torqueFrameDrag = 0;
         p.torqueTidal = 0;
@@ -141,7 +142,9 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
     }
     const rawRSq = rx * rx + ry * ry;
     // Plummer softening: r²_eff = r² + ε² (consistent with PE in potential.js)
-    const rSq = rawRSq + SOFTENING_SQ;
+    // Reduced in BH mode where Schwarzschild radius provides physical softening
+    const bhSoft = (window.sim && window.sim.physics.blackHoleEnabled) ? 1 : SOFTENING_SQ;
+    const rSq = rawRSq + bhSoft;
     const invRSq = 1 / rSq;
     const invR = Math.sqrt(invRSq);       // 1/r via sqrt(1/r²) — one sqrt instead of sqrt + division
     const invR3 = invR * invRSq;          // 1 / r_eff³
@@ -173,7 +176,7 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
     }
 
     if (toggles.coulombEnabled) {
-        const k = -(p.charge * sCharge);
+        const k = -(p.charge * sCharge) * toggles.axionModulation;
         const fDir = k * invR3;
         out.x += rx * fDir;
         out.y += ry * fDir;
@@ -283,6 +286,25 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
         // Frame-dragging torque: aligns spins toward co-rotation
         const torque = 2 * sAngMomentum * (sAngVel - p.angVel) * invR3;
         p._frameDragTorque += torque;
+    }
+
+    if (toggles.yukawaEnabled) {
+        const g2 = toggles.yukawaG2;
+        const mu = toggles.yukawaMu;
+        const r = 1 / invR;
+        const expMuR = Math.exp(-mu * r);
+        // F = g² · exp(-μr) · (1/r² + μ/r) · r̂  (attractive, like gravity)
+        const fDir = g2 * p.mass * sMass * expMuR * (invRSq + mu * invR) * invR;
+        out.x += rx * fDir;
+        out.y += ry * fDir;
+        p.forceYukawa.x += rx * fDir;
+        p.forceYukawa.y += ry * fDir;
+        // Analytical jerk for radiation reaction
+        const jBase = g2 * p.mass * sMass * expMuR;
+        const term1 = (invRSq + mu * invR) * invR;
+        const jRadial = -(3 * invRSq + 2 * mu * invR + mu * mu) * rDotVr * expMuR * g2 * p.mass * sMass * invRSq * invR;
+        p.jerk.x += vrx * jBase * term1 + rx * jRadial;
+        p.jerk.y += vry * jBase * term1 + ry * jRadial;
     }
 
     if (toggles.tidalLockingEnabled) {

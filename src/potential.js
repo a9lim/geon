@@ -94,7 +94,8 @@ export function pairPE(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMoment,
     } else {
         rx = sx - p.pos.x; ry = sy - p.pos.y;
     }
-    const rSq = rx * rx + ry * ry + SOFTENING_SQ;
+    const bhSoft = (window.sim && window.sim.physics.blackHoleEnabled) ? 1 : SOFTENING_SQ;
+    const rSq = rx * rx + ry * ry + bhSoft;
     const invRSq = 1 / rSq;
     const invR = Math.sqrt(invRSq);
     const pRSq = p.radiusSq;
@@ -103,7 +104,7 @@ export function pairPE(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMoment,
 
     let pe = 0;
     if (toggles.gravityEnabled)  pe -= p.mass * sMass * invR;
-    if (toggles.coulombEnabled)  pe += p.charge * sCharge * invR;
+    if (toggles.coulombEnabled)  pe += p.charge * sCharge * invR * toggles.axionModulation;
     const invR3 = invR * invRSq;
     if (toggles.magneticEnabled) pe += (pMagMoment * sMagMoment) * invR3;
     if (toggles.gravitomagEnabled) pe -= (pAngMomentum * sAngMomentum) * invR3;
@@ -136,6 +137,10 @@ export function pairPE(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMoment,
                 - (p.charge * p.charge * sMass + sCharge * sCharge * p.mass);
             pe += 0.5 * crossCoeff * invRSq;
         }
+    }
+    if (toggles.yukawaEnabled) {
+        const r = 1 / invR;
+        pe -= toggles.yukawaG2 * p.mass * sMass * Math.exp(-toggles.yukawaMu * r) * invR;
     }
     return pe;
 }

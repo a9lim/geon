@@ -18,6 +18,7 @@ const _forceCompColors = {
     torqueSO:    _PAL.extended.purple,
     torqueFD:    _PAL.extended.rose,
     torqueTidal: _PAL.extended.green,
+    yukawa:      _PAL.extended.brown,
 };
 
 // Spin ring colors by sign
@@ -215,6 +216,26 @@ export default class Renderer {
             if (p.angVel !== 0) {
                 this.drawSpinRing(ctx, p, isLight, blendMode);
             }
+
+            // Ergosphere ring for BH mode
+            if (window.sim && window.sim.physics.blackHoleEnabled && p.mass > 0) {
+                const M = p.mass;
+                const I = INERTIA_K * M * p.radiusSq;
+                const a = I * Math.abs(p.angVel) / M;
+                const rErgo = M + Math.sqrt(Math.max(0, M * M - a * a));
+                if (rErgo > p.radius + 0.3) {
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.shadowBlur = 0;
+                    ctx.beginPath();
+                    ctx.arc(p.pos.x, p.pos.y, rErgo, 0, TWO_PI);
+                    ctx.strokeStyle = isLight ? _r(_PAL.extended.purple, 0.3) : _r(_PAL.extended.purple, 0.4);
+                    ctx.lineWidth = 0.15;
+                    ctx.setLineDash([0.3, 0.3]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.globalCompositeOperation = blendMode;
+                }
+            }
         }
     }
 
@@ -278,8 +299,8 @@ export default class Renderer {
         for (const p of particles) {
             // Sum all 8 component vectors (includes Boris display forces)
             const s = scale / p.mass;
-            let fx = (p.forceGravity.x + p.forceCoulomb.x + p.forceMagnetic.x + p.forceGravitomag.x + p.force1PN.x + p.forceSpinCurv.x + p.forceRadiation.x) * s;
-            let fy = (p.forceGravity.y + p.forceCoulomb.y + p.forceMagnetic.y + p.forceGravitomag.y + p.force1PN.y + p.forceSpinCurv.y + p.forceRadiation.y) * s;
+            let fx = (p.forceGravity.x + p.forceCoulomb.x + p.forceMagnetic.x + p.forceGravitomag.x + p.force1PN.x + p.forceSpinCurv.x + p.forceRadiation.x + p.forceYukawa.x) * s;
+            let fy = (p.forceGravity.y + p.forceCoulomb.y + p.forceMagnetic.y + p.forceGravitomag.y + p.force1PN.y + p.forceSpinCurv.y + p.forceRadiation.y + p.forceYukawa.y) * s;
             const mag = Math.sqrt(fx * fx + fy * fy);
             if (mag < 0.1 * invZoom) continue;
             this.drawArrow(ctx, p.pos.x, p.pos.y, p.pos.x + fx, p.pos.y + fy, invZoom, color);
@@ -296,6 +317,7 @@ export default class Renderer {
             { key: 'force1PN', color: _forceCompColors.onepn },
             { key: 'forceSpinCurv', color: _forceCompColors.spinCurv },
             { key: 'forceRadiation', color: _forceCompColors.radiation },
+            { key: 'forceYukawa', color: _forceCompColors.yukawa },
         ];
         for (const { key, color } of forces) {
             for (const p of particles) {
@@ -408,13 +430,13 @@ export default class Renderer {
             if (alpha <= 0) continue;
             const size = 0.2 + ph.energy * 20;
             ctx.globalAlpha = alpha * (isLight ? 0.6 : 0.8);
-            ctx.fillStyle = _PAL.extended.yellow;
+            ctx.fillStyle = ph.type === 'gw' ? _PAL.extended.green : _PAL.extended.yellow;
             ctx.beginPath();
             ctx.arc(ph.pos.x, ph.pos.y, Math.min(size, 5), 0, TWO_PI);
             ctx.fill();
             if (!isLight) {
                 ctx.shadowBlur = Math.min(size * 3, 15);
-                ctx.shadowColor = '#FFDC6480';
+                ctx.shadowColor = ph.type === 'gw' ? '#50987880' : '#FFDC6480';
                 ctx.fill();
                 ctx.shadowBlur = 0;
             }
