@@ -1,6 +1,70 @@
 import Particle from './particle.js';
 import { angwToAngVel } from './relativity.js';
 
+// Maps physics flag names to UI toggle element IDs (same order as presets.js TOGGLE_ORDER)
+const TOGGLE_SYNC = [
+    ['gravityEnabled', 'gravity-toggle'],
+    ['coulombEnabled', 'coulomb-toggle'],
+    ['relativityEnabled', 'relativity-toggle'],
+    ['gravitomagEnabled', 'gravitomag-toggle'],
+    ['magneticEnabled', 'magnetic-toggle'],
+    ['signalDelayEnabled', 'signaldelay-toggle'],
+    ['onePNEnabled', 'onepn-toggle'],
+    ['blackHoleEnabled', 'blackhole-toggle'],
+    ['tidalLockingEnabled', 'tidallocking-toggle'],
+    ['spinOrbitEnabled', 'spinorbit-toggle'],
+    ['radiationEnabled', 'radiation-toggle'],
+    ['tidalEnabled', 'tidal-toggle'],
+    ['barnesHutEnabled', 'barneshut-toggle'],
+    ['yukawaEnabled', 'yukawa-toggle'],
+    ['axionEnabled', 'axion-toggle'],
+    ['gwRadiationEnabled', 'gwradiation-toggle'],
+    ['expansionEnabled', 'expansion-toggle'],
+];
+
+const MODE_SYNC = [
+    ['collisionMode', 'collision-toggles', 'collision'],
+    ['boundaryMode', 'boundary-toggles', 'boundary'],
+    ['topology', 'topology-toggles', 'topology'],
+];
+
+function syncUI(sim) {
+    const ph = sim.physics;
+    // Sync toggle checkboxes (parent-first order triggers dependency cascades)
+    for (const [prop, elId] of TOGGLE_SYNC) {
+        const el = document.getElementById(elId);
+        if (!el) continue;
+        const want = ph[prop];
+        if (el.checked !== want) {
+            el.checked = want;
+            el.setAttribute('aria-checked', String(want));
+            el.dispatchEvent(new Event('change'));
+        }
+    }
+    // Sync mode button groups
+    for (const [prop, groupId, attr] of MODE_SYNC) {
+        const group = document.getElementById(groupId);
+        if (!group) continue;
+        const target = group.querySelector(`[data-${attr}="${sim[prop]}"]`);
+        if (target) target.click();
+    }
+    // Sync sliders
+    const speedEl = document.getElementById('speedInput');
+    if (speedEl) { speedEl.value = sim.speedScale; speedEl.dispatchEvent(new Event('input')); }
+    const frictionEl = document.getElementById('frictionInput');
+    if (frictionEl) { frictionEl.value = ph.bounceFriction; frictionEl.dispatchEvent(new Event('input')); }
+    const hubbleEl = document.getElementById('hubbleInput');
+    if (hubbleEl) { hubbleEl.value = ph.hubbleParam; hubbleEl.dispatchEvent(new Event('input')); }
+    const yukawaG2El = document.getElementById('yukawaG2Input');
+    if (yukawaG2El) { yukawaG2El.value = ph.yukawaG2; yukawaG2El.dispatchEvent(new Event('input')); }
+    const yukawaMuEl = document.getElementById('yukawaMuInput');
+    if (yukawaMuEl) { yukawaMuEl.value = 1 / ph.yukawaMu; yukawaMuEl.dispatchEvent(new Event('input')); }
+    const axionGEl = document.getElementById('axionGInput');
+    if (axionGEl) { axionGEl.value = ph.axionG; axionGEl.dispatchEvent(new Event('input')); }
+    const axionMassEl = document.getElementById('axionMassInput');
+    if (axionMassEl) { axionMassEl.value = ph.axionMass; axionMassEl.dispatchEvent(new Event('input')); }
+}
+
 export function saveState(sim) {
     const state = {
         version: 1,
@@ -86,6 +150,7 @@ export function loadState(state, sim) {
         sim.particles.push(p);
     }
     sim.stats.resetBaseline();
+    syncUI(sim);
     return true;
 }
 

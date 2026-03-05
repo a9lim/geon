@@ -257,7 +257,7 @@ Requires Coulomb. Modulates the electromagnetic coupling constant:
 ```
 α_eff = α · (1 + g · cos(m_a · t))
 ```
-Parameters: `axionG` (coupling amplitude, default 0.1), `axionMass` (oscillation frequency, default 0.5). Applied as `axionModulation` multiplier on Coulomb force and PE. Energy is not conserved — the axion field is an external reservoir.
+Parameters: `axionG` (coupling amplitude, default 0.1), `axionMass` (oscillation frequency, default 0.5). Applied as `axionModulation` multiplier on all EM charge-dependent terms: Coulomb force and PE, magnetic dipole force and PE, Biot-Savart Bz, and dipole-sourced Bz (including their gradients for spin-orbit). Energy is not conserved — the axion field is an external reservoir.
 
 ### 1PN Corrections (EIH + Darwin EM + Bazanski)
 

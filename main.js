@@ -190,7 +190,7 @@ class Simulation {
         setVelocity(p, vx, vy);
         p.angVel = this.physics.relativityEnabled ? angwToAngVel(p.angw, p.radius) : p.angw;
         this.particles.push(p);
-        this.stats.resetBaseline();
+        if (!options.skipBaseline) this.stats.resetBaseline();
     }
 
     loop(timestamp) {
@@ -223,7 +223,7 @@ class Simulation {
                     t.source.charge -= t.charge;
                     t.source.updateColor();
                     this.addParticle(t.spawnX, t.spawnY, t.vx, t.vy, {
-                        mass: t.mass, charge: t.charge, spin: 0,
+                        mass: t.mass, charge: t.charge, spin: 0, skipBaseline: true,
                     });
                 }
                 if (toFragment.length > 0) {
@@ -241,7 +241,7 @@ class Simulation {
                             const tangVx = -Math.sin(angle) * p.angVel * offset;
                             const tangVy = Math.cos(angle) * p.angVel * offset;
                             this.addParticle(fx, fy, p.vel.x + tangVx, p.vel.y + tangVy, {
-                                mass: fragMass, charge: fragCharge, spin: p.angw
+                                mass: fragMass, charge: fragCharge, spin: p.angw, skipBaseline: true,
                             });
                         }
                     }

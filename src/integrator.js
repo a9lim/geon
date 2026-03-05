@@ -511,10 +511,10 @@ export default class Physics {
                     let power;
                     if (disc > 1e-10) {
                         const rPlus = M + Math.sqrt(disc);
-                        const kappa = Math.sqrt(disc) / (2 * M * rPlus);
+                        const kappa = Math.sqrt(disc) / (rPlus * rPlus + a * a);
                         const T = kappa / (2 * Math.PI);
                         const A = 4 * Math.PI * (rPlus * rPlus + a * a);
-                        const sigma = Math.PI / 240;
+                        const sigma = Math.PI * Math.PI / 60;
                         power = sigma * T * T * T * T * A;
                     } else {
                         power = 0; // extremal: no radiation
@@ -731,7 +731,7 @@ export default class Physics {
                                 const dx = comX - p.pos.x, dy = comY - p.pos.y;
                                 const r = Math.sqrt(dx * dx + dy * dy);
                                 if (r > 1e-10) {
-                                    const kick = dE * p.mass / (totalM * r) * dt;
+                                    const kick = dE * p.mass / (totalM * r);
                                     p.w.x += kick * dx / r;
                                     p.w.y += kick * dy / r;
                                 }
