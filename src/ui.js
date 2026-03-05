@@ -463,23 +463,42 @@ export function setupUI(sim) {
     const refBody = document.getElementById('reference-body');
     const refClose = document.getElementById('reference-close');
 
+    const openReference = (key) => {
+        const ref = REFERENCE[key];
+        if (!ref) return;
+        refTitle.textContent = ref.title;
+        refBody.innerHTML = ref.body;
+        refOverlay.hidden = false;
+        if (typeof renderMathInElement === 'function') {
+            renderMathInElement(refBody, { delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '$', right: '$', display: false },
+            ]});
+        }
+    };
+
     if (refOverlay) {
         document.querySelectorAll('.info-trigger[data-info]').forEach(trigger => {
+            // Shift+click (desktop)
             trigger.addEventListener('click', (e) => {
                 if (!e.shiftKey) return;
-                const key = trigger.dataset.info;
-                const ref = REFERENCE[key];
-                if (!ref) return;
                 e.stopPropagation();
-                refTitle.textContent = ref.title;
-                refBody.innerHTML = ref.body;
-                refOverlay.hidden = false;
-                if (typeof renderMathInElement === 'function') {
-                    renderMathInElement(refBody, { delimiters: [
-                        { left: '$$', right: '$$', display: true },
-                        { left: '$', right: '$', display: false },
-                    ]});
-                }
+                openReference(trigger.dataset.info);
+            });
+            // Long-press (mobile): 500ms touch hold opens reference
+            let longPressTimer = 0;
+            trigger.addEventListener('touchstart', (e) => {
+                longPressTimer = setTimeout(() => {
+                    e.preventDefault();
+                    openReference(trigger.dataset.info);
+                    longPressTimer = 0;
+                }, 500);
+            }, { passive: false });
+            trigger.addEventListener('touchend', () => {
+                if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = 0; }
+            });
+            trigger.addEventListener('touchmove', () => {
+                if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = 0; }
             });
         });
         refClose.addEventListener('click', () => { refOverlay.hidden = true; });
