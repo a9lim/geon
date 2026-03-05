@@ -41,5 +41,8 @@ export const DEFAULT_YUKAWA_G2 = 1.0;   // coupling strength
 export const DEFAULT_YUKAWA_MU = 0.2;   // mediator mass (inverse range)
 
 // Axion dark matter: oscillating EM coupling α_eff = α·(1 + g·cos(m_a·t))
+export const PHOTON_SOFTENING_SQ = 4;  // smaller than particle softening for tighter lensing
+
+// Axion dark matter: oscillating EM coupling α_eff = α·(1 + g·cos(m_a·t))
 export const DEFAULT_AXION_G = 0.1;     // coupling amplitude
 export const DEFAULT_AXION_MASS = 0.5;  // oscillation frequency (m_a)

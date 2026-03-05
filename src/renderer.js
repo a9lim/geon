@@ -216,6 +216,26 @@ export default class Renderer {
             if (p.angVel !== 0) {
                 this.drawSpinRing(ctx, p, isLight, blendMode);
             }
+
+            // Ergosphere ring for BH mode
+            if (window.sim && window.sim.physics.blackHoleEnabled && p.mass > 0) {
+                const M = p.mass;
+                const I = INERTIA_K * M * p.radiusSq;
+                const a = I * Math.abs(p.angVel) / M;
+                const rErgo = M + Math.sqrt(Math.max(0, M * M - a * a));
+                if (rErgo > p.radius + 0.3) {
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.shadowBlur = 0;
+                    ctx.beginPath();
+                    ctx.arc(p.pos.x, p.pos.y, rErgo, 0, TWO_PI);
+                    ctx.strokeStyle = isLight ? _r(_PAL.extended.purple, 0.3) : _r(_PAL.extended.purple, 0.4);
+                    ctx.lineWidth = 0.15;
+                    ctx.setLineDash([0.3, 0.3]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.globalCompositeOperation = blendMode;
+                }
+            }
         }
     }
 

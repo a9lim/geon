@@ -94,7 +94,8 @@ export function pairPE(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMoment,
     } else {
         rx = sx - p.pos.x; ry = sy - p.pos.y;
     }
-    const rSq = rx * rx + ry * ry + SOFTENING_SQ;
+    const bhSoft = (window.sim && window.sim.physics.blackHoleEnabled) ? 1 : SOFTENING_SQ;
+    const rSq = rx * rx + ry * ry + bhSoft;
     const invRSq = 1 / rSq;
     const invR = Math.sqrt(invRSq);
     const pRSq = p.radiusSq;

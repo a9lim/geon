@@ -142,7 +142,9 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
     }
     const rawRSq = rx * rx + ry * ry;
     // Plummer softening: r²_eff = r² + ε² (consistent with PE in potential.js)
-    const rSq = rawRSq + SOFTENING_SQ;
+    // Reduced in BH mode where Schwarzschild radius provides physical softening
+    const bhSoft = (window.sim && window.sim.physics.blackHoleEnabled) ? 1 : SOFTENING_SQ;
+    const rSq = rawRSq + bhSoft;
     const invRSq = 1 / rSq;
     const invR = Math.sqrt(invRSq);       // 1/r via sqrt(1/r²) — one sqrt instead of sqrt + division
     const invR3 = invR * invRSq;          // 1 / r_eff³

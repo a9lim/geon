@@ -1,5 +1,5 @@
 import Vec2 from './vec2.js';
-import { HISTORY_SIZE } from './config.js';
+import { HISTORY_SIZE, INERTIA_K } from './config.js';
 
 const _PAL = window._PALETTE;
 const _hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
@@ -85,7 +85,17 @@ export default class Particle {
 
     updateColor() {
         const bh = window.sim && window.sim.physics.blackHoleEnabled;
-        this.radius = bh ? 2 * this.mass : Math.cbrt(this.mass);
+        if (bh) {
+            const M = this.mass;
+            const I = INERTIA_K * M * this.radiusSq;
+            const omega = this.angVel || 0;
+            const a = I * Math.abs(omega) / M;  // spin parameter J/M
+            const Q = this.charge;
+            const disc = M * M - a * a - Q * Q;
+            this.radius = disc > 0 ? M + Math.sqrt(disc) : M * 0.5; // naked singularity floor
+        } else {
+            this.radius = Math.cbrt(this.mass);
+        }
         this.radiusSq = this.radius * this.radius;
         this.invMass = 1 / this.mass;
         this.color = this.getColor();
