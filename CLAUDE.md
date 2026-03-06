@@ -28,7 +28,7 @@ src/
   forces.js                 ~461 lines pairForce(), computeAllForces(), calculateForce() (BH walk), compute1PNPairwise(), Yukawa force
   presets.js                ~584 lines PRESETS object (15 scenarios in 4 groups), loadPreset(), declarative SLIDER_MAP, TOGGLE_MAP/TOGGLE_ORDER, external field defaults
   reference.js              ~308 lines REFERENCE object: extended physics reference content for each concept (KaTeX math)
-  higgs-field.js            ~442 lines HiggsField: 128x128 Mexican hat scalar field, symplectic Euler, PQS (cubic B-spline) deposition/interpolation, mass modulation, gradient force, phase transitions
+  higgs-field.js            ~442 lines HiggsField: 64x64 Mexican hat scalar field, symplectic Euler, PQS (cubic B-spline) deposition/interpolation, mass modulation, gradient force, phase transitions
   quadtree.js               ~279 lines QuadTreePool: SoA flat typed arrays, pool-based, zero GC
   input.js                  ~262 lines InputHandler: mouse/touch, Place/Shoot/Orbit modes, hover tooltip, antimatter flag passthrough
   signal-delay.js            249 lines getDelayedState() (3-phase light-cone solver)
@@ -180,7 +180,7 @@ Requires Coulomb. Modulates EM coupling: `α_eff = α·(1 + g·cos(m_a·t))`. Ap
 
 ### Higgs Scalar Field
 
-Independent toggle (`physics.higgsEnabled`). Dynamical real scalar field on a 128×128 grid with Mexican hat potential `V(φ) = -½μ²φ² + ¼λφ⁴`. VEV=1 baked in; the free parameter is the Higgs boson mass `m_H` (slider 0.25–1, default 0.5). With VEV=1: `λ = μ² = m_H²/2`. Smaller m_H → longer interaction range (~1/m_H), shallower potential well.
+Independent toggle (`physics.higgsEnabled`). Dynamical real scalar field on a 64×64 grid with Mexican hat potential `V(φ) = -½μ²φ² + ¼λφ⁴`. VEV=1 baked in; the free parameter is the Higgs boson mass `m_H` (slider 0.25–1, default 0.5). With VEV=1: `λ = μ² = m_H²/2`. Smaller m_H → longer interaction range (~1/m_H), shallower potential well.
 
 **Particle-grid coupling**: PQS (Piecewise Quadratic Spline, cubic B-spline, order 3). Each particle deposits to / interpolates from a 4×4 = 16 node stencil. Shape function: `W(t) = (4-6t²+3|t|³)/6` for `|t|<1`, `W(t) = (2-|t|)³/6` for `1≤|t|<2`. Gives C² continuous interpolation and C¹ continuous gradients — no grid-crossing artifacts, no self-force subtraction needed, no smoothing buffers. Pre-allocated weight arrays (`_wx`, `_wy`, `_dwx`, `_dwy`) for zero-alloc hot path.
 
@@ -198,9 +198,9 @@ Independent toggle (`physics.higgsEnabled`). Dynamical real scalar field on a 12
 
 **Damping**: Critical damping `damp = 2·m_H`. Prevents field ringing. Scales with m_H so the field always settles without oscillation.
 
-**Parameters**: One slider: `mass` (m_H, default 0.5, range 0.25–1). Config constants: `HIGGS_GRID = 128`, `HIGGS_PHI_MAX = 16`. All other parameters baked to 1 (VEV, source coupling, thermalK, damping ratio, lambda).
+**Parameters**: One slider: `mass` (m_H, default 0.5, range 0.25–1). Config constants: `HIGGS_GRID = 64`, `HIGGS_PHI_MAX = 16`. All other parameters baked to 1 (VEV, source coupling, thermalK, damping ratio, lambda).
 
-**Rendering**: Offscreen 128×128 canvas, bilinear-upscaled to world space. Magenta = depleted (φ < 1), cyan = enhanced (φ > 1). Alpha ∝ |deviation|×2. Force vector color: magenta (`--ext-magenta`).
+**Rendering**: Offscreen 64×64 canvas, bilinear-upscaled to world space. Magenta = depleted (φ < 1), cyan = enhanced (φ > 1). Alpha ∝ |deviation|×2. Force vector color: magenta (`--ext-magenta`).
 
 **baseMass synchronization**: All mass-modifying operations (merge, annihilation, Roche overflow, disintegration, Hawking evaporation) proportionally scale `baseMass`. On Higgs toggle-off, `mass` is restored to `baseMass` for all particles.
 
@@ -386,7 +386,7 @@ Canvas 2D. Dark mode: additive blending (`lighter`).
 - **Trails**: circular Float32Array[256], wrap-detection for periodic boundaries
 - **Antimatter rings**: dashed white circle (`#888` light / `#ccc` dark) around antimatter particles, radius = p.radius + 0.4
 - **Force vectors**: scale=FORCE_VECTOR_SCALE (÷ mass for accel). Component colors: gravity=red, coulomb=blue, magnetic=cyan, GM=rose, 1PN=orange, spin-curv=purple, radiation=yellow, yukawa=green, external=white, higgs=magenta
-- **Higgs field overlay**: 128×128 offscreen canvas bilinear-upscaled. Magenta=depleted, cyan=enhanced. Rendered after camera transform, before trails
+- **Higgs field overlay**: 64×64 offscreen canvas bilinear-upscaled. Magenta=depleted, cyan=enhanced. Rendered after camera transform, before trails
 - **Torque arcs**: spin-orbit=purple, frame-drag=rose, tidal=red, total=accent
 - **Photons**: yellow (EM, `type: 'em'`) / red (gravitons, `type: 'grav'`), alpha fades over PHOTON_LIFETIME=256
 - **Signal delay ghosts**: stroked outline at oldest history position
