@@ -171,12 +171,11 @@ export const REFERENCE = {
 <p>When $\\phi = v$, particles have their full "bare" mass $m_0$. When $\\phi = 0$ (symmetry restored), particles become massless.</p>
 <h3>Gradient Force</h3>
 <p>Particles feel a force toward regions of higher field value:</p>
-<p>$$\\mathbf{F} = -\\frac{m_0}{v} \\cdot g \\cdot \\nabla\\phi$$</p>
-<p>where $g$ is the Higgs coupling strength.</p>
+<p>$$\\mathbf{F} = -\\frac{m_0}{v} \\nabla\\phi$$</p>
 <h3>Field Equation</h3>
 <p>The Klein-Gordon equation with the Mexican hat potential:</p>
-<p>$$\\ddot{\\phi} = \\nabla^2\\phi + \\mu^2_{\\text{eff}}\\phi - \\lambda\\phi^3 + g \\cdot \\rho_{\\text{source}} - \\eta\\dot{\\phi}$$</p>
-<p>where $\\eta$ is a damping coefficient and $\\rho_{\\text{source}}$ is the particle source density.</p>
+<p>$$\\ddot{\\phi} = \\nabla^2\\phi + \\mu^2_{\\text{eff}}\\phi - \\lambda\\phi^3 + \\rho_{\\text{source}} - \\eta\\dot{\\phi}$$</p>
+<p>where $\\eta$ is a damping coefficient and $\\rho_{\\text{source}}$ is the particle source density (weakly coupled).</p>
 <h3>Phase Transitions</h3>
 <p>At high temperatures, thermal corrections modify the effective mass parameter:</p>
 <p>$$\\mu^2_{\\text{eff}} = \\mu^2 - c_T T^2_{\\text{local}}$$</p>

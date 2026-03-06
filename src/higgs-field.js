@@ -5,7 +5,7 @@
 // Symplectic Euler integration, bilinear interpolation, CIC source deposition.
 // Self-force subtraction via analytical steady-state Green's function estimate.
 
-import { HIGGS_GRID, DEFAULT_HIGGS_VEV, DEFAULT_HIGGS_COUPLING, DEFAULT_HIGGS_THERMAL_K, HIGGS_DAMPING, HIGGS_SOURCE_STRENGTH, HIGGS_PHI_MAX, EPSILON } from './config.js';
+import { HIGGS_GRID, HIGGS_SOURCE_STRENGTH, HIGGS_PHI_MAX, EPSILON } from './config.js';
 import { TORUS, KLEIN, RP2 } from './topology.js';
 
 const GRID = HIGGS_GRID;
@@ -25,11 +25,6 @@ export default class HiggsField {
         this._thermal = new Float64Array(GRID_SQ);
         this._source = new Float64Array(GRID_SQ);
 
-        this.vev = DEFAULT_HIGGS_VEV;
-        this.coupling = DEFAULT_HIGGS_COUPLING;
-        this.thermalK = DEFAULT_HIGGS_THERMAL_K;
-        this.damping = HIGGS_DAMPING;
-
         // Offscreen canvas for rendering
         this.canvas = document.createElement('canvas');
         this.canvas.width = GRID;
@@ -42,11 +37,8 @@ export default class HiggsField {
     }
 
     reset() {
-        const v = this.vev;
-        for (let i = 0; i < GRID_SQ; i++) {
-            this.phi[i] = v;
-            this.phiDot[i] = 0;
-        }
+        this.phi.fill(1); // VEV = 1
+        this.phiDot.fill(0);
     }
 
     /**
@@ -112,8 +104,6 @@ export default class HiggsField {
         const phiDot = this.phiDot;
         const lap = this._laplacian;
         const thermal = this._thermal;
-        const v = this.vev;
-        const muSq = v * v; // mu^2 = v^2 (lambda = 1)
 
         const cellW = domainW / GRID;
         const cellH = domainH / GRID;
@@ -135,7 +125,7 @@ export default class HiggsField {
 
         // Deposit thermal energy via CIC (drives phase transitions)
         thermal.fill(0);
-        if (this.thermalK > 0) this._depositThermal(particles, domainW, domainH);
+        this._depositThermal(particles, domainW, domainH);
 
         // Compute Laplacian with boundary conditions
         for (let iy = 0; iy < GRID; iy++) {
@@ -148,10 +138,10 @@ export default class HiggsField {
                 const iT = this._nb(ix, iy, 0, -1, bcMode, topoConst);
                 const iB = this._nb(ix, iy, 0, 1, bcMode, topoConst);
 
-                const phiL = iL >= 0 ? phi[iL] : v;
-                const phiR = iR >= 0 ? phi[iR] : v;
-                const phiT = iT >= 0 ? phi[iT] : v;
-                const phiB = iB >= 0 ? phi[iB] : v;
+                const phiL = iL >= 0 ? phi[iL] : 1;
+                const phiR = iR >= 0 ? phi[iR] : 1;
+                const phiT = iT >= 0 ? phi[iT] : 1;
+                const phiB = iB >= 0 ? phi[iB] : 1;
 
                 lap[idx] = (phiL + phiR - 2 * phiC) * invCellWSq
                          + (phiT + phiB - 2 * phiC) * invCellHSq;
@@ -159,26 +149,21 @@ export default class HiggsField {
         }
 
         // Kick phiDot, then drift phi (symplectic Euler)
-        const thermK = this.thermalK;
-        // Adaptive damping: this.damping is a ratio of critical damping (2 * m_H)
-        const mH = Math.sqrt(Math.max(2 * muSq, EPSILON));
-        const damp = this.damping * 2 * mH;
+        // All = 1: VEV=1, lambda=1, muSq=1, thermalK=1, damping ratio=1
+        // Critical damping = 2 * m_H = 2*sqrt(2)
+        const DAMP = 2 * Math.SQRT2;
         for (let i = 0; i < GRID_SQ; i++) {
             const phiVal = phi[i];
 
-            // Thermal correction: mu^2_eff = mu^2 - thermalK * T^2_local
-            // thermal[i] is KE density ~ T^2, so linear dependence gives correct T^2
-            let muSqEff = muSq;
-            if (thermK > 0 && thermal[i] > 0) {
-                muSqEff -= thermK * thermal[i];
-            }
+            // Thermal correction: mu^2_eff = 1 - KE_local
+            const muSqEff = 1 - thermal[i];
 
             // Klein-Gordon: d^2 phi/dt^2 = nabla^2 phi + mu^2_eff * phi - phi^3
-            //               - damping * dphi/dt + source  (lambda = 1)
+            //               - damping * dphi/dt + source
             const ddphi = lap[i]
                         + muSqEff * phiVal
                         - phiVal * phiVal * phiVal
-                        - damp * phiDot[i]
+                        - DAMP * phiDot[i]
                         + HIGGS_SOURCE_STRENGTH * src[i] * invCellArea;
 
             phiDot[i] += ddphi * dt;
@@ -186,7 +171,7 @@ export default class HiggsField {
 
             // Clamp field to prevent numerical blowup
             if (newPhi !== newPhi) { // NaN guard
-                phi[i] = v;
+                phi[i] = 1;
                 phiDot[i] = 0;
             } else if (newPhi > HIGGS_PHI_MAX) {
                 phi[i] = HIGGS_PHI_MAX;
@@ -200,11 +185,8 @@ export default class HiggsField {
         }
     }
 
-    /** CIC deposition of particle baseMass/VEV as scalar source. */
+    /** CIC deposition of particle baseMass as scalar source (VEV=1). */
     _depositSources(particles, domainW, domainH) {
-        const v = this.vev;
-        if (v < EPSILON) return;
-        const invV = 1 / v;
         const cellW = domainW / GRID;
         const cellH = domainH / GRID;
         if (cellW < EPSILON || cellH < EPSILON) return;
@@ -215,7 +197,7 @@ export default class HiggsField {
         for (let i = 0; i < particles.length; i++) {
             const p = particles[i];
             if (p.baseMass < EPSILON) continue;
-            const s = p.baseMass * invV;
+            const s = p.baseMass;
             this._cicCoords(p.pos.x, p.pos.y, invCellW, invCellH);
             const { ix, iy, fx, fy } = this._cic;
 
@@ -257,23 +239,17 @@ export default class HiggsField {
         }
     }
 
-    /** Set particle effective masses from local field value: m = baseMass * |phi| / VEV.
-     *  Self-force subtraction: remove the particle's own steady-state perturbation
-     *  from the sampled field. At weak coupling (HIGGS_SOURCE_STRENGTH << 1),
-     *  delta_phi ~ sourceStrength * baseMass / (v * cellArea * m_H^2).
+    /** Set particle effective masses: m = baseMass * |phi| (VEV=1).
+     *  Self-force subtraction removes the particle's own steady-state perturbation.
      */
     modulateMasses(particles, domainW, domainH, blackHoleEnabled) {
-        const v = this.vev;
-        if (v < EPSILON) return;
-        const invV = 1 / v;
         const cellW = domainW / GRID;
         const cellH = domainH / GRID;
         if (cellW < EPSILON || cellH < EPSILON) return;
         const invCellW = 1 / cellW;
         const invCellH = 1 / cellH;
         const cellArea = cellW * cellH;
-        const mHsq = Math.max(2 * v * v, EPSILON); // m_H^2 = 2v^2 (lambda = 1)
-        const selfScale = HIGGS_SOURCE_STRENGTH / (v * cellArea * mHsq);
+        const selfScale = HIGGS_SOURCE_STRENGTH / (2 * cellArea);
 
         for (let i = 0; i < particles.length; i++) {
             const p = particles[i];
@@ -299,7 +275,7 @@ export default class HiggsField {
             const w11 = fx * fy;
             phiLocal -= selfBase * (w00 * w00 + w10 * w10 + w01 * w01 + w11 * w11);
 
-            const newMass = Math.max(p.baseMass * Math.abs(phiLocal * invV), EPSILON);
+            const newMass = Math.max(p.baseMass * Math.abs(phiLocal), EPSILON);
             if (newMass !== newMass) continue; // NaN guard
             p.mass = newMass;
 
@@ -321,23 +297,17 @@ export default class HiggsField {
         }
     }
 
-    /** Apply gradient force: F = -(baseMass/VEV) * coupling * grad(phi).
-     *  Self-force gradient subtraction: remove the analytical gradient of the
-     *  particle's own steady-state perturbation from the CIC-interpolated gradient.
+    /** Apply gradient force: F = -baseMass * grad(phi) (VEV=1, coupling=1).
+     *  Self-force gradient subtraction removes the particle's own CIC perturbation.
      */
     applyForces(particles, domainW, domainH) {
-        const v = this.vev;
-        if (v < EPSILON) return;
-        const invV = 1 / v;
-        const coup = this.coupling;
         const cellW = domainW / GRID;
         const cellH = domainH / GRID;
         if (cellW < EPSILON || cellH < EPSILON) return;
         const invCellW = 1 / cellW;
         const invCellH = 1 / cellH;
         const cellArea = cellW * cellH;
-        const mHsq = Math.max(2 * v * v, EPSILON);
-        const selfScale = HIGGS_SOURCE_STRENGTH / (v * cellArea * mHsq);
+        const selfScale = HIGGS_SOURCE_STRENGTH / (2 * cellArea);
 
         for (let i = 0; i < particles.length; i++) {
             const p = particles[i];
@@ -367,9 +337,8 @@ export default class HiggsField {
             gradX -= selfBase * (2 * fx - 1) * fy2sum * invCellW;
             gradY -= selfBase * (2 * fy - 1) * fx2sum * invCellH;
 
-            const coeff = -p.baseMass * invV * coup;
-            const forceX = coeff * gradX;
-            const forceY = coeff * gradY;
+            const forceX = -p.baseMass * gradX;
+            const forceY = -p.baseMass * gradY;
 
             // NaN guard
             if (forceX !== forceX || forceY !== forceY) continue;
@@ -391,11 +360,6 @@ export default class HiggsField {
         const invCellH = 1 / cellH;
         const phi = this.phi;
         const phiDot = this.phiDot;
-        const v = this.vev;
-        const muSq = v * v;
-
-        // V(v) = -mu^4/4, offset to make V(VEV)=0 (lambda = 1)
-        const vacOffset = 0.25 * muSq * muSq;
         let total = 0;
         for (let iy = 0; iy < GRID; iy++) {
             for (let ix = 0; ix < GRID; ix++) {
@@ -412,8 +376,8 @@ export default class HiggsField {
                 const dyPhi = (phiB - p) * invCellH;
                 const gradE = 0.5 * (dxPhi * dxPhi + dyPhi * dyPhi);
 
-                // Potential: V(phi) = -1/2 mu^2 phi^2 + 1/4 phi^4 + vacOffset (lambda = 1)
-                const pot = -0.5 * muSq * p * p + 0.25 * p * p * p * p + vacOffset;
+                // V(phi) = -1/2 phi^2 + 1/4 phi^4 + 1/4  (shifted so V(1) = 0)
+                const pot = -0.5 * p * p + 0.25 * p * p * p * p + 0.25;
 
                 total += (ke + gradE + pot) * cellArea;
             }
@@ -423,17 +387,14 @@ export default class HiggsField {
         return total === total ? total : 0;
     }
 
-    /** Render field deviation from VEV to offscreen canvas. */
+    /** Render field deviation from VEV=1 to offscreen canvas. */
     render(isLight) {
         const phi = this.phi;
-        const v = this.vev;
         const data = this._imgData.data;
-        const halfV = Math.max(v * 0.5, EPSILON);
-        const invHalfV = 1 / halfV;
 
         for (let i = 0; i < GRID_SQ; i++) {
-            const deviation = phi[i] - v;
-            const intensity = Math.min(Math.abs(deviation) * invHalfV, 1.0);
+            const deviation = phi[i] - 1;
+            const intensity = Math.min(Math.abs(deviation) * 2, 1.0);
             const alpha = intensity * (isLight ? 60 : 80);
             const idx = i * 4;
 

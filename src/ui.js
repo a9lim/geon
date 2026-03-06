@@ -183,7 +183,6 @@ export function setupUI(sim) {
     const yukawaSliders = document.getElementById('yukawa-sliders');
     const axionSliders = document.getElementById('axion-sliders');
     const hubbleGroup = document.getElementById('hubble-group');
-    const higgsSliders = document.getElementById('higgs-sliders');
 
     const updateAllDeps = () => {
         // 1. Cascade dependency graph
@@ -217,7 +216,6 @@ export function setupUI(sim) {
         yukawaSliders.style.display = tEl['yukawa-toggle'].checked ? '' : 'none';
         axionSliders.style.display = tEl['axion-toggle'].checked ? '' : 'none';
         hubbleGroup.style.display = tEl['expansion-toggle'].checked ? '' : 'none';
-        if (higgsSliders) higgsSliders.style.display = tEl['higgs-toggle'].checked ? '' : 'none';
         updateFrictionVisibility();
     };
 
@@ -305,35 +303,6 @@ export function setupUI(sim) {
         sim.physics.hubbleParam = parseFloat(hubbleSlider.value);
         hubbleLabel.textContent = parseFloat(hubbleSlider.value).toFixed(4);
     });
-
-    // ─── Higgs sliders ───
-    const higgsVevSlider = document.getElementById('higgsVevInput');
-    const higgsVevLabel = document.getElementById('higgsVevValue');
-    if (higgsVevSlider) {
-        higgsVevSlider.addEventListener('input', () => {
-            const v = parseFloat(higgsVevSlider.value);
-            sim.higgsField.vev = v;
-            higgsVevLabel.textContent = v.toFixed(2);
-        });
-    }
-    const higgsCouplingSlider = document.getElementById('higgsCouplingInput');
-    const higgsCouplingLabel = document.getElementById('higgsCouplingValue');
-    if (higgsCouplingSlider) {
-        higgsCouplingSlider.addEventListener('input', () => {
-            const v = parseFloat(higgsCouplingSlider.value);
-            sim.higgsField.coupling = v;
-            higgsCouplingLabel.textContent = v.toFixed(2);
-        });
-    }
-    const higgsThermalSlider = document.getElementById('higgsThermalInput');
-    const higgsThermalLabel = document.getElementById('higgsThermalValue');
-    if (higgsThermalSlider) {
-        higgsThermalSlider.addEventListener('input', () => {
-            const v = parseFloat(higgsThermalSlider.value);
-            sim.higgsField.thermalK = v;
-            higgsThermalLabel.textContent = v.toFixed(2);
-        });
-    }
 
     // ─── External field sliders ───
     const extGravitySlider = document.getElementById('extGravityInput');
