@@ -315,7 +315,7 @@ export const PRESETS = {
             radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
             barneshut: false, yukawa: false, axion: false, expansion: false, higgs: true,
         },
-        settings: { collision: 'bounce', boundary: 'bounce', speed: 64, higgsVev: 1, higgsCoupling: 0.5, higgsThermal: 0.5 },
+        settings: { collision: 'bounce', boundary: 'bounce', speed: 64 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
         spawn(sim) {
             const cx = sim.domainW / 2, cy = sim.domainH / 2;
@@ -341,7 +341,7 @@ export const PRESETS = {
             radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
             barneshut: false, yukawa: false, axion: false, expansion: false, higgs: true,
         },
-        settings: { collision: 'bounce', boundary: 'bounce', speed: 64, higgsVev: 1, higgsCoupling: 0.8, higgsThermal: 1.0 },
+        settings: { collision: 'bounce', boundary: 'bounce', speed: 64 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
         spawn(sim) {
             const cx = sim.domainW / 2, cy = sim.domainH / 2;
@@ -486,9 +486,6 @@ const SLIDER_MAP = {
     yukawaMu: 'yukawaMuInput',
     axionMass: 'axionMassInput',
     hubble: 'hubbleInput',
-    higgsVev: 'higgsVevInput',
-    higgsCoupling: 'higgsCouplingInput',
-    higgsThermal: 'higgsThermalInput',
     extGravity: 'extGravityInput',
     extGravityAngle: 'extGravityAngleInput',
     extElectric: 'extElectricInput',
@@ -561,7 +558,7 @@ export function loadPreset(name, sim) {
     }
 
     // 5. Reset external fields (presets can override via settings)
-    const extDefaults = { extGravity: 0, extGravityAngle: 90, extElectric: 0, extElectricAngle: 0, extBz: 0, higgsVev: 1, higgsCoupling: 0.5, higgsThermal: 0.5 };
+    const extDefaults = { extGravity: 0, extGravityAngle: 90, extElectric: 0, extElectricAngle: 0, extBz: 0 };
     for (const [key, elId] of Object.entries(SLIDER_MAP)) {
         if (key in extDefaults && !(preset.settings && key in preset.settings)) {
             const el = document.getElementById(elId);
