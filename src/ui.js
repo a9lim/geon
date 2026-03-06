@@ -177,9 +177,10 @@ export function setupUI(sim) {
         // 1. Cascade dependency graph
         for (const [id, disabledFn] of DEPS) setDepState(id, disabledFn());
 
-        // 2. Black hole locks collision to merge
+        // 2. Black hole or disintegration locks collision to merge
         const bhOn = tEl['blackhole-toggle'].checked;
-        if (bhOn) {
+        const disintOn = tEl['disintegration-toggle'].checked;
+        if (bhOn || disintOn) {
             sim.collisionMode = 'merge';
             collisionToggles.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
             collisionToggles.querySelector('[data-collision="merge"]').classList.add('active');

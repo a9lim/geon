@@ -29,7 +29,7 @@ export const MAX_SPEED_RATIO = 0.99;
 
 // Radiation: tau = 2q^2/(3m), P = 2q^2*a^2/3
 export const PHOTON_LIFETIME = 256;
-export const MIN_MASS = 0.0078125;
+export const MIN_MASS = 0.01;
 export const MAX_PHOTONS = 1024;
 export const LL_FORCE_CLAMP = 0.5; // max |F_rad| as fraction of |F_ext| (LL validity)
 
@@ -51,13 +51,9 @@ export const DEFAULT_AXION_MASS = 0.05; // oscillation frequency (m_a)
 // Photon gravitational lensing
 export const PHOTON_SOFTENING_SQ = 4;  // smaller than particle softening for tighter lensing
 
-// Gravitational wave radiation (quadrupole formula)
-// P = (1/5)|d³I_ij/dt³|² — coefficient used inline in integrator.js as 0.2
-
 // Roche lobe overflow
 export const ROCHE_THRESHOLD = 0.9;       // overflow starts at this fraction of Roche radius
 export const ROCHE_TRANSFER_RATE = 0.01;  // mass transfer rate coefficient
-export const ROCHE_MIN_PACKET = 0.02;     // minimum mass for a stream particle
 
 // Cosmological expansion
 export const DEFAULT_HUBBLE = 0.001;  // Hubble parameter

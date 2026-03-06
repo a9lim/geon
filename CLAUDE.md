@@ -41,7 +41,7 @@ src/
   particle.js               ~115 lines Particle entity: pos, vel, w, angw, per-type force vectors, history buffers
   topology.js                112 lines TORUS/KLEIN/RP2 constants, minImage(), wrapPosition()
   vec2.js                     65 lines Vec2 class: set, clone, add, sub, scale, mag, magSq, normalize, dist
-  config.js                   60 lines Named constants (BH_THETA, SOFTENING, INERTIA_K, Yukawa, Axion, Roche, Hubble, GW, etc.)
+  config.js                   59 lines Named constants (BH_THETA, SOFTENING, INERTIA_K, Yukawa, Axion, Roche, Hubble, GW, etc.)
   photon.js                   40 lines Photon entity: pos, vel, energy, lifetime, emitterId, type ('em'/'grav'), gravitational lensing
   relativity.js               33 lines angwToAngVel(), angVelToAngw(), setVelocity()
 ```
@@ -218,9 +218,9 @@ Energy transfer: `dE = -mu*(v·∇Bz)*dt` (EM), `dE = -L*(v·∇Bgz)*dt` (GM). C
 
 ### Disintegration
 
-Toggle (`disintegrationEnabled`), requires Gravity. Fragments when tidal + centrifugal + Coulomb stress exceeds self-gravity. Splits into 4 pieces. Min mass: `MIN_MASS * 4`.
+Toggle (`disintegrationEnabled`), requires Gravity. Locks collision to Merge (prevents runaway particle creation). Fragments when tidal + centrifugal + Coulomb stress exceeds self-gravity. Splits into 4 pieces. Min mass: `MIN_MASS * 4`.
 
-**Roche Lobe Overflow**: Eggleton formula. Continuous mass transfer toward companion through L1. Rate: `dM = overflow * ROCHE_TRANSFER_RATE * m`, capped 10%. Returns `{ fragments, transfers }`.
+**Roche Lobe Overflow**: Eggleton formula. Continuous mass transfer toward companion through L1. Rate: `dM = overflow * ROCHE_TRANSFER_RATE * m`, capped 10%. Min packet: `MIN_MASS`. Returns `{ fragments, transfers }`.
 
 ### Photon Gravitational Lensing
 
@@ -282,7 +282,7 @@ Forces:                        Physics:
     -> Magnetic                  Radiation             [requires Gravity or Coulomb]
     -> Axion                       Larmor + EM quad   [when Coulomb on]
   Yukawa               [independent]  GW quad         [when Gravity on]
-Disintegration                   [requires Gravity]
+Disintegration                   [requires Gravity, locks collision to Merge]
 Barnes-Hut                       [independent]
 Expansion                        [independent, in Engine tab]
 ```
