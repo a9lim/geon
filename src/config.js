@@ -59,6 +59,14 @@ export const ROCHE_TRANSFER_RATE = 0.01;  // mass transfer rate coefficient
 // Cosmological expansion
 export const DEFAULT_HUBBLE = 0.001;  // Hubble parameter
 
+// Higgs field: V(φ) = -½μ²φ² + ¼λφ⁴, VEV = μ/√λ, m_H = μ√2
+export const HIGGS_GRID = 48;
+export const HIGGS_LAMBDA = 1.0;               // quartic self-coupling (fixed)
+export const DEFAULT_HIGGS_VEV = 1.0;          // vacuum expectation value
+export const DEFAULT_HIGGS_COUPLING = 0.5;     // particle-field source strength
+export const DEFAULT_HIGGS_THERMAL_K = 0.5;    // thermal correction coupling
+export const HIGGS_DAMPING = 0.02;             // numerical damping coefficient
+
 // Numerical thresholds
 export const EPSILON = 1e-9;          // general "effectively zero" guard
 export const EPSILON_SQ = EPSILON * EPSILON; // squared epsilon (for magnitude² checks)

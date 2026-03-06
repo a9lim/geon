@@ -3,6 +3,7 @@ import Renderer from './src/renderer.js';
 import InputHandler from './src/input.js';
 import Particle from './src/particle.js';
 import Heatmap from './src/heatmap.js';
+import HiggsField from './src/higgs-field.js';
 import PhasePlot from './src/phase-plot.js';
 import EffectivePotentialPlot from './src/effective-potential.js';
 import StatsDisplay from './src/stats-display.js';
@@ -31,6 +32,9 @@ class Simulation {
 
         this.heatmap = new Heatmap();
         this.renderer.heatmap = this.heatmap;
+
+        this.higgsField = new HiggsField();
+        this.renderer.higgsField = this.higgsField;
 
         this.phasePlot = new PhasePlot();
         this.effPotPlot = new EffectivePotentialPlot();
@@ -68,6 +72,7 @@ class Simulation {
             totalE: document.getElementById('totalE'),
             energyDrift: document.getElementById('energyDrift'),
             fieldE: document.getElementById('fieldE'),
+            higgsFieldE: document.getElementById('higgsFieldE'),
             radiatedE: document.getElementById('radiatedE'),
             momentum: document.getElementById('momentum'),
             particleMom: document.getElementById('particleMom'),
@@ -122,6 +127,8 @@ class Simulation {
             fbYukawaVal: document.getElementById('fb-yukawa-val'),
             fbExternal: document.getElementById('fb-external'),
             fbExternalVal: document.getElementById('fb-external-val'),
+            fbHiggs: document.getElementById('fb-higgs'),
+            fbHiggsVal: document.getElementById('fb-higgs-val'),
         };
 
         // Mount sidebar canvases
@@ -185,6 +192,7 @@ class Simulation {
         const p = new Particle(x, y);
 
         p.mass = options.mass ?? 10;
+        p.baseMass = options.baseMass ?? p.mass;
         p.charge = options.charge ?? 0;
         p.antimatter = options.antimatter ?? false;
 
@@ -260,7 +268,9 @@ class Simulation {
                 const { fragments: toFragment, transfers: rocheTransfers } = this.physics.checkDisintegration(this.particles, this.physics._lastRoot);
                 // Handle Roche lobe overflow mass transfers
                 for (const t of rocheTransfers) {
+                    const origM = t.source.mass;
                     t.source.mass -= t.mass;
+                    if (origM > 0) t.source.baseMass *= t.source.mass / origM;
                     t.source.charge -= t.charge;
                     t.source.updateColor();
                     this.addParticle(t.spawnX, t.spawnY, t.vx, t.vy, {
@@ -273,6 +283,7 @@ class Simulation {
                     for (const p of toFragment) {
                         const nf = SPAWN_COUNT;
                         const fragMass = p.mass / nf;
+                        const fragBaseMass = p.baseMass / nf;
                         const fragCharge = p.charge / nf;
                         for (let fi = 0; fi < nf; fi++) {
                             const angle = (TWO_PI * fi) / nf;
@@ -282,7 +293,7 @@ class Simulation {
                             const tangVx = -Math.sin(angle) * p.angVel * offset;
                             const tangVy = Math.cos(angle) * p.angVel * offset;
                             this.addParticle(fx, fy, p.vel.x + tangVx, p.vel.y + tangVy, {
-                                mass: fragMass, charge: fragCharge, spin: p.angw, skipBaseline: true,
+                                mass: fragMass, baseMass: fragBaseMass, charge: fragCharge, spin: p.angw, skipBaseline: true,
                             });
                         }
                     }

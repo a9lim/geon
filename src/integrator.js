@@ -59,6 +59,8 @@ export default class Physics {
         this.expansionEnabled = false;
         this.hubbleParam = 0.001;
 
+        this.higgsEnabled = false;
+
         // External background fields (uniform, independent of force toggles)
         this.extGravity = 0;          // field strength |g|
         this.extGravityAngle = PI * 0.5;  // direction in radians (default: down)
@@ -115,6 +117,7 @@ export default class Physics {
             this._toggles.axMod = 1.0;
         }
         this._toggles.softeningSq = this.blackHoleEnabled ? BH_SOFTENING_SQ : SOFTENING_SQ;
+        this._toggles.higgsEnabled = this.higgsEnabled;
     }
 
     /** Pool-allocate a ghost at (sx, sy) mirroring p. Flips for non-orientable topologies. */
@@ -392,6 +395,9 @@ export default class Physics {
                 : -1;
             computeAllForces(particles, toggles, this.pool, initRoot, this.barnesHutEnabled, relOn, this.simTime, this.periodic, this.domainW, this.domainH, this._topologyConst);
             this._applyExternalFields(particles);
+            if (this.higgsEnabled && this.sim && this.sim.higgsField) {
+                this.sim.higgsField.applyForces(particles, width, height);
+            }
             if (collisionMode === 'bounce') this._applyRepulsion(particles, this.pool, initRoot);
             if (boundaryMode === 'bounce') this._applyBoundaryForces(particles, width, height, offX, offY);
             this._forcesInit = true;
@@ -719,6 +725,7 @@ export default class Physics {
                     p.radiusSq = p.radius * p.radius;
                     this.sim.totalRadiated += dE;
 
+                    p.baseMass *= p.mass / (p.mass + dE);
                     p._hawkAccum += dE;
                     if (p._hawkAccum >= MIN_MASS && this.sim.photons.length < MAX_PHOTONS) {
                         const emitAngle = Math.random() * TWO_PI;
@@ -779,6 +786,12 @@ export default class Physics {
                     p.w.y += (p.force1PN.y - p._f1pnOld.y) * halfDtOverM;
                     if (p.w.x !== p.w.x || p.w.y !== p.w.y) { p.w.x = 0; p.w.y = 0; }
                 }
+            }
+
+            // Higgs field evolution + mass modulation
+            if (this.higgsEnabled && this.sim && this.sim.higgsField) {
+                this.sim.higgsField.update(dtSub, particles, boundaryMode, this._topologyConst, width, height);
+                this.sim.higgsField.modulateMasses(particles, width, height, this.blackHoleEnabled);
             }
 
             // Step 5: Rebuild quadtree at new positions
@@ -852,6 +865,9 @@ export default class Physics {
             resetForces(particles);
             computeAllForces(particles, toggles, this.pool, root, this.barnesHutEnabled, relOn, this.simTime, this.periodic, this.domainW, this.domainH, this._topologyConst);
             this._applyExternalFields(particles);
+            if (this.higgsEnabled && this.sim && this.sim.higgsField) {
+                this.sim.higgsField.applyForces(particles, width, height);
+            }
             if (collisionMode === 'bounce') this._applyRepulsion(particles, this.pool, root);
             if (boundaryMode === 'bounce') this._applyBoundaryForces(particles, width, height, offX, offY);
         }

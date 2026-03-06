@@ -24,7 +24,7 @@ export const PRESETS = {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
             relativity: false, onepn: false, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false, higgs: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 100 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -50,7 +50,7 @@ export const PRESETS = {
             gravity: true, coulomb: false, magnetic: false, gravitomag: true,
             relativity: true, onepn: true, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false, higgs: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 100 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: true, potential: false },
@@ -74,7 +74,7 @@ export const PRESETS = {
             gravity: true, coulomb: true, magnetic: false, gravitomag: true,
             relativity: true, onepn: true, blackhole: false,
             radiation: true, tidallocking: true, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false, higgs: false,
         },
         settings: { collision: 'merge', boundary: 'despawn', speed: 128 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -96,7 +96,7 @@ export const PRESETS = {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
             relativity: false, onepn: false, blackhole: false,
             radiation: false, tidallocking: true, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false, higgs: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 100 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -120,7 +120,7 @@ export const PRESETS = {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
             relativity: false, onepn: false, blackhole: false,
             radiation: false, tidallocking: true, spinorbit: false, disintegration: true,
-            barneshut: false, yukawa: false, axion: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false, higgs: false,
         },
         settings: { collision: 'merge', boundary: 'despawn', speed: 100 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -142,7 +142,7 @@ export const PRESETS = {
             gravity: true, coulomb: false, magnetic: false, gravitomag: true,
             relativity: true, onepn: false, blackhole: true,
             radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false, higgs: false,
         },
         settings: { collision: 'merge', boundary: 'despawn', speed: 128 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -171,7 +171,7 @@ export const PRESETS = {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
             relativity: true, onepn: false, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: true, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false, higgs: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 50, interaction: 'orbit' },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -200,7 +200,7 @@ export const PRESETS = {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
             relativity: true, onepn: false, blackhole: false,
             radiation: true, tidallocking: false, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false, higgs: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 50, interaction: 'shoot' },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -220,7 +220,7 @@ export const PRESETS = {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
             relativity: true, onepn: false, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: true, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false, higgs: false,
         },
         settings: { collision: 'bounce', boundary: 'loop', topology: 'torus', speed: 100, friction: 0.4 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -250,7 +250,7 @@ export const PRESETS = {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
             relativity: false, onepn: false, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: true, axion: false, expansion: false,
+            barneshut: false, yukawa: true, axion: false, expansion: false, higgs: false,
         },
         settings: { collision: 'bounce', boundary: 'bounce', speed: 128, yukawaMu: 1 / 15 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -281,7 +281,7 @@ export const PRESETS = {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
             relativity: true, onepn: false, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: true, disintegration: false,
-            barneshut: false, yukawa: false, axion: true, expansion: false,
+            barneshut: false, yukawa: false, axion: true, expansion: false, higgs: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 128, axionMass: 0.15 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -306,6 +306,70 @@ export const PRESETS = {
         },
     },
 
+    higgs: {
+        name: 'Higgs Mechanism',
+        desc: 'Spontaneous symmetry breaking — particles gain mass from the Higgs field',
+        toggles: {
+            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: false, onepn: false, blackhole: false,
+            radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false, higgs: true,
+        },
+        settings: { collision: 'bounce', boundary: 'bounce', speed: 64, higgsVev: 1, higgsCoupling: 0.5, higgsThermal: 0.5 },
+        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            // Particles scattered around — watch them gain mass and attract
+            for (let i = 0; i < 8; i++) {
+                const angle = (TWO_PI * i) / 8;
+                const r = 8 + Math.random() * 10;
+                sim.addParticle(
+                    cx + Math.cos(angle) * r, cy + Math.sin(angle) * r,
+                    (Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1,
+                    { mass: 1 + Math.random(), charge: 0, spin: 0 }
+                );
+            }
+        },
+    },
+
+    phasetransition: {
+        name: 'Phase Transition',
+        desc: 'High-energy particles restore the Higgs symmetry — watch mass vanish',
+        toggles: {
+            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: false, onepn: false, blackhole: false,
+            radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false, higgs: true,
+        },
+        settings: { collision: 'bounce', boundary: 'bounce', speed: 64, higgsVev: 1, higgsCoupling: 0.8, higgsThermal: 1.0 },
+        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            // Fast particles that locally restore symmetry
+            for (let i = 0; i < 6; i++) {
+                const angle = (TWO_PI * i) / 6;
+                const r = 5;
+                const v = 0.6;
+                sim.addParticle(
+                    cx + Math.cos(angle) * r, cy + Math.sin(angle) * r,
+                    -Math.cos(angle) * v * 0.3 + (Math.random() - 0.5) * 0.2,
+                    -Math.sin(angle) * v * 0.3 + (Math.random() - 0.5) * 0.2,
+                    { mass: 2, charge: 0, spin: 0 }
+                );
+            }
+            // Stationary particles around the edge — feel the phase front
+            for (let i = 0; i < 8; i++) {
+                const angle = (TWO_PI * i) / 8 + PI / 8;
+                const r = 18;
+                sim.addParticle(
+                    cx + Math.cos(angle) * r, cy + Math.sin(angle) * r,
+                    0, 0,
+                    { mass: 1, charge: 0, spin: 0 }
+                );
+            }
+        },
+    },
+
     // ─── Cosmological ───
 
     galaxy: {
@@ -315,7 +379,7 @@ export const PRESETS = {
             gravity: true, coulomb: false, magnetic: false, gravitomag: true,
             relativity: false, onepn: false, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
-            barneshut: true, yukawa: false, axion: false, expansion: false,
+            barneshut: true, yukawa: false, axion: false, expansion: false, higgs: false,
         },
         settings: { collision: 'merge', boundary: 'despawn', speed: 128 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -343,7 +407,7 @@ export const PRESETS = {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
             relativity: false, onepn: false, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, expansion: true,
+            barneshut: false, yukawa: false, axion: false, expansion: true, higgs: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 128, hubble: 0.008 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -388,6 +452,7 @@ const TOGGLE_MAP = {
     yukawa: 'yukawa-toggle',
     axion: 'axion-toggle',
     expansion: 'expansion-toggle',
+    higgs: 'higgs-toggle',
 };
 
 // Parent toggles first so dependency cascades run before children are set
@@ -396,7 +461,7 @@ const TOGGLE_ORDER = [
     'gravitomag', 'magnetic',
     'onepn', 'blackhole',
     'tidallocking', 'spinorbit', 'radiation', 'disintegration', 'barneshut',
-    'yukawa', 'axion', 'expansion',
+    'yukawa', 'axion', 'expansion', 'higgs',
 ];
 
 const VISUAL_MAP = {
@@ -421,6 +486,9 @@ const SLIDER_MAP = {
     yukawaMu: 'yukawaMuInput',
     axionMass: 'axionMassInput',
     hubble: 'hubbleInput',
+    higgsVev: 'higgsVevInput',
+    higgsCoupling: 'higgsCouplingInput',
+    higgsThermal: 'higgsThermalInput',
     extGravity: 'extGravityInput',
     extGravityAngle: 'extGravityAngleInput',
     extElectric: 'extElectricInput',
@@ -440,6 +508,7 @@ export function loadPreset(name, sim) {
     sim.totalRadiatedPy = 0;
     sim.selectedParticle = null;
     sim.physics._forcesInit = false;
+    if (sim.higgsField) sim.higgsField.reset();
     sim.camera.reset(sim.domainW / 2, sim.domainH / 2, WORLD_SCALE);
 
     // 2. Apply physics toggles in dependency order
@@ -492,7 +561,7 @@ export function loadPreset(name, sim) {
     }
 
     // 5. Reset external fields (presets can override via settings)
-    const extDefaults = { extGravity: 0, extGravityAngle: 90, extElectric: 0, extElectricAngle: 0, extBz: 0 };
+    const extDefaults = { extGravity: 0, extGravityAngle: 90, extElectric: 0, extElectricAngle: 0, extBz: 0, higgsVev: 1, higgsCoupling: 0.5, higgsThermal: 0.5 };
     for (const [key, elId] of Object.entries(SLIDER_MAP)) {
         if (key in extDefaults && !(preset.settings && key in preset.settings)) {
             const el = document.getElementById(elId);

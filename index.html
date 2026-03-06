@@ -192,6 +192,8 @@
                             <optgroup label="Exotic">
                                 <option value="nucleus">Atomic Nucleus</option>
                                 <option value="axion">Axion Field</option>
+                                <option value="higgs">Higgs Mechanism</option>
+                                <option value="phasetransition">Phase Transition</option>
                             </optgroup>
                             <optgroup label="Cosmological">
                                 <option value="galaxy">Galaxy</option>
@@ -257,6 +259,23 @@
                             <div class="control-group">
                                 <label>Mass μ <span class="slider-value" id="yukawaMuValue">0.05</span></label>
                                 <input type="range" id="yukawaMuInput" min="0.01" max="0.25" step="0.01" value="0.05">
+                            </div>
+                        </div>
+                        <div class="ctrl-row"><label for="higgs-toggle">Higgs <button class="info-trigger" data-info="higgs" aria-label="Higgs field info">?</button></label>
+                            <div class="tog-wrap"><input type="checkbox" id="higgs-toggle" role="switch" aria-checked="false">
+                            <label for="higgs-toggle" class="tog tog-higgs"><span class="tog-thumb"></span></label></div></div>
+                        <div class="ctrl-sub" id="higgs-sliders" style="display:none">
+                            <div class="control-group">
+                                <label>VEV <span class="slider-value" id="higgsVevValue">1.00</span></label>
+                                <input type="range" id="higgsVevInput" min="0.1" max="3" step="0.05" value="1">
+                            </div>
+                            <div class="control-group">
+                                <label>Coupling <span class="slider-value" id="higgsCouplingValue">0.50</span></label>
+                                <input type="range" id="higgsCouplingInput" min="0" max="2" step="0.05" value="0.5">
+                            </div>
+                            <div class="control-group">
+                                <label>Thermal c<sub>T</sub> <span class="slider-value" id="higgsThermalValue">0.50</span></label>
+                                <input type="range" id="higgsThermalInput" min="0" max="2" step="0.05" value="0.5">
                             </div>
                         </div>
                     </div>
@@ -386,6 +405,7 @@
                         <div class="stat-row stat-sub"><span class="stat-label">Spin KE</span><span class="stat-value" id="spinKE">0</span></div>
                         <div class="stat-row stat-sub"><span class="stat-label">Potential</span><span class="stat-value" id="potentialE">0</span></div>
                         <div class="stat-row stat-sub"><span class="stat-label">Field</span><span class="stat-value" id="fieldE">0</span></div>
+                        <div class="stat-row stat-sub" hidden><span class="stat-label">Higgs Field</span><span class="stat-value" id="higgsFieldE">0</span></div>
                         <div class="stat-row stat-sub"><span class="stat-label">Radiated</span><span class="stat-value" id="radiatedE">0</span></div>
                         <div class="stat-row stat-sub"><span class="stat-label">Drift</span><span class="stat-value" id="energyDrift">+0.00%</span></div>
                     </div>
@@ -425,6 +445,7 @@
                                 <div class="stat-row stat-sub" id="fb-radiation" hidden><span class="stat-label">F<sub>rad</sub> (LL)</span><span class="stat-value" id="fb-radiation-val">0</span></div>
                                 <div class="stat-row stat-sub" id="fb-yukawa" hidden><span class="stat-label">F<sub>Y</sub> = g²e<sup>-μr</sup>/r²</span><span class="stat-value" id="fb-yukawa-val">0</span></div>
                                 <div class="stat-row stat-sub" id="fb-external" hidden><span class="stat-label">F<sub>ext</sub> (field)</span><span class="stat-value" id="fb-external-val">0</span></div>
+                                <div class="stat-row stat-sub" id="fb-higgs" hidden><span class="stat-label">F<sub>H</sub> = -(m₀/v)g∇φ</span><span class="stat-value" id="fb-higgs-val">0</span></div>
                             </div>
                         </div>
                     </div>

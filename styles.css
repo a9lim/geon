@@ -105,6 +105,7 @@ body {
 .tog-blackhole    { --tog-color: var(--text); }
 .tog-yukawa       { --tog-color: var(--ext-green); }
 .tog-axion        { --tog-color: var(--ext-blue); }
+.tog-higgs        { --tog-color: var(--ext-magenta); }
 
 /* ═══════════════════════════════════════════════
    Particle Tooltip & Selection

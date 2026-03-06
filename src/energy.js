@@ -129,10 +129,17 @@ export function computeEnergies(particles, physics, sim) {
         }
     }
 
+    // Higgs field energy
+    let higgsFieldEnergy = 0;
+    if (physics.higgsEnabled && sim && sim.higgsField) {
+        higgsFieldEnergy = sim.higgsField.energy(physics.domainW, physics.domainH);
+    }
+
     return {
         linearKE, spinKE,
         pe: physics.potentialEnergy,
         fieldEnergy, fieldPx, fieldPy,
+        higgsFieldEnergy,
         px, py,
         orbitalAngMom, spinAngMom,
         comX, comY,

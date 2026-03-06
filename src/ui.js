@@ -65,6 +65,7 @@ export function setupUI(sim) {
         sim.totalRadiated = 0;
         sim.totalRadiatedPx = 0;
         sim.totalRadiatedPy = 0;
+        if (sim.higgsField) sim.higgsField.reset();
         sim.camera.reset(sim.domainW / 2, sim.domainH / 2, WORLD_SCALE);
         showToast('Simulation cleared');
     });
@@ -140,6 +141,7 @@ export function setupUI(sim) {
         { id: 'axion-toggle', prop: 'axionEnabled' },
         { id: 'blackhole-toggle', prop: 'blackHoleEnabled' },
         { id: 'expansion-toggle', prop: 'expansionEnabled' },
+        { id: 'higgs-toggle', prop: 'higgsEnabled' },
     ];
 
     // Cache elements and prop lookup
@@ -181,6 +183,7 @@ export function setupUI(sim) {
     const yukawaSliders = document.getElementById('yukawa-sliders');
     const axionSliders = document.getElementById('axion-sliders');
     const hubbleGroup = document.getElementById('hubble-group');
+    const higgsSliders = document.getElementById('higgs-sliders');
 
     const updateAllDeps = () => {
         // 1. Cascade dependency graph
@@ -214,6 +217,7 @@ export function setupUI(sim) {
         yukawaSliders.style.display = tEl['yukawa-toggle'].checked ? '' : 'none';
         axionSliders.style.display = tEl['axion-toggle'].checked ? '' : 'none';
         hubbleGroup.style.display = tEl['expansion-toggle'].checked ? '' : 'none';
+        if (higgsSliders) higgsSliders.style.display = tEl['higgs-toggle'].checked ? '' : 'none';
         updateFrictionVisibility();
     };
 
@@ -222,6 +226,10 @@ export function setupUI(sim) {
         tEl[id].addEventListener('change', () => {
             sim.physics[prop] = tEl[id].checked;
             tEl[id].setAttribute('aria-checked', tEl[id].checked);
+            // Higgs: restore masses when toggled off
+            if (id === 'higgs-toggle' && !tEl[id].checked) {
+                for (const p of sim.particles) { p.mass = p.baseMass; p.updateColor(); }
+            }
             updateAllDeps();
         });
     });
@@ -297,6 +305,35 @@ export function setupUI(sim) {
         sim.physics.hubbleParam = parseFloat(hubbleSlider.value);
         hubbleLabel.textContent = parseFloat(hubbleSlider.value).toFixed(4);
     });
+
+    // ─── Higgs sliders ───
+    const higgsVevSlider = document.getElementById('higgsVevInput');
+    const higgsVevLabel = document.getElementById('higgsVevValue');
+    if (higgsVevSlider) {
+        higgsVevSlider.addEventListener('input', () => {
+            const v = parseFloat(higgsVevSlider.value);
+            sim.higgsField.vev = v;
+            higgsVevLabel.textContent = v.toFixed(2);
+        });
+    }
+    const higgsCouplingSlider = document.getElementById('higgsCouplingInput');
+    const higgsCouplingLabel = document.getElementById('higgsCouplingValue');
+    if (higgsCouplingSlider) {
+        higgsCouplingSlider.addEventListener('input', () => {
+            const v = parseFloat(higgsCouplingSlider.value);
+            sim.higgsField.coupling = v;
+            higgsCouplingLabel.textContent = v.toFixed(2);
+        });
+    }
+    const higgsThermalSlider = document.getElementById('higgsThermalInput');
+    const higgsThermalLabel = document.getElementById('higgsThermalValue');
+    if (higgsThermalSlider) {
+        higgsThermalSlider.addEventListener('input', () => {
+            const v = parseFloat(higgsThermalSlider.value);
+            sim.higgsField.thermalK = v;
+            higgsThermalLabel.textContent = v.toFixed(2);
+        });
+    }
 
     // ─── External field sliders ───
     const extGravitySlider = document.getElementById('extGravityInput');
@@ -434,6 +471,7 @@ export function setupUI(sim) {
         yukawa: { title: 'Yukawa Potential', body: 'A screened potential $V(r) = -g^2 e^{-\\mu r}/r$ that falls off exponentially beyond range $1/\\mu$. Models short-range nuclear forces (pion exchange) and any interaction mediated by a massive particle. At short range it behaves like gravity; at long range it vanishes. The coupling $g^2$ sets the strength and $\\mu$ (the mediator mass) sets the range.' },
         axion: { title: 'Axion Coupling', body: 'Models dark matter axions oscillating as a background field $a(t) = a_0 \\cos(m_a t)$, which modulates the electromagnetic coupling: $\\alpha_{\\text{eff}} = \\alpha(1 + g\\cos(m_a t))$. This makes Coulomb and magnetic forces oscillate periodically. The effect is the exact phenomenon that axion detection experiments (CASPEr, ABRACADABRA) search for. Energy is not conserved \u2014 the axion field is an external reservoir. Requires Coulomb.' },
         expansion: { title: 'Cosmological Expansion', body: 'Adds Hubble flow $v_H = H \\cdot r$ from the domain center, causing distant particles to separate. Bound systems (where binding energy exceeds Hubble kinetic energy) resist expansion and stay together, while unbound particles drift apart \u2014 the mechanism that creates large-scale cosmic structure. Includes Hubble drag ($v_{\\text{pec}} \\propto 1/a$) to redshift peculiar velocities, matching the physics of real cosmological N-body simulations.' },
+        higgs: { title: 'Higgs Field', body: 'A dynamical scalar field with Mexican hat potential $V(\\phi) = -\\frac{1}{2}\\mu^2\\phi^2 + \\frac{1}{4}\\lambda\\phi^4$. Spontaneous symmetry breaking gives the field a vacuum expectation value (VEV) $v = \\mu/\\sqrt{\\lambda}$, and particle masses are generated proportionally: $m = m_0 \\cdot |\\phi|/v$. Particles source the field and feel a gradient force $\\mathbf{F} = -(m_0/v) \\cdot g \\cdot \\nabla\\phi$. High local kinetic energy density can restore the symmetry (phase transition), making particles temporarily massless.' },
         external: { title: 'External Fields', body: 'Uniform background fields that act on all particles, independent of force toggles.<br><b>Gravity |g|</b> \u2014 uniform gravitational field $\\mathbf{F} = m\\mathbf{g}$. Direction in degrees (90\u00B0 = down).<br><b>Electric |E|</b> \u2014 uniform electric field $\\mathbf{F} = q\\mathbf{E}$. Accelerates charges, deflects beams.<br><b>Magnetic B<sub>z</sub></b> \u2014 uniform out-of-plane magnetic field. Produces cyclotron motion ($\\omega_c = qB/m$) via the Boris integrator. Negative values reverse the field direction.' },
     };
 
