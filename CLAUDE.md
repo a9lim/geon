@@ -17,35 +17,35 @@ Serve from `a9lim.github.io/` -- shared files load via absolute paths. ES6 modul
 ## File Map
 
 ```
-main.js                     ~380 lines Simulation class, emitPhotonBurst(), fixed-timestep loop, save/load wiring, pair production, Higgs field init, window.sim
+main.js                     ~367 lines Simulation class, emitPhotonBurst(), fixed-timestep loop, save/load wiring, pair production, Higgs field init, window.sim
 index.html                  ~506 lines UI structure, 4-tab sidebar, reference overlay, zoom controls, external field sliders, antimatter button, Higgs mass slider
 styles.css                  ~235 lines Project-specific CSS overrides (control rows, form controls, overlay, theme icons now in shared-base.css)
 colors.js                    18 lines  Project color tokens (particle hues, spin ring colors)
 src/
-  integrator.js            ~1216 lines Physics class: adaptive Boris substep loop, radiation, tidal, GW quadrupole, expansion, Roche overflow, external fields, Hertz bounce, Higgs field
+  integrator.js            ~1205 lines Physics class: adaptive Boris substep loop, radiation, tidal, GW quadrupole, expansion, Roche overflow, external fields, Hertz bounce, Higgs field
   ui.js                     ~518 lines setupUI(), declarative dependency graph, info tips, reference overlay, keyboard shortcuts, external field sliders, antimatter toggle, Higgs mass slider
-  renderer.js               ~494 lines Canvas 2D: particles, trails, spin rings, ergosphere, antimatter rings, vectors, torque arcs, photons/gravitons, delay ghosts, Higgs overlay
+  renderer.js               ~493 lines Canvas 2D: particles, trails, spin rings, ergosphere, antimatter rings, vectors, torque arcs, photons/gravitons, delay ghosts, Higgs overlay
   forces.js                 ~461 lines pairForce(), computeAllForces(), calculateForce() (BH walk), compute1PNPairwise(), Yukawa force
-  presets.js                ~586 lines PRESETS object (15 scenarios in 4 groups), loadPreset(), declarative SLIDER_MAP, TOGGLE_MAP/TOGGLE_ORDER, external field defaults
-  reference.js              ~309 lines REFERENCE object: extended physics reference content for each concept (KaTeX math)
-  higgs-field.js            ~449 lines HiggsField: 64x64 Mexican hat scalar field, symplectic Euler, PQS (cubic B-spline) deposition/interpolation, mass modulation, gradient force, phase transitions
-  quadtree.js               ~280 lines QuadTreePool: SoA flat typed arrays, pool-based, zero GC
+  presets.js                ~584 lines PRESETS object (15 scenarios in 4 groups), loadPreset(), declarative SLIDER_MAP, TOGGLE_MAP/TOGGLE_ORDER, external field defaults
+  reference.js              ~308 lines REFERENCE object: extended physics reference content for each concept (KaTeX math)
+  higgs-field.js            ~442 lines HiggsField: 128x128 Mexican hat scalar field, symplectic Euler, PQS (cubic B-spline) deposition/interpolation, mass modulation, gradient force, phase transitions
+  quadtree.js               ~279 lines QuadTreePool: SoA flat typed arrays, pool-based, zero GC
   input.js                  ~262 lines InputHandler: mouse/touch, Place/Shoot/Orbit modes, hover tooltip, antimatter flag passthrough
-  signal-delay.js            250 lines getDelayedState() (3-phase light-cone solver)
-  collisions.js             ~118 lines handleCollisions(), resolveMerge(), antimatter annihilation, baseMass conservation
+  signal-delay.js            249 lines getDelayedState() (3-phase light-cone solver)
+  heatmap.js                ~223 lines Heatmap: 64x64 grav+electrostatic+Yukawa potential field overlay, mode selector, signal-delayed positions, 8-frame interval
+  effective-potential.js    ~206 lines EffectivePotentialPlot: V_eff(r) sidebar canvas, auto-scaling, current position marker
   save-load.js              ~203 lines saveState(), loadState(), downloadState(), uploadState(), quickSave(), quickLoad(), baseMass persistence
-  effective-potential.js    ~207 lines EffectivePotentialPlot: V_eff(r) sidebar canvas, auto-scaling, current position marker
-  heatmap.js                ~190 lines Heatmap: 64x64 grav+electrostatic+Yukawa potential field overlay, mode selector, signal-delayed positions, 6-frame interval
-  potential.js              ~160 lines computePE(), treePE(), pairPE() (7 PE terms: grav, Coulomb, mag dipole, GM dipole, 1PN, Bazanski, Yukawa)
+  potential.js              ~157 lines computePE(), treePE(), pairPE() (7 PE terms: grav, Coulomb, mag dipole, GM dipole, 1PN, Bazanski, Yukawa)
   energy.js                 ~147 lines computeEnergies(): KE, spin KE, momentum, angular momentum, Darwin field, Higgs field energy
   stats-display.js          ~126 lines StatsDisplay: energy/momentum/drift DOM updates (×100 display scale), selected particle info, force breakdown
-  phase-plot.js              116 lines PhasePlot: r vs v_r sidebar canvas (500-sample ring buffer)
-  particle.js               ~124 lines Particle entity: pos, vel, w, angw, baseMass, antimatter flag, per-type force vectors (incl. forceHiggs), history buffers
+  config.js                  ~123 lines Named constants, spawnOffset(), kerrNewmanRadius() helpers (softening, BH, numerical, simulation, input, display, Higgs)
+  particle.js               ~118 lines Particle entity: pos, vel, w, angw, baseMass, antimatter flag, per-type force vectors (incl. forceHiggs), history buffers
+  phase-plot.js              117 lines PhasePlot: r vs v_r sidebar canvas (512-sample ring buffer)
+  collisions.js             ~116 lines handleCollisions(), resolveMerge(), antimatter annihilation, baseMass conservation
   topology.js                112 lines TORUS/KLEIN/RP2 constants, minImage(), wrapPosition()
   vec2.js                     65 lines Vec2 class: set, clone, add, sub, scale, mag, magSq, normalize, dist
-  config.js                  ~110 lines Named constants (softening, BH, numerical thresholds, simulation control, input, display, rendering scales, pair production, Higgs field)
   photon.js                   40 lines Photon entity: pos, vel, energy, lifetime, emitterId, type ('em'/'grav'), gravitational lensing
-  relativity.js                34 lines angwToAngVel(), angVelToAngw(), setVelocity()
+  relativity.js                33 lines angwToAngVel(), angVelToAngw(), setVelocity()
 ```
 
 ## Module Dependency Graph
@@ -53,10 +53,10 @@ src/
 ```
 main.js (Simulation, window.sim)
   <- Physics (integrator), Renderer, InputHandler, Particle, HiggsField, Heatmap, PhasePlot,
-     EffectivePotentialPlot, StatsDisplay, setupUI, config, Photon, relativity helpers, save-load
+     EffectivePotentialPlot, StatsDisplay, setupUI, config (incl. spawnOffset), Photon, relativity helpers, save-load
 
 integrator.js (Physics)
-  <- QuadTreePool + Rect, config, Photon, angwToAngVel,
+  <- QuadTreePool + Rect, config (incl. spawnOffset, kerrNewmanRadius), Photon, angwToAngVel,
      resetForces + computeAllForces + compute1PNPairwise (forces),
      handleCollisions (collisions), computePE (potential),
      TORUS + KLEIN + RP2 + minImage + wrapPosition (topology)
@@ -70,15 +70,16 @@ potential.js     <- config, TORUS + minImage (topology)
 stats-display.js <- computeEnergies (energy), config (DISPLAY_SCALE, STATS_THROTTLE_MASK, EPSILON)
 ui.js            <- loadPreset (presets), config (PHYSICS_DT, WORLD_SCALE), REFERENCE (reference)
 presets.js       <- config (WORLD_SCALE, SOFTENING_SQ)
-renderer.js      <- config (MAX_TRAIL_LENGTH, PHOTON_LIFETIME, INERTIA_K, HISTORY_SIZE, VELOCITY_VECTOR_SCALE, FORCE_VECTOR_SCALE)
+renderer.js      <- config (MAX_TRAIL_LENGTH, PHOTON_LIFETIME, INERTIA_K, VELOCITY_VECTOR_SCALE, FORCE_VECTOR_SCALE)
                     (renderer.higgsField set by main.js for field overlay rendering)
-heatmap.js       <- config (SOFTENING_SQ, BH_THETA), getDelayedState (signal-delay)
+heatmap.js       <- config (SOFTENING_SQ, BH_THETA, YUKAWA_G2, HEATMAP_GRID, HEATMAP_INTERVAL, HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA), getDelayedState (signal-delay)
 input.js         <- Vec2, config (MAX_SPEED_RATIO, PINCH_DEBOUNCE, DRAG_THRESHOLD, SHOOT_VELOCITY_SCALE, ORBIT_SEARCH_RADIUS)
-collisions.js    <- config (INERTIA_K, COLLISION_SAFE_DIST, OVERLAP_FACTOR, EPSILON), relativity helpers, topology
+collisions.js    <- config (INERTIA_K), relativity helpers (angwToAngVel), topology (TORUS, minImage, wrapPosition)
 signal-delay.js  <- config (HISTORY_SIZE, NR_TOLERANCE, EPSILON), TORUS + minImage (topology)
 save-load.js     <- Particle, angwToAngVel (relativity)
 effective-potential.js <- config (SOFTENING_SQ, BH_SOFTENING_SQ, INERTIA_K, MAG_MOMENT_K, YUKAWA_G2, AXION_G)
-higgs-field.js   <- config (HIGGS_GRID, DEFAULT_HIGGS_MASS, HIGGS_PHI_MAX, EPSILON), topology (TORUS, KLEIN, RP2)
+higgs-field.js   <- config (HIGGS_GRID, DEFAULT_HIGGS_MASS, HIGGS_PHI_MAX, EPSILON, kerrNewmanRadius), topology (TORUS, KLEIN, RP2)
+particle.js      <- Vec2, config (HISTORY_SIZE, kerrNewmanRadius)
 reference.js     (no imports - pure data)
 ```
 
@@ -103,7 +104,7 @@ Key derived quantities:
 - Moment of inertia: `I = INERTIA_K * m * r²` (INERTIA_K = 0.4)
 - Magnetic moment: `mu = MAG_MOMENT_K * q * omega * r²` (MAG_MOMENT_K = 0.2)
 - Angular momentum: `L = I * omega`
-- Particle radius: `r = cbrt(mass)`; in BH mode: Kerr-Newman `r+ = M + sqrt(M²-a²-Q²)`
+- Particle radius: `r = cbrt(mass)`; in BH mode: `kerrNewmanRadius(M, r², ω, Q)` → `r+ = M + sqrt(M²-a²-Q²)` where `a = INERTIA_K*r²*|ω|`
 
 ### Per-Particle Display Vectors
 
@@ -179,7 +180,7 @@ Requires Coulomb. Modulates EM coupling: `α_eff = α·(1 + g·cos(m_a·t))`. Ap
 
 ### Higgs Scalar Field
 
-Independent toggle (`physics.higgsEnabled`). Dynamical real scalar field on a 64×64 grid with Mexican hat potential `V(φ) = -½μ²φ² + ¼λφ⁴`. VEV=1 baked in; the free parameter is the Higgs boson mass `m_H` (slider 0.25–1, default 0.5). With VEV=1: `λ = μ² = m_H²/2`. Smaller m_H → longer interaction range (~1/m_H), shallower potential well.
+Independent toggle (`physics.higgsEnabled`). Dynamical real scalar field on a 128×128 grid with Mexican hat potential `V(φ) = -½μ²φ² + ¼λφ⁴`. VEV=1 baked in; the free parameter is the Higgs boson mass `m_H` (slider 0.25–1, default 0.5). With VEV=1: `λ = μ² = m_H²/2`. Smaller m_H → longer interaction range (~1/m_H), shallower potential well.
 
 **Particle-grid coupling**: PQS (Piecewise Quadratic Spline, cubic B-spline, order 3). Each particle deposits to / interpolates from a 4×4 = 16 node stencil. Shape function: `W(t) = (4-6t²+3|t|³)/6` for `|t|<1`, `W(t) = (2-|t|)³/6` for `1≤|t|<2`. Gives C² continuous interpolation and C¹ continuous gradients — no grid-crossing artifacts, no self-force subtraction needed, no smoothing buffers. Pre-allocated weight arrays (`_wx`, `_wy`, `_dwx`, `_dwy`) for zero-alloc hot path.
 
@@ -197,9 +198,9 @@ Independent toggle (`physics.higgsEnabled`). Dynamical real scalar field on a 64
 
 **Damping**: Critical damping `damp = 2·m_H`. Prevents field ringing. Scales with m_H so the field always settles without oscillation.
 
-**Parameters**: One slider: `mass` (m_H, default 0.5, range 0.25–1). Config constants: `HIGGS_PHI_MAX = 16`. All other parameters baked to 1 (VEV, source coupling, thermalK, damping ratio, lambda).
+**Parameters**: One slider: `mass` (m_H, default 0.5, range 0.25–1). Config constants: `HIGGS_GRID = 128`, `HIGGS_PHI_MAX = 16`. All other parameters baked to 1 (VEV, source coupling, thermalK, damping ratio, lambda).
 
-**Rendering**: Offscreen 64×64 canvas, bilinear-upscaled to world space. Magenta = depleted (φ < 1), cyan = enhanced (φ > 1). Alpha ∝ |deviation|×2. Force vector color: magenta (`--ext-magenta`).
+**Rendering**: Offscreen 128×128 canvas, bilinear-upscaled to world space. Magenta = depleted (φ < 1), cyan = enhanced (φ > 1). Alpha ∝ |deviation|×2. Force vector color: magenta (`--ext-magenta`).
 
 **baseMass synchronization**: All mass-modifying operations (merge, annihilation, Roche overflow, disintegration, Hawking evaporation) proportionally scale `baseMass`. On Higgs toggle-off, `mass` is restored to `baseMass` for all particles.
 
@@ -228,7 +229,7 @@ Both quadrupole types use TT-projected angular emission pattern via rejection sa
 ### Black Hole Mode
 
 Toggle under Relativity (`physics.blackHoleEnabled`):
-- **Kerr-Newman horizon**: `r+ = M + sqrt(M²-a²-Q²)`, naked singularity floor at `M*BH_NAKED_FLOOR`
+- **Kerr-Newman horizon**: via `kerrNewmanRadius()` in config.js: `r+ = M + sqrt(M²-a²-Q²)` where `a = INERTIA_K*r²*|ω|`, naked singularity floor at `M*BH_NAKED_FLOOR`
 - **Ergosphere**: dashed ring at `r_ergo = M + sqrt(M²-a²)` (theme text color, purely visual)
 - **Reduced softening**: BH_SOFTENING_SQ = 16 (not 64)
 - **Collision lock**: forced to Merge
@@ -252,7 +253,7 @@ Energy transfer: `dE = -mu*(v·∇Bz)*dt` (EM), `dE = -L*(v·∇Bgz)*dt` (GM). C
 
 ### Disintegration
 
-Toggle (`disintegrationEnabled`), requires Gravity. Locks collision to Merge (prevents runaway particle creation). Fragments when tidal + centrifugal + Coulomb stress exceeds self-gravity. Splits into `SPAWN_COUNT` pieces. Min mass: `MIN_MASS * SPAWN_COUNT`.
+Toggle (`disintegrationEnabled`), requires Gravity. Locks collision to Merge (prevents runaway particle creation). Fragments when tidal + centrifugal + Coulomb stress exceeds self-gravity. Splits into 2 pieces (hardcoded `nf=2` in main.js). Min mass guard: `MIN_MASS * SPAWN_COUNT`.
 
 **Roche Lobe Overflow**: Eggleton formula. Continuous mass transfer toward companion through L1. Rate: `dM = overflow * ROCHE_TRANSFER_RATE * m`, capped 10%. Min packet: `MIN_MASS`. Returns `{ fragments, transfers }`.
 
@@ -262,7 +263,7 @@ Toggle (`disintegrationEnabled`), requires Gravity. Locks collision to Merge (pr
 
 ### Cosmological Expansion
 
-Toggle (`expansionEnabled`). `pos += H*(pos - center)*dt` (Hubble flow), `w *= (1 - H*dt)` (redshift). Default `hubbleParam = 0.001`. Enabling expansion locks boundary mode to "despawn" (particles leave the domain).
+Toggle (`expansionEnabled`). `pos += H*(pos - center)*dt` (Hubble flow), `w *= (1 - H*dt)` (redshift). Default `hubbleParam = DEFAULT_HUBBLE` (0.001). Enabling expansion locks boundary mode to "despawn" (particles leave the domain).
 
 ### External Background Fields
 
@@ -385,7 +386,7 @@ Canvas 2D. Dark mode: additive blending (`lighter`).
 - **Trails**: circular Float32Array[256], wrap-detection for periodic boundaries
 - **Antimatter rings**: dashed white circle (`#888` light / `#ccc` dark) around antimatter particles, radius = p.radius + 0.4
 - **Force vectors**: scale=FORCE_VECTOR_SCALE (÷ mass for accel). Component colors: gravity=red, coulomb=blue, magnetic=cyan, GM=rose, 1PN=orange, spin-curv=purple, radiation=yellow, yukawa=green, external=white, higgs=magenta
-- **Higgs field overlay**: 64×64 offscreen canvas bilinear-upscaled. Magenta=depleted, cyan=enhanced. Rendered after camera transform, before trails
+- **Higgs field overlay**: 128×128 offscreen canvas bilinear-upscaled. Magenta=depleted, cyan=enhanced. Rendered after camera transform, before trails
 - **Torque arcs**: spin-orbit=purple, frame-drag=rose, tidal=red, total=accent
 - **Photons**: yellow (EM, `type: 'em'`) / red (gravitons, `type: 'grav'`), alpha fades over PHOTON_LIFETIME=256
 - **Signal delay ghosts**: stroked outline at oldest history position
@@ -400,6 +401,7 @@ Particle color: neutral=slate `#8A7E72`. Charged: RGB lerp toward red (positive)
 
 ## Key Patterns
 
+- `spawnOffset(radius)` and `kerrNewmanRadius(M, r², ω, Q)` in config.js — shared helpers for photon/fragment spawn offsets and BH horizon radius
 - `Vec2.set(x,y)` in hot paths; `pairForce()` accumulates into `out` Vec2 + display vectors, zero alloc
 - QuadTreePool: SoA, `reset()`+`build()` per substep, zero GC
 - `window.sim` for console debugging. `_PALETTE`/`_FONT` frozen by colors.js
@@ -421,7 +423,7 @@ Particle color: neutral=slate `#8A7E72`. Charged: RGB lerp toward red (positive)
 - `checkDisintegration()` returns `{ fragments, transfers }` (not a flat array)
 - GW quadrupole history buffer needs 4+ samples for 3rd derivative -- first frames produce no output
 - Radiation power-dissipation terms (−v·F²/mγ² and +F·(v·F)/mγ⁴) only active when relativity on
-- Heatmap signal delay is expensive (GRID²×N delay solves) -- mitigated by 6-frame update interval
+- Heatmap signal delay is expensive (GRID²×N delay solves) -- mitigated by 8-frame update interval (HEATMAP_INTERVAL)
 - Reference overlay uses `renderMathInElement` from KaTeX auto-render (loaded deferred)
 - World coordinates use `sim.domainW/H` (viewport / WORLD_SCALE), not pixel dimensions
 - `forceRadiation` is cleared for all particles before the substep loop to prevent stale accumulation (neutral particles with 1 substep)
@@ -437,7 +439,7 @@ Particle color: neutral=slate `#8A7E72`. Charged: RGB lerp toward red (positive)
 - External Bz enters Boris rotation alongside particle-sourced Bz -- included in `needBoris` condition check
 - Higgs PQS stencil extends to `[ix-1..ix+2]` — `_phiAt()` uses boundary clamping for out-of-range nodes
 - Higgs `_pqsCoords()` stores `dx`/`dy` in `_pqs` object — needed by `applyForces()` for gradient weight computation
-- Higgs `modulateMasses()` updates radius/radiusSq/invMass inline (not via `updateColor()`) to avoid per-substep string allocation; must handle BH mode Kerr-Newman radius
+- Higgs `modulateMasses()` updates radius/radiusSq/invMass inline (not via `updateColor()`) to avoid per-substep string allocation; BH mode uses `kerrNewmanRadius()`
 - Higgs `_nb()` uses integer boundary mode constants (BC_DESPAWN=0/BC_BOUNCE=1/BC_LOOP=2) converted once per `update()` call
 - `baseMass` must be saved/loaded and proportionally scaled wherever `mass` is modified (merge, annihilation, Roche, disintegration, Hawking)
 - Higgs field `energy()` shifts potential by +μ²/4 so V(1)=0 -- without this, a constant negative offset dominates energy tracking
