@@ -30,7 +30,7 @@ export default class Physics {
         this.radiationEnabled = true;
         this.blackHoleEnabled = false;
         this.disintegrationEnabled = false;
-        this.tidalLockingEnabled = false;
+        this.tidalLockingEnabled = true;
         this.signalDelayEnabled = true;
         this.spinOrbitEnabled = true;
         this.onePNEnabled = true;
@@ -41,7 +41,7 @@ export default class Physics {
         this.axionEnabled = false;
         this.axionMass = DEFAULT_AXION_MASS;
 
-        this.quadRadiationEnabled = false;
+        this.quadRadiationEnabled = true;
         this.expansionEnabled = false;
         this.hubbleParam = 0.001;
 
@@ -64,7 +64,7 @@ export default class Physics {
             magneticEnabled: true,
             gravitomagEnabled: true,
             onePNEnabled: true,
-            tidalLockingEnabled: false,
+            tidalLockingEnabled: true,
             yukawaEnabled: false,
             yukawaMu: 0.2,
             axionEnabled: false,
