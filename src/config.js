@@ -66,6 +66,7 @@ export const DEFAULT_HIGGS_VEV = 1.0;          // vacuum expectation value
 export const DEFAULT_HIGGS_COUPLING = 0.5;     // particle-field source strength
 export const DEFAULT_HIGGS_THERMAL_K = 0.5;    // thermal correction coupling
 export const HIGGS_DAMPING = 1.0;              // damping ratio (1.0 = critical, scales with 2*m_H)
+export const HIGGS_SOURCE_STRENGTH = 0.01;    // particle->field source coupling (weak: delta_phi/v ~ 3% for m=10)
 
 // Numerical thresholds
 export const EPSILON = 1e-9;          // general "effectively zero" guard
