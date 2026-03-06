@@ -26,12 +26,14 @@ export default class Particle {
         this.forceRadiation = new Vec2(0, 0);
         this.forceYukawa = new Vec2(0, 0);
         this.forceExternal = new Vec2(0, 0);
+        this.forceHiggs = new Vec2(0, 0);
         this.torqueSpinOrbit = 0;
         this.torqueFrameDrag = 0;
         this.torqueTidal = 0;
         this._f1pnOld = { x: 0, y: 0 };
 
         this.mass = mass;
+        this.baseMass = mass;
         this.charge = charge;
         this.antimatter = false;
         this.angw = 0;      // angular celerity (unbounded)

@@ -18,6 +18,7 @@ const TOGGLE_SYNC = [
     ['yukawaEnabled', 'yukawa-toggle'],
     ['axionEnabled', 'axion-toggle'],
     ['expansionEnabled', 'expansion-toggle'],
+    ['higgsEnabled', 'higgs-toggle'],
 ];
 
 const MODE_SYNC = [
@@ -65,7 +66,7 @@ export function saveState(sim) {
         particles: sim.particles.map(p => ({
             x: p.pos.x, y: p.pos.y,
             wx: p.w.x, wy: p.w.y,
-            mass: p.mass, charge: p.charge, angw: p.angw, antimatter: p.antimatter,
+            mass: p.mass, baseMass: p.baseMass, charge: p.charge, angw: p.angw, antimatter: p.antimatter,
         })),
         toggles: {},
         settings: {
@@ -83,7 +84,7 @@ export function saveState(sim) {
         'radiationEnabled', 'blackHoleEnabled', 'disintegrationEnabled',
         'tidalLockingEnabled', 'spinOrbitEnabled',
         'onePNEnabled', 'yukawaEnabled', 'axionEnabled',
-        'expansionEnabled']) {
+        'expansionEnabled', 'higgsEnabled']) {
         state.toggles[key] = ph[key];
     }
     state.yukawaMu = ph.yukawaMu;
@@ -110,6 +111,7 @@ export function loadState(state, sim) {
     if (state.yukawaMu != null) ph.yukawaMu = state.yukawaMu;
     if (state.axionMass != null) ph.axionMass = state.axionMass;
     if (state.hubbleParam != null) ph.hubbleParam = state.hubbleParam;
+    if (sim.higgsField) sim.higgsField.reset();
 
     if (state.settings) {
         const col = state.settings.collision || 'pass';
@@ -129,6 +131,7 @@ export function loadState(state, sim) {
     for (const pd of state.particles) {
         const p = new Particle(pd.x, pd.y, pd.mass, pd.charge);
         p.mass = pd.mass;
+        p.baseMass = pd.baseMass ?? pd.mass;
         p.charge = pd.charge;
         p.angw = pd.angw;
         p.antimatter = pd.antimatter || false;

@@ -30,7 +30,7 @@ export default class StatsDisplay {
         const totalPx = e.px + e.fieldPx + sim.totalRadiatedPx;
         const totalPy = e.py + e.fieldPy + sim.totalRadiatedPy;
         const pMag = Math.sqrt(totalPx * totalPx + totalPy * totalPy);
-        const total = e.linearKE + e.spinKE + e.pe + e.fieldEnergy + sim.totalRadiated;
+        const total = e.linearKE + e.spinKE + e.pe + e.fieldEnergy + e.higgsFieldEnergy + sim.totalRadiated;
 
         if (this.initialEnergy === null && particles.length > 0) {
             this.initialEnergy = total;
@@ -51,6 +51,10 @@ export default class StatsDisplay {
         this.dom.totalE.textContent = fmt(total);
         this.dom.energyDrift.textContent = fmtDrift(eDrift);
         this.dom.fieldE.textContent = fmt(e.fieldEnergy);
+        if (this.dom.higgsFieldE) {
+            this.dom.higgsFieldE.textContent = fmt(e.higgsFieldEnergy);
+            this.dom.higgsFieldE.closest('.stat-row').hidden = e.higgsFieldEnergy === 0;
+        }
         this.dom.radiatedE.textContent = fmt(sim.totalRadiated);
         this.dom.momentum.textContent = fmt(pMag);
         this.dom.particleMom.textContent = fmt(Math.sqrt(e.px * e.px + e.py * e.py));
@@ -81,8 +85,8 @@ export default class StatsDisplay {
         if (dom.effPotSection) dom.effPotSection.hidden = false;
         const speed = Math.sqrt(p.vel.x * p.vel.x + p.vel.y * p.vel.y);
         const gamma = physics.relativityEnabled ? Math.sqrt(1 + p.w.magSq()) : 1;
-        const totalFx = p.forceGravity.x + p.forceCoulomb.x + p.forceMagnetic.x + p.forceGravitomag.x + p.force1PN.x + p.forceSpinCurv.x + p.forceRadiation.x + p.forceYukawa.x + p.forceExternal.x;
-        const totalFy = p.forceGravity.y + p.forceCoulomb.y + p.forceMagnetic.y + p.forceGravitomag.y + p.force1PN.y + p.forceSpinCurv.y + p.forceRadiation.y + p.forceYukawa.y + p.forceExternal.y;
+        const totalFx = p.forceGravity.x + p.forceCoulomb.x + p.forceMagnetic.x + p.forceGravitomag.x + p.force1PN.x + p.forceSpinCurv.x + p.forceRadiation.x + p.forceYukawa.x + p.forceExternal.x + p.forceHiggs.x;
+        const totalFy = p.forceGravity.y + p.forceCoulomb.y + p.forceMagnetic.y + p.forceGravitomag.y + p.force1PN.y + p.forceSpinCurv.y + p.forceRadiation.y + p.forceYukawa.y + p.forceExternal.y + p.forceHiggs.y;
         const forceMag = Math.sqrt(totalFx * totalFx + totalFy * totalFy);
 
         dom.mass.textContent = fmtRaw(p.mass) + (p.antimatter ? ' (anti)' : '');
@@ -104,6 +108,7 @@ export default class StatsDisplay {
             { row: dom.fbRadiation, val: dom.fbRadiationVal, vec: p.forceRadiation },
             { row: dom.fbYukawa, val: dom.fbYukawaVal, vec: p.forceYukawa },
             { row: dom.fbExternal, val: dom.fbExternalVal, vec: p.forceExternal },
+            { row: dom.fbHiggs, val: dom.fbHiggsVal, vec: p.forceHiggs },
         ];
         for (const f of forces) {
             if (!f.row) continue;

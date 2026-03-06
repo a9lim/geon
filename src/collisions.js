@@ -48,8 +48,11 @@ export function handleCollisions(particles, pool, root, mode, bounceFriction, re
                     const apx = p1.w.x * annihilated * frac1 + real2.w.x * annihilated * frac2;
                     const apy = p1.w.y * annihilated * frac1 + real2.w.y * annihilated * frac2;
                     annihilations.push({ x: cx, y: cy, energy: 2 * annihilated, px: apx, py: apy });
+                    const origM1 = p1.mass, origM2 = real2.mass;
                     p1.mass -= annihilated;
                     real2.mass -= annihilated;
+                    if (origM1 > 0) p1.baseMass *= p1.mass / origM1;
+                    if (origM2 > 0) real2.baseMass *= real2.mass / origM2;
                     p1.updateColor();
                     real2.updateColor();
                 } else if (mode === 'merge') {
@@ -95,6 +98,8 @@ export function resolveMerge(p1, p2, relativityEnabled, periodic, miDx, miDy) {
         + INERTIA_K * p2.mass * p2.radius * p2.radius * p2.angw;
 
     p1.mass = totalMass;
+    p1.baseMass = p1.baseMass + p2.baseMass;
+    p2.baseMass = 0;
     p1.charge = p1.charge + p2.charge;
     p1.w.set(newWx, newWy);
     p1.pos.set(newX, newY);

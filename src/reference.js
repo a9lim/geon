@@ -156,6 +156,33 @@ export const REFERENCE = {
 <p>This is the exact effect searched for by axion detection experiments like CASPEr and ABRACADABRA.</p>
 `,
     },
+    higgs: {
+        title: 'Higgs Field',
+        body: `
+<p>A dynamical scalar field with the Mexican hat (sombrero) potential:</p>
+<p>$$V(\\phi) = -\\frac{1}{2}\\mu^2\\phi^2 + \\frac{1}{4}\\lambda\\phi^4$$</p>
+<h3>Spontaneous Symmetry Breaking</h3>
+<p>The potential has a maximum at $\\phi = 0$ and a ring of minima at the vacuum expectation value (VEV):</p>
+<p>$$v = \\frac{\\mu}{\\sqrt{\\lambda}}$$</p>
+<p>The field spontaneously "rolls" to $\\phi = v$, breaking the symmetry. The Higgs boson mass is $m_H = \\mu\\sqrt{2}$.</p>
+<h3>Mass Generation</h3>
+<p>Particle masses are proportional to the local field value:</p>
+<p>$$m_{\\text{eff}} = m_0 \\cdot \\frac{|\\phi(\\mathbf{x})|}{v}$$</p>
+<p>When $\\phi = v$, particles have their full "bare" mass $m_0$. When $\\phi = 0$ (symmetry restored), particles become massless.</p>
+<h3>Gradient Force</h3>
+<p>Particles feel a force toward regions of higher field value:</p>
+<p>$$\\mathbf{F} = -\\frac{m_0}{v} \\cdot g \\cdot \\nabla\\phi$$</p>
+<p>where $g$ is the Higgs coupling strength.</p>
+<h3>Field Equation</h3>
+<p>The Klein-Gordon equation with the Mexican hat potential:</p>
+<p>$$\\ddot{\\phi} = \\nabla^2\\phi + \\mu^2_{\\text{eff}}\\phi - \\lambda\\phi^3 + g \\cdot \\rho_{\\text{source}} - \\eta\\dot{\\phi}$$</p>
+<p>where $\\eta$ is a damping coefficient and $\\rho_{\\text{source}}$ is the particle source density.</p>
+<h3>Phase Transitions</h3>
+<p>At high temperatures, thermal corrections modify the effective mass parameter:</p>
+<p>$$\\mu^2_{\\text{eff}} = \\mu^2 - c_T T^2_{\\text{local}}$$</p>
+<p>When $c_T T^2 > \\mu^2$, the effective $\\mu^2$ becomes negative, restoring the symmetry ($\\phi \\to 0$). This models the electroweak phase transition that occurred in the early universe at $T \\sim 160$ GeV.</p>
+`,
+    },
     expansion: {
         title: 'Cosmological Expansion',
         body: `

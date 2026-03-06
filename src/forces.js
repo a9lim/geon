@@ -24,6 +24,7 @@ export function resetForces(particles) {
         p.forceRadiation.x = p.forceRadiation.y = 0;
         p.forceYukawa.x = p.forceYukawa.y = 0;
         p.forceExternal.x = p.forceExternal.y = 0;
+        p.forceHiggs.x = p.forceHiggs.y = 0;
         p.torqueSpinOrbit = 0;
         p.torqueFrameDrag = 0;
         p.torqueTidal = 0;
