@@ -3,7 +3,7 @@
 // B-like (velocity-dependent) forces for exact |v|-preserving rotation.
 
 import QuadTreePool, { Rect } from './quadtree.js';
-import { PI, TWO_PI, SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, LL_FORCE_CLAMP, TIDAL_STRENGTH, FRAGMENT_COUNT, SOFTENING_SQ, QUADTREE_CAPACITY, BH_THETA, HISTORY_SIZE, HISTORY_STRIDE, DEFAULT_YUKAWA_MU, AXION_G, DEFAULT_AXION_MASS, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, ROCHE_MIN_PACKET, DEFAULT_HUBBLE } from './config.js';
+import { PI, TWO_PI, SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, LL_FORCE_CLAMP, TIDAL_STRENGTH, FRAGMENT_COUNT, SOFTENING_SQ, QUADTREE_CAPACITY, BH_THETA, HISTORY_SIZE, HISTORY_STRIDE, DEFAULT_YUKAWA_MU, AXION_G, DEFAULT_AXION_MASS, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, DEFAULT_HUBBLE } from './config.js';
 import Photon from './photon.js';
 import { angwToAngVel } from './relativity.js';
 
@@ -980,7 +980,7 @@ export default class Physics {
 
             if (maxTidal + centrifugal + coulombSelf > selfGravity) {
                 fragments.push(p);
-            } else if (strongestOther && strongestDist > 1e-10 && p.mass > ROCHE_MIN_PACKET * 4) {
+            } else if (strongestOther && strongestDist > 1e-10 && p.mass > MIN_MASS * 4) {
                 // Roche lobe overflow: Eggleton formula r_Roche ≈ 0.462·d·(m/(m+M))^(1/3)
                 const d = strongestDist;
                 const q = p.mass / (p.mass + strongestOther.mass);
@@ -991,7 +991,7 @@ export default class Physics {
                         const l1x = strongestDx / l1Mag, l1y = strongestDy / l1Mag;
                         const overflow = p.radius / rRoche - ROCHE_THRESHOLD;
                         const dM = Math.min(overflow * ROCHE_TRANSFER_RATE * p.mass, p.mass * 0.1);
-                        if (dM >= ROCHE_MIN_PACKET) {
+                        if (dM >= MIN_MASS) {
                             transfers.push({
                                 source: p,
                                 mass: dM,
