@@ -78,7 +78,7 @@ collisions.js    <- config (INERTIA_K, COLLISION_SAFE_DIST, OVERLAP_FACTOR, EPSI
 signal-delay.js  <- config (HISTORY_SIZE, NR_TOLERANCE, EPSILON), TORUS + minImage (topology)
 save-load.js     <- Particle, angwToAngVel (relativity)
 effective-potential.js <- config (SOFTENING_SQ, BH_SOFTENING_SQ, INERTIA_K, MAG_MOMENT_K, YUKAWA_G2, AXION_G)
-higgs-field.js   <- config (HIGGS_GRID, HIGGS_LAMBDA, DEFAULT_HIGGS_VEV/COUPLING/THERMAL, HIGGS_DAMPING, HIGGS_SOURCE_STRENGTH, EPSILON), topology (TORUS, KLEIN, RP2)
+higgs-field.js   <- config (HIGGS_GRID, DEFAULT_HIGGS_VEV/COUPLING/THERMAL, HIGGS_DAMPING, HIGGS_SOURCE_STRENGTH, HIGGS_PHI_MAX, EPSILON), topology (TORUS, KLEIN, RP2)
 reference.js     (no imports - pure data)
 ```
 
@@ -197,7 +197,7 @@ Independent toggle (`physics.higgsEnabled`). Dynamical real scalar field on a 48
 
 **Damping**: Adaptive critical damping: `damp = dampingRatio · 2 · m_H` where `m_H = √(2λv²)`. `HIGGS_DAMPING = 1.0` (ratio of critical damping). Prevents field ringing that amplifies self-force artifacts.
 
-**Parameters**: `vev` (default 1.0, slider 0.1–5.0), `coupling` (default 0.5, slider 0–2.0), `thermalK` (default 0.5, slider 0–2.0). Config constants: `lambda = 1.0`, `damping = 1.0` (critical damping ratio), `HIGGS_SOURCE_STRENGTH = 0.01`.
+**Parameters**: `vev` (default 1.0, slider 0.1–5.0), `coupling` (default 0.5, slider 0–2.0), `thermalK` (default 0.5, slider 0–2.0). Config constants: `damping = 1.0` (critical damping ratio), `HIGGS_SOURCE_STRENGTH = 0.01`. Lambda is baked to 1 (removed as constant).
 
 **Rendering**: Offscreen 48×48 canvas, bilinear-upscaled to world space. Magenta = depleted (φ < VEV), cyan = enhanced (φ > VEV). Alpha ∝ |deviation|. Force vector color: magenta (`--ext-magenta`).
 
