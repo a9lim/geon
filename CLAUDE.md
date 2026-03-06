@@ -17,32 +17,33 @@ Serve from `a9lim.github.io/` -- shared files load via absolute paths. ES6 modul
 ## File Map
 
 ```
-main.js                     ~350 lines Simulation class, fixed-timestep loop, save/load wiring, pair production, window.sim
-index.html                  ~493 lines UI structure, 4-tab sidebar, reference overlay, zoom controls, external field sliders, antimatter button
-styles.css                  ~234 lines Project-specific CSS overrides (control rows, form controls, overlay, theme icons now in shared-base.css)
+main.js                     ~364 lines Simulation class, fixed-timestep loop, save/load wiring, pair production, Higgs field init, window.sim
+index.html                  ~514 lines UI structure, 4-tab sidebar, reference overlay, zoom controls, external field sliders, antimatter button, Higgs sliders
+styles.css                  ~235 lines Project-specific CSS overrides (control rows, form controls, overlay, theme icons now in shared-base.css)
 colors.js                    18 lines  Project color tokens (particle hues, spin ring colors)
 src/
-  integrator.js            ~1205 lines Physics class: adaptive Boris substep loop, radiation, tidal, GW quadrupole, expansion, Roche overflow, external fields, Hertz bounce
-  ui.js                     ~498 lines setupUI(), declarative dependency graph, info tips, reference overlay, keyboard shortcuts, external field sliders, antimatter toggle
-  renderer.js               ~484 lines Canvas 2D: particles, trails, spin rings, ergosphere, antimatter rings, vectors, torque arcs, photons/gravitons, delay ghosts
-  forces.js                 ~460 lines pairForce(), computeAllForces(), calculateForce() (BH walk), compute1PNPairwise(), Yukawa force
-  presets.js                ~517 lines PRESETS object (13 scenarios in 4 groups), loadPreset(), declarative SLIDER_MAP, TOGGLE_MAP/TOGGLE_ORDER, external field defaults
-  reference.js              ~282 lines REFERENCE object: extended physics reference content for each concept (KaTeX math)
+  integrator.js            ~1216 lines Physics class: adaptive Boris substep loop, radiation, tidal, GW quadrupole, expansion, Roche overflow, external fields, Hertz bounce, Higgs field
+  ui.js                     ~536 lines setupUI(), declarative dependency graph, info tips, reference overlay, keyboard shortcuts, external field sliders, antimatter toggle, Higgs sliders
+  renderer.js               ~494 lines Canvas 2D: particles, trails, spin rings, ergosphere, antimatter rings, vectors, torque arcs, photons/gravitons, delay ghosts, Higgs overlay
+  forces.js                 ~461 lines pairForce(), computeAllForces(), calculateForce() (BH walk), compute1PNPairwise(), Yukawa force
+  presets.js                ~586 lines PRESETS object (15 scenarios in 4 groups), loadPreset(), declarative SLIDER_MAP, TOGGLE_MAP/TOGGLE_ORDER, external field defaults
+  reference.js              ~309 lines REFERENCE object: extended physics reference content for each concept (KaTeX math)
+  higgs-field.js            ~393 lines HiggsField: 48x48 Mexican hat scalar field, symplectic Euler, CIC deposition, mass modulation, gradient force, phase transitions
   quadtree.js               ~280 lines QuadTreePool: SoA flat typed arrays, pool-based, zero GC
   input.js                  ~262 lines InputHandler: mouse/touch, Place/Shoot/Orbit modes, hover tooltip, antimatter flag passthrough
   signal-delay.js            250 lines getDelayedState() (3-phase light-cone solver)
-  collisions.js             ~113 lines handleCollisions(), resolveMerge(), antimatter annihilation
-  save-load.js              ~199 lines saveState(), loadState(), downloadState(), uploadState(), quickSave(), quickLoad()
+  collisions.js             ~118 lines handleCollisions(), resolveMerge(), antimatter annihilation, baseMass conservation
+  save-load.js              ~203 lines saveState(), loadState(), downloadState(), uploadState(), quickSave(), quickLoad(), baseMass persistence
   effective-potential.js    ~207 lines EffectivePotentialPlot: V_eff(r) sidebar canvas, auto-scaling, current position marker
   heatmap.js                ~190 lines Heatmap: 48x48 grav+electrostatic+Yukawa potential field overlay, mode selector, signal-delayed positions, 6-frame interval
   potential.js              ~160 lines computePE(), treePE(), pairPE() (7 PE terms: grav, Coulomb, mag dipole, GM dipole, 1PN, Bazanski, Yukawa)
-  energy.js                  139 lines computeEnergies(): KE, spin KE, momentum, angular momentum, Darwin field
-  stats-display.js          ~121 lines StatsDisplay: energy/momentum/drift DOM updates (×100 display scale), selected particle info, force breakdown
+  energy.js                 ~147 lines computeEnergies(): KE, spin KE, momentum, angular momentum, Darwin field, Higgs field energy
+  stats-display.js          ~126 lines StatsDisplay: energy/momentum/drift DOM updates (×100 display scale), selected particle info, force breakdown
   phase-plot.js              116 lines PhasePlot: r vs v_r sidebar canvas (500-sample ring buffer)
-  particle.js               ~122 lines Particle entity: pos, vel, w, angw, antimatter flag, per-type force vectors, history buffers
+  particle.js               ~124 lines Particle entity: pos, vel, w, angw, baseMass, antimatter flag, per-type force vectors (incl. forceHiggs), history buffers
   topology.js                112 lines TORUS/KLEIN/RP2 constants, minImage(), wrapPosition()
   vec2.js                     65 lines Vec2 class: set, clone, add, sub, scale, mag, magSq, normalize, dist
-  config.js                  ~104 lines Named constants (softening, BH, numerical thresholds, simulation control, input, display, rendering scales, pair production)
+  config.js                  ~111 lines Named constants (softening, BH, numerical thresholds, simulation control, input, display, rendering scales, pair production, Higgs field)
   photon.js                   40 lines Photon entity: pos, vel, energy, lifetime, emitterId, type ('em'/'grav'), gravitational lensing
   relativity.js                34 lines angwToAngVel(), angVelToAngw(), setVelocity()
 ```
@@ -51,7 +52,7 @@ src/
 
 ```
 main.js (Simulation, window.sim)
-  <- Physics (integrator), Renderer, InputHandler, Particle, Heatmap, PhasePlot,
+  <- Physics (integrator), Renderer, InputHandler, Particle, HiggsField, Heatmap, PhasePlot,
      EffectivePotentialPlot, StatsDisplay, setupUI, config, Photon, relativity helpers, save-load
 
 integrator.js (Physics)
@@ -59,21 +60,25 @@ integrator.js (Physics)
      resetForces + computeAllForces + compute1PNPairwise (forces),
      handleCollisions (collisions), computePE (potential),
      TORUS + KLEIN + RP2 + minImage + wrapPosition (topology)
+     (accesses sim.higgsField via this.sim backref, not direct import)
 
 forces.js        <- config, getDelayedState (signal-delay), TORUS + minImage (topology)
                     computeAllForces() uses relativityEnabled for signal delay (no separate param)
 energy.js        <- config (INERTIA_K, SOFTENING_SQ, BH_SOFTENING_SQ), TORUS + minImage (topology)
+                    (accesses sim.higgsField via window.sim for field energy)
 potential.js     <- config, TORUS + minImage (topology)
 stats-display.js <- computeEnergies (energy), config (DISPLAY_SCALE, STATS_THROTTLE_MASK, EPSILON)
 ui.js            <- loadPreset (presets), config (PHYSICS_DT, WORLD_SCALE), REFERENCE (reference)
 presets.js       <- config (WORLD_SCALE, SOFTENING_SQ)
 renderer.js      <- config (MAX_TRAIL_LENGTH, PHOTON_LIFETIME, INERTIA_K, HISTORY_SIZE, VELOCITY_VECTOR_SCALE, FORCE_VECTOR_SCALE)
+                    (renderer.higgsField set by main.js for field overlay rendering)
 heatmap.js       <- config (SOFTENING_SQ, BH_THETA), getDelayedState (signal-delay)
 input.js         <- Vec2, config (MAX_SPEED_RATIO, PINCH_DEBOUNCE, DRAG_THRESHOLD, SHOOT_VELOCITY_SCALE, ORBIT_SEARCH_RADIUS)
 collisions.js    <- config (INERTIA_K, COLLISION_SAFE_DIST, OVERLAP_FACTOR, EPSILON), relativity helpers, topology
 signal-delay.js  <- config (HISTORY_SIZE, NR_TOLERANCE, EPSILON), TORUS + minImage (topology)
 save-load.js     <- Particle, angwToAngVel (relativity)
 effective-potential.js <- config (SOFTENING_SQ, BH_SOFTENING_SQ, INERTIA_K, MAG_MOMENT_K, YUKAWA_G2, AXION_G)
+higgs-field.js   <- config (HIGGS_GRID, HIGGS_LAMBDA, DEFAULT_HIGGS_VEV/COUPLING/THERMAL, HIGGS_DAMPING, EPSILON), topology (TORUS, KLEIN, RP2)
 reference.js     (no imports - pure data)
 ```
 
@@ -102,7 +107,7 @@ Key derived quantities:
 
 ### Per-Particle Display Vectors
 
-Force vectors (9 Vec2s, reset each substep via `resetForces()`): `forceGravity`, `forceCoulomb`, `forceMagnetic`, `forceGravitomag`, `force1PN`, `forceSpinCurv`, `forceRadiation`, `forceYukawa`, `forceExternal`. `forceSpinCurv` accumulates both Stern-Gerlach and Mathisson-Papapetrou. `forceExternal` accumulates uniform gravity (F=mg) and electric field (F=qE) forces.
+Force vectors (10 Vec2s, reset each substep via `resetForces()`): `forceGravity`, `forceCoulomb`, `forceMagnetic`, `forceGravitomag`, `force1PN`, `forceSpinCurv`, `forceRadiation`, `forceYukawa`, `forceExternal`, `forceHiggs`. `forceSpinCurv` accumulates both Stern-Gerlach and Mathisson-Papapetrou. `forceExternal` accumulates uniform gravity (F=mg) and electric field (F=qE) forces. `forceHiggs` is the scalar field gradient force.
 
 Torque scalars (3): `torqueSpinOrbit` (EM + GM spin-orbit power), `torqueFrameDrag`, `torqueTidal`. Rendered as circular arc arrows.
 
@@ -119,8 +124,9 @@ Per substep (inside `Physics.update()` while loop):
 7. **Drift**: `vel = w / sqrt(1 + w²)`, `pos += vel * dt`
 8. Cosmological expansion (if enabled)
 9. **1PN velocity-Verlet correction**: recompute 1PN at new positions (always pairwise via `compute1PNPairwise()`), kick `w += (F_new - F_old) * dt / (2m)`
-10. Rebuild quadtree, handle collisions (with annihilation), repel contact forces, photon absorption
-11. Apply external fields (uniform g, E, Bz), reset forces + compute new forces for next substep
+10. **Higgs field**: evolve scalar field (symplectic Euler), modulate particle masses from local φ
+11. Rebuild quadtree, handle collisions (with annihilation), repel contact forces, photon absorption
+12. Apply external fields (uniform g, E, Bz), Higgs gradient force, reset forces + compute new forces for next substep
 
 After all substeps: record signal-delay history (strided, once per HISTORY_STRIDE=64 `update()` calls), compute PE, reconstruct velocity-dependent display forces.
 
@@ -170,6 +176,28 @@ Independent toggle. `F = -g²·m₁m₂·exp(-μr)/r²·(1+μr)`. Parameters: `y
 ### Axion Dark Matter Coupling
 
 Requires Coulomb. Modulates EM coupling: `α_eff = α·(1 + g·cos(m_a·t))`. Applied as `axionModulation` multiplier on all charge-dependent terms. Default `axionMass = 0.05` (slider range 0.01–0.25). Energy not conserved (external reservoir).
+
+### Higgs Scalar Field
+
+Independent toggle (`physics.higgsEnabled`). Dynamical real scalar field on a 48×48 grid with Mexican hat potential `V(φ) = -½μ²φ² + ¼λφ⁴`, VEV `v = μ/√λ`.
+
+**Mass generation**: `m_eff = baseMass · |φ(x)/v|`. Particles store intrinsic `baseMass` (Yukawa coupling to field); effective `mass` varies with local field value. At VEV, `m_eff = baseMass`. In symmetric phase (φ→0), particles become effectively massless (floored at 0.001).
+
+**Gradient force**: `F = -(baseMass/v) · coupling · ∇φ`. Bilinear gradient interpolation. Accumulates into `forceHiggs`. Applied as E-like force after external fields.
+
+**Field equation**: Klein-Gordon with Mexican hat: `∂²φ/∂t² = ∇²φ + μ²_eff·φ - λφ³ + coupling·source/cellArea - damping·∂φ/∂t`. Symplectic Euler (kick-drift). CIC (Cloud-In-Cell) bilinear deposition for particle source terms.
+
+**Phase transitions**: Thermal correction `μ²_eff = μ² - thermalK · T²_local` where `T²_local` is CIC-deposited KE density. When local KE is high enough, `μ²_eff` turns negative → field relaxes to φ=0 (symmetric phase), particles lose mass.
+
+**Boundary conditions**: Integer-coded for inner-loop speed (BC_DESPAWN=0/BC_BOUNCE=1/BC_LOOP=2). Despawn→Dirichlet (φ=VEV at edges). Bounce→Neumann (∂φ/∂n=0, clamped). Loop→periodic with full topology awareness (Torus/Klein/RP²).
+
+**Field energy**: `E = ∫(½φ̇² + ½|∇φ|² + V(φ))dA`, shifted so V(VEV)=0. Tracked in stats as `higgsFieldEnergy`, included in total energy.
+
+**Parameters**: `vev` (default 1.0, slider 0.1–5.0), `coupling` (default 0.5, slider 0–2.0), `thermalK` (default 0.5, slider 0–2.0). `lambda = 1.0`, `damping = 0.02` (config constants).
+
+**Rendering**: Offscreen 48×48 canvas, bilinear-upscaled to world space. Magenta = depleted (φ < VEV), cyan = enhanced (φ > VEV). Alpha ∝ |deviation|. Force vector color: magenta (`--ext-magenta`).
+
+**baseMass synchronization**: All mass-modifying operations (merge, annihilation, Roche overflow, disintegration, Hawking evaporation) proportionally scale `baseMass`. On Higgs toggle-off, `mass` is restored to `baseMass` for all particles.
 
 ### 1PN Corrections (EIH + Darwin EM + Bazanski)
 
@@ -281,7 +309,7 @@ Do NOT flip these signs.
 
 ## Energy & Momentum
 
-`computeEnergies()` returns: `linearKE`, `spinKE`, `pe`, `fieldEnergy`, `fieldPx/Py`, `px/py`, `orbitalAngMom`, `spinAngMom`, `comX/comY`. Relativistic KE uses `wSq / (gamma + 1)` to avoid cancellation.
+`computeEnergies()` returns: `linearKE`, `spinKE`, `pe`, `fieldEnergy`, `fieldPx/Py`, `px/py`, `orbitalAngMom`, `spinAngMom`, `comX/comY`, `higgsFieldEnergy`. Relativistic KE uses `wSq / (gamma + 1)` to avoid cancellation. Higgs field energy (KE + gradient + shifted potential) computed via `sim.higgsField.energy()` when enabled.
 
 Darwin field corrections (O(v²/c²)) computed when Magnetic or GM enabled but 1PN is off. When 1PN on, absorbed into PE. Conservation: exact with gravity + Coulomb only, pairwise mode.
 
@@ -320,6 +348,7 @@ Forces:                        Physics:
     -> Magnetic                  Radiation             [requires Gravity or Coulomb]
     -> Axion                       Larmor + EM quad   [when Coulomb on]
   Yukawa               [independent]  GW quad         [when Gravity on]
+  Higgs                [independent]
 Disintegration                   [requires Gravity, locks collision to Merge]
 Barnes-Hut                       [independent]
 Expansion                        [independent, in Engine tab]
@@ -329,7 +358,7 @@ Expansion                        [independent, in Engine tab]
 
 Implemented as a declarative `DEPS` array in `ui.js`, evaluated in topological order by `updateAllDeps()` on every toggle change. Each entry maps a toggle ID to a disabled-condition function. `setDepState()` applies `.ctrl-disabled` class and auto-unchecks disabled toggles. Cascades automatically because DEPS are ordered parents-before-children.
 
-Defaults on: gravity, coulomb, magnetic, gravitomag, 1PN, relativity, spin-orbit, radiation, tidal locking. Defaults off: Yukawa, Axion, Disintegration, Expansion, Barnes-Hut, Black Hole.
+Defaults on: gravity, coulomb, magnetic, gravitomag, 1PN, relativity, spin-orbit, radiation, tidal locking. Defaults off: Yukawa, Axion, Higgs, Disintegration, Expansion, Barnes-Hut, Black Hole.
 
 ## UI
 
@@ -337,7 +366,7 @@ Defaults on: gravity, coulomb, magnetic, gravitomag, 1PN, relativity, spin-orbit
 
 Topbar: Home | Brand "No-Hair" | Pause/Step/Reset/Save/Load | Antimatter toggle | Theme | Panel toggle.
 
-Preset selector uses `<optgroup>` categories: Gravity, EM, Exotic, Cosmological. 13 presets total (9 via keyboard `1`-`9`, rest dropdown-only).
+Preset selector uses `<optgroup>` categories: Gravity, EM, Exotic, Cosmological. 15 presets total (9 via keyboard `1`-`9`, rest dropdown-only). Exotic group includes Higgs Mechanism and Phase Transition presets.
 
 Sim speed slider: range 1–128, default 64. Bounce friction slider only visible when collision mode or boundary mode is "bounce" (controlled by `updateFrictionVisibility()` inside `updateAllDeps()`). Expansion toggle locks boundary mode to "despawn". External fields section in Engine tab: 5 sliders (g strength, g angle, E strength, E angle, Bz), direction sliders auto-show when strength > 0. Antimatter toolbar button (`A` key) toggles `sim.antimatterMode` — new particles spawn as antimatter when active.
 
@@ -351,7 +380,8 @@ Canvas 2D. Dark mode: additive blending (`lighter`).
 - **Spin rings**: arc length ∝ |omega*r|, cyan=positive, orange=negative
 - **Trails**: circular Float32Array[256], wrap-detection for periodic boundaries
 - **Antimatter rings**: dashed white circle (`#888` light / `#ccc` dark) around antimatter particles, radius = p.radius + 0.4
-- **Force vectors**: scale=FORCE_VECTOR_SCALE (÷ mass for accel). Component colors: gravity=red, coulomb=blue, magnetic=cyan, GM=rose, 1PN=orange, spin-curv=purple, radiation=yellow, yukawa=green, external=white
+- **Force vectors**: scale=FORCE_VECTOR_SCALE (÷ mass for accel). Component colors: gravity=red, coulomb=blue, magnetic=cyan, GM=rose, 1PN=orange, spin-curv=purple, radiation=yellow, yukawa=green, external=white, higgs=magenta
+- **Higgs field overlay**: 48×48 offscreen canvas bilinear-upscaled. Magenta=depleted, cyan=enhanced. Rendered after camera transform, before trails
 - **Torque arcs**: spin-orbit=purple, frame-drag=rose, tidal=red, total=accent
 - **Photons**: yellow (EM, `type: 'em'`) / red (gravitons, `type: 'grav'`), alpha fades over PHOTON_LIFETIME=256
 - **Signal delay ghosts**: stroked outline at oldest history position
@@ -401,3 +431,9 @@ Particle color: neutral=slate `#8A7E72`. Charged: RGB lerp toward red (positive)
 - Old save files with `collision: 'repel'` are migrated to `'bounce'` in loadState()
 - External field sliders reset to 0 on preset load (in SLIDER_MAP defaults)
 - External Bz enters Boris rotation alongside particle-sourced Bz -- included in `needBoris` condition check
+- Higgs `modulateMasses()` updates radius/radiusSq/invMass inline (not via `updateColor()`) to avoid per-substep string allocation; must handle BH mode Kerr-Newman radius
+- Higgs `_nb()` uses integer boundary mode constants (BC_DESPAWN=0/BC_BOUNCE=1/BC_LOOP=2) converted once per `update()` call
+- `baseMass` must be saved/loaded and proportionally scaled wherever `mass` is modified (merge, annihilation, Roche, disintegration, Hawking)
+- Higgs field `energy()` shifts potential by +μ⁴/(4λ) so V(VEV)=0 -- without this, a constant negative offset dominates energy tracking
+- Higgs thermal correction uses `thermalK * thermal[i]` (linear in KE density ∝ T²), not squared -- squaring would give T⁴ dependence
+- Higgs field reset on preset load and clear; mass restoration to `baseMass` on toggle-off
