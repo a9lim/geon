@@ -74,6 +74,9 @@ export function computeEnergies(particles, physics, sim) {
     const halfDomW = domW * 0.5;
     const halfDomH = domH * 0.5;
     const topology = physics._topologyConst;
+    const axionMod = physics.axionEnabled 
+        ? 1 + physics.axionG * Math.cos(physics.axionMass * physics.simTime)
+        : 1.0;
 
     if (magneticOn || gmOn) {
         for (let i = 0; i < n; i++) {
@@ -99,7 +102,7 @@ export function computeEnergies(particles, physics, sim) {
                 const svDotR = svx * rx + svy * ry;
 
                 if (magneticOn) {
-                    const qqInvR = pi.charge * pj.charge * invR;
+                    const qqInvR = pi.charge * pj.charge * invR * axionMod;
                     if (emFieldEnergyOn) fieldEnergy -= 0.5 * qqInvR * velTerm;
                     const coeff = qqInvR * 0.5;
                     fieldPx += coeff * (svx + rx * svDotR);
@@ -119,7 +122,7 @@ export function computeEnergies(particles, physics, sim) {
                     const invRSq = invR * invR;
                     const crossCoeff = pi.charge * pj.charge * (pi.mass + pj.mass)
                         - (pi.charge * pi.charge * pj.mass + pj.charge * pj.charge * pi.mass);
-                    fieldEnergy += 0.5 * crossCoeff * invRSq;
+                    fieldEnergy += 0.5 * crossCoeff * invRSq * axionMod;
                 }
             }
         }
