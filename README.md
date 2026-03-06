@@ -23,7 +23,7 @@ Everything runs in natural units (c = 1, G = 1). Particles store proper velocity
 - **Stern-Gerlach / Mathisson-Papapetrou** -- Translational forces from spin-field gradient coupling (EM and gravitational).
 - **Yukawa** -- Screened force V(r) = -g^2 exp(-mu*r)/r between massive particles, with configurable coupling strength and range.
 - **Axion dark matter** -- Oscillating modulation of the electromagnetic coupling constant, simulating an axion-like background field.
-- **Higgs scalar field** -- Dynamical real scalar field on a 48x48 grid with Mexican hat potential V(phi) = -1/2 mu^2 phi^2 + 1/4 lambda phi^4. Particles acquire effective mass m = baseMass * |phi/v| via Yukawa coupling to the field and feel gradient forces F = -(baseMass/v) * coupling * grad(phi). Thermal corrections restore symmetry at high energy density (phase transitions).
+- **Higgs scalar field** -- Dynamical real scalar field on a 48x48 grid with Mexican hat potential V(phi) = -1/2 mu^2 phi^2 + 1/4 lambda phi^4. Particles source the field via weak CIC deposition (Yukawa coupling), acquire effective mass m = baseMass * |phi/v|, and feel gradient forces F = -(baseMass/v) * coupling * grad(phi). Analytical self-force subtraction prevents grid artifacts. Adaptive critical damping, thermal corrections restore symmetry at high energy density (phase transitions).
 
 ### Additional Physics
 
@@ -98,7 +98,7 @@ src/
   renderer.js               ~494 lines  Canvas 2D: particles, trails, vectors, photons, glow, Higgs overlay
   forces.js                 ~461 lines  Pairwise + Barnes-Hut force accumulation, 1PN, Yukawa
   presets.js                ~586 lines  Fifteen preset scenarios (Gravity / EM / Exotic / Cosmological)
-  higgs-field.js            ~393 lines  Higgs scalar field: Mexican hat potential, symplectic Euler, CIC deposition, mass modulation, gradient force, phase transitions
+  higgs-field.js            ~470 lines  Higgs scalar field: Mexican hat potential, symplectic Euler, CIC deposition, source term, self-force subtraction, mass modulation, gradient force, phase transitions
   reference.js              ~309 lines  Extended physics reference (KaTeX math)
   quadtree.js               ~280 lines  SoA pool-based Barnes-Hut tree (zero GC)
   input.js                  ~262 lines  Mouse/touch, Place/Shoot/Orbit spawn modes
@@ -113,7 +113,7 @@ src/
   collisions.js             ~118 lines  Merge, antimatter annihilation, baseMass conservation
   phase-plot.js              116 lines  Phase space plot (sidebar canvas)
   topology.js                112 lines  Torus / Klein / RP2 min-image + wrapping
-  config.js                 ~111 lines  Named constants (softening, BH, numerical, Higgs, pair production)
+  config.js                 ~112 lines  Named constants (softening, BH, numerical, Higgs, pair production)
   vec2.js                     65 lines  2D vector math
   photon.js                   40 lines  Radiation photon entity
   relativity.js               34 lines  Proper velocity helpers
