@@ -1,5 +1,5 @@
 // ─── Potential Field Heatmap ───
-// 48x48 offscreen canvas, diverging colormap, updates every 6 frames.
+// 64x64 offscreen canvas, diverging colormap, updates every HEATMAP_INTERVAL frames.
 // When Barnes-Hut is enabled, uses tree walk for O(GRID² log N) instead of O(GRID² N).
 
 import { SOFTENING_SQ, BH_THETA, YUKAWA_G2, HEATMAP_GRID, HEATMAP_INTERVAL, HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA } from './config.js';

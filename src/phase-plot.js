@@ -1,5 +1,5 @@
 // ─── Phase Space Plot ───
-// r vs v_r relative to the most massive body; 500-sample ring buffer.
+// r vs v_r relative to the most massive body; 512-sample ring buffer.
 import { TWO_PI, PHASE_BUFFER_LEN } from './config.js';
 
 const BUFFER_LEN = PHASE_BUFFER_LEN;
