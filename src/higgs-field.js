@@ -24,7 +24,6 @@ export default class HiggsField {
         this.phi = new Float64Array(GRID_SQ);
         this.phiDot = new Float64Array(GRID_SQ);
         this._laplacian = new Float64Array(GRID_SQ);
-        this._source = new Float64Array(GRID_SQ);
         this._thermal = new Float64Array(GRID_SQ);
 
         this.lambda = HIGGS_LAMBDA;
@@ -114,7 +113,6 @@ export default class HiggsField {
         const phi = this.phi;
         const phiDot = this.phiDot;
         const lap = this._laplacian;
-        const src = this._source;
         const thermal = this._thermal;
         const v = this.vev;
         const lam = this.lambda;
@@ -125,17 +123,17 @@ export default class HiggsField {
         if (cellW < EPSILON || cellH < EPSILON) return;
         const invCellWSq = 1 / (cellW * cellW);
         const invCellHSq = 1 / (cellH * cellH);
-        const invCellArea = 1 / (cellW * cellH);
 
         // Convert string boundary mode to integer once
         const bcMode = boundaryMode === 'loop' ? BC_LOOP
                      : boundaryMode === 'bounce' ? BC_BOUNCE
                      : BC_DESPAWN;
 
-        // Deposit particle sources and thermal energy via CIC
-        src.fill(0);
+        // Deposit thermal energy via CIC (drives phase transitions)
+        // No direct particle source term — individual backreaction on the VEV
+        // is negligible (suppressed by y^2/m_H^2), matching the SM picture.
+        // Thermal coupling is the collective backreaction that matters.
         thermal.fill(0);
-        this._depositSources(particles, domainW, domainH);
         if (this.thermalK > 0) this._depositThermal(particles, domainW, domainH);
 
         // Compute Laplacian with boundary conditions
@@ -162,7 +160,6 @@ export default class HiggsField {
         // Kick phiDot, then drift phi (symplectic Euler)
         const thermK = this.thermalK;
         const damp = this.damping;
-        const coup = this.coupling;
         for (let i = 0; i < GRID_SQ; i++) {
             const phiVal = phi[i];
 
@@ -174,11 +171,10 @@ export default class HiggsField {
             }
 
             // Klein-Gordon: d^2 phi/dt^2 = nabla^2 phi + mu^2_eff * phi - lambda * phi^3
-            //               + coupling * source / cellArea - damping * dphi/dt
+            //               - damping * dphi/dt
             const ddphi = lap[i]
                         + muSqEff * phiVal
                         - lam * phiVal * phiVal * phiVal
-                        + coup * src[i] * invCellArea
                         - damp * phiDot[i];
 
             phiDot[i] += ddphi * dt;
@@ -197,34 +193,6 @@ export default class HiggsField {
             } else {
                 phi[i] = newPhi;
             }
-        }
-    }
-
-    /** CIC deposition of particle source strength (baseMass / VEV). */
-    _depositSources(particles, domainW, domainH) {
-        const cellW = domainW / GRID;
-        const cellH = domainH / GRID;
-        if (cellW < EPSILON || cellH < EPSILON) return;
-        const invCellW = 1 / cellW;
-        const invCellH = 1 / cellH;
-        const src = this._source;
-        const invV = this.vev > EPSILON ? 1 / this.vev : 0;
-
-        for (let i = 0; i < particles.length; i++) {
-            const p = particles[i];
-            if (p.baseMass < EPSILON) continue;
-            const strength = p.baseMass * invV;
-            this._cicCoords(p.pos.x, p.pos.y, invCellW, invCellH);
-            const { ix, iy, fx, fy } = this._cic;
-
-            if (ix >= 0 && ix < GRID && iy >= 0 && iy < GRID)
-                src[iy * GRID + ix] += strength * (1 - fx) * (1 - fy);
-            if (ix + 1 < GRID && iy >= 0 && iy < GRID)
-                src[iy * GRID + ix + 1] += strength * fx * (1 - fy);
-            if (ix >= 0 && ix < GRID && iy + 1 < GRID)
-                src[(iy + 1) * GRID + ix] += strength * (1 - fx) * fy;
-            if (ix + 1 < GRID && iy + 1 < GRID)
-                src[(iy + 1) * GRID + ix + 1] += strength * fx * fy;
         }
     }
 
@@ -255,30 +223,16 @@ export default class HiggsField {
         }
     }
 
-    /**
-     * Set particle effective masses from local field value: m = baseMass * |phi| / VEV.
-     * Subtracts the analytical self-perturbation before sampling to avoid self-interaction.
-     *
-     * Self-field estimate: in linearized steady state (-nabla^2 + m_H^2) dphi = source,
-     * ignoring the Laplacian (local approx), dphi_cell ~ source_cell / m_H^2.
-     * The self-contribution to the bilinear sample is sum(w_i^2) * selfBase.
-     */
+    /** Set particle effective masses from local field value: m = baseMass * |phi| / VEV. */
     modulateMasses(particles, domainW, domainH, blackHoleEnabled) {
         const v = this.vev;
         if (v < EPSILON) return;
         const invV = 1 / v;
-        const lam = this.lambda;
-        const mHsq = 2 * lam * v * v; // Higgs boson mass squared
         const cellW = domainW / GRID;
         const cellH = domainH / GRID;
         if (cellW < EPSILON || cellH < EPSILON) return;
         const invCellW = 1 / cellW;
         const invCellH = 1 / cellH;
-        const cellArea = cellW * cellH;
-
-        // selfScale = coupling / (v * cellArea * mHsq), so selfBase = baseMass * selfScale
-        const selfDenom = v * cellArea * mHsq;
-        const selfScale = selfDenom > EPSILON ? this.coupling / selfDenom : 0;
 
         for (let i = 0; i < particles.length; i++) {
             const p = particles[i];
@@ -288,26 +242,14 @@ export default class HiggsField {
             const ix = this._cic.ix, iy = this._cic.iy;
             const fx = this._cic.fx, fy = this._cic.fy;
 
-            // CIC weights
-            const w00 = (1 - fx) * (1 - fy);
-            const w10 = fx * (1 - fy);
-            const w01 = (1 - fx) * fy;
-            const w11 = fx * fy;
-
             // Bilinear sample of phi
-            const phiRaw = this._phiAt(ix, iy) * w00
-                         + this._phiAt(ix + 1, iy) * w10
-                         + this._phiAt(ix, iy + 1) * w01
-                         + this._phiAt(ix + 1, iy + 1) * w11;
-
-            // Subtract self-perturbation: dphi_self_sampled = selfBase * sum(w_i^2)
-            const selfBase = p.baseMass * selfScale;
-            const selfSample = selfBase * (w00 * w00 + w10 * w10 + w01 * w01 + w11 * w11);
-            const phiLocal = phiRaw - selfSample;
+            const phiLocal = this._phiAt(ix, iy) * (1 - fx) * (1 - fy)
+                           + this._phiAt(ix + 1, iy) * fx * (1 - fy)
+                           + this._phiAt(ix, iy + 1) * (1 - fx) * fy
+                           + this._phiAt(ix + 1, iy + 1) * fx * fy;
 
             const newMass = Math.max(p.baseMass * Math.abs(phiLocal * invV), EPSILON);
-            // NaN guard
-            if (newMass !== newMass) continue;
+            if (newMass !== newMass) continue; // NaN guard
             p.mass = newMass;
 
             // Update mass-derived quantities (color depends only on charge, skip getColor)
@@ -328,30 +270,17 @@ export default class HiggsField {
         }
     }
 
-    /**
-     * Apply gradient force: F = -(baseMass/VEV) * coupling * grad(phi).
-     * Subtracts the analytical self-force gradient to prevent self-interaction.
-     *
-     * Self-force gradient (derived from CIC kernel symmetry):
-     *   selfGradX = selfBase * (2fx - 1) * ((1-fy)^2 + fy^2) / cellW
-     *   selfGradY = selfBase * (2fy - 1) * ((1-fx)^2 + fx^2) / cellH
-     */
+    /** Apply gradient force: F = -(baseMass/VEV) * coupling * grad(phi). */
     applyForces(particles, domainW, domainH) {
         const v = this.vev;
         if (v < EPSILON) return;
         const invV = 1 / v;
         const coup = this.coupling;
-        const lam = this.lambda;
-        const mHsq = 2 * lam * v * v;
         const cellW = domainW / GRID;
         const cellH = domainH / GRID;
         if (cellW < EPSILON || cellH < EPSILON) return;
         const invCellW = 1 / cellW;
         const invCellH = 1 / cellH;
-        const cellArea = cellW * cellH;
-
-        const selfDenom = v * cellArea * mHsq;
-        const selfScale = selfDenom > EPSILON ? coup / selfDenom : 0;
 
         for (let i = 0; i < particles.length; i++) {
             const p = particles[i];
@@ -367,16 +296,9 @@ export default class HiggsField {
             const v01 = this._phiAt(ix, iy + 1);
             const v11 = this._phiAt(ix + 1, iy + 1);
 
-            // Bilinear gradient of total field
-            let gradX = ((v10 - v00) * (1 - fy) + (v11 - v01) * fy) * invCellW;
-            let gradY = ((v01 - v00) * (1 - fx) + (v11 - v10) * fx) * invCellH;
-
-            // Subtract analytical self-force gradient
-            const selfBase = p.baseMass * selfScale;
-            const fy2 = fy * fy;
-            const fx2 = fx * fx;
-            gradX -= selfBase * (2 * fx - 1) * ((1 - fy) * (1 - fy) + fy2) * invCellW;
-            gradY -= selfBase * (2 * fy - 1) * ((1 - fx) * (1 - fx) + fx2) * invCellH;
+            // Bilinear gradient
+            const gradX = ((v10 - v00) * (1 - fy) + (v11 - v01) * fy) * invCellW;
+            const gradY = ((v01 - v00) * (1 - fx) + (v11 - v10) * fx) * invCellH;
 
             const coeff = -p.baseMass * invV * coup;
             const forceX = coeff * gradX;
