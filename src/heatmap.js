@@ -2,10 +2,10 @@
 // 48x48 offscreen canvas, diverging colormap, updates every 6 frames.
 // When Barnes-Hut is enabled, uses tree walk for O(GRID² log N) instead of O(GRID² N).
 
-import { SOFTENING_SQ, BH_THETA, YUKAWA_G2, HEATMAP_INTERVAL, HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA } from './config.js';
+import { SOFTENING_SQ, BH_THETA, YUKAWA_G2, HEATMAP_GRID, HEATMAP_INTERVAL, HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA } from './config.js';
 import { getDelayedState } from './signal-delay.js';
 
-const GRID_SIZE = 48;
+const GRID_SIZE = HEATMAP_GRID;
 const GRID_SQ = GRID_SIZE * GRID_SIZE;
 const UPDATE_INTERVAL = HEATMAP_INTERVAL;
 const SENSITIVITY = HEATMAP_SENSITIVITY;

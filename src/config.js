@@ -37,7 +37,7 @@ export const LL_FORCE_CLAMP = 0.5; // max |F_rad| as fraction of |F_ext| (LL val
 
 // Signal delay history buffer
 export const HISTORY_SIZE = 256;
-export const HISTORY_STRIDE = 64; // ~120 snapshots/second 
+export const HISTORY_STRIDE = 64; // ~120 snapshots/second
 
 export const TIDAL_STRENGTH = 2.0;
 
@@ -67,11 +67,13 @@ export const DEFAULT_HIGGS_COUPLING = 0.5;     // particle-field source strength
 export const DEFAULT_HIGGS_THERMAL_K = 0.5;    // thermal correction coupling
 export const HIGGS_DAMPING = 1.0;              // damping ratio (1.0 = critical, scales with 2*m_H)
 export const HIGGS_SOURCE_STRENGTH = 0.01;    // particle->field source coupling (weak: delta_phi/v ~ 3% for m=10)
+export const HIGGS_PHI_MAX = 50;              // field value clamp (prevent runaway)
 
 // Numerical thresholds
 export const EPSILON = 1e-9;          // general "effectively zero" guard
 export const EPSILON_SQ = EPSILON * EPSILON; // squared epsilon (for magnitude² checks)
 export const NR_TOLERANCE = EPSILON / 1000; // Newton-Raphson convergence (signal delay)
+export const NR_MAX_ITER = 6;             // Newton-Raphson iteration cap (signal delay)
 
 // Simulation control
 export const MAX_FRAME_DT = 0.1;          // frame delta cap (100ms = 10fps floor)
@@ -90,7 +92,7 @@ export const SPAWN_COUNT = 4;          // fragments per disintegration / photons
 export const PAIR_PROD_MIN_ENERGY = 2;    // minimum photon energy for pair production (2mc²)
 export const PAIR_PROD_RADIUS = 8;        // proximity to massive body required
 export const PAIR_PROD_PROB = 0.005;      // probability per substep per eligible photon
-export const PAIR_PROD_MAX_PARTICLES = 128; // suppress pair production above this particle count
+export const PAIR_PROD_MAX_PARTICLES = 32; // suppress pair production above this particle count
 export const PAIR_PROD_MIN_AGE = 32;      // photon must survive this many ticks before it can pair-produce
 
 // Input
@@ -103,6 +105,7 @@ export const ORBIT_SEARCH_RADIUS = 10;     // orbit mode: min distance to consid
 export const DISPLAY_SCALE = 100;          // energy/momentum × this for readout
 export const STATS_THROTTLE_MASK = 3;      // update stats every (mask+1)th frame
 export const PHASE_BUFFER_LEN = 512;       // phase plot ring buffer samples
+export const HEATMAP_GRID = 48;            // heatmap resolution (independent of Higgs grid)
 export const HEATMAP_INTERVAL = 8;         // frames between heatmap recomputes
 export const HEATMAP_SENSITIVITY = 2;      // tanh scaling for potential → alpha
 export const HEATMAP_MAX_ALPHA = 100;      // max alpha before cap

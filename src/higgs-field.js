@@ -5,7 +5,7 @@
 // Symplectic Euler integration, bilinear interpolation, CIC source deposition.
 // Self-force subtraction via analytical steady-state Green's function estimate.
 
-import { HIGGS_GRID, HIGGS_LAMBDA, DEFAULT_HIGGS_VEV, DEFAULT_HIGGS_COUPLING, DEFAULT_HIGGS_THERMAL_K, HIGGS_DAMPING, HIGGS_SOURCE_STRENGTH, EPSILON } from './config.js';
+import { HIGGS_GRID, HIGGS_LAMBDA, DEFAULT_HIGGS_VEV, DEFAULT_HIGGS_COUPLING, DEFAULT_HIGGS_THERMAL_K, HIGGS_DAMPING, HIGGS_SOURCE_STRENGTH, HIGGS_HIGGS_PHI_MAX, EPSILON } from './config.js';
 import { TORUS, KLEIN, RP2 } from './topology.js';
 
 const GRID = HIGGS_GRID;
@@ -16,8 +16,6 @@ const BC_DESPAWN = 0;
 const BC_BOUNCE = 1;
 const BC_LOOP = 2;
 
-// Field value clamp: prevent runaway in the wave equation
-const PHI_MAX = 50;
 
 export default class HiggsField {
     constructor() {
@@ -192,11 +190,11 @@ export default class HiggsField {
             if (newPhi !== newPhi) { // NaN guard
                 phi[i] = v;
                 phiDot[i] = 0;
-            } else if (newPhi > PHI_MAX) {
-                phi[i] = PHI_MAX;
+            } else if (newPhi > HIGGS_PHI_MAX) {
+                phi[i] = HIGGS_PHI_MAX;
                 phiDot[i] = 0;
-            } else if (newPhi < -PHI_MAX) {
-                phi[i] = -PHI_MAX;
+            } else if (newPhi < -HIGGS_PHI_MAX) {
+                phi[i] = -HIGGS_PHI_MAX;
                 phiDot[i] = 0;
             } else {
                 phi[i] = newPhi;
