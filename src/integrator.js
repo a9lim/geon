@@ -48,7 +48,6 @@ export default class Physics {
         this.blackHoleEnabled = false;
         this.disintegrationEnabled = false;
         this.tidalLockingEnabled = true;
-        this.signalDelayEnabled = true;
         this.spinOrbitEnabled = true;
         this.onePNEnabled = true;
 
@@ -57,8 +56,6 @@ export default class Physics {
 
         this.axionEnabled = false;
         this.axionMass = DEFAULT_AXION_MASS;
-
-        this.quadRadiationEnabled = true;
         this.expansionEnabled = false;
         this.hubbleParam = 0.001;
 
@@ -211,6 +208,7 @@ export default class Physics {
 
         let n = particles.length;
         const relOn = this.relativityEnabled;
+        this.signalDelayEnabled = relOn;
         this._syncToggles();
         const toggles = this._toggles;
 
@@ -385,7 +383,7 @@ export default class Physics {
 
             // Landau-Lifshitz radiation reaction (full 1/c² terms)
             // F_rad = τ·[dF/dt / γ³ − v·F²/(m·γ²) + F·(v·F)/(m·γ⁴)]
-            if (this.radiationEnabled && this.sim) {
+            if (this.radiationEnabled && this.coulombEnabled && this.sim) {
                 for (let i = 0; i < n; i++) {
                     const p = particles[i];
                     if (Math.abs(p.charge) < 1e-10) continue;
@@ -687,8 +685,9 @@ export default class Physics {
         // d³I_xx = Σ 2·(3·vx·Fx + x·Jx), d³I_yy analogous
         // d³I_xy = Σ (Jx·y + 3·Fx·vy + 3·vx·Fy + x·Jy)
         // where Jx = dFx/dt = analytical jerk (grav+Coulomb+Yukawa) + backward-diff residual
-        if (this.quadRadiationEnabled && n >= 2 && this.sim) {
-            const emQuad = this.radiationEnabled && this.coulombEnabled;
+        if (this.radiationEnabled && n >= 2 && this.sim && (this.gravityEnabled || this.coulombEnabled)) {
+            const gwQuad = this.gravityEnabled;
+            const emQuad = this.coulombEnabled;
             let d3Ixx = 0, d3Ixy = 0, d3Iyy = 0;
             let d3Qxx = 0, d3Qxy = 0, d3Qyy = 0;
             let jerkReady = true;
@@ -726,9 +725,11 @@ export default class Physics {
                 if (p._qResCount < 2) p._qResCount++;
 
                 // Mass quadrupole d³I_ij/dt³
-                d3Ixx += 6 * vx * Fx + 2 * x * Jx;
-                d3Ixy += Jx * y + 3 * Fx * vy + 3 * vx * Fy + x * Jy;
-                d3Iyy += 6 * vy * Fy + 2 * y * Jy;
+                if (gwQuad) {
+                    d3Ixx += 6 * vx * Fx + 2 * x * Jx;
+                    d3Ixy += Jx * y + 3 * Fx * vy + 3 * vx * Fy + x * Jy;
+                    d3Iyy += 6 * vy * Fy + 2 * y * Jy;
+                }
 
                 // EM quadrupole d³Q_ij/dt³ (same structure, weighted by q/m)
                 if (emQuad) {

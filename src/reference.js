@@ -64,18 +64,31 @@ export const REFERENCE = {
 <h3>Relativistic Kinetic Energy</h3>
 <p>$$\\text{KE} = (\\gamma - 1)mc^2 = \\frac{w^2}{\\gamma + 1}m$$</p>
 <p>The second form avoids catastrophic cancellation at low velocities.</p>
+<h3>Signal Delay</h3>
+<p>Forces propagate at the speed of light ($c = 1$) instead of acting instantaneously. The light-cone equation solved for each pair:</p>
+<p>$$|\\mathbf{x}_{\\text{src}}(t_{\\text{ret}}) - \\mathbf{x}_{\\text{obs}}| = t_{\\text{now}} - t_{\\text{ret}}$$</p>
+<p>Three-phase solver: Newton-Raphson segment search (6 iterations), exact quadratic solve, then constant-velocity extrapolation fallback. History buffers: 256 entries per particle, recorded every 64 update calls.</p>
 `,
     },
     radiation: {
-        title: 'Electromagnetic Radiation',
+        title: 'Radiation',
         body: `
+<h3>Larmor Radiation (Dipole)</h3>
 <p>Accelerating charges radiate energy via the Larmor formula:</p>
 <p>$$P = \\frac{2q^2 a^2}{3}$$</p>
-<h3>Landau-Lifshitz Reaction Force</h3>
-<p>The radiation reaction is modeled with three terms:</p>
+<p>Requires Coulomb. The Landau-Lifshitz reaction force:</p>
 <p>$$\\mathbf{F}_{\\text{rad}} = \\tau\\left[\\frac{\\dot{\\mathbf{F}}}{\\gamma^3} - \\frac{\\mathbf{v}F^2}{m\\gamma^2} + \\frac{\\mathbf{F}(\\mathbf{v}\\cdot\\mathbf{F})}{m\\gamma^4}\\right]$$</p>
-<p>where $\\tau = 2q^2/(3m)$.</p>
-<p>The jerk term uses analytical derivatives for gravity and Coulomb, plus finite differences for other forces. Clamped to 50% of external force for perturbative validity.</p>
+<p>where $\\tau = 2q^2/(3m)$. Clamped to 50% of external force.</p>
+<h3>EM Quadrupole</h3>
+<p>Requires Coulomb. Charge quadrupole emission:</p>
+<p>$$P_{\\text{EM}} = \\frac{1}{180}|\\dddot{Q}_{ij}|^2$$</p>
+<p>where $Q_{ij} = \\sum q \\cdot x_i x_j$.</p>
+<h3>Gravitational Waves (Mass Quadrupole)</h3>
+<p>Requires Gravity. Mass quadrupole emission:</p>
+<p>$$P_{\\text{GW}} = \\frac{1}{5}|\\dddot{I}_{ij}|^2$$</p>
+<p>where $I_{ij} = \\sum m(x_i x_j - \\delta_{ij}r^2/3)$. For a circular binary (Peters formula):</p>
+<p>$$P = \\frac{32}{5}\\frac{m_1^2 m_2^2(m_1+m_2)}{r^5}$$</p>
+<p>This causes orbital inspiral and eventual merger, as detected by LIGO.</p>
 `,
     },
     onepn: {
@@ -91,21 +104,6 @@ export const REFERENCE = {
 <p>Mixed gravity-EM interaction:</p>
 <p>$$F = \\frac{q_1 q_2(m_1+m_2) - (q_1^2 m_2 + q_2^2 m_1)}{r^3}\\hat{r}$$</p>
 <p>All three use velocity-Verlet integration for second-order accuracy.</p>
-`,
-    },
-    signaldelay: {
-        title: 'Signal Delay',
-        body: `
-<p>Forces propagate at the speed of light ($c = 1$) instead of acting instantaneously.</p>
-<p>The light-cone equation solved for each pair:</p>
-<p>$$|\\mathbf{x}_{\\text{src}}(t_{\\text{ret}}) - \\mathbf{x}_{\\text{obs}}| = t_{\\text{now}} - t_{\\text{ret}}$$</p>
-<h3>Three-Phase Solver</h3>
-<ol>
-<li><b>Newton-Raphson</b>: 6 iterations to locate the correct history segment</li>
-<li><b>Quadratic solve</b>: exact solution on the piecewise-linear trajectory segment</li>
-<li><b>Extrapolation</b>: constant-velocity fallback when history is exhausted</li>
-</ol>
-<p>History buffers: 256 entries per particle, recorded every 64 update calls.</p>
 `,
     },
     blackhole: {
@@ -156,21 +154,6 @@ export const REFERENCE = {
 <p>$$\\alpha_{\\text{eff}} = \\alpha(1 + g\\cos(m_a t))$$</p>
 <p>All Coulomb and magnetic forces oscillate with the axion field. Energy is not conserved since the axion field acts as an external reservoir.</p>
 <p>This is the exact effect searched for by axion detection experiments like CASPEr and ABRACADABRA.</p>
-`,
-    },
-    quadradiation: {
-        title: 'Quadrupole Radiation',
-        body: `
-<p>Gravitational wave emission from the mass quadrupole moment:</p>
-<p>$$P_{\\text{GW}} = \\frac{1}{5}|\\dddot{I}_{ij}|^2$$</p>
-<p>where $I_{ij} = \\sum m(x_i x_j - \\delta_{ij}r^2/3)$ is the reduced quadrupole moment tensor.</p>
-<h3>Peters Formula (Circular Binary)</h3>
-<p>$$P = \\frac{32}{5}\\frac{m_1^2 m_2^2(m_1+m_2)}{r^5}$$</p>
-<p>This causes orbital inspiral and eventual merger, exactly as detected by LIGO.</p>
-<h3>EM Quadrupole</h3>
-<p>When radiation is enabled, also computes:</p>
-<p>$$P_{\\text{EM}} = \\frac{1}{180}|\\dddot{Q}_{ij}|^2$$</p>
-<p>where $Q_{ij} = \\sum q \\cdot x_i x_j$ is the charge quadrupole.</p>
 `,
     },
     expansion: {

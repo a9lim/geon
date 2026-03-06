@@ -8,7 +8,6 @@ const TOGGLE_SYNC = [
     ['relativityEnabled', 'relativity-toggle'],
     ['gravitomagEnabled', 'gravitomag-toggle'],
     ['magneticEnabled', 'magnetic-toggle'],
-    ['signalDelayEnabled', 'signaldelay-toggle'],
     ['onePNEnabled', 'onepn-toggle'],
     ['blackHoleEnabled', 'blackhole-toggle'],
     ['tidalLockingEnabled', 'tidallocking-toggle'],
@@ -18,7 +17,6 @@ const TOGGLE_SYNC = [
     ['barnesHutEnabled', 'barneshut-toggle'],
     ['yukawaEnabled', 'yukawa-toggle'],
     ['axionEnabled', 'axion-toggle'],
-    ['quadRadiationEnabled', 'quadradiation-toggle'],
     ['expansionEnabled', 'expansion-toggle'],
 ];
 
@@ -83,8 +81,8 @@ export function saveState(sim) {
     for (const key of ['gravityEnabled', 'coulombEnabled', 'magneticEnabled',
         'gravitomagEnabled', 'relativityEnabled', 'barnesHutEnabled',
         'radiationEnabled', 'blackHoleEnabled', 'disintegrationEnabled',
-        'tidalLockingEnabled', 'signalDelayEnabled', 'spinOrbitEnabled',
-        'onePNEnabled', 'yukawaEnabled', 'axionEnabled', 'quadRadiationEnabled',
+        'tidalLockingEnabled', 'spinOrbitEnabled',
+        'onePNEnabled', 'yukawaEnabled', 'axionEnabled',
         'expansionEnabled']) {
         state.toggles[key] = ph[key];
     }
