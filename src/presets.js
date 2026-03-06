@@ -1,6 +1,5 @@
 // ─── Preset Definitions ───
 // Each preset configures toggles, engine settings, visuals, and spawns particles.
-// Designed to teach one physics concept by enabling only the relevant forces.
 import { WORLD_SCALE, SOFTENING_SQ } from './config.js';
 
 // Plummer-softened circular orbit velocity: F = coupling*r/(r²+ε²)^{3/2}, set F/m = v²/r
@@ -16,13 +15,16 @@ const _vGrav = (M, r) => {
 };
 
 export const PRESETS = {
+    // ─── Gravity ───
+
     kepler: {
         name: 'Kepler Orbits',
         desc: 'Classical gravity — Keplerian motion and conservation laws',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
             relativity: false, onepn: false, signaldelay: false, blackhole: false,
-            radiation: false, tidallocking: false, spinorbit: false, disintegration: false, barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+            radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
+            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 100 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -47,7 +49,8 @@ export const PRESETS = {
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: true,
             relativity: true, onepn: true, signaldelay: false, blackhole: false,
-            radiation: false, tidallocking: false, spinorbit: false, disintegration: false, barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+            radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
+            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 100 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: true, potential: false },
@@ -63,13 +66,113 @@ export const PRESETS = {
         },
     },
 
+    inspiral: {
+        name: 'Binary Inspiral',
+        desc: 'Gravitational wave emission — quadrupole radiation drains orbital energy',
+        // Coulomb + Radiation enabled for quadradiation UI dependency chain;
+        // particles carry zero charge so EM forces contribute nothing.
+        toggles: {
+            gravity: true, coulomb: true, magnetic: false, gravitomag: true,
+            relativity: true, onepn: true, signaldelay: true, blackhole: false,
+            radiation: true, tidallocking: true, spinorbit: false, disintegration: false,
+            barneshut: false, yukawa: false, axion: false, quadradiation: true, expansion: false,
+        },
+        settings: { collision: 'merge', boundary: 'despawn', speed: 200 },
+        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            const M = 5;
+            const sep = 14;
+            const v = _vGrav(M, 2 * sep) / Math.sqrt(2) * 0.85;
+            // Opposite spins — frame-dragging drives them toward co-rotation
+            sim.addParticle(cx - sep, cy, 0, v, { mass: M, charge: 0, spin: 0.9 });
+            sim.addParticle(cx + sep, cy, 0, -v, { mass: M, charge: 0, spin: -0.9 });
+        },
+    },
+
+    tidallock: {
+        name: 'Tidal Lock',
+        desc: 'Tidal friction synchronizes spin to orbit',
+        toggles: {
+            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: false, onepn: false, signaldelay: false, blackhole: false,
+            radiation: false, tidallocking: true, spinorbit: false, disintegration: false,
+            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+        },
+        settings: { collision: 'pass', boundary: 'despawn', speed: 100 },
+        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            const planetM = 3, moonM = 1;
+            // Moon with fast spin — watch it lock
+            const r = 12;
+            const v = _vGrav(planetM, r);
+            // Compensate planet velocity so total momentum = 0
+            const vPlanet = -v * moonM / planetM;
+            sim.addParticle(cx, cy, 0, vPlanet, { mass: planetM, charge: 0, spin: 0 });
+            sim.addParticle(cx + r, cy, 0, v, { mass: moonM, charge: 0, spin: 0.8 });
+        },
+    },
+
+    roche: {
+        name: 'Roche Limit',
+        desc: 'Tidal disintegration — a body torn apart past the Roche limit',
+        toggles: {
+            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: false, onepn: false, signaldelay: false, blackhole: false,
+            radiation: false, tidallocking: true, spinorbit: false, disintegration: true,
+            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+        },
+        settings: { collision: 'merge', boundary: 'despawn', speed: 100 },
+        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            // Massive primary at center
+            sim.addParticle(cx, cy, 0, 0, { mass: 8, charge: 0, spin: 0 });
+            // Smaller body on eccentric plunge — perihelion inside Roche limit
+            const r = 25;
+            const vCirc = _vGrav(8, r);
+            sim.addParticle(cx + r, cy, 0, vCirc * 0.5, { mass: 2, charge: 0, spin: 0.3 });
+        },
+    },
+
+    hawking: {
+        name: 'Hawking Evaporation',
+        desc: 'Small black holes radiate and evaporate',
+        toggles: {
+            gravity: true, coulomb: false, magnetic: false, gravitomag: true,
+            relativity: true, onepn: false, signaldelay: false, blackhole: true,
+            radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
+            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+        },
+        settings: { collision: 'merge', boundary: 'despawn', speed: 150 },
+        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            // Small BHs that will visibly evaporate (P ∝ 1/M²)
+            const masses = [0.3, 0.4, 0.5, 0.65, 0.8];
+            for (let i = 0; i < masses.length; i++) {
+                const angle = (2 * Math.PI * i) / masses.length;
+                const r = 12 + Math.random() * 8;
+                sim.addParticle(
+                    cx + Math.cos(angle) * r, cy + Math.sin(angle) * r,
+                    (Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1,
+                    { mass: masses[i], charge: 0, spin: 0 }
+                );
+            }
+        },
+    },
+
+    // ─── Electromagnetism ───
+
     atom: {
         name: 'Atom',
         desc: 'Coulomb binding — electromagnetic atomic structure',
         toggles: {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
             relativity: true, onepn: false, signaldelay: false, blackhole: false,
-            radiation: false, tidallocking: false, spinorbit: true, disintegration: false, barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+            radiation: false, tidallocking: false, spinorbit: true, disintegration: false,
+            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 50, interaction: 'orbit' },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -97,7 +200,8 @@ export const PRESETS = {
         toggles: {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
             relativity: true, onepn: false, signaldelay: false, blackhole: false,
-            radiation: true, tidallocking: false, spinorbit: false, disintegration: false, barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+            radiation: true, tidallocking: false, spinorbit: false, disintegration: false,
+            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 50, interaction: 'shoot' },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -110,84 +214,14 @@ export const PRESETS = {
         },
     },
 
-    tidallock: {
-        name: 'Tidal Lock',
-        desc: 'Tidal friction synchronizes spin to orbit',
-        toggles: {
-            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: false, onepn: false, signaldelay: false, blackhole: false,
-            radiation: false, tidallocking: true, spinorbit: false, disintegration: false, barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
-        },
-        settings: { collision: 'pass', boundary: 'despawn', speed: 100 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            const planetM = 3, moonM = 1;
-            // Moon with fast spin — watch it lock
-            const r = 12;
-            const v = _vGrav(planetM, r);
-            // Compensate planet velocity so total momentum = 0
-            const vPlanet = -v * moonM / planetM;
-            sim.addParticle(cx, cy, 0, vPlanet, { mass: planetM, charge: 0, spin: 0 });
-            sim.addParticle(cx + r, cy, 0, v, { mass: moonM, charge: 0, spin: 0.8 });
-        },
-    },
-
-    hawking: {
-        name: 'Hawking Evaporation',
-        desc: 'Small black holes radiate and evaporate',
-        toggles: {
-            gravity: true, coulomb: false, magnetic: false, gravitomag: true,
-            relativity: true, onepn: false, signaldelay: false, blackhole: true,
-            radiation: false, tidallocking: false, spinorbit: false, disintegration: false, barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
-        },
-        settings: { collision: 'merge', boundary: 'despawn', speed: 150 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            // Small BHs that will visibly evaporate (P ∝ 1/M²)
-            const masses = [0.3, 0.4, 0.5, 0.65, 0.8];
-            for (let i = 0; i < masses.length; i++) {
-                const angle = (2 * Math.PI * i) / masses.length;
-                const r = 12 + Math.random() * 8;
-                sim.addParticle(
-                    cx + Math.cos(angle) * r, cy + Math.sin(angle) * r,
-                    (Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1,
-                    { mass: masses[i], charge: 0, spin: 0 }
-                );
-            }
-        },
-    },
-
-    pulsars: {
-        name: 'Binary Pulsars',
-        desc: 'Frame-dragging, gravitomagnetism, and signal delay',
-        toggles: {
-            gravity: true, coulomb: false, magnetic: false, gravitomag: true,
-            relativity: true, onepn: true, signaldelay: true, blackhole: false,
-            radiation: false, tidallocking: false, spinorbit: false, disintegration: false, barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
-        },
-        settings: { collision: 'pass', boundary: 'despawn', speed: 50 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            const starM = 6;
-            const dist = 15;
-            // Equal-mass binary: each orbits COM at radius dist, separation D=2*dist
-            // v = _vGrav(M, D) / sqrt(2) for equal masses, scaled down for tighter orbit
-            const v = _vGrav(starM, 2 * dist) / Math.sqrt(2) * 0.8;
-            sim.addParticle(cx - dist, cy, 0, v, { mass: starM, charge: 0, spin: 0.9 });
-            sim.addParticle(cx + dist, cy, 0, -v, { mass: starM, charge: 0, spin: 0.9 });
-        },
-    },
-
     magnetic: {
         name: 'Magnetic Dipoles',
         desc: 'Dipole interactions, Lorentz force, and spin-orbit coupling',
         toggles: {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
             relativity: true, onepn: false, signaldelay: false, blackhole: false,
-            radiation: false, tidallocking: false, spinorbit: true, disintegration: false, barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+            radiation: false, tidallocking: false, spinorbit: true, disintegration: false,
+            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
         },
         settings: { collision: 'bounce', boundary: 'loop', topology: 'torus', speed: 100, friction: 0.4 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -208,13 +242,81 @@ export const PRESETS = {
         },
     },
 
+    // ─── Exotic ───
+
+    nucleus: {
+        name: 'Atomic Nucleus',
+        desc: 'Yukawa potential — short-range force binds nucleons like a liquid drop',
+        toggles: {
+            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: false, onepn: false, signaldelay: false, blackhole: false,
+            radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
+            barneshut: false, yukawa: true, axion: false, quadradiation: false, expansion: false,
+        },
+        settings: { collision: 'bounce', boundary: 'bounce', speed: 200, yukawaRange: 15 },
+        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            // Nucleons in a ring — gravity + Yukawa pull them into a bound cluster
+            const N = 7;
+            for (let i = 0; i < N; i++) {
+                const angle = (2 * Math.PI * i) / N;
+                const r = 10 + Math.random() * 4;
+                const cos = Math.cos(angle), sin = Math.sin(angle);
+                // Small tangential velocity → rotating collapse
+                const v = 0.04;
+                sim.addParticle(
+                    cx + cos * r, cy + sin * r,
+                    -sin * v + (Math.random() - 0.5) * 0.02,
+                    cos * v + (Math.random() - 0.5) * 0.02,
+                    { mass: 2, charge: 0, spin: (Math.random() - 0.5) * 0.3 }
+                );
+            }
+        },
+    },
+
+    axion: {
+        name: 'Axion Field',
+        desc: 'Dark matter axion oscillates the electromagnetic coupling',
+        toggles: {
+            gravity: false, coulomb: true, magnetic: true, gravitomag: false,
+            relativity: true, onepn: false, signaldelay: false, blackhole: false,
+            radiation: false, tidallocking: false, spinorbit: true, disintegration: false,
+            barneshut: false, yukawa: false, axion: true, quadradiation: false, expansion: false,
+        },
+        settings: { collision: 'pass', boundary: 'despawn', speed: 200, axionMass: 0.15 },
+        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            const sep = 28;
+            // Two atoms side by side — axion makes both breathe in unison
+            for (let s = -1; s <= 1; s += 2) {
+                const nx = cx + s * sep / 2;
+                const nucQ = 3;
+                sim.addParticle(nx, cy, 0, 0, { mass: 4, charge: nucQ, spin: 0 });
+                const r = 10;
+                const v = _vCirc(nucQ, r, 0.8);
+                const angle = s > 0 ? 0 : Math.PI;
+                const cos = Math.cos(angle), sin = Math.sin(angle);
+                sim.addParticle(
+                    nx + cos * r, cy + sin * r,
+                    -sin * v, cos * v,
+                    { mass: 0.8, charge: -1, spin: 0.2 }
+                );
+            }
+        },
+    },
+
+    // ─── Cosmological ───
+
     galaxy: {
         name: 'Galaxy',
         desc: 'Large-scale gravitational dynamics and accretion',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: true,
             relativity: false, onepn: false, signaldelay: false, blackhole: false,
-            radiation: false, tidallocking: false, spinorbit: false, disintegration: false, barneshut: true, yukawa: false, axion: false, quadradiation: false, expansion: false,
+            radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
+            barneshut: true, yukawa: false, axion: false, quadradiation: false, expansion: false,
         },
         settings: { collision: 'merge', boundary: 'despawn', speed: 150 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -234,11 +336,39 @@ export const PRESETS = {
             }
         },
     },
+
+    expansion: {
+        name: 'Expanding Universe',
+        desc: 'Cosmological expansion — Hubble flow vs gravitational binding',
+        toggles: {
+            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: false, onepn: false, signaldelay: false, blackhole: false,
+            radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
+            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: true,
+        },
+        settings: { collision: 'pass', boundary: 'despawn', speed: 200, hubble: 0.008 },
+        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            // Uniform cloud at rest — inner particles stay bound, outer ones recede
+            for (let i = 0; i < 25; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const r = 2 + Math.random() * 25;
+                sim.addParticle(
+                    cx + Math.cos(angle) * r, cy + Math.sin(angle) * r,
+                    0, 0,
+                    { mass: 0.3, charge: 0, spin: 0 }
+                );
+            }
+        },
+    },
 };
 
 export const PRESET_ORDER = [
-    'kepler', 'precession', 'atom', 'bremsstrahlung', 'tidallock',
-    'hawking', 'pulsars', 'magnetic', 'galaxy',
+    'kepler', 'precession', 'inspiral', 'tidallock', 'roche', 'hawking',
+    'atom', 'bremsstrahlung', 'magnetic',
+    'nucleus', 'axion',
+    'galaxy', 'expansion',
 ];
 
 // ─── Toggle/Setting Application ───
@@ -290,6 +420,9 @@ const MODE_GROUPS = {
 const SLIDER_MAP = {
     speed: 'speedInput',
     friction: 'frictionInput',
+    yukawaRange: 'yukawaMuInput',
+    axionMass: 'axionMassInput',
+    hubble: 'hubbleInput',
 };
 
 export function loadPreset(name, sim) {
