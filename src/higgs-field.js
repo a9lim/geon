@@ -1,11 +1,11 @@
 // ─── Higgs Scalar Field ───
 // Dynamical scalar field on a 2D grid with Mexican hat potential.
-// V(phi) = -1/2 mu^2 phi^2 + 1/4 lambda phi^4
-// VEV v = mu / sqrt(lambda), Higgs boson mass m_H = mu * sqrt(2)
+// V(phi) = -1/2 mu^2 phi^2 + 1/4 phi^4  (lambda = 1)
+// VEV v = mu, Higgs boson mass m_H = v * sqrt(2)
 // Symplectic Euler integration, bilinear interpolation, CIC source deposition.
 // Self-force subtraction via analytical steady-state Green's function estimate.
 
-import { HIGGS_GRID, HIGGS_LAMBDA, DEFAULT_HIGGS_VEV, DEFAULT_HIGGS_COUPLING, DEFAULT_HIGGS_THERMAL_K, HIGGS_DAMPING, HIGGS_SOURCE_STRENGTH, HIGGS_HIGGS_PHI_MAX, EPSILON } from './config.js';
+import { HIGGS_GRID, DEFAULT_HIGGS_VEV, DEFAULT_HIGGS_COUPLING, DEFAULT_HIGGS_THERMAL_K, HIGGS_DAMPING, HIGGS_SOURCE_STRENGTH, HIGGS_PHI_MAX, EPSILON } from './config.js';
 import { TORUS, KLEIN, RP2 } from './topology.js';
 
 const GRID = HIGGS_GRID;
@@ -25,7 +25,6 @@ export default class HiggsField {
         this._thermal = new Float64Array(GRID_SQ);
         this._source = new Float64Array(GRID_SQ);
 
-        this.lambda = HIGGS_LAMBDA;
         this.vev = DEFAULT_HIGGS_VEV;
         this.coupling = DEFAULT_HIGGS_COUPLING;
         this.thermalK = DEFAULT_HIGGS_THERMAL_K;
@@ -114,8 +113,7 @@ export default class HiggsField {
         const lap = this._laplacian;
         const thermal = this._thermal;
         const v = this.vev;
-        const lam = this.lambda;
-        const muSq = v * v * lam; // mu^2 = v^2 * lambda
+        const muSq = v * v; // mu^2 = v^2 (lambda = 1)
 
         const cellW = domainW / GRID;
         const cellH = domainH / GRID;
@@ -163,7 +161,7 @@ export default class HiggsField {
         // Kick phiDot, then drift phi (symplectic Euler)
         const thermK = this.thermalK;
         // Adaptive damping: this.damping is a ratio of critical damping (2 * m_H)
-        const mH = Math.sqrt(Math.max(2 * lam * v * v, EPSILON));
+        const mH = Math.sqrt(Math.max(2 * muSq, EPSILON));
         const damp = this.damping * 2 * mH;
         for (let i = 0; i < GRID_SQ; i++) {
             const phiVal = phi[i];
@@ -175,11 +173,11 @@ export default class HiggsField {
                 muSqEff -= thermK * thermal[i];
             }
 
-            // Klein-Gordon: d^2 phi/dt^2 = nabla^2 phi + mu^2_eff * phi - lambda * phi^3
-            //               - damping * dphi/dt + source
+            // Klein-Gordon: d^2 phi/dt^2 = nabla^2 phi + mu^2_eff * phi - phi^3
+            //               - damping * dphi/dt + source  (lambda = 1)
             const ddphi = lap[i]
                         + muSqEff * phiVal
-                        - lam * phiVal * phiVal * phiVal
+                        - phiVal * phiVal * phiVal
                         - damp * phiDot[i]
                         + HIGGS_SOURCE_STRENGTH * src[i] * invCellArea;
 
@@ -274,8 +272,7 @@ export default class HiggsField {
         const invCellW = 1 / cellW;
         const invCellH = 1 / cellH;
         const cellArea = cellW * cellH;
-        const mHsq = Math.max(2 * this.lambda * v * v, EPSILON);
-        // selfScale: how much phi shifts per unit source at one grid cell
+        const mHsq = Math.max(2 * v * v, EPSILON); // m_H^2 = 2v^2 (lambda = 1)
         const selfScale = HIGGS_SOURCE_STRENGTH / (v * cellArea * mHsq);
 
         for (let i = 0; i < particles.length; i++) {
@@ -339,7 +336,7 @@ export default class HiggsField {
         const invCellW = 1 / cellW;
         const invCellH = 1 / cellH;
         const cellArea = cellW * cellH;
-        const mHsq = Math.max(2 * this.lambda * v * v, EPSILON);
+        const mHsq = Math.max(2 * v * v, EPSILON);
         const selfScale = HIGGS_SOURCE_STRENGTH / (v * cellArea * mHsq);
 
         for (let i = 0; i < particles.length; i++) {
@@ -394,12 +391,11 @@ export default class HiggsField {
         const invCellH = 1 / cellH;
         const phi = this.phi;
         const phiDot = this.phiDot;
-        const lam = this.lambda;
         const v = this.vev;
-        const muSq = v * v * lam;
+        const muSq = v * v;
 
-        // V(v) = -mu^4/(4*lambda), offset to make V(VEV)=0
-        const vacOffset = lam > EPSILON ? 0.25 * muSq * muSq / lam : 0;
+        // V(v) = -mu^4/4, offset to make V(VEV)=0 (lambda = 1)
+        const vacOffset = 0.25 * muSq * muSq;
         let total = 0;
         for (let iy = 0; iy < GRID; iy++) {
             for (let ix = 0; ix < GRID; ix++) {
@@ -416,9 +412,8 @@ export default class HiggsField {
                 const dyPhi = (phiB - p) * invCellH;
                 const gradE = 0.5 * (dxPhi * dxPhi + dyPhi * dyPhi);
 
-                // Potential: V(phi) = -1/2 mu^2 phi^2 + 1/4 lambda phi^4 + vacOffset
-                // Shifted so V(VEV) = 0 (vacuum has zero energy)
-                const pot = -0.5 * muSq * p * p + 0.25 * lam * p * p * p * p + vacOffset;
+                // Potential: V(phi) = -1/2 mu^2 phi^2 + 1/4 phi^4 + vacOffset (lambda = 1)
+                const pot = -0.5 * muSq * p * p + 0.25 * p * p * p * p + vacOffset;
 
                 total += (ke + gradE + pot) * cellArea;
             }
