@@ -170,15 +170,27 @@
                         <h2 class="group-label">Preset</h2>
                         <select id="preset-select" class="preset-select">
                             <option value="none" selected>None</option>
-                            <option value="kepler">Kepler Orbits</option>
-                            <option value="precession">Precession</option>
-                            <option value="atom">Atom</option>
-                            <option value="bremsstrahlung">Bremsstrahlung</option>
-                            <option value="tidallock">Tidal Lock</option>
-                            <option value="hawking">Hawking Evaporation</option>
-                            <option value="pulsars">Binary Pulsars</option>
-                            <option value="magnetic">Magnetic Dipoles</option>
-                            <option value="galaxy">Galaxy</option>
+                            <optgroup label="Gravity">
+                                <option value="kepler">Kepler Orbits</option>
+                                <option value="precession">Precession</option>
+                                <option value="inspiral">Binary Inspiral</option>
+                                <option value="tidallock">Tidal Lock</option>
+                                <option value="roche">Roche Limit</option>
+                                <option value="hawking">Hawking Evaporation</option>
+                            </optgroup>
+                            <optgroup label="Electromagnetism">
+                                <option value="atom">Atom</option>
+                                <option value="bremsstrahlung">Bremsstrahlung</option>
+                                <option value="magnetic">Magnetic Dipoles</option>
+                            </optgroup>
+                            <optgroup label="Exotic">
+                                <option value="nucleus">Atomic Nucleus</option>
+                                <option value="axion">Axion Field</option>
+                            </optgroup>
+                            <optgroup label="Cosmological">
+                                <option value="galaxy">Galaxy</option>
+                                <option value="expansion">Expanding Universe</option>
+                            </optgroup>
                         </select>
                     </div>
                     <div class="panel-section">
