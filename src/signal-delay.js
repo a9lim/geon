@@ -3,7 +3,7 @@
 // via NR convergence to segment, exact quadratic on that segment, and
 // constant-velocity extrapolation past the buffer.
 
-import { HISTORY_SIZE, NR_TOLERANCE, EPSILON } from './config.js';
+import { HISTORY_SIZE, NR_TOLERANCE, NR_MAX_ITER, EPSILON } from './config.js';
 import { TORUS, minImage } from './topology.js';
 
 const _miOut = { x: 0, y: 0 };
@@ -11,7 +11,6 @@ const _miOut = { x: 0, y: 0 };
 // Shared return object -- caller must read before next call
 const _delayedOut = { x: 0, y: 0, vx: 0, vy: 0 };
 
-const NR_MAX_ITER = 6;
 
 /** Solve light-cone equation; returns shared {x,y,vx,vy} or null. */
 export function getDelayedState(source, observer, simTime, periodic, domW, domH, halfDomW, halfDomH, topology = TORUS) {
