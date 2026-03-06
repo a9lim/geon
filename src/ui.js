@@ -125,12 +125,10 @@ export function setupUI(sim) {
         { id: 'radiation-toggle', prop: 'radiationEnabled' },
         { id: 'disintegration-toggle', prop: 'disintegrationEnabled' },
         { id: 'tidallocking-toggle', prop: 'tidalLockingEnabled' },
-        { id: 'signaldelay-toggle', prop: 'signalDelayEnabled' },
         { id: 'spinorbit-toggle', prop: 'spinOrbitEnabled' },
         { id: 'barneshut-toggle', prop: 'barnesHutEnabled' },
         { id: 'yukawa-toggle', prop: 'yukawaEnabled' },
         { id: 'axion-toggle', prop: 'axionEnabled' },
-        { id: 'quadradiation-toggle', prop: 'quadRadiationEnabled' },
         { id: 'blackhole-toggle', prop: 'blackHoleEnabled' },
         { id: 'expansion-toggle', prop: 'expansionEnabled' },
     ];
@@ -148,8 +146,7 @@ export function setupUI(sim) {
     const DEPS = [
         ['gravitomag-toggle', () => !tEl['gravity-toggle'].checked],
         ['magnetic-toggle', () => !tEl['coulomb-toggle'].checked],
-        ['signaldelay-toggle', () => !tEl['relativity-toggle'].checked],
-        ['radiation-toggle', () => !tEl['coulomb-toggle'].checked],
+        ['radiation-toggle', () => !tEl['gravity-toggle'].checked && !tEl['coulomb-toggle'].checked],
         ['tidallocking-toggle', () => !tEl['gravity-toggle'].checked],
         ['disintegration-toggle', () => !tEl['gravity-toggle'].checked],
         ['axion-toggle', () => !tEl['coulomb-toggle'].checked],
@@ -157,7 +154,6 @@ export function setupUI(sim) {
         // Children of toggles that may have been disabled above
         ['onepn-toggle', () => !tEl['relativity-toggle'].checked || (!tEl['magnetic-toggle'].checked && !tEl['gravitomag-toggle'].checked)],
         ['spinorbit-toggle', () => !tEl['magnetic-toggle'].checked && !tEl['gravitomag-toggle'].checked],
-        ['quadradiation-toggle', () => !tEl['radiation-toggle'].checked],
     ];
 
     const setDepState = (id, disabled) => {
@@ -369,11 +365,10 @@ export function setupUI(sim) {
         coulomb: { title: 'Coulomb', body: 'Electrostatic force: $F = q_1 q_2 / r^2$. Like charges repel and opposite charges attract. Combined with gravity, this lets you build atom-like bound states with charged particles.' },
         magnetic: { title: 'Magnetic', body: 'Two components. Spinning charged particles create magnetic dipoles ($\\mu = q\\omega r^2/5$) that interact via $F = 3\\mu_1 \\mu_2 / r^4$. Moving charges also generate magnetic fields, producing the Lorentz force $\\mathbf{F} = q(\\mathbf{v} \\times \\mathbf{B})$, handled exactly by the Boris integrator. Requires Coulomb.' },
         gravitomag: { title: 'Gravitomagnetic', body: 'The gravitational analog of magnetism, from general relativity\'s gravitoelectromagnetic (GEM) framework. Spinning masses interact via $F = 3L_1 L_2 / r^4$ (co-rotating masses attract, unlike EM dipoles which repel). Moving masses feel a Lorentz-like force $\\mathbf{F} = 4m(\\mathbf{v} \\times \\mathbf{B}_g)$. Frame-dragging torque gradually aligns nearby spins. Requires Gravity.' },
-        relativity: { title: 'Relativity', body: 'Switches the simulation between relativistic and classical mechanics. When on, the state variable is proper velocity $\\mathbf{w} = \\gamma\\mathbf{v}$ (which can grow without bound), and coordinate velocity is derived as $\\mathbf{v} = \\mathbf{w}/\\sqrt{1+w^2}$, enforcing $|v| < c$. When off, $\\mathbf{v} = \\mathbf{w}$ with no speed limit.' },
-        radiation: { title: 'Radiation', body: 'Accelerating charges radiate energy (Larmor power: $P = 2q^2 a^2/3$). The Landau\u2013Lifshitz reaction force decelerates the emitter with three terms: a jerk term ($\\dot{\\mathbf{F}}/\\gamma^3$), a radiative drag ($-\\mathbf{v}F^2/m\\gamma^2$), and a force-aligned correction ($+\\mathbf{F}(\\mathbf{v}\\!\\cdot\\!\\mathbf{F})/m\\gamma^4$). Emitted photons are visible particles that carry away energy and momentum, causing orbital decay of charged particles. Requires Coulomb.' },
+        relativity: { title: 'Relativity', body: 'Switches the simulation between relativistic and classical mechanics. When on, the state variable is proper velocity $\\mathbf{w} = \\gamma\\mathbf{v}$ (which can grow without bound), and coordinate velocity is derived as $\\mathbf{v} = \\mathbf{w}/\\sqrt{1+w^2}$, enforcing $|v| < c$. When off, $\\mathbf{v} = \\mathbf{w}$ with no speed limit. Enables signal delay: forces propagate at $c$ instead of acting instantaneously, with a light-cone solver on per-particle history buffers.' },
+        radiation: { title: 'Radiation', body: 'Enables all radiation channels. <b>With Coulomb:</b> Landau\u2013Lifshitz reaction force ($P = 2q^2 a^2/3$) decelerates charged emitters, plus EM quadrupole radiation ($P_{\\text{EM}} = |\\dddot{Q}_{ij}|^2/180$). <b>With Gravity:</b> gravitational wave emission from the mass quadrupole ($P_{\\text{GW}} = |\\dddot{I}_{ij}|^2/5$), causing orbital inspiral and merger. Emitted photons (yellow) and gravitons (red) carry energy and momentum away from the system. Requires Gravity or Coulomb.' },
         disintegration: { title: 'Disintegration', body: 'Particles break apart when disruptive forces exceed their self-gravity. The sim checks tidal stretching from neighbors ($\\propto M R / r^3$), centrifugal stress from rapid spin, and Coulomb self-repulsion. When the combined outward forces win, the particle splits into 3 fragments.' },
         tidallocking: { title: 'Tidal Locking', body: 'Tidal torque drives spin toward synchronous rotation ($\\omega_{\\text{spin}} \\to \\omega_{\\text{orbit}}$). The torque is $\\tau \\propto -(M + q_1 q_2/m)^2 R^3 / r^6 \\cdot \\Delta\\omega$. The mixed coupling captures all cross-terms between gravitational and electrostatic tidal fields. Requires Gravity.' },
-        signaldelay: { title: 'Signal Delay', body: 'Forces propagate at the speed of light instead of acting instantaneously. Each particle sees others at their past positions on the light cone: $|\\mathbf{x}_{\\text{src}}(t_{\\text{ret}}) - \\mathbf{x}_{\\text{obs}}| = t_{\\text{now}} - t_{\\text{ret}}$. The delayed time is solved analytically using recorded position histories. Requires Relativity.' },
         spinorbit: { title: 'Spin\u2013Orbit', body: 'Couples translational and rotational motion through field gradients. Moving through a non-uniform magnetic or gravitomagnetic field transfers energy between a particle\'s orbit and its spin. Also applies translational kicks: Stern\u2013Gerlach force ($\\mathbf{F} = \\mu\\nabla B$) for EM, and Mathisson\u2013Papapetrou force ($\\mathbf{F} = -L\\nabla B_g$) for gravity.' },
         interaction: { title: 'Spawn Modes', body: '<b>Place</b> \u2014 click to spawn a particle at rest.<br><b>Shoot</b> \u2014 click and drag to set the particle\'s initial velocity.<br><b>Orbit</b> \u2014 spawns in a circular orbit around the nearest massive body, with velocity set to $v = \\sqrt{M/r}$.' },
         barneshut: { title: 'Barnes\u2013Hut', body: 'Controls the force calculation algorithm. When on, uses an $O(N \\log N)$ quadtree approximation ($\\theta = 0.5$) that groups distant particles together, allowing hundreds of particles to run smoothly. When off, computes every pair exactly ($O(N^2)$) which is slower but conserves momentum and angular momentum to machine precision.' },
@@ -384,7 +379,6 @@ export function setupUI(sim) {
         onepn: { title: '1PN Correction', body: 'First post-Newtonian $O(v^2/c^2)$ corrections. For gravity: the Einstein\u2013Infeld\u2013Hoffmann (EIH) force produces perihelion precession ($\\Delta\\phi \\approx 6\\pi M / a(1-e^2)$). For electromagnetism: the Darwin correction from the Darwin Lagrangian adds velocity-dependent terms beyond the Lorentz force. Each sector activates only when its velocity-dependent force (Gravitomagnetic or Magnetic) is on. Integrated with a velocity-Verlet scheme for second-order accuracy. Requires Relativity.' },
         yukawa: { title: 'Yukawa Potential', body: 'A screened potential $V(r) = -g^2 e^{-\\mu r}/r$ that falls off exponentially beyond range $1/\\mu$. Models short-range nuclear forces (pion exchange) and any interaction mediated by a massive particle. At short range it behaves like gravity; at long range it vanishes. The coupling $g^2$ sets the strength and $\\mu$ (the mediator mass) sets the range.' },
         axion: { title: 'Axion Coupling', body: 'Models dark matter axions oscillating as a background field $a(t) = a_0 \\cos(m_a t)$, which modulates the electromagnetic coupling: $\\alpha_{\\text{eff}} = \\alpha(1 + g\\cos(m_a t))$. This makes Coulomb and magnetic forces oscillate periodically. The effect is the exact phenomenon that axion detection experiments (CASPEr, ABRACADABRA) search for. Energy is not conserved \u2014 the axion field is an external reservoir. Requires Coulomb.' },
-        quadradiation: { title: 'Quadrupole Radiation', body: 'Gravitational wave emission from the mass quadrupole moment: $P = \\frac{1}{5}|\\dddot{I}_{ij}|^2$. For circular binaries this gives $P = \\frac{32}{5} \\frac{m_1^2 m_2^2(m_1+m_2)}{r^5}$, causing orbital inspiral and merger \u2014 exactly what LIGO detects. Emitted gravitons (red) carry energy and momentum away from the system. Also includes EM quadrupole radiation when Radiation is enabled. Requires Gravity.' },
         expansion: { title: 'Cosmological Expansion', body: 'Adds Hubble flow $v_H = H \\cdot r$ from the domain center, causing distant particles to separate. Bound systems (where binding energy exceeds Hubble kinetic energy) resist expansion and stay together, while unbound particles drift apart \u2014 the mechanism that creates large-scale cosmic structure. Includes Hubble drag ($v_{\\text{pec}} \\propto 1/a$) to redshift peculiar velocities, matching the physics of real cosmological N-body simulations.' },
     };
 

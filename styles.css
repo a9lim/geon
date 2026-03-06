@@ -95,7 +95,6 @@ body {
 .tog-magnetic    { --tog-color: var(--ext-cyan); }
 .tog-relativity  { --tog-color: var(--ext-orange); }
 .tog-radiation    { --tog-color: var(--ext-yellow); }
-.tog-signaldelay  { --tog-color: var(--ext-orange); }
 .tog-spinorbit    { --tog-color: var(--ext-purple); }
 .tog-tidal        { --tog-color: var(--ext-slate); }
 .tog-tidallocking { --tog-color: var(--ext-red); }
@@ -103,7 +102,6 @@ body {
 .tog-blackhole    { --tog-color: var(--text); }
 .tog-yukawa       { --tog-color: var(--ext-green); }
 .tog-axion        { --tog-color: var(--ext-blue); }
-.tog-quadradiation { --tog-color: var(--ext-yellow); }
 
 /* ═══════════════════════════════════════════════
    Particle Tooltip & Selection

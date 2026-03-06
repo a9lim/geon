@@ -22,9 +22,9 @@ export const PRESETS = {
         desc: 'Classical gravity — Keplerian motion and conservation laws',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: false, onepn: false, signaldelay: false, blackhole: false,
+            relativity: false, onepn: false, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 100 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -48,9 +48,9 @@ export const PRESETS = {
         desc: 'Relativistic perihelion advance — watch the rosette orbit',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: true,
-            relativity: true, onepn: true, signaldelay: false, blackhole: false,
+            relativity: true, onepn: true, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 100 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: true, potential: false },
@@ -69,13 +69,12 @@ export const PRESETS = {
     inspiral: {
         name: 'Binary Inspiral',
         desc: 'Gravitational wave emission — quadrupole radiation drains orbital energy',
-        // Coulomb + Radiation enabled for quadradiation UI dependency chain;
         // particles carry zero charge so EM forces contribute nothing.
         toggles: {
             gravity: true, coulomb: true, magnetic: false, gravitomag: true,
-            relativity: true, onepn: true, signaldelay: true, blackhole: false,
+            relativity: true, onepn: true, blackhole: false,
             radiation: true, tidallocking: true, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, quadradiation: true, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false,
         },
         settings: { collision: 'merge', boundary: 'despawn', speed: 128 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -95,9 +94,9 @@ export const PRESETS = {
         desc: 'Tidal friction synchronizes spin to orbit',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: false, onepn: false, signaldelay: false, blackhole: false,
+            relativity: false, onepn: false, blackhole: false,
             radiation: false, tidallocking: true, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 100 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -119,9 +118,9 @@ export const PRESETS = {
         desc: 'Tidal disintegration — a body torn apart past the Roche limit',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: false, onepn: false, signaldelay: false, blackhole: false,
+            relativity: false, onepn: false, blackhole: false,
             radiation: false, tidallocking: true, spinorbit: false, disintegration: true,
-            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false,
         },
         settings: { collision: 'merge', boundary: 'despawn', speed: 100 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -141,9 +140,9 @@ export const PRESETS = {
         desc: 'Small black holes radiate and evaporate',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: true,
-            relativity: true, onepn: false, signaldelay: false, blackhole: true,
+            relativity: true, onepn: false, blackhole: true,
             radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false,
         },
         settings: { collision: 'merge', boundary: 'despawn', speed: 128 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -170,9 +169,9 @@ export const PRESETS = {
         desc: 'Coulomb binding — electromagnetic atomic structure',
         toggles: {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
-            relativity: true, onepn: false, signaldelay: false, blackhole: false,
+            relativity: true, onepn: false, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: true, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 50, interaction: 'orbit' },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -199,9 +198,9 @@ export const PRESETS = {
         desc: 'Radiation from accelerating charges — watch the photons',
         toggles: {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
-            relativity: true, onepn: false, signaldelay: false, blackhole: false,
+            relativity: true, onepn: false, blackhole: false,
             radiation: true, tidallocking: false, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 50, interaction: 'shoot' },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -219,9 +218,9 @@ export const PRESETS = {
         desc: 'Dipole interactions, Lorentz force, and spin-orbit coupling',
         toggles: {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
-            relativity: true, onepn: false, signaldelay: false, blackhole: false,
+            relativity: true, onepn: false, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: true, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false,
         },
         settings: { collision: 'bounce', boundary: 'loop', topology: 'torus', speed: 100, friction: 0.4 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -249,9 +248,9 @@ export const PRESETS = {
         desc: 'Yukawa potential — short-range force binds nucleons like a liquid drop',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: false, onepn: false, signaldelay: false, blackhole: false,
+            relativity: false, onepn: false, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: true, axion: false, quadradiation: false, expansion: false,
+            barneshut: false, yukawa: true, axion: false, expansion: false,
         },
         settings: { collision: 'bounce', boundary: 'bounce', speed: 128, yukawaRange: 15 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -280,9 +279,9 @@ export const PRESETS = {
         desc: 'Dark matter axion oscillates the electromagnetic coupling',
         toggles: {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
-            relativity: true, onepn: false, signaldelay: false, blackhole: false,
+            relativity: true, onepn: false, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: true, disintegration: false,
-            barneshut: false, yukawa: false, axion: true, quadradiation: false, expansion: false,
+            barneshut: false, yukawa: false, axion: true, expansion: false,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 128, axionMass: 0.15 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -314,9 +313,9 @@ export const PRESETS = {
         desc: 'Large-scale gravitational dynamics and accretion',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: true,
-            relativity: false, onepn: false, signaldelay: false, blackhole: false,
+            relativity: false, onepn: false, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
-            barneshut: true, yukawa: false, axion: false, quadradiation: false, expansion: false,
+            barneshut: true, yukawa: false, axion: false, expansion: false,
         },
         settings: { collision: 'merge', boundary: 'despawn', speed: 128 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -342,9 +341,9 @@ export const PRESETS = {
         desc: 'Cosmological expansion — Hubble flow vs gravitational binding',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: false, onepn: false, signaldelay: false, blackhole: false,
+            relativity: false, onepn: false, blackhole: false,
             radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
-            barneshut: false, yukawa: false, axion: false, quadradiation: false, expansion: true,
+            barneshut: false, yukawa: false, axion: false, expansion: true,
         },
         settings: { collision: 'pass', boundary: 'despawn', speed: 128, hubble: 0.008 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
@@ -380,7 +379,6 @@ const TOGGLE_MAP = {
     gravitomag: 'gravitomag-toggle',
     relativity: 'relativity-toggle',
     onepn: 'onepn-toggle',
-    signaldelay: 'signaldelay-toggle',
     blackhole: 'blackhole-toggle',
     radiation: 'radiation-toggle',
     tidallocking: 'tidallocking-toggle',
@@ -389,7 +387,6 @@ const TOGGLE_MAP = {
     barneshut: 'barneshut-toggle',
     yukawa: 'yukawa-toggle',
     axion: 'axion-toggle',
-    quadradiation: 'quadradiation-toggle',
     expansion: 'expansion-toggle',
 };
 
@@ -397,9 +394,9 @@ const TOGGLE_MAP = {
 const TOGGLE_ORDER = [
     'gravity', 'coulomb', 'relativity',
     'gravitomag', 'magnetic',
-    'signaldelay', 'onepn', 'blackhole',
+    'onepn', 'blackhole',
     'tidallocking', 'spinorbit', 'radiation', 'disintegration', 'barneshut',
-    'yukawa', 'axion', 'quadradiation', 'expansion',
+    'yukawa', 'axion', 'expansion',
 ];
 
 const VISUAL_MAP = {
