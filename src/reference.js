@@ -207,10 +207,10 @@ export const REFERENCE = {
 <p>$$\\mathcal{L}_{\\text{Darwin}} = -\\frac{q_1 q_2}{2r}\\!\\left[(\\mathbf{v}_1 \\!\\cdot\\! \\mathbf{v}_2) + (\\mathbf{v}_1 \\!\\cdot\\! \\hat{r})(\\mathbf{v}_2 \\!\\cdot\\! \\hat{r})\\right]$$</p>
 <p>This adds velocity-dependent corrections beyond Coulomb + Lorentz. It modifies atomic electron orbits and is the classical counterpart to the Breit interaction in quantum mechanics.</p>
 
-<h3>Bazanski Cross-Term</h3>
-<p>Requires both Gravitomagnetic and Magnetic. A mixed gravity-EM term at 1PN:</p>
-<p>$$\\mathbf{F}_{\\text{Baz}} = \\frac{q_1 q_2(m_1+m_2) - (q_1^2 m_2 + q_2^2 m_1)}{r^3}\\,\\hat{r}$$</p>
-<p>This position-dependent $1/r^3$ force vanishes for identical particles. It represents gravitational corrections to electromagnetic self-energy and vice versa.</p>
+<h3>Bazanski Cross-Term &mdash; Mixed Gravity-EM Sector</h3>
+<p>Requires both Gravitomagnetic and Magnetic. A mixed gravity-EM interaction Lagrangian at 1PN:</p>
+<p>$$\\mathcal{L}_{\\text{Baz}} = -\\frac{q_1 q_2(m_1+m_2) - (q_1^2 m_2 + q_2^2 m_1)}{2r^2}$$</p>
+<p>Unlike the EIH and Darwin terms, this Lagrangian has no velocity dependence — it is purely a position-dependent $1/r^2$ potential correction. It vanishes for identical particles (when $q_1 = q_2$ and $m_1 = m_2$) and represents the gravitational correction to electromagnetic self-energy and vice versa.</p>
 
 <h3>Integration Scheme</h3>
 <p>All three sectors use velocity-Verlet: the 1PN force is computed before and after the drift step, and the average is applied, giving second-order accuracy. This is necessary because 1PN forces depend on both position and velocity.</p>
