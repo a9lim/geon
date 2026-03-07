@@ -485,7 +485,7 @@ export default class Renderer {
                 if ((ph.type === 'grav') !== isGrav) continue;
                 const alpha = 1 - ph.lifetime / PHOTON_LIFETIME;
                 if (alpha <= 0) continue;
-                const size = 0.2 + ph.energy * 20;
+                const size = 0.2 + ph.energy * 5;
                 const r = size < 5 ? size : 5;
                 if (!isLight) {
                     ctx.shadowBlur = size * 3 < 15 ? size * 3 : 15;
@@ -511,15 +511,13 @@ export default class Renderer {
 
         for (let i = 0, len = pions.length; i < len; i++) {
             const pn = pions[i];
-            const alpha = 1 - pn.lifetime / PION_LIFETIME;
-            if (alpha <= 0) continue;
-            const size = 0.2 + pn.energy * 20;
+            const size = 0.2 + pn.energy * 5;
             const r = size < 5 ? size : 5;
             if (!isLight) {
                 ctx.shadowBlur = size * 3 < 15 ? size * 3 : 15;
                 ctx.shadowColor = glowColor;
             }
-            ctx.globalAlpha = alpha * alphaScale;
+            ctx.globalAlpha = alphaScale;
             ctx.beginPath();
             ctx.arc(pn.pos.x, pn.pos.y, r, 0, TWO_PI);
             ctx.fill();
