@@ -1,7 +1,7 @@
 // ─── Scalar Field Base Class ───
 // Shared grid infrastructure for dynamical scalar fields (Higgs, Axion).
 // PQS (cubic B-spline, order 3) particle-grid coupling: 4×4 stencil,
-// C² interpolation, C¹ continuous gradients.
+// C² interpolation, C² continuous gradients (PQS-interpolated grid gradients).
 
 import { EPSILON, FIELD_EXCITATION_SIGMA, MERGE_EXCITATION_SCALE } from './config.js';
 import { TORUS, KLEIN, RP2 } from './topology.js';
@@ -27,12 +27,14 @@ export default class ScalarField {
         this._laplacian = new Float64Array(gsq);
         this._source = new Float64Array(gsq);
 
+        // Pre-computed grid-point gradients (central differences, grid units)
+        this._gradX = new Float64Array(gsq);
+        this._gradY = new Float64Array(gsq);
+
         // PQS pre-allocated weight arrays (4 weights per axis)
-        this._pqs = { ix: 0, iy: 0, dx: 0, dy: 0 };
+        this._pqs = { ix: 0, iy: 0 };
         this._wx = new Float64Array(4);
         this._wy = new Float64Array(4);
-        this._dwx = new Float64Array(4);
-        this._dwy = new Float64Array(4);
 
         // Pre-allocated gradient and momentum outputs
         this._gradOut = { x: 0, y: 0 };
@@ -49,6 +51,8 @@ export default class ScalarField {
     reset(vacValue) {
         this.field.fill(vacValue);
         this.fieldDot.fill(0);
+        this._gradX.fill(0);
+        this._gradY.fill(0);
     }
 
     /**
@@ -107,7 +111,6 @@ export default class ScalarField {
         p.iy = Math.floor(gy);
 
         const dx = gx - p.ix;
-        p.dx = dx;
         const tx = 1 - dx;
         const dx2 = dx * dx;
         const dx3 = dx2 * dx;
@@ -118,7 +121,6 @@ export default class ScalarField {
         wx[3] = dx3 / 6;
 
         const dy = gy - p.iy;
-        p.dy = dy;
         const ty = 1 - dy;
         const dy2 = dy * dy;
         const dy3 = dy2 * dy;
@@ -185,6 +187,40 @@ export default class ScalarField {
         }
     }
 
+    /** Compute central-difference gradients at each grid point (grid units).
+     *  Interior fast path + border path, same pattern as _computeLaplacian(). */
+    _computeGridGradients(bcMode, topoConst, vacValue) {
+        const field = this.field;
+        const gx = this._gradX;
+        const gy = this._gradY;
+        const GRID = this._grid;
+        const last = GRID - 1;
+
+        // Interior cells: direct indexing (no _nb dispatch)
+        for (let iy = 1; iy < last; iy++) {
+            const row = iy * GRID;
+            for (let ix = 1; ix < last; ix++) {
+                const idx = row + ix;
+                gx[idx] = (field[idx + 1] - field[idx - 1]) * 0.5;
+                gy[idx] = (field[idx + GRID] - field[idx - GRID]) * 0.5;
+            }
+        }
+
+        // Border cells: use _nb for boundary-aware wrapping
+        for (let iy = 0; iy < GRID; iy++) {
+            for (let ix = 0; ix < GRID; ix++) {
+                if (ix > 0 && ix < last && iy > 0 && iy < last) continue;
+                const idx = iy * GRID + ix;
+                const iL = this._nb(ix - 1, iy, bcMode, topoConst);
+                const iR = this._nb(ix + 1, iy, bcMode, topoConst);
+                const iT = this._nb(ix, iy - 1, bcMode, topoConst);
+                const iB = this._nb(ix, iy + 1, bcMode, topoConst);
+                gx[idx] = ((iR >= 0 ? field[iR] : vacValue) - (iL >= 0 ? field[iL] : vacValue)) * 0.5;
+                gy[idx] = ((iB >= 0 ? field[iB] : vacValue) - (iT >= 0 ? field[iT] : vacValue)) * 0.5;
+            }
+        }
+    }
+
     /** PQS interpolation of field value at (x, y). */
     interpolate(x, y, invCellW, invCellH) {
         this._pqsCoords(x, y, invCellW, invCellH);
@@ -201,35 +237,32 @@ export default class ScalarField {
         return val;
     }
 
-    /** PQS gradient at (x, y). Returns pre-allocated {x, y} or null on NaN. */
+    /** PQS-interpolated gradient at (x, y) from pre-computed grid gradients.
+     *  Returns pre-allocated {x, y} or null on NaN.
+     *  Uses standard PQS value weights on _gradX/_gradY arrays, giving C²
+     *  continuous forces (vs C¹ from analytical B-spline derivatives). */
     gradient(x, y, invCellW, invCellH) {
         this._pqsCoords(x, y, invCellW, invCellH);
-        const { ix, iy, dx, dy } = this._pqs;
+        const { ix, iy } = this._pqs;
         const wx = this._wx;
         const wy = this._wy;
-
-        const tx = 1 - dx;
-        const dwx = this._dwx;
-        dwx[0] = -tx * tx * 0.5;
-        dwx[1] = dx * (-2 + 1.5 * dx);
-        dwx[2] = 0.5 + dx * (1 - 1.5 * dx);
-        dwx[3] = dx * dx * 0.5;
-
-        const ty = 1 - dy;
-        const dwy = this._dwy;
-        dwy[0] = -ty * ty * 0.5;
-        dwy[1] = dy * (-2 + 1.5 * dy);
-        dwy[2] = 0.5 + dy * (1 - 1.5 * dy);
-        dwy[3] = dy * dy * 0.5;
+        const GRID = this._grid;
+        const LAST = GRID - 1;
+        const gxArr = this._gradX;
+        const gyArr = this._gradY;
 
         let gx = 0, gy = 0;
         for (let jy = 0; jy < 4; jy++) {
             const wyj = wy[jy];
-            const dwyj = dwy[jy];
+            const cy = iy + jy - 1;
+            const ccy = cy < 0 ? 0 : cy > LAST ? LAST : cy;
             for (let jx = 0; jx < 4; jx++) {
-                const val = this._fieldAt(ix + jx - 1, iy + jy - 1);
-                gx += val * dwx[jx] * wyj;
-                gy += val * wx[jx] * dwyj;
+                const cx = ix + jx - 1;
+                const ccx = cx < 0 ? 0 : cx > LAST ? LAST : cx;
+                const idx = ccy * GRID + ccx;
+                const w = wx[jx] * wyj;
+                gx += gxArr[idx] * w;
+                gy += gyArr[idx] * w;
             }
         }
 

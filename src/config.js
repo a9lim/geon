@@ -51,8 +51,8 @@ export const QUADRUPOLE_POWER_CLAMP = 0.01;  // max quadrupole dE as fraction of
 export const ABERRATION_THRESHOLD = 1.01;    // min gamma for relativistic aberration
 
 // ── Yukawa ──
-export const YUKAWA_G2 = 32;                // coupling strength (fixed)
-export const DEFAULT_YUKAWA_MU = 0.05;       // mediator mass (inverse range)
+export const YUKAWA_COUPLING = 32;           // g² coupling strength (fixed)
+export const DEFAULT_PION_MASS = 0.15;       // mediator mass (inverse range), ~m_π/m_N
 
 // ── Scalar Fields (Higgs & Axion) ──
 export const SCALAR_GRID = 64;
@@ -60,7 +60,7 @@ export const SCALAR_FIELD_MAX = 2;           // field value clamp
 export const FIELD_EXCITATION_SIGMA = 2;     // Gaussian width in grid cells (merge wave packets)
 export const MERGE_EXCITATION_SCALE = 0.5;   // amplitude = scale * sqrt(keLost)
 
-export const DEFAULT_HIGGS_MASS = 0.05;      // m_H (oscillation frequency)
+export const DEFAULT_HIGGS_MASS = 0.50;      // m_H (oscillation frequency), ~m_H/v_EW
 export const HIGGS_COUPLING = 1;             // g (source = g·baseMass, force = g·baseMass·∇φ)
 
 export const DEFAULT_AXION_MASS = 0.05;      // m_a (oscillation frequency)
@@ -73,12 +73,12 @@ export const BH_NAKED_FLOOR = 0.5;           // naked singularity horizon floor 
 export const SPAWN_COUNT = 4;
 export const SPAWN_OFFSET_MULTIPLIER = 1.5;
 export const SPAWN_OFFSET_FLOOR = 1;
-export const SPAWN_MIN_ENERGY = 0.01;         // min energy per emitted photon (Hawking / annihilation)
+export const SPAWN_MIN_ENERGY = 0.05;         // min energy per emitted photon (Hawking / annihilation)
 export const ROCHE_THRESHOLD = 0.9;
 export const ROCHE_TRANSFER_RATE = 0.01;
 
 // ── Pair Production ──
-export const PAIR_PROD_MIN_ENERGY = 2;       // 2mc²
+export const PAIR_PROD_MIN_ENERGY = 1;       // minimum photon energy for pair production
 export const PAIR_PROD_RADIUS = 8;           // proximity to massive body
 export const PAIR_PROD_PROB = 0.005;         // probability per substep
 export const PAIR_PROD_MAX_PARTICLES = 32;

@@ -2,7 +2,7 @@
 // 64x64 offscreen canvas, diverging colormap, updates every HEATMAP_INTERVAL frames.
 // When Barnes-Hut is enabled, uses tree walk for O(GRID² log N) instead of O(GRID² N).
 
-import { SOFTENING_SQ, BH_THETA, YUKAWA_G2, HEATMAP_GRID, HEATMAP_INTERVAL, HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA } from './config.js';
+import { SOFTENING_SQ, BH_THETA, YUKAWA_COUPLING, HEATMAP_GRID, HEATMAP_INTERVAL, HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA } from './config.js';
 import { getDelayedState } from './signal-delay.js';
 
 // Parse heatmap colors from shared palette at module load (0-255 ints)
@@ -58,7 +58,7 @@ function treePotential(pool, rootIdx, wx, wy, thetaSq, softeningSq, doGravity, d
                 if (doCoulomb) eP += p.charge * invR;
                 if (doYukawa) {
                     const r = 1 / invR;
-                    yP -= YUKAWA_G2 * p.mass * Math.exp(-yukawaMu * r) * invR;
+                    yP -= YUKAWA_COUPLING * p.mass * Math.exp(-yukawaMu * r) * invR;
                 }
             }
             _treeOut.g += gP;
@@ -71,7 +71,7 @@ function treePotential(pool, rootIdx, wx, wy, thetaSq, softeningSq, doGravity, d
             if (doCoulomb) _treeOut.e += pool.totalCharge[nodeIdx] * invR;
             if (doYukawa) {
                 const r = 1 / invR;
-                _treeOut.y -= YUKAWA_G2 * pool.totalMass[nodeIdx] * Math.exp(-yukawaMu * r) * invR;
+                _treeOut.y -= YUKAWA_COUPLING * pool.totalMass[nodeIdx] * Math.exp(-yukawaMu * r) * invR;
             }
         } else if (pool.divided[nodeIdx]) {
             _hmStack[stackTop++] = pool.nw[nodeIdx];
@@ -160,7 +160,7 @@ export default class Heatmap {
                         if (doCoulomb) ePhi += p.charge * invR;
                         if (doYukawa) {
                             const r = 1 / invR;
-                            yPhi -= YUKAWA_G2 * p.mass * Math.exp(-yukawaMu * r) * invR;
+                            yPhi -= YUKAWA_COUPLING * p.mass * Math.exp(-yukawaMu * r) * invR;
                         }
                     }
                 }
@@ -180,7 +180,7 @@ export default class Heatmap {
                         if (doCoulomb) ePhi += dp.charge * invR;
                         if (doYukawa) {
                             const r = 1 / invR;
-                            yPhi -= YUKAWA_G2 * dp._deathMass * Math.exp(-yukawaMu * r) * invR;
+                            yPhi -= YUKAWA_COUPLING * dp._deathMass * Math.exp(-yukawaMu * r) * invR;
                         }
                     }
                 }

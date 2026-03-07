@@ -90,6 +90,9 @@ export default class AxionField extends ScalarField {
                 field[i] = newA;
             }
         }
+
+        // Pre-compute grid gradients for C² smooth force interpolation
+        this._computeGridGradients(bcMode, topoConst, 0);
     }
 
     /** PQS deposition of g·q² as scalar source (g = AXION_COUPLING). */
@@ -126,7 +129,7 @@ export default class AxionField extends ScalarField {
     }
 
     /** Apply gradient force: F = +g·q² * grad(a) where g = AXION_COUPLING.
-     *  PQS gradient weights (derivative of cubic B-spline) give C¹ continuous forces.
+     *  PQS-interpolated grid gradients give C² continuous forces.
      */
     applyForces(particles, domainW, domainH) {
         const GRID = this._grid;

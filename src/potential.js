@@ -1,7 +1,7 @@
 // ─── Potential Energy Computation ───
 // Mirrors force calculation structure (BH tree or pairwise) for consistent PE.
 
-import { YUKAWA_G2 } from './config.js';
+import { YUKAWA_COUPLING } from './config.js';
 import { TORUS, minImage } from './topology.js';
 
 const _miOut = { x: 0, y: 0 };
@@ -148,7 +148,7 @@ export function pairPE(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMoment,
         const r = 1 / invR;
         const mu = toggles.yukawaMu;
         const expMuR = Math.exp(-mu * r);
-        pe -= YUKAWA_G2 * p.mass * sMass * expMuR * invR;
+        pe -= YUKAWA_COUPLING * p.mass * sMass * expMuR * invR;
         // Scalar Breit PE: +g²m₁m₂e^{-μr}/(2r) · [v₁·v₂ + (n̂·v₁)(n̂·v₂)(1+μr)]
         if (toggles.onePNEnabled) {
             const pvx = p.vel.x, pvy = p.vel.y;
@@ -156,7 +156,7 @@ export function pairPE(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMoment,
             const nDotV1 = nx * pvx + ny * pvy;
             const nDotV2 = nx * svx + ny * svy;
             const v1DotV2 = pvx * svx + pvy * svy;
-            pe += 0.5 * YUKAWA_G2 * p.mass * sMass * expMuR * invR * (v1DotV2 + nDotV1 * nDotV2 * (1 + mu * r));
+            pe += 0.5 * YUKAWA_COUPLING * p.mass * sMass * expMuR * invR * (v1DotV2 + nDotV1 * nDotV2 * (1 + mu * r));
         }
     }
     return pe;

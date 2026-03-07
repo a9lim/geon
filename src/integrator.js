@@ -3,7 +3,7 @@
 // B-like (velocity-dependent) forces for exact |v|-preserving rotation.
 
 import QuadTreePool from './quadtree.js';
-import { PI, TWO_PI, SOFTENING, BH_SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, LL_FORCE_CLAMP, TIDAL_STRENGTH, SPAWN_COUNT, SOFTENING_SQ, BH_SOFTENING_SQ, QUADTREE_CAPACITY, BH_THETA, HISTORY_SIZE, HISTORY_STRIDE, DEFAULT_YUKAWA_MU, DEFAULT_AXION_MASS, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, DEFAULT_HUBBLE, EPSILON, EPSILON_SQ, MAX_REJECTION_SAMPLES, QUADRUPOLE_POWER_CLAMP, ABERRATION_THRESHOLD, spawnOffset, kerrNewmanRadius, MAX_PIONS, YUKAWA_G2, BOSON_ABSORB_FRACTION, BOSON_MIN_AGE } from './config.js';
+import { PI, TWO_PI, SOFTENING, BH_SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, LL_FORCE_CLAMP, TIDAL_STRENGTH, SPAWN_COUNT, SOFTENING_SQ, BH_SOFTENING_SQ, QUADTREE_CAPACITY, BH_THETA, HISTORY_SIZE, HISTORY_STRIDE, DEFAULT_PION_MASS, DEFAULT_AXION_MASS, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, DEFAULT_HUBBLE, EPSILON, EPSILON_SQ, MAX_REJECTION_SAMPLES, QUADRUPOLE_POWER_CLAMP, ABERRATION_THRESHOLD, spawnOffset, kerrNewmanRadius, MAX_PIONS, YUKAWA_COUPLING, BOSON_ABSORB_FRACTION, BOSON_MIN_AGE } from './config.js';
 import Photon from './photon.js';
 import Pion from './pion.js';
 import { angwToAngVel } from './relativity.js';
@@ -65,7 +65,7 @@ export default class Physics {
         this.onePNEnabled = true;
 
         this.yukawaEnabled = false;
-        this.yukawaMu = DEFAULT_YUKAWA_MU;
+        this.yukawaMu = DEFAULT_PION_MASS;
 
         this.axionEnabled = false;
         this.axionMass = DEFAULT_AXION_MASS;
@@ -104,7 +104,7 @@ export default class Physics {
             gravitomagEnabled: true,
             onePNEnabled: true,
             yukawaEnabled: false,
-            yukawaMu: DEFAULT_YUKAWA_MU,
+            yukawaMu: DEFAULT_PION_MASS,
             axionEnabled: false,
             softeningSq: SOFTENING_SQ,
         };
@@ -812,7 +812,7 @@ export default class Physics {
                     // Scalar Larmor: P = g²m²a²/3 = g²F²/3
                     // 1/3 angular factor for spin-0 (cf. 2/3 for spin-1 EM Larmor)
                     // Scalar charge Q = g·m (Yukawa couples ∝ m), so Q²a² = g²m²(F/m)² = g²F²
-                    let dE = YUKAWA_G2 / 3 * fYukSq * dtSub;
+                    let dE = YUKAWA_COUPLING / 3 * fYukSq * dtSub;
                     // LL clamp: radiated power ≤ LL_FORCE_CLAMP × work done by Yukawa force
                     const fYukMag = Math.sqrt(fYukSq);
                     const wSqCl = p.w.x * p.w.x + p.w.y * p.w.y;
