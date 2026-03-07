@@ -148,45 +148,30 @@ export default class InputHandler {
         }
     }
 
-    _deleteParticlesAt(pos) {
-        const kept = [];
-        for (const p of this.sim.particles) {
-            if (p.antimatter || p.pos.dist(pos) > p.radius) {
-                kept.push(p);
-            } else {
-                this.sim.physics._retireParticle(p);
-            }
-        }
-        this.sim.particles = kept;
-        if (this.sim.selectedParticle && !kept.includes(this.sim.selectedParticle)) {
-            this.sim.selectedParticle = null;
-        }
+    _deleteParticle(p) {
+        this.sim.physics._retireParticle(p);
+        this.sim.particles = this.sim.particles.filter(q => q !== p);
+        if (this.sim.selectedParticle === p) this.sim.selectedParticle = null;
     }
 
     onMouseDown(e) {
-        if (e.button === 2) {
-            const pos = this._getPosNew(e.clientX, e.clientY);
-            const hit = this.findParticleAt(pos);
-            if (hit) {
-                if (hit.antimatter) {
-                    this.sim.selectedParticle = hit;
-                } else {
-                    this._deleteParticlesAt(pos);
-                }
-                return;
-            }
-            // Empty space: start antimatter drag
-            this.isDragging = true;
-            this._rightButton = true;
-            this.dragStart = pos;
-            this.currentPos = pos.clone();
+        const isRight = e.button === 2;
+        if (e.button !== 0 && !isRight) return;
+
+        const pos = this._getPosNew(e.clientX, e.clientY);
+        const hit = this.findParticleAt(pos);
+
+        // Right-click on particle: select antimatter, delete matter
+        if (isRight && hit) {
+            if (hit.antimatter) this.sim.selectedParticle = hit;
+            else this._deleteParticle(hit);
             return;
         }
 
         this.isDragging = true;
-        this._rightButton = false;
-        this.dragStart = this._getPosNew(e.clientX, e.clientY);
-        this.currentPos = this.dragStart.clone();
+        this._rightButton = isRight;
+        this.dragStart = pos;
+        this.currentPos = pos.clone();
     }
 
     onMouseMove(e) {
@@ -215,32 +200,17 @@ export default class InputHandler {
 
         const endPos = this._getPosNew(e.clientX, e.clientY);
 
-        // Right-click drag: spawn antimatter
-        if (e.button === 2 && this._rightButton) {
-            this.spawnParticle(endPos, true);
-            return;
-        }
-
-        if (e.button !== 0) return;
-
-        const dragDist = this.dragStart.dist(endPos);
-
-        // Short click on a particle: select (matter) or delete (antimatter)
-        if (dragDist < DRAG_THRESHOLD) {
+        // Short click on a particle: select same type, delete opposite type
+        if (this.dragStart.dist(endPos) < DRAG_THRESHOLD) {
             const hit = this.findParticleAt(endPos);
             if (hit) {
-                if (hit.antimatter) {
-                    this.sim.physics._retireParticle(hit);
-                    this.sim.particles = this.sim.particles.filter(p => p !== hit);
-                    if (this.sim.selectedParticle === hit) this.sim.selectedParticle = null;
-                } else {
-                    this.sim.selectedParticle = hit;
-                }
+                if (hit.antimatter === this._rightButton) this.sim.selectedParticle = hit;
+                else this._deleteParticle(hit);
                 return;
             }
         }
 
-        this.spawnParticle(endPos, false);
+        this.spawnParticle(endPos, this._rightButton);
     }
 
     findParticleAt(worldPos) {
