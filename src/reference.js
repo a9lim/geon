@@ -331,7 +331,7 @@ export const REFERENCE = {
 </ul>
 
 <h3>Field Visualization</h3>
-<p>The field overlay shows $a > 0$ in orange and $a < 0$ in blue, with opacity proportional to field amplitude. Watch how charged particles source field excitations that propagate outward, oscillating at frequency $m_a$, and modulate the local EM coupling strength.</p>
+<p>The field overlay shows $a > 0$ in blue and $a < 0$ in red, with opacity proportional to field amplitude. Watch how charged particles source field excitations that propagate outward, oscillating at frequency $m_a$, and modulate the local EM coupling strength.</p>
 `,
     },
 

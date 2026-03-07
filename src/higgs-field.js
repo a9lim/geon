@@ -4,8 +4,13 @@
 // m_H is the free parameter (slider 0.25-1, default 0.5)
 // Extends ScalarField for shared PQS infrastructure.
 
-import { HIGGS_GRID, DEFAULT_HIGGS_MASS, HIGGS_PHI_MAX, EPSILON, kerrNewmanRadius } from './config.js';
+import { HIGGS_GRID, DEFAULT_HIGGS_MASS, HIGGS_PHI_MAX, HIGGS_COUPLING, EPSILON, kerrNewmanRadius } from './config.js';
 import ScalarField, { bcFromString } from './scalar-field.js';
+
+// Parse overlay colors from shared palette at module load (0-255 ints)
+const _ph = window._parseHex; // hex -> [r,g,b] in 0–1
+const _depletedRGB = _ph(window._PALETTE.extended.magenta).map(v => (v * 255 + 0.5) | 0);
+const _enhancedRGB = _ph(window._PALETTE.extended.cyan).map(v => (v * 255 + 0.5) | 0);
 
 export default class HiggsField extends ScalarField {
     constructor() {
@@ -91,12 +96,12 @@ export default class HiggsField extends ScalarField {
         }
     }
 
-    /** PQS deposition of particle baseMass as scalar source. */
+    /** PQS deposition of g·baseMass as scalar source (g = HIGGS_COUPLING). */
     _depositSources(particles, invCellW, invCellH, bcMode, topoConst) {
         for (let i = 0; i < particles.length; i++) {
             const p = particles[i];
             if (p.baseMass < EPSILON) continue;
-            this._depositPQS(this._source, p.pos.x, p.pos.y, p.baseMass, invCellW, invCellH, bcMode, topoConst);
+            this._depositPQS(this._source, p.pos.x, p.pos.y, HIGGS_COUPLING * p.baseMass, invCellW, invCellH, bcMode, topoConst);
         }
     }
 
@@ -140,7 +145,7 @@ export default class HiggsField extends ScalarField {
         }
     }
 
-    /** Apply gradient force: F = -baseMass * grad(phi).
+    /** Apply gradient force: F = -g·baseMass * grad(phi) where g = HIGGS_COUPLING.
      *  PQS gradient weights (derivative of cubic B-spline) give C¹ continuous forces.
      */
     applyForces(particles, domainW, domainH) {
@@ -158,8 +163,8 @@ export default class HiggsField extends ScalarField {
             const grad = this.gradient(p.pos.x, p.pos.y, invCellW, invCellH);
             if (!grad) continue;
 
-            const forceX = -p.baseMass * grad.x;
-            const forceY = -p.baseMass * grad.y;
+            const forceX = -HIGGS_COUPLING * p.baseMass * grad.x;
+            const forceY = -HIGGS_COUPLING * p.baseMass * grad.y;
 
             p.force.x += forceX;
             p.force.y += forceY;
@@ -217,17 +222,12 @@ export default class HiggsField extends ScalarField {
 
         for (let i = 0; i < GRID_SQ; i++) {
             const deviation = field[i] - 1;
-            const intensity = Math.min(Math.abs(deviation) * 2, 1.0);
+            const intensity = Math.min(Math.abs(deviation) * (8 / HIGGS_COUPLING), 1.0);
             const alpha = intensity * (isLight ? 60 : 80);
             const idx = i * 4;
 
-            if (deviation < 0) {
-                // Depleted (below VEV) -> magenta #B4689C (180, 104, 156)
-                data[idx] = 180; data[idx + 1] = 104; data[idx + 2] = 156;
-            } else {
-                // Enhanced (above VEV) -> cyan #4AACA0 (74, 172, 160)
-                data[idx] = 74; data[idx + 1] = 172; data[idx + 2] = 160;
-            }
+            const rgb = deviation < 0 ? _depletedRGB : _enhancedRGB;
+            data[idx] = rgb[0]; data[idx + 1] = rgb[1]; data[idx + 2] = rgb[2];
             data[idx + 3] = alpha;
         }
         this._ctx.putImageData(this._imgData, 0, 0);

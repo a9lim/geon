@@ -16,6 +16,11 @@
 import { AXION_GRID, AXION_A_MAX, DEFAULT_AXION_MASS, AXION_COUPLING, EPSILON } from './config.js';
 import ScalarField, { bcFromString } from './scalar-field.js';
 
+// Parse overlay colors from shared palette at module load (0-255 ints)
+const _ph = window._parseHex; // hex -> [r,g,b] in 0–1
+const _posRGB = _ph(window._PALETTE.extended.blue).map(v => (v * 255 + 0.5) | 0);
+const _negRGB = _ph(window._PALETTE.extended.red).map(v => (v * 255 + 0.5) | 0);
+
 export default class AxionField extends ScalarField {
     constructor() {
         super(AXION_GRID, AXION_A_MAX);
@@ -188,7 +193,7 @@ export default class AxionField extends ScalarField {
         return total === total ? total : 0; // NaN guard
     }
 
-    /** Render field to offscreen canvas. Orange = positive, blue = negative. */
+    /** Render field to offscreen canvas. Blue = positive, red = negative. */
     render(isLight) {
         const field = this.field;
         const data = this._imgData.data;
@@ -199,14 +204,9 @@ export default class AxionField extends ScalarField {
             const intensity = Math.min(Math.abs(aVal) * 4, 1.0);
             const alpha = intensity * (isLight ? 60 : 80);
             const idx = i * 4;
+            const rgb = aVal > 0 ? _posRGB : _negRGB;
 
-            if (aVal > 0) {
-                // Positive -> orange #CC8E4E (204, 142, 78)
-                data[idx] = 204; data[idx + 1] = 142; data[idx + 2] = 78;
-            } else {
-                // Negative -> blue #5C92A8 (92, 146, 168)
-                data[idx] = 92; data[idx + 1] = 146; data[idx + 2] = 168;
-            }
+            data[idx] = rgb[0]; data[idx + 1] = rgb[1]; data[idx + 2] = rgb[2];
             data[idx + 3] = alpha;
         }
         this._ctx.putImageData(this._imgData, 0, 0);
