@@ -3,7 +3,7 @@
 // B-like (velocity-dependent) forces for exact |v|-preserving rotation.
 
 import QuadTreePool, { Rect } from './quadtree.js';
-import { PI, TWO_PI, SOFTENING, BH_SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, LL_FORCE_CLAMP, TIDAL_STRENGTH, SPAWN_COUNT, SOFTENING_SQ, BH_SOFTENING_SQ, QUADTREE_CAPACITY, BH_THETA, HISTORY_SIZE, HISTORY_STRIDE, DEFAULT_YUKAWA_MU, DEFAULT_AXION_MASS, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, DEFAULT_HUBBLE, EPSILON, EPSILON_SQ, MAX_REJECTION_SAMPLES, QUADRUPOLE_POWER_CLAMP, ABERRATION_THRESHOLD, spawnOffset, kerrNewmanRadius, PION_EMISSION_THRESHOLD, PION_LIFETIME, MAX_PIONS, YUKAWA_G2 } from './config.js';
+import { PI, TWO_PI, SOFTENING, BH_SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, LL_FORCE_CLAMP, TIDAL_STRENGTH, SPAWN_COUNT, SOFTENING_SQ, BH_SOFTENING_SQ, QUADTREE_CAPACITY, BH_THETA, HISTORY_SIZE, HISTORY_STRIDE, DEFAULT_YUKAWA_MU, DEFAULT_AXION_MASS, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, DEFAULT_HUBBLE, EPSILON, EPSILON_SQ, MAX_REJECTION_SAMPLES, QUADRUPOLE_POWER_CLAMP, ABERRATION_THRESHOLD, spawnOffset, kerrNewmanRadius, PION_LIFETIME, MAX_PIONS, YUKAWA_G2 } from './config.js';
 import Photon from './photon.js';
 import Pion from './pion.js';
 import { angwToAngVel } from './relativity.js';
@@ -764,7 +764,7 @@ export default class Physics {
                     // Scalar charge Q = g·m (Yukawa couples ∝ m), so Q²a² = g²m²(F/m)² = g²F²
                     const dE = YUKAWA_G2 / 3 * fYukSq * dtSub;
                     p._yukawaRadAccum += dE;
-                    if (p._yukawaRadAccum >= PION_EMISSION_THRESHOLD && pions.length < MAX_PIONS) {
+                    if (p._yukawaRadAccum >= MIN_MASS && pions.length < MAX_PIONS) {
                         const pionMass = this.yukawaMu;
                         const ke = p._yukawaRadAccum - pionMass;
                         if (ke > 0) {
@@ -870,13 +870,13 @@ export default class Physics {
                 }
                 // Field excitations from merge collisions (Higgs/Axion boson emission)
                 if (merges.length > 0 && this.sim) {
+                    const hasHiggs = this.higgsEnabled && this.sim.higgsField;
+                    const hasAxion = this.axionEnabled && this.sim.axionField;
+                    const share = (hasHiggs && hasAxion) ? 0.5 : 1;
                     for (const m of merges) {
-                        if (this.higgsEnabled && this.sim.higgsField) {
-                            this.sim.higgsField.depositExcitation(m.x, m.y, m.energy, width, height);
-                        }
-                        if (this.axionEnabled && this.sim.axionField) {
-                            this.sim.axionField.depositExcitation(m.x, m.y, m.energy, width, height);
-                        }
+                        const e = m.energy * share;
+                        if (hasHiggs) this.sim.higgsField.depositExcitation(m.x, m.y, e, width, height);
+                        if (hasAxion) this.sim.axionField.depositExcitation(m.x, m.y, e, width, height);
                     }
                 }
             }

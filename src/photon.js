@@ -1,5 +1,5 @@
 import Vec2 from './vec2.js';
-import { BH_THETA, PHOTON_SOFTENING_SQ, EPSILON } from './config.js';
+import { BH_THETA, BOSON_SOFTENING_SQ, EPSILON } from './config.js';
 
 // Pre-allocated stack for iterative tree walk (photon lensing)
 let _phStack = new Int32Array(256);
@@ -25,7 +25,7 @@ export default class Photon {
                 const p = particles[i];
                 const dx = p.pos.x - this.pos.x;
                 const dy = p.pos.y - this.pos.y;
-                const rSq = dx * dx + dy * dy + PHOTON_SOFTENING_SQ;
+                const rSq = dx * dx + dy * dy + BOSON_SOFTENING_SQ;
                 const invR3 = 1 / (rSq * Math.sqrt(rSq));
                 this.vel.x += 2 * p.mass * dx * invR3 * dt;
                 this.vel.y += 2 * p.mass * dy * invR3 * dt;
@@ -67,13 +67,13 @@ export default class Photon {
                     const p = pool.points[base + i];
                     const pdx = p.pos.x - px;
                     const pdy = p.pos.y - py;
-                    const rSq = pdx * pdx + pdy * pdy + PHOTON_SOFTENING_SQ;
+                    const rSq = pdx * pdx + pdy * pdy + BOSON_SOFTENING_SQ;
                     const invR3 = 1 / (rSq * Math.sqrt(rSq));
                     this.vel.x += 2 * p.mass * pdx * invR3 * dt;
                     this.vel.y += 2 * p.mass * pdy * invR3 * dt;
                 }
             } else if (pool.divided[nodeIdx] && (size * size < thetaSq * dSq)) {
-                const rSq = dSq + PHOTON_SOFTENING_SQ;
+                const rSq = dSq + BOSON_SOFTENING_SQ;
                 const invR3 = 1 / (rSq * Math.sqrt(rSq));
                 this.vel.x += 2 * pool.totalMass[nodeIdx] * dx * invR3 * dt;
                 this.vel.y += 2 * pool.totalMass[nodeIdx] * dy * invR3 * dt;
