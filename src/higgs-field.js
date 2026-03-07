@@ -9,7 +9,7 @@ import ScalarField, { bcFromString } from './scalar-field.js';
 
 // Parse overlay colors from shared palette at module load (0-255 ints)
 const _ph = window._parseHex; // hex -> [r,g,b] in 0–1
-const _depletedRGB = _ph(window._PALETTE.extended.magenta).map(v => (v * 255 + 0.5) | 0);
+const _depletedRGB = _ph(window._PALETTE.extended.lime).map(v => (v * 255 + 0.5) | 0);
 const _enhancedRGB = _ph(window._PALETTE.extended.cyan).map(v => (v * 255 + 0.5) | 0);
 
 export default class HiggsField extends ScalarField {
