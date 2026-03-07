@@ -94,15 +94,12 @@ export function computeAllForces(particles, toggles, pool, root, barnesHutEnable
                     const o = particles[j];
 
                     let sx, sy, svx, svy, sAngVel;
-                    if (useSignalDelay && o.histCount >= 2) {
+                    if (useSignalDelay) {
+                        if (o.histCount < 2) continue; // no history — outside light cone
                         const ret = getDelayedState(o, p, simTime, periodic, domW, domH, halfDomW, halfDomH, topology);
-                        if (ret) {
-                            sx = ret.x; sy = ret.y; svx = ret.vx; svy = ret.vy;
-                            sAngVel = o.angVel;
-                        } else {
-                            sx = o.pos.x; sy = o.pos.y; svx = o.vel.x; svy = o.vel.y;
-                            sAngVel = o.angVel;
-                        }
+                        if (!ret) continue; // retarded time predates particle
+                        sx = ret.x; sy = ret.y; svx = ret.vx; svy = ret.vy;
+                        sAngVel = o.angVel;
                     } else {
                         sx = o.pos.x; sy = o.pos.y; svx = o.vel.x; svy = o.vel.y;
                         sAngVel = o.angVel;
@@ -459,10 +456,11 @@ export function calculateForce(particle, pool, rootIdx, theta, out, toggles, per
                 if (other.isGhost && other.original === particle) continue;
                 const real = other.isGhost ? other.original : other;
                 let sx, sy, svx, svy;
-                if (useSignalDelay && !other.isGhost && real.histCount >= 2) {
+                if (useSignalDelay && !other.isGhost) {
+                    if (real.histCount < 2) continue; // no history — outside light cone
                     const ret = getDelayedState(real, particle, simTime, periodic, domW, domH, halfDomW, halfDomH, topology);
-                    if (ret) { sx = ret.x; sy = ret.y; svx = ret.vx; svy = ret.vy; }
-                    else { sx = other.pos.x; sy = other.pos.y; svx = other.vel.x; svy = other.vel.y; }
+                    if (!ret) continue; // retarded time predates particle
+                    sx = ret.x; sy = ret.y; svx = ret.vx; svy = ret.vy;
                 } else {
                     sx = other.pos.x; sy = other.pos.y; svx = other.vel.x; svy = other.vel.y;
                 }

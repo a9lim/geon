@@ -141,11 +141,12 @@ export default class Heatmap {
                     for (let i = 0; i < n; i++) {
                         const p = particles[i];
                         let px, py;
-                        if (useDelay && p.histCount >= 2) {
+                        if (useDelay) {
+                            if (p.histCount < 2) continue; // no history — light hasn't propagated yet
                             _hmObs.pos.x = wx; _hmObs.pos.y = wy;
                             const ret = getDelayedState(p, _hmObs, simTime, periodic, domW, domH, halfDomW, halfDomH, topology);
-                            if (ret) { px = ret.x; py = ret.y; }
-                            else { px = p.pos.x; py = p.pos.y; }
+                            if (!ret) continue; // outside past light cone
+                            px = ret.x; py = ret.y;
                         } else {
                             px = p.pos.x; py = p.pos.y;
                         }

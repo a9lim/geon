@@ -240,6 +240,9 @@ export function getDelayedState(source, observer, simTime, periodic, domW, domH,
 
         if (s > 0) s = 0;
 
+        // Reject extrapolation past particle creation (particle didn't exist yet)
+        if (tOldest + s < source.creationTime) return null;
+
         _delayedOut.x  = histX[start] + vx * s;
         _delayedOut.y  = histY[start] + vy * s;
         _delayedOut.vx = vx;

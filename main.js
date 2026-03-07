@@ -206,6 +206,7 @@ class Simulation {
         p.charge = options.charge ?? 0;
         p.antimatter = options.antimatter ?? false;
 
+        p.creationTime = this.physics.simTime;
         p.updateColor();
 
         // Spin is surface velocity as fraction of c; convert to angular celerity
