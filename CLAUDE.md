@@ -17,18 +17,18 @@ Serve from `a9lim.github.io/` -- shared files load via absolute paths. ES6 modul
 ## File Map
 
 ```
-main.js                  376 lines  Simulation class, emitPhotonBurst(), fixed-timestep loop, save/load, pair production, window.sim
-index.html               508 lines  UI: 4-tab sidebar, reference overlay, zoom controls, field sliders, antimatter button
+main.js                  393 lines  Simulation class, emitPhotonBurst(), fixed-timestep loop, save/load, pair production, pion loop, window.sim
+index.html               511 lines  UI: 4-tab sidebar, reference overlay, zoom controls, field sliders, antimatter button
 styles.css               235 lines  Project-specific CSS overrides
 colors.js                 18 lines  Project color tokens (particle hues, spin ring colors)
 src/
-  integrator.js         1222 lines  Physics class: Boris substep loop, radiation, tidal, GW quadrupole, expansion, Roche, external fields, Hertz bounce, scalar fields
-  ui.js                  526 lines  setupUI(), declarative dependency graph, info tips, reference overlay, keyboard shortcuts
-  renderer.js            503 lines  Canvas 2D: particles, trails, spin rings, ergosphere, antimatter rings, vectors, torque arcs, photons, delay ghosts, field overlays
+  integrator.js         1306 lines  Physics class: Boris substep loop, radiation, pion emission/absorption, field excitations, tidal, GW quadrupole, expansion, Roche, external fields, Hertz bounce, scalar fields
+  ui.js                  527 lines  setupUI(), declarative dependency graph, info tips, reference overlay, keyboard shortcuts
+  renderer.js            534 lines  Canvas 2D: particles, trails, spin rings, ergosphere, antimatter rings, vectors, torque arcs, photons, pions, delay ghosts, field overlays
   forces.js              450 lines  pairForce(), computeAllForces(), calculateForce() (BH walk), compute1PNPairwise(), Yukawa
-  presets.js             585 lines  PRESETS (15 scenarios, 4 groups), loadPreset(), SLIDER_MAP, TOGGLE_MAP/TOGGLE_ORDER
+  presets.js             665 lines  PRESETS (18 scenarios, 4 groups), loadPreset(), SLIDER_MAP, TOGGLE_MAP/TOGGLE_ORDER
   reference.js           638 lines  REFERENCE object: physics reference content (KaTeX math)
-  scalar-field.js        239 lines  ScalarField base class: PQS grid, topology-aware deposition, Laplacian, interpolation, gradient
+  scalar-field.js        270 lines  ScalarField base class: PQS grid, topology-aware deposition, Laplacian, interpolation, gradient, field excitations
   higgs-field.js         235 lines  HiggsField extends ScalarField: Mexican hat potential, thermal phase transitions, mass modulation
   axion-field.js         214 lines  AxionField extends ScalarField: quadratic potential, scalar aF^2 coupling, EM modulation
   quadtree.js            279 lines  QuadTreePool: SoA flat typed arrays, pool-based, zero GC
@@ -36,17 +36,18 @@ src/
   signal-delay.js        249 lines  getDelayedState() (3-phase light-cone solver)
   heatmap.js             224 lines  Heatmap: 64x64 potential field overlay, mode selector, signal-delayed positions
   effective-potential.js 203 lines  EffectivePotentialPlot: V_eff(r) sidebar canvas, auto-scaling
-  save-load.js           204 lines  saveState(), loadState(), downloadState(), uploadState(), quickSave/Load(), baseMass persistence
+  save-load.js           205 lines  saveState(), loadState(), downloadState(), uploadState(), quickSave/Load(), baseMass persistence
   potential.js           152 lines  computePE(), treePE(), pairPE() (7 PE terms)
   energy.js              153 lines  computeEnergies(): KE, spin KE, momentum, angular momentum, Darwin, field energies
   stats-display.js       131 lines  StatsDisplay: energy/momentum/drift DOM updates (x100 display scale)
-  config.js              126 lines  Named constants, spawnOffset(), kerrNewmanRadius() helpers
-  particle.js            122 lines  Particle: pos, vel, w, angw, baseMass, antimatter, cached magMoment/angMomentum, 11 force Vec2s, axMod, history
+  config.js              136 lines  Named constants, spawnOffset(), kerrNewmanRadius() helpers, pion/field excitation constants
+  particle.js            123 lines  Particle: pos, vel, w, angw, baseMass, antimatter, cached magMoment/angMomentum, 11 force Vec2s, axMod, _yukawaRadAccum, history
   phase-plot.js          117 lines  PhasePlot: r vs v_r sidebar canvas (512-sample ring buffer)
-  collisions.js          116 lines  handleCollisions(), resolveMerge(), antimatter annihilation, baseMass conservation
+  collisions.js          125 lines  handleCollisions(), resolveMerge(), antimatter annihilation, baseMass conservation, merge KE tracking
   topology.js            112 lines  TORUS/KLEIN/RP2 constants, minImage(), wrapPosition()
   vec2.js                 61 lines  Vec2 class: set, clone, add, sub, scale, mag, magSq, normalize, dist, static sub
   photon.js               88 lines  Photon: pos, vel, energy, lifetime, type ('em'/'grav'), gravitational lensing (BH tree walk)
+  pion.js                121 lines  Pion: massive Yukawa force carrier, proper velocity, (1+v^2) GR deflection, decay -> photons
   relativity.js           22 lines  angwToAngVel(), setVelocity()
 ```
 
@@ -54,10 +55,12 @@ src/
 
 ```
 main.js <- Physics (integrator), Renderer, InputHandler, Particle, HiggsField, AxionField,
-           Heatmap, PhasePlot, EffectivePotentialPlot, StatsDisplay, setupUI, config, Photon, save-load
+           Heatmap, PhasePlot, EffectivePotentialPlot, StatsDisplay, setupUI, config, Photon, Pion, save-load
 
-integrator.js <- QuadTreePool, config, Photon, angwToAngVel, forces (resetForces/computeAllForces/compute1PNPairwise),
+integrator.js <- QuadTreePool, config, Photon, Pion, angwToAngVel, forces (resetForces/computeAllForces/compute1PNPairwise),
                  handleCollisions, computePE, topology (accesses sim.higgsField/axionField via this.sim backref)
+
+pion.js       <- Vec2, config (BH_THETA, PION_SOFTENING_SQ, EPSILON)
 
 forces.js     <- config, getDelayedState, topology
 energy.js     <- config, topology (accesses sim.higgsField/axionField via window.sim)
@@ -108,12 +111,14 @@ Per substep (inside `Physics.update()` while loop):
 4. **Half-kick**: `w += F/m * dt/2`
 5. Spin-orbit energy coupling, Stern-Gerlach/Mathisson-Papapetrou kicks, frame-drag torque
 6. Radiation reaction (Landau-Lifshitz)
-7. **Drift**: `vel = w / sqrt(1 + w^2)`, `pos += vel * dt`
-8. Cosmological expansion (if enabled)
-9. **1PN velocity-Verlet correction**: recompute 1PN at new positions (always pairwise via `compute1PNPairwise()`), kick `w += (F_new - F_old) * dt / (2m)`
-10. **Scalar fields**: evolve Higgs (symplectic Euler), modulate masses; evolve axion, interpolate axMod
-11. Rebuild quadtree, handle collisions (with annihilation), repel contact forces, photon absorption
-12. Apply external fields, Higgs/Axion gradient forces, sync axMod, reset forces + compute new forces
+7. Pion emission (scalar Larmor, when Yukawa enabled) + radiation reaction on emitter
+8. **Drift**: `vel = w / sqrt(1 + w^2)`, `pos += vel * dt`
+9. Cosmological expansion (if enabled)
+10. **1PN velocity-Verlet correction**: recompute 1PN at new positions (always pairwise via `compute1PNPairwise()`), kick `w += (F_new - F_old) * dt / (2m)`
+11. **Scalar fields**: evolve Higgs (symplectic Euler), modulate masses; evolve axion, interpolate axMod
+12. Rebuild quadtree, handle collisions (with annihilation + merge KE tracking), repel contact forces, photon absorption, pion absorption
+13. Deposit field excitations from merge KE into active scalar fields
+14. Apply external fields, Higgs/Axion gradient forces, sync axMod, reset forces + compute new forces
 
 After all substeps: record signal-delay history (strided, once per HISTORY_STRIDE=64 `update()` calls), compute PE, reconstruct velocity-dependent display forces.
 
@@ -125,7 +130,7 @@ After all substeps: record signal-delay history (strided, once per HISTORY_STRID
 
 ### Fixed-Timestep Loop
 
-`PHYSICS_DT = 1/128`. Accumulator collects `rawDt * speedScale`, drained in fixed chunks. Photon updates and tidal breakup inside the loop; energy/rendering/DOM outside.
+`PHYSICS_DT = 1/128`. Accumulator collects `rawDt * speedScale`, drained in fixed chunks. Photon updates, pion updates/decay, and tidal breakup inside the loop; energy/rendering/DOM outside.
 
 ## Force Types
 
@@ -154,7 +159,7 @@ Requires Gravity. `coupling = m_other + q1*q2/m1`. `tau = -TIDAL_STRENGTH * coup
 
 ### Yukawa Potential
 
-Independent toggle. `F = -g^2 * m1*m2 * exp(-mu*r)/r^2 * (1+mu*r)`. Parameters: `yukawaG2` (default 1.0), `yukawaMu` (default 0.05, slider 0.01-0.25). Includes analytical jerk for radiation.
+Independent toggle. `F = -g^2 * m1*m2 * exp(-mu*r)/r^2 * (1+mu*r)`. Parameters: `yukawaG2` (default 1.0), `yukawaMu` (default 0.05, slider 0.01-0.25). Includes analytical jerk for radiation. Emits pions as massive force carriers (see Pion section).
 
 ### External Background Fields
 
@@ -178,7 +183,7 @@ Collision mode `'bounce'` and boundary mode `'bounce'`: `F = K * delta^1.5` (K=1
 
 Shared PQS (cubic B-spline, order 3) grid infrastructure for Higgs and Axion. 4x4 = 16 node stencil per particle. C^2 interpolation, C^1 gradients. Pre-allocated weight arrays for zero-alloc hot path.
 
-Key methods: `_nb()` (boundary-aware neighbor), `_depositPQS()` (topology-aware deposition), `_computeLaplacian()`, `interpolate()`, `gradient()`, `draw()`.
+Key methods: `_nb()` (boundary-aware neighbor), `_depositPQS()` (topology-aware deposition), `_computeLaplacian()`, `interpolate()`, `gradient()`, `draw()`, `depositExcitation()` (Gaussian wave packet into `fieldDot`).
 
 `bcFromString()` converts boundary mode string to integer (BC_DESPAWN=0 / BC_BOUNCE=1 / BC_LOOP=2).
 
@@ -210,6 +215,43 @@ Requires Coulomb. Quadratic potential `V(a) = 1/2 m_a^2 a^2`. No symmetry breaki
 - **Energy**: `E = integral(1/2 a_dot^2 + 1/2 |grad(a)|^2 + 1/2 m_a^2 a^2) dA`. No offset needed.
 - **Parameters**: One slider: m_a (0.01-0.25, default 0.05).
 - **Rendering**: Blue = positive (a > 0), red = negative (a < 0). Alpha proportional to |a|*4.
+
+## Pions (Massive Force Carriers)
+
+`Pion` class in `pion.js`. Massive Yukawa force carriers, analogous to `Photon` but with `v < c`. Yukawa's 1935 insight: pion mass equals `yukawaMu`.
+
+### Emission (Scalar Larmor)
+
+Yukawa interactions emit pions via scalar Larmor radiation: `P = g^2 * m^2 * a^2 / 3 = g^2 * F_yuk^2 / 3`. Scalar charge `Q = g*m` (Yukawa couples proportional to mass); `1/3` angular factor for spin-0 (vs `2/3` for spin-1 EM). Energy accumulated in `p._yukawaRadAccum`; emits when accumulation exceeds `PION_EMISSION_THRESHOLD` (0.02) and pion KE would be positive (total energy > pion rest mass). Species: pi0 (neutral, 50%), pi+ or pi- (charged, 25% each). Capped at MAX_PIONS = 256.
+
+**Radiation reaction**: After emission, particle's proper velocity `w` is scaled down to subtract the emitted energy from KE, preventing double-counting (force already computed directly).
+
+### Velocity & Deflection
+
+Proper velocity `w` (celerity): `vel = w / sqrt(1 + w^2)`, so `|v| < c` always. GR deflection uses `(1 + v^2)` factor (not `2x`), which correctly reduces to `2x` at `v -> c` (null geodesic) and `1x` at `v -> 0` (Newtonian).
+
+### Decay
+
+`pi0 -> 2 photons` (back-to-back perpendicular to flight), `pi+/- -> 1 photon` (along flight direction). Uses `sim._PhotonClass` reference to avoid circular import.
+
+### Absorption
+
+Quadtree overlap query after photon absorption. Transfers momentum and charge (pi+/-) to absorbing particle. Self-absorption guard: `pion.emitterId != particle index` and `pion.age >= 3`.
+
+### Constants
+
+`PION_LIFETIME = 128`, `MAX_PIONS = 256`, `PION_EMISSION_THRESHOLD = 0.02`, `PION_SOFTENING_SQ = 4`.
+
+## Field Excitations
+
+Merge collisions deposit Gaussian wave packets into active scalar fields via `ScalarField.depositExcitation()`. The existing Klein-Gordon wave equation propagates them naturally.
+
+- **Trigger**: KE lost in inelastic merge (`keBefore - keAfter`), tracked by `handleCollisions()` returning `{ annihilations, merges }`.
+- **Amplitude**: `MERGE_EXCITATION_SCALE * sqrt(keLost)` (MERGE_EXCITATION_SCALE = 0.3).
+- **Shape**: Gaussian bump deposited into `fieldDot` array with `sigma = FIELD_EXCITATION_SIGMA` (2 grid cells), 3-sigma cutoff.
+- **Higgs excitations**: Merge energy excites oscillations around VEV=1 ("Higgs boson" analog).
+- **Axion excitations**: Merge energy excites oscillations around vacuum a=0 ("axion particle" analog).
+- **Constants**: `FIELD_EXCITATION_SIGMA = 2`, `MERGE_EXCITATION_SCALE = 0.3`.
 
 ## Advanced Physics
 
@@ -283,7 +325,7 @@ Do NOT flip these signs.
 
 **Energy** (`energy.js`): Returns linearKE, spinKE, pe, fieldEnergy, momentum, angular momentum, COM, higgsFieldEnergy, axionFieldEnergy. Relativistic KE uses `wSq / (gamma + 1)`. Darwin field corrections when Magnetic/GM on but 1PN off. Conservation exact with gravity + Coulomb only, pairwise mode.
 
-**Collisions**: Three modes -- pass (none), bounce (Hertz contact via `_applyRepulsion()`), merge (quadtree overlap detection, conserves mass/charge/momentum/angular momentum). `handleCollisions()` returns `annihilations` array for photon emission.
+**Collisions**: Three modes -- pass (none), bounce (Hertz contact via `_applyRepulsion()`), merge (quadtree overlap detection, conserves mass/charge/momentum/angular momentum). `handleCollisions()` returns `{ annihilations, merges }` -- integrator emits photons from annihilations and deposits field excitations from merges.
 
 ## Topology
 
@@ -322,7 +364,7 @@ Defaults on: gravity, coulomb, magnetic, gravitomag, 1PN, relativity, spin-orbit
 
 Topbar: Home | Brand "No-Hair" | Pause/Step/Reset/Save/Load | Antimatter | Theme | Panel toggle.
 
-15 presets in 4 `<optgroup>` categories: Gravity (6), Electromagnetism (3), Exotic (4), Cosmological (2). First 9 via keyboard `1`-`9`. Sim speed range 1-128, default 64.
+18 presets in 4 `<optgroup>` categories: Gravity (6), Electromagnetism (3), Exotic (7), Cosmological (2). First 9 via keyboard `1`-`9`. Sim speed range 1-128, default 64.
 
 ## Renderer
 
@@ -333,6 +375,7 @@ Canvas 2D. Dark mode: additive blending (`lighter`). WORLD_SCALE = 16 (domain = 
 - **Force vectors**: component colors: gravity=red, coulomb=blue, magnetic=cyan, GM=rose, 1PN=orange, spin-curv=purple, radiation=yellow, yukawa=green, external=white, higgs=magenta, axion=orange
 - **Field overlays**: 64x64 offscreen canvas, bilinear-upscaled. Higgs: magenta/cyan. Axion: red/blue.
 - **Photons**: yellow (EM) / red (gravitons), alpha fades over PHOTON_LIFETIME=256
+- **Pions**: green circles (`_PALETTE.extended.green`), glow in dark mode, alpha fades over PION_LIFETIME=128
 - **Effective potential plot**: V_eff(r) sidebar canvas. 200-sample curve. Includes gravity, Coulomb, mag dipole, GM dipole, Yukawa.
 
 ## Key Patterns
@@ -360,7 +403,7 @@ Canvas 2D. Dark mode: additive blending (`lighter`). WORLD_SCALE = 16 (domain = 
 - `.mode-toggles` in shared-base.css sets `display: grid` which overrides `hidden` attribute -- use `style.display` toggling
 - All numerical thresholds (EPSILON, NR_TOLERANCE, etc.) are in config.js -- no inline magic numbers
 - Bounce collision uses `_applyRepulsion()` which needs O(n^2) fallback when BH off (root < 0) -- do not early-return
-- `handleCollisions()` only runs for merge mode; returns `annihilations` array -- integrator must emit photons
+- `handleCollisions()` only runs for merge mode; returns `{ annihilations, merges }` -- integrator emits photons and deposits field excitations
 - Old save files with `collision: 'repel'` are migrated to `'bounce'` in loadState()
 - External Bz enters Boris rotation alongside particle-sourced Bz -- included in `needBoris` condition check
 - ScalarField arrays are `field`/`fieldDot` (not `phi`/`phiDot` or `a`/`aDot`)
@@ -374,3 +417,8 @@ Canvas 2D. Dark mode: additive blending (`lighter`). WORLD_SCALE = 16 (domain = 
 - `magMoment`/`angMomentum` cache reflects previous `computeAllForces()` state -- consistent with B-field gradients used in same substep
 - Ghost particles must carry `magMoment`/`angMomentum` fields (set in `_addGhost()`)
 - Photon `update()` takes optional pool/root for BH tree lensing; falls back to O(N) when null or root < 0
+- Pion `update()` uses same BH tree lensing as Photon but with `(1+v^2)` GR factor (massive particle) instead of `2x` (massless)
+- Pion decay uses `sim._PhotonClass` reference (set in main.js) to avoid circular import with photon.js
+- `_yukawaRadAccum` on Particle accumulates pion emission energy -- reset to 0 after each emission
+- Field excitation `depositExcitation()` writes to `fieldDot` (not `field`) -- wave equation propagates naturally
+- `sim.pions` array must be cleared on preset load and reset (in main.js, save-load.js, ui.js)

@@ -9,8 +9,9 @@ import PhasePlot from './src/phase-plot.js';
 import EffectivePotentialPlot from './src/effective-potential.js';
 import StatsDisplay from './src/stats-display.js';
 import { setupUI } from './src/ui.js';
-import { TWO_PI, WORLD_SCALE, ZOOM_MIN, ZOOM_MAX, WHEEL_ZOOM_IN, DEFAULT_SPEED_SCALE, PHOTON_LIFETIME, SPAWN_MIN_ENERGY, PHYSICS_DT, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, SOFTENING_SQ, BH_SOFTENING_SQ, MAX_SPEED_RATIO, MAX_FRAME_DT, ACCUMULATOR_CAP, SPAWN_COUNT, spawnOffset, SPAWN_OFFSET_FLOOR, PAIR_PROD_MIN_ENERGY, PAIR_PROD_RADIUS, PAIR_PROD_PROB, PAIR_PROD_MAX_PARTICLES, PAIR_PROD_MIN_AGE } from './src/config.js';
+import { TWO_PI, WORLD_SCALE, ZOOM_MIN, ZOOM_MAX, WHEEL_ZOOM_IN, DEFAULT_SPEED_SCALE, PHOTON_LIFETIME, PION_LIFETIME, SPAWN_MIN_ENERGY, PHYSICS_DT, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, SOFTENING_SQ, BH_SOFTENING_SQ, MAX_SPEED_RATIO, MAX_FRAME_DT, ACCUMULATOR_CAP, SPAWN_COUNT, spawnOffset, SPAWN_OFFSET_FLOOR, PAIR_PROD_MIN_ENERGY, PAIR_PROD_RADIUS, PAIR_PROD_PROB, PAIR_PROD_MAX_PARTICLES, PAIR_PROD_MIN_AGE } from './src/config.js';
 import Photon from './src/photon.js';
+import Pion from './src/pion.js';
 
 import { setVelocity, angwToAngVel } from './src/relativity.js';
 import { quickSave, quickLoad, downloadState, uploadState } from './src/save-load.js';
@@ -97,6 +98,8 @@ class Simulation {
         this.selectedParticle = null;
         this.antimatterMode = false;
         this.photons = [];
+        this.pions = [];
+        this._PhotonClass = Photon;  // expose for Pion.decay()
         this.totalRadiated = 0;
         this.totalRadiatedPx = 0;
         this.totalRadiatedPy = 0;
@@ -292,6 +295,20 @@ class Simulation {
                 }
                 this.photons.length = pLen;
 
+                // Update pions: move, decay, swap-and-pop dead
+                let piLen = this.pions.length;
+                for (let i = piLen - 1; i >= 0; i--) {
+                    const pn = this.pions[i];
+                    pn.update(PHYSICS_DT, this.particles, _pool, _root);
+                    if (!pn.alive) {
+                        this.pions[i] = this.pions[--piLen];
+                    } else if (pn.lifetime > PION_LIFETIME) {
+                        pn.decay(this);
+                        this.pions[i] = this.pions[--piLen];
+                    }
+                }
+                this.pions.length = piLen;
+
                 const { fragments: toFragment, transfers: rocheTransfers } = this.physics.checkDisintegration(this.particles, this.physics._lastRoot);
                 // Handle Roche lobe overflow mass transfers
                 for (const t of rocheTransfers) {
@@ -362,7 +379,7 @@ class Simulation {
             this.physics.yukawaEnabled, this.physics.yukawaMu);
         this.phasePlot.update(this.particles, this.selectedParticle);
         this.effPotPlot.update(this.particles, this.selectedParticle, this.physics);
-        this.renderer.render(this.particles, PHYSICS_DT, this.camera, this.photons);
+        this.renderer.render(this.particles, PHYSICS_DT, this.camera, this.photons, this.pions);
         this.phasePlot.draw(this.renderer.isLight);
         this.effPotPlot.draw(this.renderer.isLight);
         if (this.running) this.stats.updateEnergy(this.particles, this.physics, this);

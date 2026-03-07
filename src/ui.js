@@ -62,6 +62,7 @@ export function setupUI(sim) {
         sim.selectedParticle = null;
         sim.physics._forcesInit = false;
         sim.photons = [];
+        sim.pions = [];
         sim.totalRadiated = 0;
         sim.totalRadiatedPx = 0;
         sim.totalRadiatedPy = 0;

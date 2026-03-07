@@ -1,4 +1,4 @@
-import { MAX_TRAIL_LENGTH, PHOTON_LIFETIME, INERTIA_K, PI, TWO_PI, HALF_PI, VELOCITY_VECTOR_SCALE, FORCE_VECTOR_SCALE } from './config.js';
+import { MAX_TRAIL_LENGTH, PHOTON_LIFETIME, PION_LIFETIME, INERTIA_K, PI, TWO_PI, HALF_PI, VELOCITY_VECTOR_SCALE, FORCE_VECTOR_SCALE } from './config.js';
 const _PAL = window._PALETTE;
 const _r = window._r;
 
@@ -54,7 +54,7 @@ export default class Renderer {
         this.isLight = isLight;
     }
 
-    render(particles, dt = 0.016, camera, photons) {
+    render(particles, dt = 0.016, camera, photons, pions) {
         const ctx = this.ctx;
         const isLight = this.isLight;
 
@@ -90,6 +90,7 @@ export default class Renderer {
 
         this.drawParticles(ctx, particles, isLight);
         if (photons && photons.length) this.drawPhotons(ctx, photons, isLight);
+        if (pions && pions.length) this.drawPions(ctx, pions, isLight);
 
         ctx.globalCompositeOperation = 'source-over';
         ctx.shadowBlur = 0;
@@ -496,6 +497,36 @@ export default class Renderer {
                     ctx.fill();
                     ctx.shadowBlur = 0;
                 }
+            }
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    drawPions(ctx, pions, isLight) {
+        ctx.globalCompositeOperation = isLight ? 'source-over' : 'lighter';
+        ctx.shadowBlur = 0;
+        const alphaScale = isLight ? 0.7 : 0.9;
+        const color = _PAL.extended.green;
+        const glowColor = _r(color, 0.5);
+
+        for (let i = 0, len = pions.length; i < len; i++) {
+            const pn = pions[i];
+            const alpha = 1 - pn.lifetime / PION_LIFETIME;
+            if (alpha <= 0) continue;
+            const size = 0.3 + pn.energy * 15;
+            const r = size < 4 ? size : 4;
+            ctx.globalAlpha = alpha * alphaScale;
+            ctx.fillStyle = color;
+
+            ctx.beginPath();
+            ctx.arc(pn.pos.x, pn.pos.y, r, 0, TWO_PI);
+            ctx.fill();
+
+            if (!isLight) {
+                ctx.shadowBlur = size * 2 < 12 ? size * 2 : 12;
+                ctx.shadowColor = glowColor;
+                ctx.fill();
+                ctx.shadowBlur = 0;
             }
         }
         ctx.globalAlpha = 1;

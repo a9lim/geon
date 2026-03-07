@@ -3,7 +3,7 @@
 // PQS (cubic B-spline, order 3) particle-grid coupling: 4×4 stencil,
 // C² interpolation, C¹ continuous gradients.
 
-import { EPSILON } from './config.js';
+import { EPSILON, FIELD_EXCITATION_SIGMA, MERGE_EXCITATION_SCALE } from './config.js';
 import { TORUS, KLEIN, RP2 } from './topology.js';
 
 // Boundary mode constants for inner-loop speed (avoid string comparison)
@@ -224,6 +224,37 @@ export default class ScalarField {
         out.y = gy * invCellH;
         if (out.x !== out.x || out.y !== out.y) return null;
         return out;
+    }
+
+    /** Deposit a Gaussian wave packet (field excitation / boson) at world (x,y).
+     *  Energy goes into fieldDot so it propagates via the wave equation. */
+    depositExcitation(x, y, energy, domainW, domainH) {
+        const GRID = this._grid;
+        const cellW = domainW / GRID;
+        const cellH = domainH / GRID;
+        if (cellW < EPSILON || cellH < EPSILON) return;
+
+        const gx = x / cellW;
+        const gy = y / cellH;
+        const sigma = FIELD_EXCITATION_SIGMA;
+        const sigmaSq = sigma * sigma;
+        const amplitude = MERGE_EXCITATION_SCALE * Math.sqrt(energy);
+        const range = Math.ceil(3 * sigma);
+
+        const ixMin = Math.max(0, Math.floor(gx) - range);
+        const ixMax = Math.min(GRID - 1, Math.floor(gx) + range);
+        const iyMin = Math.max(0, Math.floor(gy) - range);
+        const iyMax = Math.min(GRID - 1, Math.floor(gy) + range);
+
+        for (let iy = iyMin; iy <= iyMax; iy++) {
+            const dy = iy - gy;
+            for (let ix = ixMin; ix <= ixMax; ix++) {
+                const dx = ix - gx;
+                const rSq = dx * dx + dy * dy;
+                if (rSq > 9 * sigmaSq) continue;
+                this.fieldDot[iy * GRID + ix] += amplitude * Math.exp(-rSq / (2 * sigmaSq));
+            }
+        }
     }
 
     /** Draw field overlay in world space. */
