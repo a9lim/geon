@@ -136,6 +136,7 @@ export function loadState(state, sim) {
         p.charge = pd.charge;
         p.angw = pd.angw;
         p.antimatter = pd.antimatter || false;
+        p.creationTime = -Infinity; // loaded particles treated as always existing
         p.w.x = pd.wx;
         p.w.y = pd.wy;
         p.updateColor();

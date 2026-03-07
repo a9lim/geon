@@ -12,6 +12,7 @@ export default class Particle {
 
     constructor(x, y, mass = 10, charge = 0) {
         this.id = Particle.nextId++;
+        this.creationTime = -Infinity; // set by addParticle / loadState
         this.pos = new Vec2(x, y);
         this.vel = new Vec2(0, 0);
         this.w = new Vec2(0, 0);    // proper velocity (gamma*v)
