@@ -811,6 +811,8 @@ export default class Physics {
                             const wx = gamma * speed * Math.cos(angle);
                             const wy = gamma * speed * Math.sin(angle);
                             const charge = Math.abs(p.charge) < EPSILON ? 0 : (Math.random() < 0.5 ? 0 : (Math.random() < 0.5 ? 1 : -1));
+                            p.charge -= charge;
+                            if (charge !== 0) p.updateColor();
                             const offset = spawnOffset(p.radius);
                             pions.push(new Pion(
                                 p.pos.x + Math.cos(angle) * offset,
