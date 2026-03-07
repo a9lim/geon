@@ -22,7 +22,7 @@ Everything runs in natural units (c = 1, G = 1). Particles store proper velocity
 - **Larmor radiation** -- Accelerating charges lose energy via the full Landau-Lifshitz force (jerk + 1/c^2 power-dissipation terms) and emit photons.
 - **Stern-Gerlach / Mathisson-Papapetrou** -- Translational forces from spin-field gradient coupling (EM and gravitational).
 - **Yukawa** -- Screened force V(r) = -g^2 exp(-mu*r)/r between massive particles, with configurable coupling strength and range.
-- **Axion dark matter** -- Oscillating modulation of the electromagnetic coupling constant, simulating an axion-like background field.
+- **Axion dark matter** -- Dynamical axion-like scalar field on a 64x64 grid. Scalar aF² coupling makes the EM coupling constant position-dependent. Charged particles source the field (proportional to q²) and feel gradient forces. Field oscillates at frequency m_a, like real axion dark matter.
 - **Higgs scalar field** -- Dynamical real scalar field on a 48x48 grid with Mexican hat potential V(phi) = -1/2 mu^2 phi^2 + 1/4 lambda phi^4. Particles source the field via weak CIC deposition (Yukawa coupling), acquire effective mass m = baseMass * |phi/v|, and feel gradient forces F = -(baseMass/v) * coupling * grad(phi). Analytical self-force subtraction prevents grid artifacts. Adaptive critical damping, thermal corrections restore symmetry at high energy density (phase transitions).
 
 ### Additional Physics

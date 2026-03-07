@@ -30,7 +30,7 @@ src/
   reference.js              ~636 lines REFERENCE object: extended physics reference content for each concept (KaTeX math, Lagrangians, forces, potentials)
   scalar-field.js            239 lines ScalarField base class: PQS grid infrastructure, topology-aware deposition, Laplacian, interpolation, gradient, offscreen canvas
   higgs-field.js            ~235 lines HiggsField extends ScalarField: Mexican hat potential, thermal phase transitions, mass modulation, gradient force
-  axion-field.js            ~204 lines AxionField extends ScalarField: quadratic potential, q² source coupling, EM modulation, gradient force
+  axion-field.js            ~211 lines AxionField extends ScalarField: quadratic potential, scalar aF² coupling, q² source, EM modulation, gradient force
   quadtree.js               ~279 lines QuadTreePool: SoA flat typed arrays, pool-based, zero GC
   input.js                  ~262 lines InputHandler: mouse/touch, Place/Shoot/Orbit modes, hover tooltip, antimatter flag passthrough
   signal-delay.js            249 lines getDelayedState() (3-phase light-cone solver)
@@ -182,23 +182,23 @@ Independent toggle. `F = -g²·m₁m₂·exp(-μr)/r²·(1+μr)`. Parameters: `y
 
 ### Axion Scalar Field
 
-Requires Coulomb. Dynamical pseudoscalar field on a 64×64 grid with quadratic potential `V(a) = ½m_a²a²`. No symmetry breaking — vacuum at a=0. Extends `ScalarField` base class.
+Requires Coulomb. Axion-like scalar field on a 64×64 grid with quadratic potential `V(a) = ½m_a²a²`. No symmetry breaking — vacuum at a=0. Extends `ScalarField` base class. Uses the **scalar** `aF²` coupling (not the QCD axion's pseudoscalar `aFF̃ ∝ E·B`, which vanishes identically in 2D where E is in-plane and B is perpendicular).
 
 **Particle-grid coupling**: PQS (cubic B-spline, order 3) via shared `ScalarField` base class (same as Higgs). Topology-aware deposition via `_nb()` wrapping.
 
-**Source coupling**: Charged particles deposit `q²` into the field via PQS. Neutral particles neither source nor feel the axion field.
+**Source coupling**: Charged particles deposit `g·q²` (regularized EM self-energy from `aF²` vertex, `g = AXION_COUPLING`) into the field via PQS. Neutral particles neither source nor feel the axion field.
 
-**EM coupling modulation**: `α_eff(x) = α·(1 + a(x))`. Per-particle `p.axMod` (interpolated from local field value via `interpolateAxMod()`) replaces the old global `toggles.axMod` oscillation. Clamped `≥ 0` to prevent EM force sign reversal (axion can screen EM to zero but never flip it). All EM forces (Coulomb, magnetic dipole, Biot-Savart) use the local coupling. Applied in `pairForce()` and `pairPE()`.
+**EM coupling modulation**: From `L_int = -(1+g·a)F²/4`, the coupling constant becomes position-dependent: `α_eff(x) = α·(1 + g·a(x))`. Per-particle `p.axMod` (interpolated from local field value via `interpolateAxMod()`). Clamped `≥ 0` to prevent EM force sign reversal. All EM forces (Coulomb, magnetic dipole, Biot-Savart) use the local coupling. Applied in `pairForce()` and `pairPE()`.
 
-**Gradient force**: `F = -q²·∇a`. PQS gradient (C¹ continuous). Accumulates into `forceAxion`. Applied as E-like force after external fields.
+**Gradient force**: `F = -g·q²·∇a`. PQS gradient (C¹ continuous). Accumulates into `forceAxion`. Applied as E-like force after external fields.
 
-**Field equation**: `∂²a/∂t² = ∇²a - m_a²·a - 2m_a·∂a/∂t + source/cellArea`. Symplectic Euler (kick-drift). Critical damping `2·m_a`.
+**Field equation**: `∂²a/∂t² = ∇²a - m_a²·a - g·m_a·∂a/∂t + source/cellArea`. Symplectic Euler (kick-drift). Damping `ζ = g/2` gives `Q = 1/g`, so `g·Q = 1` — resonant buildup exactly compensates the coupling strength. With `g = 0.2`: Q = 5.
 
 **Boundary conditions**: Shared with Higgs via `ScalarField._nb()`. Despawn→Dirichlet (a=0 at edges). Bounce→Neumann. Loop→periodic with topology awareness.
 
 **Field energy**: `E = ∫(½ȧ² + ½|∇a|² + ½m_a²a²)dA`. No offset needed (V(0)=0). Tracked in stats as `axionFieldEnergy`, included in total energy.
 
-**Parameters**: One slider: `mass` (m_a, default 0.05, range 0.01–0.25). Config constants: `AXION_GRID = 64`, `AXION_A_MAX = 8`. Coupling baked to 1.
+**Parameters**: One slider: `mass` (m_a, default 0.05, range 0.01–0.25). Config constants: `AXION_GRID = 64`, `AXION_A_MAX = 2`, `AXION_COUPLING = 0.2`.
 
 **Rendering**: Offscreen 64×64 canvas, bilinear-upscaled. Orange = positive (a > 0), blue = negative (a < 0). Alpha ∝ |a|×4. Force vector color: orange (`--ext-orange`).
 
@@ -488,7 +488,7 @@ Particle color: neutral=slate `#8A7E72`. Charged: RGB lerp toward red (positive)
 - Higgs/Axion field reset on preset load and clear; Higgs mass restoration to `baseMass` on toggle-off; Axion axMod reset to 1 on toggle-off
 - Axion `p.axMod` is per-particle (interpolated from local field), not a global oscillation -- `pairForce()` and `pairPE()` use `p.axMod`, not `toggles.axMod`
 - Axion `p.axMod` clamped `>= 0` -- without this, `a(x) < -1` reverses EM force signs causing runaway acceleration and radiation detonation
-- Axion coupling baked to 1 -- no `AXION_G` constant. Force is `F = -q²·∇a`, modulation is `α_eff = α·(1 + a(x))`
+- Axion uses scalar `aF²` coupling (not pseudoscalar `aFF̃` which vanishes in 2D). `AXION_COUPLING = 0.2` scales source (`g·q²`), gradient force (`-g·q²·∇a`), and modulation (`α_eff = α·(1 + g·a)`) consistently
 - `magMoment`/`angMomentum` cache is set in `computeAllForces()` — if angVel changes mid-substep (spin-orbit, frame-drag), the cache reflects the *previous* computeAllForces state, which is consistent with the B-field gradients used in the same substep
 - Ghost particles must carry `magMoment`/`angMomentum` fields (set in `_addGhost()`) for BH leaf walk in `pairForce()`/`pairPE()`
 - Photon `update()` takes optional `pool`/`root` for BH tree lensing; falls back to O(N) brute force when pool is null or root < 0

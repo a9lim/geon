@@ -47,8 +47,9 @@ export const DEFAULT_YUKAWA_MU = 0.05;  // mediator mass (inverse range)
 
 // Axion field: V(a) = 1/2 m_a² a² (quadratic potential, no SSB)
 export const AXION_GRID = 64;
-export const AXION_A_MAX = 8;            // field value clamp (prevent runaway)
+export const AXION_A_MAX = 2;            // field value clamp (keeps axMod in [0,3])
 export const DEFAULT_AXION_MASS = 0.05; // mediator mass (oscillation frequency)
+export const AXION_COUPLING = 0.2;      // g in L = -(1+g·a)F²/4; also sets Q = 1/g = 5, ζ = g/2
 
 // Photon gravitational lensing
 export const PHOTON_SOFTENING_SQ = 4;  // smaller than particle softening for tighter lensing

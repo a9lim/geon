@@ -1,12 +1,19 @@
 // ─── Axion Scalar Field ───
-// Dynamical pseudoscalar field on a 2D grid with quadratic potential.
+// Dynamical scalar field (ALP) on a 2D grid with quadratic potential.
 // V(a) = 1/2 m_a^2 a^2  (no symmetry breaking — field oscillates around a=0)
 // m_a is the free parameter (slider 0.01-0.25, default 0.05)
 // Extends ScalarField for shared PQS infrastructure.
-// Charged particles source the field (proportional to q²) and feel gradient force F = -q²·∇a.
-// Local EM coupling modulation: α_eff(x) = α·(1 + a(x)).
+//
+// Uses the scalar coupling L_int = -(1+g·a)F²/4, which makes α position-dependent:
+//   α_eff(x) = α·(1 + a(x))
+// The QCD axion's pseudoscalar aFF̃ ∝ E·B coupling vanishes in 2D (E in-plane, B⊥).
+// The scalar aF² coupling is the simplest ALP interaction that works in 2D and
+// correctly modifies all EM forces via a local coupling constant.
+//
+// Source: g·q² (regularized EM self-energy from aF² vertex, g = AXION_COUPLING).
+// Gradient force: F = -g·q²·∇a. EM modulation: α_eff = α·(1 + g·a).
 
-import { AXION_GRID, AXION_A_MAX, DEFAULT_AXION_MASS, EPSILON } from './config.js';
+import { AXION_GRID, AXION_A_MAX, DEFAULT_AXION_MASS, AXION_COUPLING, EPSILON } from './config.js';
 import ScalarField, { bcFromString } from './scalar-field.js';
 
 export default class AxionField extends ScalarField {
@@ -49,10 +56,10 @@ export default class AxionField extends ScalarField {
         this._computeLaplacian(bcMode, topoConst, invCellWSq, invCellHSq, 0);
 
         // Kick fieldDot, then drift field (symplectic Euler)
-        // Klein-Gordon: d²a/dt² = ∇²a - m_a²·a - damp·ȧ + source
+        // Klein-Gordon: d²a/dt² = ∇²a - m_a²·a - g·m_a·ȧ + source  (ζ = g/2, Q = 1/g)
         const mA = this.mass;
         const mASq = mA * mA;
-        const damp = 2 * mA; // critical damping
+        const damp = AXION_COUPLING * mA; // Q = 1/g = 5, so g·Q = 1 (resonant buildup ≈ static response)
         const lap = this._laplacian;
 
         for (let i = 0; i < GRID_SQ; i++) {
@@ -80,18 +87,18 @@ export default class AxionField extends ScalarField {
         }
     }
 
-    /** PQS deposition of particle q² as scalar source. */
+    /** PQS deposition of g·q² as scalar source (g = AXION_COUPLING). */
     _depositSources(particles, invCellW, invCellH, bcMode, topoConst) {
         for (let i = 0; i < particles.length; i++) {
             const p = particles[i];
             const qSq = p.charge * p.charge;
             if (qSq < EPSILON) continue;
-            this._depositPQS(this._source, p.pos.x, p.pos.y, qSq, invCellW, invCellH, bcMode, topoConst);
+            this._depositPQS(this._source, p.pos.x, p.pos.y, AXION_COUPLING * qSq, invCellW, invCellH, bcMode, topoConst);
         }
     }
 
     /** Interpolate local axion field value at each particle position.
-     *  Sets p.axMod = 1 + a(x) (coupling baked to 1).
+     *  Sets p.axMod = 1 + g·a(x) where g = AXION_COUPLING.
      */
     interpolateAxMod(particles, domainW, domainH) {
         const GRID = this._grid;
@@ -106,13 +113,14 @@ export default class AxionField extends ScalarField {
 
         for (let i = 0; i < particles.length; i++) {
             const p = particles[i];
-            // Clamp >= 0: axion can screen EM to zero but never reverse sign
             const aLocal = this.interpolate(p.pos.x, p.pos.y, invCellW, invCellH);
-            p.axMod = aLocal > -1 ? 1 + aLocal : 0;
+            // axMod = 1 + g·a, clamped >= 0 (can screen EM to zero but never reverse)
+            const ga = AXION_COUPLING * aLocal;
+            p.axMod = ga > -1 ? 1 + ga : 0;
         }
     }
 
-    /** Apply gradient force: F = -q² * grad(a).
+    /** Apply gradient force: F = -g·q² * grad(a) where g = AXION_COUPLING.
      *  PQS gradient weights (derivative of cubic B-spline) give C¹ continuous forces.
      */
     applyForces(particles, domainW, domainH) {
@@ -131,8 +139,8 @@ export default class AxionField extends ScalarField {
             const grad = this.gradient(p.pos.x, p.pos.y, invCellW, invCellH);
             if (!grad) continue;
 
-            const forceX = -qSq * grad.x;
-            const forceY = -qSq * grad.y;
+            const forceX = -AXION_COUPLING * qSq * grad.x;
+            const forceY = -AXION_COUPLING * qSq * grad.y;
 
             p.force.x += forceX;
             p.force.y += forceY;
