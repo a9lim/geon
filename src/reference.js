@@ -662,7 +662,7 @@ export const REFERENCE = {
 <p>$$\\Delta E = \\text{KE}_{\\text{before}} - \\text{KE}_{\\text{after}}$$</p>
 <p>This energy is deposited as a Gaussian bump in the field's time derivative $\\dot{\\phi}$ (or $\\dot{a}$):</p>
 <p>$$\\dot{\\phi}(\\mathbf{x}) \\mathrel{+}= A \\exp\\!\\left(-\\frac{|\\mathbf{x} - \\mathbf{x}_0|^2}{2\\sigma^2}\\right)$$</p>
-<p>where $A = 0.3\\sqrt{\\Delta E}$ and $\\sigma = 2$ grid cells. The existing Klein-Gordon wave equation then propagates the excitation naturally.</p>
+<p>where $A = 0.5\\sqrt{\\Delta E}$ and $\\sigma = 2$ grid cells. The existing Klein-Gordon wave equation then propagates the excitation naturally.</p>
 
 <h3>Higgs Boson Analog</h3>
 <p>When the Higgs field is active, merge energy creates oscillations around the vacuum expectation value $\\langle\\phi\\rangle = 1$. These ripples are the 2D analog of the Higgs boson — excitations of the field that gives particles their mass. The Mexican hat potential:</p>

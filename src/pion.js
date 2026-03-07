@@ -3,7 +3,7 @@
 // Unlike Photon (massless, |v|=c), pions travel at v<c with proper velocity w.
 
 import Vec2 from './vec2.js';
-import { BH_THETA, PION_SOFTENING_SQ, EPSILON } from './config.js';
+import { BH_THETA, BOSON_SOFTENING_SQ, EPSILON } from './config.js';
 
 let _piStack = new Int32Array(256);
 
@@ -40,7 +40,7 @@ export default class Pion {
                 const p = particles[i];
                 const dx = p.pos.x - this.pos.x;
                 const dy = p.pos.y - this.pos.y;
-                const rSq = dx * dx + dy * dy + PION_SOFTENING_SQ;
+                const rSq = dx * dx + dy * dy + BOSON_SOFTENING_SQ;
                 const invR3 = 1 / (rSq * Math.sqrt(rSq));
                 this.w.x += grFactor * p.mass * dx * invR3 * dt;
                 this.w.y += grFactor * p.mass * dy * invR3 * dt;
@@ -100,13 +100,13 @@ export default class Pion {
                     const p = pool.points[base + i];
                     const pdx = p.pos.x - px;
                     const pdy = p.pos.y - py;
-                    const rSq = pdx * pdx + pdy * pdy + PION_SOFTENING_SQ;
+                    const rSq = pdx * pdx + pdy * pdy + BOSON_SOFTENING_SQ;
                     const invR3 = 1 / (rSq * Math.sqrt(rSq));
                     this.w.x += grFactor * p.mass * pdx * invR3 * dt;
                     this.w.y += grFactor * p.mass * pdy * invR3 * dt;
                 }
             } else if (pool.divided[nodeIdx] && (size * size < thetaSq * dSq)) {
-                const rSq = dSq + PION_SOFTENING_SQ;
+                const rSq = dSq + BOSON_SOFTENING_SQ;
                 const invR3 = 1 / (rSq * Math.sqrt(rSq));
                 this.w.x += grFactor * pool.totalMass[nodeIdx] * dx * invR3 * dt;
                 this.w.y += grFactor * pool.totalMass[nodeIdx] * dy * invR3 * dt;

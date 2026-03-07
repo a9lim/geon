@@ -60,7 +60,7 @@ main.js <- Physics (integrator), Renderer, InputHandler, Particle, HiggsField, A
 integrator.js <- QuadTreePool, config, Photon, Pion, angwToAngVel, forces (resetForces/computeAllForces/compute1PNPairwise),
                  handleCollisions, computePE, topology (accesses sim.higgsField/axionField via this.sim backref)
 
-pion.js       <- Vec2, config (BH_THETA, PION_SOFTENING_SQ, EPSILON)
+pion.js       <- Vec2, config (BH_THETA, BOSON_SOFTENING_SQ, EPSILON)
 
 forces.js     <- config, getDelayedState, topology
 energy.js     <- config, topology (accesses sim.higgsField/axionField via window.sim)
@@ -222,7 +222,7 @@ Requires Coulomb. Quadratic potential `V(a) = 1/2 m_a^2 a^2`. No symmetry breaki
 
 ### Emission (Scalar Larmor)
 
-Yukawa interactions emit pions via scalar Larmor radiation: `P = g^2 * m^2 * a^2 / 3 = g^2 * F_yuk^2 / 3`. Scalar charge `Q = g*m` (Yukawa couples proportional to mass); `1/3` angular factor for spin-0 (vs `2/3` for spin-1 EM). Energy accumulated in `p._yukawaRadAccum`; emits when accumulation exceeds `PION_EMISSION_THRESHOLD` (0.02) and pion KE would be positive (total energy > pion rest mass). Species: pi0 (neutral, 50%), pi+ or pi- (charged, 25% each). Capped at MAX_PIONS = 256.
+Yukawa interactions emit pions via scalar Larmor radiation: `P = g^2 * m^2 * a^2 / 3 = g^2 * F_yuk^2 / 3`. Scalar charge `Q = g*m` (Yukawa couples proportional to mass); `1/3` angular factor for spin-0 (vs `2/3` for spin-1 EM). Energy accumulated in `p._yukawaRadAccum`; emits when accumulation exceeds `MIN_MASS` (0.01, same threshold as photon emission) and pion KE would be positive (total energy > pion rest mass). Species: pi0 (neutral, 50%), pi+ or pi- (charged, 25% each). Capped at MAX_PIONS = 256.
 
 **Radiation reaction**: After emission, particle's proper velocity `w` is scaled down to subtract the emitted energy from KE, preventing double-counting (force already computed directly).
 
@@ -240,18 +240,18 @@ Quadtree overlap query after photon absorption. Transfers momentum and charge (p
 
 ### Constants
 
-`PION_LIFETIME = 128`, `MAX_PIONS = 256`, `PION_EMISSION_THRESHOLD = 0.02`, `PION_SOFTENING_SQ = 4`.
+`PION_LIFETIME = 128`, `MAX_PIONS = 256`, `BOSON_SOFTENING_SQ = 4` (shared by photon and pion lensing).
 
 ## Field Excitations
 
 Merge collisions deposit Gaussian wave packets into active scalar fields via `ScalarField.depositExcitation()`. The existing Klein-Gordon wave equation propagates them naturally.
 
 - **Trigger**: KE lost in inelastic merge (`keBefore - keAfter`), tracked by `handleCollisions()` returning `{ annihilations, merges }`.
-- **Amplitude**: `MERGE_EXCITATION_SCALE * sqrt(keLost)` (MERGE_EXCITATION_SCALE = 0.3).
+- **Amplitude**: `MERGE_EXCITATION_SCALE * sqrt(keLost)` (MERGE_EXCITATION_SCALE = 0.5).
 - **Shape**: Gaussian bump deposited into `fieldDot` array with `sigma = FIELD_EXCITATION_SIGMA` (2 grid cells), 3-sigma cutoff.
 - **Higgs excitations**: Merge energy excites oscillations around VEV=1 ("Higgs boson" analog).
 - **Axion excitations**: Merge energy excites oscillations around vacuum a=0 ("axion particle" analog).
-- **Constants**: `FIELD_EXCITATION_SIGMA = 2`, `MERGE_EXCITATION_SCALE = 0.3`.
+- **Constants**: `FIELD_EXCITATION_SIGMA = 2`, `MERGE_EXCITATION_SCALE = 0.5`.
 
 ## Advanced Physics
 
