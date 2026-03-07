@@ -399,7 +399,7 @@ Defaults on: gravity, coulomb, magnetic, gravitomag, 1PN, relativity, spin-orbit
 
 Topbar: Home | Brand "No-Hair" | Pause/Step/Reset/Save/Load | Theme | Panel toggle.
 
-19 presets in 4 `<optgroup>` categories: Gravity (6), Electromagnetism (3), Exotic (8), Cosmological (2). First 9 via keyboard `1`-`9`. Sim speed range 1-128, default 64.
+19 presets in 4 `<optgroup>` categories: Gravity (6), Electromagnetism (3), Exotic (8), Cosmological (2). First 9 via keyboard `1`-`9`. Sim speed range 1-64, default 32.
 
 ## Renderer
 
