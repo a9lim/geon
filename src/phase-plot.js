@@ -1,6 +1,9 @@
 // ─── Phase Space Plot ───
 // r vs v_r relative to the most massive body; 512-sample ring buffer.
 import { TWO_PI, PHASE_BUFFER_LEN } from './config.js';
+import { TORUS, minImage } from './topology.js';
+
+const _miOut = { x: 0, y: 0 };
 
 const BUFFER_LEN = PHASE_BUFFER_LEN;
 const MARGIN = 24;
@@ -17,7 +20,7 @@ export default class PhasePlot {
         this.trackedId = -1;
     }
 
-    update(particles, selectedParticle) {
+    update(particles, selectedParticle, physics) {
         if (!this.enabled || !selectedParticle) return;
 
         const sel = selectedParticle;
@@ -38,7 +41,15 @@ export default class PhasePlot {
             }
         }
 
-        const dx = sel.pos.x - refX, dy = sel.pos.y - refY;
+        let dx, dy;
+        if (physics && physics.periodic) {
+            minImage(refX, refY, sel.pos.x, sel.pos.y,
+                     physics._topologyConst || TORUS, physics.domainW, physics.domainH,
+                     physics.domainW * 0.5, physics.domainH * 0.5, _miOut);
+            dx = _miOut.x; dy = _miOut.y;
+        } else {
+            dx = sel.pos.x - refX; dy = sel.pos.y - refY;
+        }
         const r = Math.sqrt(dx * dx + dy * dy) || 1;
         const rx = dx / r, ry = dy / r;
         const dvx = sel.vel.x - refVx, dvy = sel.vel.y - refVy;

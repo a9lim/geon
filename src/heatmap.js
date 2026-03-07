@@ -151,13 +151,17 @@ export default class Heatmap {
                             _hmObs.pos.x = wx; _hmObs.pos.y = wy;
                             const ret = getDelayedState(p, _hmObs, simTime, periodic, domW, domH, halfDomW, halfDomH, topology);
                             if (!ret) continue; // outside past light cone
-                            dx = wx - ret.x; dy = wy - ret.y;
-                        } else {
-                            dx = wx - p.pos.x; dy = wy - p.pos.y;
-                        }
-                        if (periodic) {
-                            minImage(0, 0, dx, dy, topology, domW, domH, halfDomW, halfDomH, _miOut);
+                            if (periodic) {
+                                minImage(wx, wy, ret.x, ret.y, topology, domW, domH, halfDomW, halfDomH, _miOut);
+                                dx = _miOut.x; dy = _miOut.y;
+                            } else {
+                                dx = ret.x - wx; dy = ret.y - wy;
+                            }
+                        } else if (periodic) {
+                            minImage(wx, wy, p.pos.x, p.pos.y, topology, domW, domH, halfDomW, halfDomH, _miOut);
                             dx = _miOut.x; dy = _miOut.y;
+                        } else {
+                            dx = p.pos.x - wx; dy = p.pos.y - wy;
                         }
                         const rSq = dx * dx + dy * dy + softeningSq;
                         const invR = 1 / Math.sqrt(rSq);
@@ -178,10 +182,12 @@ export default class Heatmap {
                         if (dp.histCount < 2) continue;
                         const ret = getDelayedState(dp, _hmObs, simTime, periodic, domW, domH, halfDomW, halfDomH, topology);
                         if (!ret) continue;
-                        let dx = wx - ret.x, dy = wy - ret.y;
+                        let dx, dy;
                         if (periodic) {
-                            minImage(0, 0, dx, dy, topology, domW, domH, halfDomW, halfDomH, _miOut);
+                            minImage(wx, wy, ret.x, ret.y, topology, domW, domH, halfDomW, halfDomH, _miOut);
                             dx = _miOut.x; dy = _miOut.y;
+                        } else {
+                            dx = ret.x - wx; dy = ret.y - wy;
                         }
                         const rSq = dx * dx + dy * dy + softeningSq;
                         const invR = 1 / Math.sqrt(rSq);

@@ -69,7 +69,9 @@ forces.js     <- config, getDelayedState, topology
 energy.js     <- config, topology (accesses sim.higgsField/axionField via window.sim)
 potential.js  <- config, topology
 renderer.js   <- config (higgsField/axionField set by main.js)
-heatmap.js    <- config, getDelayedState
+heatmap.js    <- config, getDelayedState, topology
+effective-potential.js <- config, topology
+phase-plot.js  <- config, topology
 scalar-field.js <- config, topology
 higgs-field.js  <- config, ScalarField + bcFromString
 axion-field.js  <- config, ScalarField + bcFromString
