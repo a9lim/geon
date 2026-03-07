@@ -162,7 +162,7 @@ Always active when Gravity is on (no separate toggle). `coupling = m_other + q1*
 
 ### Yukawa Potential
 
-Independent toggle. `F = -g^2 * m1*m2 * exp(-mu*r)/r^2 * (1+mu*r)`. Parameters: `yukawaG2` (default 32), `yukawaMu` (default 0.05, slider 0.01-0.25). Includes analytical jerk for radiation. Emits pions as massive force carriers (see Pion section). **Scalar Breit correction** (requires 1PN): O(v^2/c^2) velocity-dependent correction from massive scalar boson exchange Hamiltonian `δH = g²m₁m₂e^{-μr}/(2r) * [v₁·v₂ + (r̂·v₁)(r̂·v₂)(1+μr)]`. Force into `force1PN`. Velocity-Verlet corrected via `compute1PNPairwise()`.
+Independent toggle. `F = -g^2 * m1*m2 * exp(-mu*r)/r^2 * (1+mu*r)`. Parameters: `yukawaCoupling` (default 32), `yukawaMu` (default 0.15, slider 0.05-0.50). Includes analytical jerk for radiation. Emits pions as massive force carriers (see Pion section). **Scalar Breit correction** (requires 1PN): O(v^2/c^2) velocity-dependent correction from massive scalar boson exchange Hamiltonian `δH = g²m₁m₂e^{-μr}/(2r) * [v₁·v₂ + (r̂·v₁)(r̂·v₂)(1+μr)]`. Force into `force1PN`. Velocity-Verlet corrected via `compute1PNPairwise()`.
 
 ### External Background Fields
 
@@ -184,9 +184,9 @@ Collision mode `'bounce'` and boundary mode `'bounce'`: `F = K * delta^1.5` (K=1
 
 ### Base Class (`ScalarField`)
 
-Shared PQS (cubic B-spline, order 3) grid infrastructure for Higgs and Axion. 4x4 = 16 node stencil per particle. C^2 interpolation, C^1 gradients. Pre-allocated weight arrays for zero-alloc hot path.
+Shared PQS (cubic B-spline, order 3) grid infrastructure for Higgs and Axion. 4x4 = 16 node stencil per particle. C^2 interpolation, C^2 gradients (PQS-interpolated central-difference grid gradients). Pre-allocated weight arrays for zero-alloc hot path.
 
-Key methods: `_nb()` (boundary-aware neighbor), `_depositPQS()` (topology-aware deposition), `_computeLaplacian()` (interior fast path + border path), `interpolate()`, `gradient()`, `_fieldEnergy(domainW, domainH, potentialFn)` (shared KE+gradient+potential grid integration), `draw()`, `depositExcitation()` (Gaussian wave packet into `fieldDot`).
+Key methods: `_nb()` (boundary-aware neighbor), `_depositPQS()` (topology-aware deposition), `_computeLaplacian()` (interior fast path + border path), `_computeGridGradients()` (central differences, interior fast path + border path), `interpolate()`, `gradient()` (PQS-interpolates pre-computed grid gradients), `_fieldEnergy(domainW, domainH, potentialFn)` (shared KE+gradient+potential grid integration), `draw()`, `depositExcitation()` (Gaussian wave packet into `fieldDot`).
 
 `bcFromString()` converts boundary mode string to integer (BC_DESPAWN=0 / BC_BOUNCE=1 / BC_LOOP=2).
 
@@ -194,7 +194,7 @@ Field arrays are `field`/`fieldDot` (not `phi`/`phiDot` or `a`/`aDot`). Grid siz
 
 ### Higgs Field
 
-Independent toggle. Mexican hat potential `V(phi) = -1/2 mu^2 phi^2 + 1/4 lambda phi^4`. VEV=1; free parameter is m_H (slider 0.01-0.25, default 0.05). With VEV=1: `lambda = mu^2 = m_H^2/2`.
+Independent toggle. Mexican hat potential `V(phi) = -1/2 mu^2 phi^2 + 1/4 lambda phi^4`. VEV=1; free parameter is m_H (slider 0.25-1.00, default 0.50). With VEV=1: `lambda = mu^2 = m_H^2/2`.
 
 - **Mass generation**: `m_eff = baseMass * |phi(x)|`. At VEV, m_eff = baseMass. Symmetric phase (phi->0): effectively massless (floored at EPSILON).
 - **Gradient force**: `F = +g * baseMass * grad(phi)` where g = HIGGS_COUPLING = 1. Into `forceHiggs`.
@@ -317,7 +317,7 @@ Toggle. `pos += H*(pos - center)*dt` (Hubble flow), `w *= (1 - H*dt)` (redshift)
 
 ### Antimatter & Pair Production
 
-`p.antimatter` boolean. Toolbar button (key `A`). Matter+antimatter merge annihilates lesser mass, emits photons via `emitPhotonBurst()`. Pair production: photons with energy >= 2 near massive body (dist < 8) can produce matter+antimatter pair (prob 0.005/substep).
+`p.antimatter` boolean. Toolbar button (key `A`). Matter+antimatter merge annihilates lesser mass, emits photons via `emitPhotonBurst()`. Pair production: photons with energy >= 1 near massive body (dist < 8) can produce matter+antimatter pair (prob 0.005/substep).
 
 ## Sign Conventions (IMPORTANT)
 

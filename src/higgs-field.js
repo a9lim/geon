@@ -94,6 +94,9 @@ export default class HiggsField extends ScalarField {
                 field[i] = newPhi;
             }
         }
+
+        // Pre-compute grid gradients for C² smooth force interpolation
+        this._computeGridGradients(bcMode, topoConst, 1);
     }
 
     /** PQS deposition of g·baseMass as scalar source (g = HIGGS_COUPLING). */
@@ -146,7 +149,7 @@ export default class HiggsField extends ScalarField {
     }
 
     /** Apply gradient force: F = +g·baseMass * grad(phi) where g = HIGGS_COUPLING.
-     *  PQS gradient weights (derivative of cubic B-spline) give C¹ continuous forces.
+     *  PQS-interpolated grid gradients give C² continuous forces.
      */
     applyForces(particles, domainW, domainH) {
         const GRID = this._grid;

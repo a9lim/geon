@@ -2,7 +2,7 @@
 // V_eff(r) = V(r) + L²/(2μr²) for selected particle vs most massive body.
 // Draws curve + current-position marker on a sidebar canvas.
 
-import { TWO_PI, SOFTENING_SQ, BH_SOFTENING_SQ, YUKAWA_G2 } from './config.js';
+import { TWO_PI, SOFTENING_SQ, BH_SOFTENING_SQ, YUKAWA_COUPLING } from './config.js';
 
 const N_SAMPLES = 200;
 const MARGIN = 28;
@@ -103,7 +103,7 @@ export default class EffectivePotentialPlot {
         if (gm) v -= selL * refL * invR3;
 
         // Yukawa: -g²m₁m₂·exp(-μr)/r
-        if (yuk) v -= YUKAWA_G2 * sel.mass * ref.mass * Math.exp(-physics.yukawaMu * r) * invR;
+        if (yuk) v -= YUKAWA_COUPLING * sel.mass * ref.mass * Math.exp(-physics.yukawaMu * r) * invR;
 
         return v;
     }

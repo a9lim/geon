@@ -2,7 +2,7 @@
 // Pairwise and Barnes-Hut force accumulation. Separates E-like (position-dependent)
 // from B-like (velocity-dependent) forces for the Boris integrator.
 
-import { BH_THETA, INERTIA_K, MAG_MOMENT_K, TIDAL_STRENGTH, YUKAWA_G2, EPSILON } from './config.js';
+import { BH_THETA, INERTIA_K, MAG_MOMENT_K, TIDAL_STRENGTH, YUKAWA_COUPLING, EPSILON } from './config.js';
 import { getDelayedState } from './signal-delay.js';
 import { TORUS, minImage } from './topology.js';
 
@@ -276,13 +276,13 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
         const r = 1 / invR;
         const expMuR = Math.exp(-mu * r);
         // F = g² · exp(-μr) · (1/r² + μ/r) · r̂  (attractive, like gravity)
-        const fDir = YUKAWA_G2 * p.mass * sMass * expMuR * (invRSq + mu * invR) * invR;
+        const fDir = YUKAWA_COUPLING * p.mass * sMass * expMuR * (invRSq + mu * invR) * invR;
         out.x += rx * fDir;
         out.y += ry * fDir;
         p.forceYukawa.x += rx * fDir;
         p.forceYukawa.y += ry * fDir;
         // Analytical jerk for radiation reaction (jBase * term1 == fDir)
-        const jRadial = -(3 * invRSq + 2 * mu * invR + mu * mu) * rDotVr * YUKAWA_G2 * p.mass * sMass * expMuR * invRSq * invR;
+        const jRadial = -(3 * invRSq + 2 * mu * invR + mu * mu) * rDotVr * YUKAWA_COUPLING * p.mass * sMass * expMuR * invRSq * invR;
         p.jerk.x += vrx * fDir + rx * jRadial;
         p.jerk.y += vry * fDir + ry * jRadial;
 
@@ -296,7 +296,7 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
             const nDotV2 = nx * svx + ny * svy;
             const v1DotV2 = pvx * svx + pvy * svy;
             const alpha = 1 + mu * r;
-            const beta = 0.5 * YUKAWA_G2 * p.mass * sMass * expMuR * invRSq;
+            const beta = 0.5 * YUKAWA_COUPLING * p.mass * sMass * expMuR * invRSq;
             const radial = -(alpha * v1DotV2 + (alpha * alpha + alpha + 1) * nDotV1 * nDotV2);
             const fx = beta * (radial * nx + alpha * (nDotV2 * pvx + nDotV1 * svx));
             const fy = beta * (radial * ny + alpha * (nDotV2 * pvy + nDotV1 * svy));
@@ -397,7 +397,7 @@ export function compute1PNPairwise(particles, SOFTENING_SQ_VAL, periodic, domW, 
                 const nDotV2 = nx * svx + ny * svy;
                 const v1DotV2 = pvx * svx + pvy * svy;
                 const alpha = 1 + mu * r;
-                const beta = 0.5 * YUKAWA_G2 * pMass * o.mass * expMuR * invRSq;
+                const beta = 0.5 * YUKAWA_COUPLING * pMass * o.mass * expMuR * invRSq;
                 const radial = -(alpha * v1DotV2 + (alpha * alpha + alpha + 1) * nDotV1 * nDotV2);
                 p.force1PN.x += beta * (radial * nx + alpha * (nDotV2 * pvx + nDotV1 * svx));
                 p.force1PN.y += beta * (radial * ny + alpha * (nDotV2 * pvy + nDotV1 * svy));
