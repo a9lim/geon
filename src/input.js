@@ -167,8 +167,12 @@ export default class InputHandler {
         if (e.button === 2) {
             const pos = this._getPosNew(e.clientX, e.clientY);
             const hit = this.findParticleAt(pos);
-            if (hit && !hit.antimatter) {
-                this._deleteParticlesAt(pos);
+            if (hit) {
+                if (hit.antimatter) {
+                    this.sim.selectedParticle = hit;
+                } else {
+                    this._deleteParticlesAt(pos);
+                }
                 return;
             }
             // Empty space: start antimatter drag
