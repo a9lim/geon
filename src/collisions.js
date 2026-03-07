@@ -48,6 +48,9 @@ export function handleCollisions(particles, pool, root, mode, bounceFriction, re
                     const apy = (p1.w.y + real2.w.y) * annihilated;
                     annihilations.push({ x: cx, y: cy, energy: 2 * annihilated, px: apx, py: apy });
                     const origM1 = p1.mass, origM2 = real2.mass;
+                    // Save pre-annihilation mass for signal delay retirement
+                    if (!p1._deathMass) p1._deathMass = origM1;
+                    if (!real2._deathMass) real2._deathMass = origM2;
                     p1.mass -= annihilated;
                     real2.mass -= annihilated;
                     if (origM1 > 0) p1.baseMass *= p1.mass / origM1;
@@ -60,6 +63,8 @@ export function handleCollisions(particles, pool, root, mode, bounceFriction, re
                                    + 0.5 * real2.mass * (real2.vel.x * real2.vel.x + real2.vel.y * real2.vel.y);
                     const mx = (p1.pos.x * p1.mass + real2.pos.x * real2.mass) / (p1.mass + real2.mass);
                     const my = (p1.pos.y * p1.mass + real2.pos.y * real2.mass) / (p1.mass + real2.mass);
+                    // Save pre-merge mass for signal delay retirement
+                    real2._deathMass = real2.mass;
                     resolveMerge(p1, real2, relativityEnabled, periodic, dx, dy);
                     const keAfter = 0.5 * p1.mass * (p1.vel.x * p1.vel.x + p1.vel.y * p1.vel.y);
                     const keLost = Math.max(0, keBefore - keAfter);
@@ -72,17 +77,20 @@ export function handleCollisions(particles, pool, root, mode, bounceFriction, re
         }
     }
 
+    const removed = [];
     if (mode === 'merge') {
         let write = 0;
         for (let read = 0; read < particles.length; read++) {
             if (particles[read].mass !== 0) {
                 particles[write++] = particles[read];
+            } else {
+                removed.push(particles[read]);
             }
         }
         particles.length = write;
     }
 
-    return { annihilations, merges };
+    return { annihilations, merges, removed };
 }
 
 /** Merge p2 into p1, conserving mass, charge, linear and angular momentum. */

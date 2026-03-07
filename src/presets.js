@@ -578,6 +578,7 @@ export function loadPreset(name, sim) {
 
     // 1. Clear state
     sim.particles = [];
+    sim.deadParticles = [];
     sim.photons = [];
     sim.pions = [];
     sim.totalRadiated = 0;

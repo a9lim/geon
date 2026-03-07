@@ -106,7 +106,7 @@ export default class Heatmap {
         this._imgData = this.ctx.createImageData(GRID_SIZE, GRID_SIZE);
     }
 
-    update(particles, camera, width, height, pool, root, barnesHutEnabled, relativityEnabled, simTime, periodic, domW, domH, topology, softeningSq = SOFTENING_SQ, yukawaEnabled = false, yukawaMu = 0.2) {
+    update(particles, camera, width, height, pool, root, barnesHutEnabled, relativityEnabled, simTime, periodic, domW, domH, topology, softeningSq = SOFTENING_SQ, yukawaEnabled = false, yukawaMu = 0.2, deadParticles = null) {
         if (!this.enabled) return;
         if (++this.frameCount % UPDATE_INTERVAL !== 0) return;
 
@@ -122,6 +122,7 @@ export default class Heatmap {
         const useDelay = relativityEnabled;
         const halfDomW = domW * 0.5, halfDomH = domH * 0.5;
         const doYukawa = yukawaEnabled && (this.mode === 'all' || this.mode === 'yukawa');
+        const deadN = deadParticles ? deadParticles.length : 0;
 
         for (let gy = 0; gy < GRID_SIZE; gy++) {
             const wy = top + (gy + 0.5) * cellH;
@@ -158,6 +159,26 @@ export default class Heatmap {
                         if (doYukawa) {
                             const r = 1 / invR;
                             yPhi -= YUKAWA_G2 * p.mass * Math.exp(-yukawaMu * r) * invR;
+                        }
+                    }
+                }
+
+                // Dead particles: signal delay fade-out (not in tree)
+                if (deadN > 0 && useDelay) {
+                    _hmObs.pos.x = wx; _hmObs.pos.y = wy;
+                    for (let i = 0; i < deadN; i++) {
+                        const dp = deadParticles[i];
+                        if (dp.histCount < 2) continue;
+                        const ret = getDelayedState(dp, _hmObs, simTime, periodic, domW, domH, halfDomW, halfDomH, topology);
+                        if (!ret) continue;
+                        const dx = wx - ret.x, dy = wy - ret.y;
+                        const rSq = dx * dx + dy * dy + softeningSq;
+                        const invR = 1 / Math.sqrt(rSq);
+                        gPhi -= dp._deathMass * invR;
+                        ePhi += dp.charge * invR;
+                        if (doYukawa) {
+                            const r = 1 / invR;
+                            yPhi -= YUKAWA_G2 * dp._deathMass * Math.exp(-yukawaMu * r) * invR;
                         }
                     }
                 }
