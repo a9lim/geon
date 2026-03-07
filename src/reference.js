@@ -223,8 +223,13 @@ export const REFERENCE = {
 <p>$$\\mathcal{L}_{\\text{Baz}} = -\\frac{q_1 q_2(m_1+m_2) - (q_1^2 m_2 + q_2^2 m_1)}{2r^2}$$</p>
 <p>Unlike the EIH and Darwin terms, this Lagrangian has no velocity dependence — it is purely a position-dependent $1/r^2$ potential correction. It vanishes for identical particles (when $q_1 = q_2$ and $m_1 = m_2$) and represents the gravitational correction to electromagnetic self-energy and vice versa.</p>
 
+<h3>Scalar Breit &mdash; Yukawa Sector</h3>
+<p>Requires Yukawa. The $O(v^2/c^2)$ relativistic correction for massive scalar (spin-0) boson exchange, derived from the Breit equation:</p>
+<p>$$\\delta H = \\frac{g^2 m_1 m_2\\,e^{-\\mu r}}{2r}\\left[\\mathbf{v}_1\\!\\cdot\\!\\mathbf{v}_2 + (\\hat{r}\\!\\cdot\\!\\mathbf{v}_1)(\\hat{r}\\!\\cdot\\!\\mathbf{v}_2)(1+\\mu r)\\right]$$</p>
+<p>This is positive (repulsive), weakening the Yukawa attraction for fast-moving particles. The $(1+\\mu r)$ factor on the radial-velocity term comes from the massive propagator. Unlike EM (spin-1) exchange, scalar exchange produces no magnetic-type force &mdash; there is no Boris rotation component. All corrections are radial and velocity-dependent, with both radial and tangential force components accumulated into the 1PN display vector.</p>
+
 <h3>Integration Scheme</h3>
-<p>All three sectors use velocity-Verlet: the 1PN force is computed before and after the drift step, and the average is applied, giving second-order accuracy. This is necessary because 1PN forces depend on both position and velocity.</p>
+<p>All four sectors use velocity-Verlet: the 1PN force is computed before and after the drift step, and the average is applied, giving second-order accuracy. This is necessary because 1PN forces depend on both position and velocity.</p>
 `,
     },
 
@@ -340,7 +345,9 @@ export const REFERENCE = {
 <p>The coupling $g = 0.05$ compensates for the field's high quality factor ($Q = 1/g = 20$); in nature, $g \\sim \\alpha/f_a$ is fantastically small.</p>
 
 <h3>Peccei\u2013Quinn Mechanism (Yukawa Coupling)</h3>
-<p>When the Yukawa potential is also enabled, the axion field additionally couples to the strong sector via the Peccei\u2013Quinn mechanism. Unlike the scalar EM coupling (same for matter and antimatter), this is a <em>pseudoscalar</em> coupling that flips sign under CP conjugation &mdash; the key signature that distinguishes matter from antimatter:</p>
+<p>When the Yukawa potential is also enabled, the axion field additionally couples to the strong sector via the Peccei\u2013Quinn mechanism. The interaction Lagrangian is the pseudoscalar analog of the $aF^2$ EM coupling:</p>
+<p>$$\\mathcal{L}_{\\text{PQ}} = \\frac{a}{f_a}\\,\\frac{g_s^2}{32\\pi^2}\\,G_{\\mu\\nu}^a\\tilde{G}^{a\\mu\\nu}$$</p>
+<p>In QCD this couples the axion to the gluon topological charge density $G\\tilde{G}$. In this simulation, the strong sector is modeled by the Yukawa potential, so the coupling acts on the Yukawa interaction strength instead. Unlike the scalar EM coupling (same for matter and antimatter), this is a <em>pseudoscalar</em> coupling that flips sign under CP conjugation &mdash; the key signature that distinguishes matter from antimatter:</p>
 <p>$$\\text{source}_{\\text{PQ}} = \\pm g\\,m, \\qquad \\mathbf{F}_{\\text{PQ}} = \\pm g\\,m\\,\\nabla a$$</p>
 <p>where $+$ is for matter and $-$ for antimatter. The Yukawa coupling is locally modulated:</p>
 <p>$$g^2_{\\text{eff}} = g^2\\left(1 + ga\\right) \\text{ (matter)}, \\qquad g^2\\left(1 - ga\\right) \\text{ (antimatter)}$$</p>
