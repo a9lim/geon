@@ -112,6 +112,27 @@ export default class Physics {
         this._toggles.higgsEnabled = this.higgsEnabled;
     }
 
+    /** Move a removed particle to deadParticles for signal delay fade-out. */
+    _retireParticle(p) {
+        if (!this.relativityEnabled || !this.sim) return;
+        if (p.mass > 0) p._deathMass = p.mass;
+        p.deathTime = this.simTime;
+        // Record final history snapshot so buffer extends to death time
+        p._initHistory();
+        const h = p.histHead;
+        p.histX[h] = p.pos.x;
+        p.histY[h] = p.pos.y;
+        p.histVx[h] = p.vel.x;
+        p.histVy[h] = p.vel.y;
+        p.histTime[h] = this.simTime;
+        p.histHead = (h + 1) % HISTORY_SIZE;
+        if (p.histCount < HISTORY_SIZE) p.histCount++;
+        // Cache dipole moments at death (won't be recached in computeAllForces)
+        p.magMoment = MAG_MOMENT_K * p.charge * p.angVel * p.radiusSq;
+        p.angMomentum = INERTIA_K * p._deathMass * p.angVel * p.radiusSq;
+        this.sim.deadParticles.push(p);
+    }
+
     /** Pool-allocate a ghost at (sx, sy) mirroring p. Flips for non-orientable topologies. */
     _addGhost(p, sx, sy, flipVx = false, flipVy = false) {
         let g;
@@ -397,7 +418,7 @@ export default class Physics {
             const initRoot = this.barnesHutEnabled
                 ? this._buildTree(particles)
                 : -1;
-            computeAllForces(particles, toggles, this.pool, initRoot, this.barnesHutEnabled, relOn, this.simTime, this.periodic, this.domainW, this.domainH, this._topologyConst);
+            computeAllForces(particles, toggles, this.pool, initRoot, this.barnesHutEnabled, relOn, this.simTime, this.periodic, this.domainW, this.domainH, this._topologyConst, this.sim && this.sim.deadParticles);
             this._applyExternalFields(particles);
             if (this.higgsEnabled && this.sim && this.sim.higgsField) {
                 this.sim.higgsField.applyForces(particles, width, height);
@@ -858,8 +879,10 @@ export default class Physics {
 
             // Step 6: Collisions (bounce uses force-based Hertz repulsion; only merge goes here)
             if (collisionMode === 'merge') {
-                const { annihilations, merges } = handleCollisions(particles, this.pool, root, collisionMode, this.bounceFriction, this.relativityEnabled, this.periodic, this.domainW, this.domainH, this._topologyConst);
+                const { annihilations, merges, removed } = handleCollisions(particles, this.pool, root, collisionMode, this.bounceFriction, this.relativityEnabled, this.periodic, this.domainW, this.domainH, this._topologyConst);
                 n = particles.length;
+                // Retire removed particles for signal delay fade-out
+                for (let ri = 0; ri < removed.length; ri++) this._retireParticle(removed[ri]);
                 // Annihilation: emit photon burst from matter-antimatter collisions
                 if (annihilations.length > 0 && this.sim) {
                     for (const ann of annihilations) {
@@ -947,7 +970,7 @@ export default class Physics {
             // Step 7: Recompute forces and B fields for next substep
             resetForces(particles);
             this._syncAxionField(particles, width, height);
-            computeAllForces(particles, toggles, this.pool, root, this.barnesHutEnabled, relOn, this.simTime, this.periodic, this.domainW, this.domainH, this._topologyConst);
+            computeAllForces(particles, toggles, this.pool, root, this.barnesHutEnabled, relOn, this.simTime, this.periodic, this.domainW, this.domainH, this._topologyConst, this.sim && this.sim.deadParticles);
             this._applyExternalFields(particles);
             if (this.higgsEnabled && this.sim && this.sim.higgsField) {
                 this.sim.higgsField.applyForces(particles, width, height);
@@ -1178,6 +1201,7 @@ export default class Physics {
             if (boundaryMode === 'despawn') {
                 if (p.pos.x < left - DESPAWN_MARGIN || p.pos.x > right + DESPAWN_MARGIN ||
                     p.pos.y < top - DESPAWN_MARGIN || p.pos.y > bottom + DESPAWN_MARGIN) {
+                    this._retireParticle(p);
                     continue;
                 }
             } else if (boundaryMode === 'loop') {

@@ -17,33 +17,33 @@ Serve from `a9lim.github.io/` -- shared files load via absolute paths. ES6 modul
 ## File Map
 
 ```
-main.js                  393 lines  Simulation class, emitPhotonBurst(), fixed-timestep loop, save/load, pair production, pion loop, window.sim
+main.js                  411 lines  Simulation class, emitPhotonBurst(), fixed-timestep loop, save/load, pair production, pion loop, deadParticles cleanup, window.sim
 index.html               511 lines  UI: 4-tab sidebar, reference overlay, zoom controls, field sliders, antimatter button
 styles.css               245 lines  Project-specific CSS overrides, toggle/slider theme colors
 colors.js                 18 lines  Project color tokens (particle hues, spin ring colors)
 src/
-  integrator.js         1306 lines  Physics class: Boris substep loop, radiation, pion emission/absorption, field excitations, tidal, GW quadrupole, expansion, Roche, external fields, Hertz bounce, scalar fields
+  integrator.js         1329 lines  Physics class: Boris substep loop, radiation, pion emission/absorption, field excitations, tidal, GW quadrupole, expansion, Roche, external fields, Hertz bounce, scalar fields, _retireParticle
   ui.js                  527 lines  setupUI(), declarative dependency graph, info tips, reference overlay, keyboard shortcuts
   renderer.js            534 lines  Canvas 2D: particles, trails, spin rings, ergosphere, antimatter rings, vectors, torque arcs, photons, pions, delay ghosts, field overlays
-  forces.js              450 lines  pairForce(), computeAllForces(), calculateForce() (BH walk), compute1PNPairwise(), Yukawa
+  forces.js              500 lines  pairForce(), computeAllForces(), calculateForce() (BH walk), compute1PNPairwise(), Yukawa, dead particle forces
   presets.js             665 lines  PRESETS (18 scenarios, 4 groups), loadPreset(), SLIDER_MAP, TOGGLE_MAP/TOGGLE_ORDER
   reference.js           697 lines  REFERENCE object: physics reference content (KaTeX math)
   scalar-field.js        270 lines  ScalarField base class: PQS grid, topology-aware deposition, Laplacian, interpolation, gradient, field excitations
   higgs-field.js         235 lines  HiggsField extends ScalarField: Mexican hat potential, thermal phase transitions, mass modulation
   axion-field.js         214 lines  AxionField extends ScalarField: quadratic potential, scalar aF^2 coupling, EM modulation
   quadtree.js            279 lines  QuadTreePool: SoA flat typed arrays, pool-based, zero GC
-  input.js               262 lines  InputHandler: mouse/touch, Place/Shoot/Orbit modes, hover tooltip
-  signal-delay.js        249 lines  getDelayedState() (3-phase light-cone solver)
-  heatmap.js             224 lines  Heatmap: 64x64 potential field overlay, mode selector, signal-delayed positions
+  input.js               270 lines  InputHandler: mouse/touch, Place/Shoot/Orbit modes, hover tooltip
+  signal-delay.js        255 lines  getDelayedState() (3-phase light-cone solver, creationTime/deathTime guards)
+  heatmap.js             246 lines  Heatmap: 64x64 potential field overlay, mode selector, signal-delayed positions, dead particle contributions
   effective-potential.js 203 lines  EffectivePotentialPlot: V_eff(r) sidebar canvas, auto-scaling
   save-load.js           205 lines  saveState(), loadState(), downloadState(), uploadState(), quickSave/Load(), baseMass persistence
   potential.js           152 lines  computePE(), treePE(), pairPE() (7 PE terms)
   energy.js              153 lines  computeEnergies(): KE, spin KE, momentum, angular momentum, Darwin, field energies
   stats-display.js       131 lines  StatsDisplay: energy/momentum/drift DOM updates (x100 display scale)
   config.js              136 lines  Named constants, spawnOffset(), kerrNewmanRadius() helpers, pion/field excitation constants
-  particle.js            123 lines  Particle: pos, vel, w, angw, baseMass, antimatter, cached magMoment/angMomentum, 11 force Vec2s, axMod, _yukawaRadAccum, history
+  particle.js            126 lines  Particle: pos, vel, w, angw, baseMass, antimatter, cached magMoment/angMomentum, 11 force Vec2s, axMod, _yukawaRadAccum, history, creationTime/deathTime/_deathMass
   phase-plot.js          117 lines  PhasePlot: r vs v_r sidebar canvas (512-sample ring buffer)
-  collisions.js          125 lines  handleCollisions(), resolveMerge(), antimatter annihilation, baseMass conservation, merge KE tracking
+  collisions.js          133 lines  handleCollisions(), resolveMerge(), antimatter annihilation, baseMass conservation, merge KE tracking, returns removed particles
   topology.js            112 lines  TORUS/KLEIN/RP2 constants, minImage(), wrapPosition()
   vec2.js                 61 lines  Vec2 class: set, clone, add, sub, scale, mag, magSq, normalize, dist, static sub
   photon.js               88 lines  Photon: pos, vel, energy, lifetime, type ('em'/'grav'), gravitational lensing (BH tree walk)
@@ -290,7 +290,13 @@ Toggle under Relativity (requires Gravity). Locks collision to Merge.
 Auto-activates with Relativity. Three-phase solver on per-particle circular history buffers (Float64Array[256], recorded every HISTORY_STRIDE=64 `update()` calls):
 1. Newton-Raphson segment search (up to 8 iterations)
 2. Exact quadratic solve on converged segment
-3. Constant-velocity extrapolation for t_ret before recorded history
+3. Constant-velocity extrapolation for t_ret before recorded history (skipped for dead particles)
+
+**Light-cone causality**: Both particle creation and deletion respect finite propagation speed. Newly placed particles have `creationTime = simTime`; the solver rejects extrapolation past creation (particle didn't exist yet). Deleted particles are moved to `sim.deadParticles[]` via `Physics._retireParticle()`, which records a final history snapshot, saves `_deathMass`/`deathTime`, and caches dipole moments. Dead particles continue to exert forces/potential via signal delay until their light-cone fades past all observers, then are garbage-collected (`simTime - deathTime > 2 * domain_diagonal`). The solver skips backward extrapolation for dead particles to prevent spurious solutions.
+
+**Dead particle force path**: `computeAllForces()` and `Heatmap.update()` iterate `deadParticles` as additional sources (always pairwise with signal delay, even when Barnes-Hut is on for live particles). `_deathMass` is used instead of `mass` (which may be zeroed by merge). Dead particles are excluded from `compute1PNPairwise()` (their contribution is constant across drift, so the velocity-Verlet correction is zero).
+
+**Retirement points**: boundary despawn (integrator), collision merge/annihilation (collisions.js returns `removed`), disintegration (main.js), Hawking evaporation (main.js), right-click delete (input.js). All reset paths (preset load, clear, save-load) clear `deadParticles`.
 
 BH mode: signal delay at leaf level only; distant aggregates use current positions.
 
@@ -326,7 +332,7 @@ Do NOT flip these signs.
 
 **Energy** (`energy.js`): Returns linearKE, spinKE, pe, fieldEnergy, momentum, angular momentum, COM, higgsFieldEnergy, axionFieldEnergy. Relativistic KE uses `wSq / (gamma + 1)`. Darwin field corrections when Magnetic/GM on but 1PN off. Conservation exact with gravity + Coulomb only, pairwise mode.
 
-**Collisions**: Three modes -- pass (none), bounce (Hertz contact via `_applyRepulsion()`), merge (quadtree overlap detection, conserves mass/charge/momentum/angular momentum). `handleCollisions()` returns `{ annihilations, merges }` -- integrator emits photons from annihilations and deposits field excitations from merges.
+**Collisions**: Three modes -- pass (none), bounce (Hertz contact via `_applyRepulsion()`), merge (quadtree overlap detection, conserves mass/charge/momentum/angular momentum). `handleCollisions()` returns `{ annihilations, merges, removed }` -- integrator emits photons from annihilations, deposits field excitations from merges, and retires removed particles for signal delay fade-out.
 
 ## Topology
 
@@ -404,7 +410,7 @@ Canvas 2D. Dark mode: additive blending (`lighter`). WORLD_SCALE = 16 (domain = 
 - `.mode-toggles` in shared-base.css sets `display: grid` which overrides `hidden` attribute -- use `style.display` toggling
 - All numerical thresholds (EPSILON, NR_TOLERANCE, etc.) are in config.js -- no inline magic numbers
 - Bounce collision uses `_applyRepulsion()` which needs O(n^2) fallback when BH off (root < 0) -- do not early-return
-- `handleCollisions()` only runs for merge mode; returns `{ annihilations, merges }` -- integrator emits photons and deposits field excitations
+- `handleCollisions()` only runs for merge mode; returns `{ annihilations, merges, removed }` -- integrator emits photons, deposits field excitations, and retires removed particles
 - Old save files with `collision: 'repel'` are migrated to `'bounce'` in loadState()
 - External Bz enters Boris rotation alongside particle-sourced Bz -- included in `needBoris` condition check
 - ScalarField arrays are `field`/`fieldDot` (not `phi`/`phiDot` or `a`/`aDot`)
@@ -423,3 +429,8 @@ Canvas 2D. Dark mode: additive blending (`lighter`). WORLD_SCALE = 16 (domain = 
 - `_yukawaRadAccum` on Particle accumulates pion emission energy -- reset to 0 after each emission
 - Field excitation `depositExcitation()` writes to `fieldDot` (not `field`) -- wave equation propagates naturally
 - `sim.pions` array must be cleared on preset load and reset (in main.js, save-load.js, ui.js)
+- `sim.deadParticles` must be cleared on preset load, clear, and save-load (same locations as pions)
+- Dead particles use `_deathMass` (not `mass`) in force/heatmap code -- merged particles have mass=0 but `_deathMass` preserves the pre-merge value
+- `_retireParticle()` must be called BEFORE the particle is removed from the array (needs valid pos/vel for final history snapshot)
+- Collision code saves `_deathMass` before `resolveMerge()` zeroes mass -- `_retireParticle` uses `p.mass > 0` check to decide whether to overwrite
+- Dead particles skip backward extrapolation in signal-delay solver (deathTime < Infinity guard) -- prevents spurious solutions when true retarded time is past death

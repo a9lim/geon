@@ -96,6 +96,7 @@ export function loadState(state, sim) {
     if (!state || state.version !== 1) return false;
 
     sim.particles = [];
+    sim.deadParticles = [];
     sim.photons = [];
     sim.pions = [];
     sim.totalRadiated = 0;

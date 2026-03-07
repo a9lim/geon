@@ -45,7 +45,7 @@ export function resetForces(particles) {
  * In pairwise mode with signal delay, source positions are evaluated on the
  * past light cone rather than at the current time.
  */
-export function computeAllForces(particles, toggles, pool, root, barnesHutEnabled, relativityEnabled, simTime, periodic, domW, domH, topology = TORUS) {
+export function computeAllForces(particles, toggles, pool, root, barnesHutEnabled, relativityEnabled, simTime, periodic, domW, domH, topology = TORUS, deadParticles = null) {
     const halfDomW = domW * 0.5;
     const halfDomH = domH * 0.5;
     const n = particles.length;
@@ -61,8 +61,7 @@ export function computeAllForces(particles, toggles, pool, root, barnesHutEnable
     const useSignalDelay = relativityEnabled;
 
     if (barnesHutEnabled) {
-        if (root < 0) return;
-        for (let i = 0; i < n; i++) {
+        if (root >= 0) for (let i = 0; i < n; i++) {
             calculateForce(particles[i], pool, root, BH_THETA, particles[i].force, toggles, periodic, domW, domH, halfDomW, halfDomH, topology, useSignalDelay, simTime);
         }
     } else {
@@ -110,6 +109,24 @@ export function computeAllForces(particles, toggles, pool, root, barnesHutEnable
                         o.magMoment, o.angMomentum, p.force, toggles,
                         periodic, domW, domH, halfDomW, halfDomH, topology);
                 }
+            }
+        }
+    }
+
+    // Forces from dead particles (signal delay fade-out)
+    const deadN = deadParticles ? deadParticles.length : 0;
+    if (deadN > 0 && useSignalDelay) {
+        for (let i = 0; i < n; i++) {
+            const p = particles[i];
+            for (let j = 0; j < deadN; j++) {
+                const o = deadParticles[j];
+                if (o.histCount < 2) continue;
+                const ret = getDelayedState(o, p, simTime, periodic, domW, domH, halfDomW, halfDomH, topology);
+                if (!ret) continue;
+                pairForce(p, ret.x, ret.y, ret.vx, ret.vy,
+                    o._deathMass, o.charge, o.angVel,
+                    o.magMoment, o.angMomentum, p.force, toggles,
+                    periodic, domW, domH, halfDomW, halfDomH, topology);
             }
         }
     }

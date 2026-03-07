@@ -152,8 +152,16 @@ export default class InputHandler {
     onMouseDown(e) {
         if (e.button === 2) {
             const pos = this._getPosNew(e.clientX, e.clientY);
-            this.sim.particles = this.sim.particles.filter(p => p.pos.dist(pos) > p.radius);
-            if (this.sim.selectedParticle && !this.sim.particles.includes(this.sim.selectedParticle)) {
+            const kept = [];
+            for (const p of this.sim.particles) {
+                if (p.pos.dist(pos) > p.radius) {
+                    kept.push(p);
+                } else {
+                    this.sim.physics._retireParticle(p);
+                }
+            }
+            this.sim.particles = kept;
+            if (this.sim.selectedParticle && !kept.includes(this.sim.selectedParticle)) {
                 this.sim.selectedParticle = null;
             }
             return;

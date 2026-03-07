@@ -24,6 +24,7 @@ class Simulation {
         this.height = window.innerHeight;
 
         this.particles = [];
+        this.deadParticles = [];
         this.physics = new Physics();
         this.renderer = new Renderer(this.ctx, this.width, this.height);
         this.domainW = this.width / WORLD_SCALE;
@@ -347,6 +348,8 @@ class Simulation {
                     for (let ri = 0; ri < this.particles.length; ri++) {
                         if (!fragSet.has(this.particles[ri])) {
                             this.particles[write++] = this.particles[ri];
+                        } else {
+                            this.physics._retireParticle(this.particles[ri]);
                         }
                     }
                     this.particles.length = write;
@@ -363,12 +366,26 @@ class Simulation {
                         }
                         // Final burst: emit remaining mass-energy as photons
                         if (p.mass > 0) this.emitPhotonBurst(p.pos.x, p.pos.y, p.mass, p.radius, p.id);
+                        this.physics._retireParticle(p);
                         if (this.selectedParticle === p) this.selectedParticle = null;
                     }
                     this.particles.length = writeIdx;
                 }
 
                 this.accumulator -= PHYSICS_DT;
+            }
+
+            // Clean up dead particles whose light-cone can no longer reach any observer
+            if (this.deadParticles.length > 0) {
+                const maxDist = 2 * Math.sqrt(this.domainW * this.domainW + this.domainH * this.domainH);
+                let dw = 0;
+                for (let i = 0; i < this.deadParticles.length; i++) {
+                    const dp = this.deadParticles[i];
+                    if (this.physics.simTime - dp.deathTime < maxDist) {
+                        this.deadParticles[dw++] = dp;
+                    }
+                }
+                this.deadParticles.length = dw;
             }
         }
 
@@ -377,7 +394,7 @@ class Simulation {
             this.physics.relativityEnabled,
             this.physics.simTime, this.physics.periodic, this.domainW, this.domainH,
             this.topology, this.physics.blackHoleEnabled ? BH_SOFTENING_SQ : SOFTENING_SQ,
-            this.physics.yukawaEnabled, this.physics.yukawaMu);
+            this.physics.yukawaEnabled, this.physics.yukawaMu, this.deadParticles);
         this.phasePlot.update(this.particles, this.selectedParticle);
         this.effPotPlot.update(this.particles, this.selectedParticle, this.physics);
         this.renderer.render(this.particles, PHYSICS_DT, this.camera, this.photons, this.pions);

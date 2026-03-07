@@ -195,6 +195,9 @@ export function getDelayedState(source, observer, simTime, periodic, domW, domH,
 
     } // buffer
 
+    // Dead particles have complete history — don't extrapolate past their buffer
+    if (source.deathTime < Infinity) return null;
+
     // ─── Extrapolation: backward from oldest sample at constant velocity ───
     {
         let dx, dy;
