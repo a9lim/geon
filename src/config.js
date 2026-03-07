@@ -60,6 +60,16 @@ export const PHOTON_SOFTENING_SQ = 4;  // smaller than particle softening for ti
 export const ROCHE_THRESHOLD = 0.9;       // overflow starts at this fraction of Roche radius
 export const ROCHE_TRANSFER_RATE = 0.01;  // mass transfer rate coefficient
 
+// Pion (Yukawa force carrier — massive mediator)
+export const PION_LIFETIME = 128;              // ticks before decay
+export const MAX_PIONS = 256;                  // simultaneous pion cap
+export const PION_EMISSION_THRESHOLD = 0.02;   // min accumulated Yukawa energy for emission
+export const PION_SOFTENING_SQ = 4;            // gravitational lensing softening
+
+// Field excitations (Higgs/Axion boson wave packets deposited on merge)
+export const FIELD_EXCITATION_SIGMA = 2;       // Gaussian width in grid cells
+export const MERGE_EXCITATION_SCALE = 0.3;     // amplitude = scale * sqrt(keLost)
+
 // Cosmological expansion
 export const DEFAULT_HUBBLE = 0.001;  // Hubble parameter
 

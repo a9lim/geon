@@ -620,6 +620,65 @@ export const REFERENCE = {
 `,
     },
 
+    pion: {
+        title: 'Pion Exchange (Yukawa Force Carriers)',
+        body: `
+<p>The Yukawa potential was proposed in 1935 by Hideki Yukawa, who predicted that the short-range nuclear force must be mediated by a massive particle — the <b>pion</b>. In this simulation, pions are emitted automatically during Yukawa interactions as massive force carriers, analogous to how photons mediate electromagnetic radiation.</p>
+
+<h3>Emission: Scalar Larmor Radiation</h3>
+<p>A particle accelerating under the Yukawa force radiates pions with power:</p>
+<p>$$P = \\frac{1}{3}\\,g^2 m^2 a^2 = \\frac{1}{3}\\,g^2 F_{\\text{Yuk}}^2$$</p>
+<p>The scalar charge is $Q = gm$ (since the Yukawa coupling is proportional to mass), so $Q^2 a^2 = g^2 m^2 (F/m)^2 = g^2 F^2$. The factor of $\\frac{1}{3}$ comes from integrating the $\\cos^2\\theta$ angular pattern of spin-0 radiation over the sphere — compared to $\\frac{2}{3}$ for the $\\sin^2\\theta$ dipole pattern of spin-1 (EM) Larmor radiation. The ratio $1:2$ reflects the single polarization state of a scalar vs. two for a photon.</p>
+
+<h3>Pion Mass</h3>
+<p>The pion rest mass equals the Yukawa range parameter $\\mu$:</p>
+<p>$$m_\\pi = \\mu, \\qquad V(r) = -g^2 \\frac{e^{-\\mu r}}{r}$$</p>
+<p>This is Yukawa's key insight: the range of the force ($\\sim 1/\\mu$) is inversely proportional to the mediator mass. Heavier pions mean shorter-range forces.</p>
+
+<h3>Kinematics</h3>
+<p>Unlike massless photons ($|v| = c$), pions travel at $v < c$ using proper velocity:</p>
+<p>$$\\mathbf{v} = \\frac{\\mathbf{w}}{\\sqrt{1 + w^2}}$$</p>
+<p>Gravitational deflection uses the massive-particle geodesic factor $(1 + v^2)$, which correctly reduces to $2\\times$ (null geodesic) as $v \\to c$ and $1\\times$ (Newtonian) as $v \\to 0$.</p>
+
+<h3>Decay</h3>
+<p>Pions decay after a finite lifetime:</p>
+<ul>
+<li>$\\pi^0 \\to 2\\gamma$ — two photons emitted back-to-back perpendicular to the flight direction</li>
+<li>$\\pi^\\pm \\to \\gamma$ — one photon along the flight direction (simplified from $\\mu\\nu$)</li>
+</ul>
+
+<h3>Radiation Reaction</h3>
+<p>When a pion is emitted, the emitting particle's kinetic energy is reduced by the pion's total energy (rest mass + kinetic). This prevents double-counting: the Yukawa force is already computed directly between particles, so the pion emission represents the radiation channel only.</p>
+`,
+    },
+
+    fieldExcitation: {
+        title: 'Field Excitations (Higgs Boson & Axion Particle)',
+        body: `
+<p>When particles merge, kinetic energy lost in the inelastic collision excites the active scalar fields (Higgs and/or Axion). These excitations propagate as wave packets — the simulation's analog of <b>Higgs bosons</b> and <b>axion particles</b>.</p>
+
+<h3>Mechanism</h3>
+<p>The kinetic energy before and after an inelastic merge determines the excitation energy:</p>
+<p>$$\\Delta E = \\text{KE}_{\\text{before}} - \\text{KE}_{\\text{after}}$$</p>
+<p>This energy is deposited as a Gaussian bump in the field's time derivative $\\dot{\\phi}$ (or $\\dot{a}$):</p>
+<p>$$\\dot{\\phi}(\\mathbf{x}) \\mathrel{+}= A \\exp\\!\\left(-\\frac{|\\mathbf{x} - \\mathbf{x}_0|^2}{2\\sigma^2}\\right)$$</p>
+<p>where $A = 0.3\\sqrt{\\Delta E}$ and $\\sigma = 2$ grid cells. The existing Klein-Gordon wave equation then propagates the excitation naturally.</p>
+
+<h3>Higgs Boson Analog</h3>
+<p>When the Higgs field is active, merge energy creates oscillations around the vacuum expectation value $\\langle\\phi\\rangle = 1$. These ripples are the 2D analog of the Higgs boson — excitations of the field that gives particles their mass. The Mexican hat potential:</p>
+<p>$$V(\\phi) = -\\frac{1}{2}\\mu^2\\phi^2 + \\frac{1}{4}\\lambda\\phi^4$$</p>
+<p>determines the oscillation frequency: $\\omega = m_H = \\mu\\sqrt{2}$.</p>
+
+<h3>Axion Particle Analog</h3>
+<p>When the Axion field is active, merge energy creates oscillations around the vacuum $\\langle a \\rangle = 0$. These propagating wave packets are the simulation's analog of axion particles — quanta of the axion-like scalar field. The quadratic potential:</p>
+<p>$$V(a) = \\frac{1}{2}m_a^2 a^2$$</p>
+<p>gives simple harmonic oscillation at frequency $\\omega = m_a$.</p>
+
+<h3>Physical Motivation</h3>
+<p>In quantum field theory, particles <em>are</em> field excitations. The Higgs boson discovered at the LHC in 2012 is a quantum of the Higgs field; axions (if they exist) would be quanta of an axion-like field. This simulation captures the classical wave analog: localized disturbances that propagate, disperse, and interact with particles through the same coupling that governs the background field.</p>
+`,
+    },
+
     conserved: {
         title: 'Conserved Quantities',
         body: `

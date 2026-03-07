@@ -13,6 +13,7 @@ export function handleCollisions(particles, pool, root, mode, bounceFriction, re
     const halfDomW = domW * 0.5;
     const halfDomH = domH * 0.5;
     const annihilations = [];
+    const merges = [];
 
     for (let ci = 0; ci < particles.length; ci++) {
         const p1 = particles[ci];
@@ -54,7 +55,15 @@ export function handleCollisions(particles, pool, root, mode, bounceFriction, re
                     p1.updateColor();
                     real2.updateColor();
                 } else if (mode === 'merge') {
+                    // Compute KE before merge for field excitation energy
+                    const keBefore = 0.5 * p1.mass * (p1.vel.x * p1.vel.x + p1.vel.y * p1.vel.y)
+                                   + 0.5 * real2.mass * (real2.vel.x * real2.vel.x + real2.vel.y * real2.vel.y);
+                    const mx = (p1.pos.x * p1.mass + real2.pos.x * real2.mass) / (p1.mass + real2.mass);
+                    const my = (p1.pos.y * p1.mass + real2.pos.y * real2.mass) / (p1.mass + real2.mass);
                     resolveMerge(p1, real2, relativityEnabled, periodic, dx, dy);
+                    const keAfter = 0.5 * p1.mass * (p1.vel.x * p1.vel.x + p1.vel.y * p1.vel.y);
+                    const keLost = Math.max(0, keBefore - keAfter);
+                    if (keLost > 0) merges.push({ x: mx, y: my, energy: keLost });
                     if (periodic) {
                         wrapPosition(p1, topology, domW, domH);
                     }
@@ -73,7 +82,7 @@ export function handleCollisions(particles, pool, root, mode, bounceFriction, re
         particles.length = write;
     }
 
-    return annihilations;
+    return { annihilations, merges };
 }
 
 /** Merge p2 into p1, conserving mass, charge, linear and angular momentum. */

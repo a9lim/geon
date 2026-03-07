@@ -332,6 +332,85 @@ export const PRESETS = {
         },
     },
 
+    pionexchange: {
+        name: 'Pion Exchange',
+        desc: 'Yukawa scattering emits massive pions — watch them carry force between nucleons',
+        toggles: {
+            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: false, onepn: false, blackhole: false,
+            radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
+            barneshut: false, yukawa: true, axion: false, expansion: false, higgs: false,
+        },
+        settings: { collision: 'bounce', boundary: 'bounce', speed: 64, yukawaMu: 0.1 },
+        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            const N = 5;
+            for (let i = 0; i < N; i++) {
+                const angle = (TWO_PI * i) / N;
+                const r = 8;
+                const v = 0.04;
+                const cos = Math.cos(angle), sin = Math.sin(angle);
+                sim.addParticle(cx + cos * r, cy + sin * r,
+                    -sin * v + (Math.random() - 0.5) * 0.02,
+                    cos * v + (Math.random() - 0.5) * 0.02,
+                    { mass: 3, charge: 0, spin: (Math.random() - 0.5) * 0.2 });
+            }
+        },
+    },
+
+    higgsboson: {
+        name: 'Higgs Boson',
+        desc: 'Particle collisions excite the Higgs field — watch wave packets ripple outward',
+        toggles: {
+            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: false, onepn: false, blackhole: false,
+            radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
+            barneshut: false, yukawa: false, axion: false, expansion: false, higgs: true,
+        },
+        settings: { collision: 'merge', boundary: 'bounce', speed: 64 },
+        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            // Head-on collision to produce Higgs excitation
+            sim.addParticle(cx - 15, cy, 0.4, 0, { mass: 3, charge: 0, spin: 0 });
+            sim.addParticle(cx + 15, cy, -0.4, 0, { mass: 3, charge: 0, spin: 0 });
+            // Stationary witnesses to feel the wave
+            for (let i = 0; i < 6; i++) {
+                const angle = (TWO_PI * i) / 6;
+                const r = 20;
+                sim.addParticle(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, 0, 0,
+                    { mass: 1, charge: 0, spin: 0 });
+            }
+        },
+    },
+
+    axionburst: {
+        name: 'Axion Burst',
+        desc: 'Charged collisions excite the axion field — EM coupling ripples outward',
+        toggles: {
+            gravity: false, coulomb: true, magnetic: true, gravitomag: false,
+            relativity: true, onepn: false, blackhole: false,
+            radiation: false, tidallocking: false, spinorbit: false, disintegration: false,
+            barneshut: false, yukawa: false, axion: true, expansion: false, higgs: false,
+        },
+        settings: { collision: 'merge', boundary: 'despawn', speed: 64, axionMass: 0.1 },
+        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            // Charged head-on collision
+            sim.addParticle(cx - 12, cy, 0.3, 0, { mass: 2, charge: 3, spin: 0 });
+            sim.addParticle(cx + 12, cy, -0.3, 0, { mass: 2, charge: -3, spin: 0 });
+            // Orbiting electrons to feel axion EM modulation
+            const r = 22;
+            for (let i = 0; i < 4; i++) {
+                const angle = (TWO_PI * i) / 4;
+                sim.addParticle(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, 0, 0,
+                    { mass: 0.5, charge: -1, spin: 0.2 });
+            }
+        },
+    },
+
     phasetransition: {
         name: 'Phase Transition',
         desc: 'High-energy particles restore the Higgs symmetry — watch mass vanish',
@@ -430,7 +509,7 @@ export const PRESETS = {
 export const PRESET_ORDER = [
     'kepler', 'precession', 'inspiral', 'tidallock', 'roche', 'hawking',
     'atom', 'bremsstrahlung', 'magnetic',
-    'nucleus', 'axion',
+    'nucleus', 'axion', 'pionexchange', 'higgs', 'higgsboson', 'axionburst', 'phasetransition',
     'galaxy', 'expansion',
 ];
 
@@ -501,6 +580,7 @@ export function loadPreset(name, sim) {
     // 1. Clear state
     sim.particles = [];
     sim.photons = [];
+    sim.pions = [];
     sim.totalRadiated = 0;
     sim.totalRadiatedPx = 0;
     sim.totalRadiatedPy = 0;

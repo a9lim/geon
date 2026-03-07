@@ -3,8 +3,9 @@
 // B-like (velocity-dependent) forces for exact |v|-preserving rotation.
 
 import QuadTreePool, { Rect } from './quadtree.js';
-import { PI, TWO_PI, SOFTENING, BH_SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, LL_FORCE_CLAMP, TIDAL_STRENGTH, SPAWN_COUNT, SOFTENING_SQ, BH_SOFTENING_SQ, QUADTREE_CAPACITY, BH_THETA, HISTORY_SIZE, HISTORY_STRIDE, DEFAULT_YUKAWA_MU, DEFAULT_AXION_MASS, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, DEFAULT_HUBBLE, EPSILON, EPSILON_SQ, MAX_REJECTION_SAMPLES, QUADRUPOLE_POWER_CLAMP, ABERRATION_THRESHOLD, spawnOffset, kerrNewmanRadius } from './config.js';
+import { PI, TWO_PI, SOFTENING, BH_SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, LL_FORCE_CLAMP, TIDAL_STRENGTH, SPAWN_COUNT, SOFTENING_SQ, BH_SOFTENING_SQ, QUADTREE_CAPACITY, BH_THETA, HISTORY_SIZE, HISTORY_STRIDE, DEFAULT_YUKAWA_MU, DEFAULT_AXION_MASS, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, DEFAULT_HUBBLE, EPSILON, EPSILON_SQ, MAX_REJECTION_SAMPLES, QUADRUPOLE_POWER_CLAMP, ABERRATION_THRESHOLD, spawnOffset, kerrNewmanRadius, PION_EMISSION_THRESHOLD, PION_LIFETIME, MAX_PIONS, YUKAWA_G2 } from './config.js';
 import Photon from './photon.js';
+import Pion from './pion.js';
 import { angwToAngVel } from './relativity.js';
 
 import { resetForces, computeAllForces, compute1PNPairwise } from './forces.js';
@@ -751,6 +752,52 @@ export default class Physics {
                 }
             }
 
+            // Pion emission from Yukawa interactions (scalar Larmor radiation)
+            if (this.yukawaEnabled && this.radiationEnabled && this.sim) {
+                const pions = this.sim.pions;
+                for (let i = 0; i < n; i++) {
+                    const p = particles[i];
+                    const fYukSq = p.forceYukawa.x * p.forceYukawa.x + p.forceYukawa.y * p.forceYukawa.y;
+                    if (fYukSq < EPSILON_SQ) continue;
+                    // Scalar Larmor: P = g²m²a²/3 = g²F²/3
+                    // 1/3 angular factor for spin-0 (cf. 2/3 for spin-1 EM Larmor)
+                    // Scalar charge Q = g·m (Yukawa couples ∝ m), so Q²a² = g²m²(F/m)² = g²F²
+                    const dE = YUKAWA_G2 / 3 * fYukSq * dtSub;
+                    p._yukawaRadAccum += dE;
+                    if (p._yukawaRadAccum >= PION_EMISSION_THRESHOLD && pions.length < MAX_PIONS) {
+                        const pionMass = this.yukawaMu;
+                        const ke = p._yukawaRadAccum - pionMass;
+                        if (ke > 0) {
+                            const angle = Math.atan2(p.forceYukawa.y, p.forceYukawa.x);
+                            const speed = Math.sqrt(ke * (ke + 2 * pionMass)) / (ke + pionMass);
+                            const gamma = 1 / Math.sqrt(1 - speed * speed);
+                            const wx = gamma * speed * Math.cos(angle);
+                            const wy = gamma * speed * Math.sin(angle);
+                            const charge = Math.abs(p.charge) < EPSILON ? 0 : (Math.random() < 0.33 ? 0 : (Math.random() < 0.5 ? 1 : -1));
+                            const offset = spawnOffset(p.radius);
+                            pions.push(new Pion(
+                                p.pos.x + Math.cos(angle) * offset,
+                                p.pos.y + Math.sin(angle) * offset,
+                                wx, wy, pionMass, charge, p._yukawaRadAccum, p.id
+                            ));
+                            // Radiation reaction: subtract emitted energy from particle KE
+                            const wSq = p.w.x * p.w.x + p.w.y * p.w.y;
+                            if (wSq > EPSILON_SQ) {
+                                const pKE = relOn
+                                    ? (Math.sqrt(1 + wSq) - 1) * p.mass
+                                    : 0.5 * p.mass * wSq;
+                                if (pKE > p._yukawaRadAccum) {
+                                    const scale = Math.sqrt(1 - p._yukawaRadAccum / pKE);
+                                    p.w.x *= scale;
+                                    p.w.y *= scale;
+                                }
+                            }
+                            p._yukawaRadAccum = 0;
+                        }
+                    }
+                }
+            }
+
             // Step 4: Derive coordinate velocity from w, then drift positions
             for (let i = 0; i < n; i++) {
                 const p = particles[i];
@@ -813,12 +860,23 @@ export default class Physics {
 
             // Step 6: Collisions (bounce uses force-based Hertz repulsion; only merge goes here)
             if (collisionMode === 'merge') {
-                const annihilations = handleCollisions(particles, this.pool, root, collisionMode, this.bounceFriction, this.relativityEnabled, this.periodic, this.domainW, this.domainH, this._topologyConst);
+                const { annihilations, merges } = handleCollisions(particles, this.pool, root, collisionMode, this.bounceFriction, this.relativityEnabled, this.periodic, this.domainW, this.domainH, this._topologyConst);
                 n = particles.length;
                 // Annihilation: emit photon burst from matter-antimatter collisions
                 if (annihilations.length > 0 && this.sim) {
                     for (const ann of annihilations) {
                         this.sim.emitPhotonBurst(ann.x, ann.y, ann.energy, 0, -1);
+                    }
+                }
+                // Field excitations from merge collisions (Higgs/Axion boson emission)
+                if (merges.length > 0 && this.sim) {
+                    for (const m of merges) {
+                        if (this.higgsEnabled && this.sim.higgsField) {
+                            this.sim.higgsField.depositExcitation(m.x, m.y, m.energy, width, height);
+                        }
+                        if (this.axionEnabled && this.sim.axionField) {
+                            this.sim.axionField.depositExcitation(m.x, m.y, m.energy, width, height);
+                        }
                     }
                 }
             }
@@ -848,6 +906,33 @@ export default class Physics {
                             this.sim.totalRadiatedPx -= ph.energy * ph.vel.x;
                             this.sim.totalRadiatedPy -= ph.energy * ph.vel.y;
                             ph.alive = false;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Pion absorption: transfer momentum + charge to absorbing particle
+            if (this.yukawaEnabled && this.sim && this.sim.pions.length > 0) {
+                const softening = this.blackHoleEnabled ? BH_SOFTENING : SOFTENING;
+                const pions = this.sim.pions;
+                for (let pi = pions.length - 1; pi >= 0; pi--) {
+                    const pn = pions[pi];
+                    if (!pn.alive) continue;
+                    const candidates = this.pool.queryReuse(root,
+                        pn.pos.x, pn.pos.y, softening, softening);
+                    for (let ci = 0; ci < candidates.length; ci++) {
+                        const target = candidates[ci];
+                        if (target.isGhost) continue;
+                        if (target.id === pn.emitterId && pn.age < 3) continue;
+                        const dx = pn.pos.x - target.pos.x;
+                        const dy = pn.pos.y - target.pos.y;
+                        if (dx * dx + dy * dy < target.radius * target.radius) {
+                            target.w.x += pn.energy * pn.vel.x / target.mass;
+                            target.w.y += pn.energy * pn.vel.y / target.mass;
+                            target.charge += pn.charge;
+                            if (pn.charge !== 0) target.updateColor();
+                            pn.alive = false;
                             break;
                         }
                     }
