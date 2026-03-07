@@ -162,7 +162,7 @@ Always active when Gravity is on (no separate toggle). `coupling = m_other + q1*
 
 ### Yukawa Potential
 
-Independent toggle. `F = -g^2 * m1*m2 * exp(-mu*r)/r^2 * (1+mu*r)`. Parameters: `yukawaCoupling` (default 32), `yukawaMu` (default 0.15, slider 0.05-0.50). Includes analytical jerk for radiation. Emits pions as massive force carriers (see Pion section). **Scalar Breit correction** (requires 1PN): O(v^2/c^2) velocity-dependent correction from massive scalar boson exchange Hamiltonian `δH = g²m₁m₂e^{-μr}/(2r) * [v₁·v₂ + (r̂·v₁)(r̂·v₂)(1+μr)]`. Force into `force1PN`. Velocity-Verlet corrected via `compute1PNPairwise()`.
+Independent toggle. `F = -g^2 * m1*m2 * exp(-mu*r)/r^2 * (1+mu*r)`. Parameters: `yukawaCoupling` (default 14), `yukawaMu` (default 0.15, slider 0.05-0.50). Includes analytical jerk for radiation. Emits pions as massive force carriers (see Pion section). **Scalar Breit correction** (requires 1PN): O(v^2/c^2) velocity-dependent correction from massive scalar boson exchange Hamiltonian `δH = g²m₁m₂e^{-μr}/(2r) * [v₁·v₂ + (r̂·v₁)(r̂·v₂)(1+μr)]`. Force into `force1PN`. Velocity-Verlet corrected via `compute1PNPairwise()`.
 
 ### External Background Fields
 
@@ -250,7 +250,7 @@ Quadtree overlap query after photon absorption. Transfers momentum and charge (p
 
 ### Constants
 
-`PION_HALF_LIFE = 32` (probabilistic decay: `P = 1 - exp(-ln2/t_half * dt)` per substep), `MAX_PIONS = 256`, `BOSON_SOFTENING_SQ = 4` (shared by photon and pion lensing), `BOSON_ABSORB_FRACTION = 1` (absorption cross-section), `BOSON_MIN_AGE = 4` (minimum substeps before absorption).
+`PION_HALF_LIFE = 32` (probabilistic decay: `PION_DECAY_PROB` pre-computed per substep), `MAX_PIONS = 256`, `BOSON_SOFTENING_SQ = 4` (shared by photon and pion lensing), `BOSON_ABSORB_FRACTION = 1` (absorption cross-section), `BOSON_MIN_AGE = 4` (minimum substeps before absorption), `ABERRATION_THRESHOLD = 1.01` (min gamma for Lorentz aberration of emission angles), `QUADRUPOLE_POWER_CLAMP = 0.01` (max quadrupole dE as fraction of system KE).
 
 ## Field Excitations
 
@@ -327,7 +327,7 @@ Toggle. `pos += H*(pos - center)*dt` (Hubble flow), `w *= (1 - H*dt)` (redshift)
 
 ### Antimatter & Pair Production
 
-`p.antimatter` boolean. Right-click spawns antimatter (with negated charge and spin). Left-click on antimatter deletes it; right-click on matter deletes it. Symmetric: same-type click selects, opposite-type click deletes. Matter+antimatter merge annihilates lesser mass, emits photons via `emitPhotonBurst()`. Pair production: photons with energy >= 1 near massive body (dist < 8) can produce matter+antimatter pair (prob 0.005/substep).
+`p.antimatter` boolean. Right-click spawns antimatter (with negated charge and spin). Left-click on antimatter deletes it; right-click on matter deletes it. Symmetric: same-type click selects, opposite-type click deletes. Matter+antimatter merge annihilates lesser mass, emits photons via `emitPhotonBurst()`. Pair production: photons with energy >= 0.5 near massive body (dist < 8) can produce matter+antimatter pair (prob 0.005/substep, min age 64 substeps, max 32 particles).
 
 ## Sign Conventions (IMPORTANT)
 
