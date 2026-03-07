@@ -5,6 +5,13 @@
 import { SOFTENING_SQ, BH_THETA, YUKAWA_G2, HEATMAP_GRID, HEATMAP_INTERVAL, HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA } from './config.js';
 import { getDelayedState } from './signal-delay.js';
 
+// Parse heatmap colors from shared palette at module load (0-255 ints)
+const _ph = window._parseHex; // hex -> [r,g,b] in 0–1
+const _gravRGB   = _ph(window._PALETTE.extended.slate).map(v => (v * 255 + 0.5) | 0);
+const _eNegRGB   = _ph(window._PALETTE.extended.blue).map(v => (v * 255 + 0.5) | 0);
+const _ePosRGB   = _ph(window._PALETTE.extended.red).map(v => (v * 255 + 0.5) | 0);
+const _yukawaRGB = _ph(window._PALETTE.extended.green).map(v => (v * 255 + 0.5) | 0);
+
 const GRID_SIZE = HEATMAP_GRID;
 const GRID_SQ = GRID_SIZE * GRID_SIZE;
 const UPDATE_INTERVAL = HEATMAP_INTERVAL;
@@ -187,16 +194,10 @@ export default class Heatmap {
             const idx = i * 4;
             if (totalA > 0) {
                 const invA = 1 / totalA;
-                // Slate: 138, 126, 114 — gravity
-                let r = 138 * gA, g = 126 * gA, b = 114 * gA;
-                // Blue-teal (negative charge) / Red-warm (positive charge) — electric
-                if (this.elecPotential[i] < 0) {
-                    r += 92 * eA; g += 146 * eA; b += 168 * eA;
-                } else {
-                    r += 192 * eA; g += 80 * eA; b += 72 * eA;
-                }
-                // Green: 80, 152, 120 — yukawa
-                r += 80 * yA; g += 152 * yA; b += 120 * yA;
+                const eRGB = this.elecPotential[i] < 0 ? _eNegRGB : _ePosRGB;
+                let r = _gravRGB[0] * gA + eRGB[0] * eA + _yukawaRGB[0] * yA;
+                let g = _gravRGB[1] * gA + eRGB[1] * eA + _yukawaRGB[1] * yA;
+                let b = _gravRGB[2] * gA + eRGB[2] * eA + _yukawaRGB[2] * yA;
 
                 data[idx] = (r * invA + 0.5) | 0;
                 data[idx + 1] = (g * invA + 0.5) | 0;

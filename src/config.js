@@ -49,7 +49,7 @@ export const DEFAULT_YUKAWA_MU = 0.05;  // mediator mass (inverse range)
 export const AXION_GRID = 64;
 export const AXION_A_MAX = 2;            // field value clamp (keeps axMod in [0,3])
 export const DEFAULT_AXION_MASS = 0.05; // mediator mass (oscillation frequency)
-export const AXION_COUPLING = 0.2;      // g in L = -(1+g·a)F²/4; also sets Q = 1/g = 5, ζ = g/2
+export const AXION_COUPLING = 0.05;      // g in L = -(1+g·a)F²/4; also sets Q = 1/g, ζ = g/2
 
 // Photon gravitational lensing
 export const PHOTON_SOFTENING_SQ = 4;  // smaller than particle softening for tighter lensing
@@ -63,8 +63,9 @@ export const DEFAULT_HUBBLE = 0.001;  // Hubble parameter
 
 // Higgs field: V(φ) = -(m_H²/4)φ² + (m_H²/8)φ⁴ (VEV=1, λ=m_H²/2)
 export const HIGGS_GRID = 64;
+export const HIGGS_PHI_MAX = 2;              // field value clamp (prevent runaway)
 export const DEFAULT_HIGGS_MASS = 0.5;        // Higgs boson mass (mediator range ~ 1/m_H)
-export const HIGGS_PHI_MAX = 16;              // field value clamp (prevent runaway)
+export const HIGGS_COUPLING = 0.25;            // Yukawa coupling g (source = g·baseMass, force = g·baseMass·∇φ)
 
 // Numerical thresholds
 export const EPSILON = 1e-9;          // general "effectively zero" guard

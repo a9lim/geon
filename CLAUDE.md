@@ -81,7 +81,7 @@ signal-delay.js  <- config (HISTORY_SIZE, NR_TOLERANCE, EPSILON), TORUS + minIma
 save-load.js     <- Particle, angwToAngVel (relativity)
 effective-potential.js <- config (SOFTENING_SQ, BH_SOFTENING_SQ, YUKAWA_G2)
 scalar-field.js  <- config (EPSILON), topology (TORUS, KLEIN, RP2)
-higgs-field.js   <- config (HIGGS_GRID, DEFAULT_HIGGS_MASS, HIGGS_PHI_MAX, EPSILON, kerrNewmanRadius), ScalarField + bcFromString (scalar-field)
+higgs-field.js   <- config (HIGGS_GRID, DEFAULT_HIGGS_MASS, HIGGS_PHI_MAX, HIGGS_COUPLING, EPSILON, kerrNewmanRadius), ScalarField + bcFromString (scalar-field)
 axion-field.js   <- config (AXION_GRID, AXION_A_MAX, DEFAULT_AXION_MASS, EPSILON), ScalarField + bcFromString (scalar-field)
 particle.js      <- Vec2, config (HISTORY_SIZE, kerrNewmanRadius)
 reference.js     (no imports - pure data)
@@ -198,9 +198,9 @@ Requires Coulomb. Axion-like scalar field on a 64×64 grid with quadratic potent
 
 **Field energy**: `E = ∫(½ȧ² + ½|∇a|² + ½m_a²a²)dA`. No offset needed (V(0)=0). Tracked in stats as `axionFieldEnergy`, included in total energy.
 
-**Parameters**: One slider: `mass` (m_a, default 0.05, range 0.01–0.25). Config constants: `AXION_GRID = 64`, `AXION_A_MAX = 2`, `AXION_COUPLING = 0.2`.
+**Parameters**: One slider: `mass` (m_a, default 0.05, range 0.01–0.25). Config constants: `AXION_GRID = 64`, `AXION_A_MAX = 2`, `AXION_COUPLING = 0.05`.
 
-**Rendering**: Offscreen 64×64 canvas, bilinear-upscaled. Orange = positive (a > 0), blue = negative (a < 0). Alpha ∝ |a|×4. Force vector color: orange (`--ext-orange`).
+**Rendering**: Offscreen 64×64 canvas, bilinear-upscaled. Blue = positive (a > 0), red = negative (a < 0). Alpha ∝ |a|×4. Colors from `_PALETTE.extended`. Force vector color: orange (`--ext-orange`).
 
 ### Scalar Field Base Class
 
@@ -225,9 +225,9 @@ Independent toggle (`physics.higgsEnabled`). Dynamical real scalar field on a 64
 
 **Mass generation**: `m_eff = baseMass · |φ(x)|`. Particles store intrinsic `baseMass`; effective `mass` varies with local field value. At VEV (φ=1), `m_eff = baseMass`. In symmetric phase (φ→0), particles become effectively massless (floored at EPSILON).
 
-**Gradient force**: `F = -baseMass · ∇φ`. PQS gradient weights (derivative of cubic B-spline) give C¹ continuous forces. Accumulates into `forceHiggs`. Applied as E-like force after external fields. Included in Larmor radiation jerk via numerical backward difference of the residual force.
+**Gradient force**: `F = -g·baseMass · ∇φ` where `g = HIGGS_COUPLING`. PQS gradient weights (derivative of cubic B-spline) give C¹ continuous forces. Accumulates into `forceHiggs`. Applied as E-like force after external fields. Included in Larmor radiation jerk via numerical backward difference of the residual force.
 
-**Field equation**: `∂²φ/∂t² = ∇²φ + μ²_eff·φ - μ²φ³ + source/cellArea - 2m_H·∂φ/∂t` where `μ² = m_H²/2`. Symplectic Euler (kick-drift). PQS deposition of `baseMass` for particle source terms. Source coupling g=1 (physical Yukawa coupling, same as mass coupling).
+**Field equation**: `∂²φ/∂t² = ∇²φ + μ²_eff·φ - μ²φ³ + source/cellArea - 2m_H·∂φ/∂t` where `μ² = m_H²/2`. Symplectic Euler (kick-drift). PQS deposition of `g·baseMass` for particle source terms (`g = HIGGS_COUPLING = 0.25`).
 
 **Phase transitions**: Thermal correction `μ²_eff = μ² - KE_local` (thermalK=1 baked in) where `KE_local` is PQS-deposited KE density. When local KE exceeds μ², field relaxes to φ=0 (symmetric phase), particles lose mass.
 
@@ -237,9 +237,9 @@ Independent toggle (`physics.higgsEnabled`). Dynamical real scalar field on a 64
 
 **Damping**: Critical damping `damp = 2·m_H`. Prevents field ringing. Scales with m_H so the field always settles without oscillation.
 
-**Parameters**: One slider: `mass` (m_H, default 0.5, range 0.25–1). Config constants: `HIGGS_GRID = 64`, `HIGGS_PHI_MAX = 16`. All other parameters baked to 1 (VEV, source coupling, thermalK, damping ratio, lambda).
+**Parameters**: One slider: `mass` (m_H, default 0.5, range 0.25–1). Config constants: `HIGGS_GRID = 64`, `HIGGS_PHI_MAX = 2`, `HIGGS_COUPLING = 0.25`. VEV=1, thermalK=1, damping ratio=1 baked in.
 
-**Rendering**: Offscreen 64×64 canvas, bilinear-upscaled to world space. Magenta = depleted (φ < 1), cyan = enhanced (φ > 1). Alpha ∝ |deviation|×2. Force vector color: magenta (`--ext-magenta`).
+**Rendering**: Offscreen 64×64 canvas, bilinear-upscaled to world space. Magenta = depleted (φ < 1), cyan = enhanced (φ > 1). Alpha ∝ |deviation|×(8/g). Colors from `_PALETTE.extended`. Force vector color: magenta (`--ext-magenta`).
 
 **baseMass synchronization**: All mass-modifying operations (merge, annihilation, Roche overflow, disintegration, Hawking evaporation) proportionally scale `baseMass`. On Higgs toggle-off, `mass` is restored to `baseMass` for all particles.
 
@@ -426,7 +426,7 @@ Canvas 2D. Dark mode: additive blending (`lighter`).
 - **Antimatter rings**: dashed white circle (`#888` light / `#ccc` dark) around antimatter particles, radius = p.radius + 0.4
 - **Force vectors**: scale=FORCE_VECTOR_SCALE (÷ mass for accel). Component colors: gravity=red, coulomb=blue, magnetic=cyan, GM=rose, 1PN=orange, spin-curv=purple, radiation=yellow, yukawa=green, external=white, higgs=magenta, axion=orange
 - **Higgs field overlay**: 64×64 offscreen canvas bilinear-upscaled. Magenta=depleted, cyan=enhanced. Rendered after camera transform, before trails
-- **Axion field overlay**: 64×64 offscreen canvas bilinear-upscaled. Orange=positive, blue=negative. Rendered after Higgs overlay
+- **Axion field overlay**: 64×64 offscreen canvas bilinear-upscaled. Blue=positive, red=negative. Rendered after Higgs overlay
 - **Torque arcs**: spin-orbit=purple, frame-drag=rose, tidal=red, total=accent
 - **Photons**: yellow (EM, `type: 'em'`) / red (gravitons, `type: 'grav'`), alpha fades over PHOTON_LIFETIME=256
 - **Signal delay ghosts**: stroked outline at oldest history position
@@ -488,7 +488,7 @@ Particle color: neutral=slate `#8A7E72`. Charged: RGB lerp toward red (positive)
 - Higgs/Axion field reset on preset load and clear; Higgs mass restoration to `baseMass` on toggle-off; Axion axMod reset to 1 on toggle-off
 - Axion `p.axMod` is per-particle (interpolated from local field), not a global oscillation -- `pairForce()` and `pairPE()` use `p.axMod`, not `toggles.axMod`
 - Axion `p.axMod` clamped `>= 0` -- without this, `a(x) < -1` reverses EM force signs causing runaway acceleration and radiation detonation
-- Axion uses scalar `aF²` coupling (not pseudoscalar `aFF̃` which vanishes in 2D). `AXION_COUPLING = 0.2` scales source (`g·q²`), gradient force (`-g·q²·∇a`), and modulation (`α_eff = α·(1 + g·a)`) consistently
+- Axion uses scalar `aF²` coupling (not pseudoscalar `aFF̃` which vanishes in 2D). `AXION_COUPLING = 0.05` scales source (`g·q²`), gradient force (`-g·q²·∇a`), and modulation (`α_eff = α·(1 + g·a)`) consistently
 - `magMoment`/`angMomentum` cache is set in `computeAllForces()` — if angVel changes mid-substep (spin-orbit, frame-drag), the cache reflects the *previous* computeAllForces state, which is consistent with the B-field gradients used in the same substep
 - Ghost particles must carry `magMoment`/`angMomentum` fields (set in `_addGhost()`) for BH leaf walk in `pairForce()`/`pairPE()`
 - Photon `update()` takes optional `pool`/`root` for BH tree lensing; falls back to O(N) brute force when pool is null or root < 0
