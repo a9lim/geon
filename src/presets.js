@@ -276,7 +276,7 @@ export const PRESETS = {
 
     axion: {
         name: 'Axion Field',
-        desc: 'Dynamical pseudoscalar field modulates EM coupling spatially',
+        desc: 'Scalar aF² coupling makes EM strength position-dependent',
         toggles: {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
             relativity: true, onepn: false, blackhole: false,
