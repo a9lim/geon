@@ -51,7 +51,7 @@ export const QUADRUPOLE_POWER_CLAMP = 0.01;  // max quadrupole dE as fraction of
 export const ABERRATION_THRESHOLD = 1.01;    // min gamma for relativistic aberration
 
 // ── Yukawa ──
-export const YUKAWA_COUPLING = 32;           // g² coupling strength (fixed)
+export const YUKAWA_COUPLING = 14;           // g² coupling strength (fixed)
 export const DEFAULT_PION_MASS = 0.15;       // mediator mass (inverse range), ~m_π/m_N
 
 // ── Scalar Fields (Higgs & Axion) ──
@@ -79,7 +79,7 @@ export const ROCHE_THRESHOLD = 0.9;
 export const ROCHE_TRANSFER_RATE = 0.01;
 
 // ── Pair Production ──
-export const PAIR_PROD_MIN_ENERGY = 1;       // minimum photon energy for pair production
+export const PAIR_PROD_MIN_ENERGY = 0.5;       // minimum photon energy for pair production
 export const PAIR_PROD_RADIUS = 8;           // proximity to massive body
 export const PAIR_PROD_PROB = 0.005;         // probability per substep
 export const PAIR_PROD_MAX_PARTICLES = 32;
@@ -110,7 +110,7 @@ export const DISPLAY_SCALE = 100;
 export const STATS_THROTTLE_MASK = 3;
 export const PHASE_BUFFER_LEN = 512;
 export const HEATMAP_GRID = 64;
-export const HEATMAP_INTERVAL = 8;
+export const HEATMAP_INTERVAL = 4;
 export const HEATMAP_SENSITIVITY = 2;
 export const HEATMAP_MAX_ALPHA = 100;
 export const VELOCITY_VECTOR_SCALE = 32;
