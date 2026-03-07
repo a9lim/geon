@@ -200,7 +200,7 @@ Independent toggle. Mexican hat potential `V(phi) = -1/2 mu^2 phi^2 + 1/4 lambda
 - **Boundary**: Despawn -> Dirichlet (phi=1). Bounce -> Neumann. Loop -> periodic (topology-aware).
 - **Energy**: `E = integral(1/2 phi_dot^2 + 1/2 |grad(phi)|^2 + V(phi)) dA`, shifted so V(1)=0 (vacOffset = mu^2/4).
 - **Damping**: Critical damping `damp = 2*m_H`.
-- **Rendering**: Magenta = depleted (phi < 1), cyan = enhanced (phi > 1). Alpha proportional to |deviation|.
+- **Rendering**: Lime = depleted (phi < 1), cyan = enhanced (phi > 1). Alpha proportional to |deviation|.
 - **baseMass sync**: All mass-modifying operations (merge, annihilation, Roche, disintegration, Hawking) proportionally scale baseMass. Toggle-off restores mass to baseMass.
 
 ### Axion Field
@@ -214,7 +214,7 @@ Requires Coulomb. Quadratic potential `V(a) = 1/2 m_a^2 a^2`. No symmetry breaki
 - **Boundary**: Same as Higgs via `ScalarField._nb()`, but Dirichlet uses a=0 (not a=1).
 - **Energy**: `E = integral(1/2 a_dot^2 + 1/2 |grad(a)|^2 + 1/2 m_a^2 a^2) dA`. No offset needed.
 - **Parameters**: One slider: m_a (0.01-0.25, default 0.05).
-- **Rendering**: Blue = positive (a > 0), red = negative (a < 0). Alpha proportional to |a|*4.
+- **Rendering**: Indigo = positive (a > 0), red = negative (a < 0). Alpha proportional to |a|*4.
 
 ## Pions (Massive Force Carriers)
 
@@ -372,7 +372,7 @@ Canvas 2D. Dark mode: additive blending (`lighter`). WORLD_SCALE = 16 (domain = 
 
 - **Particles**: r = cbrt(mass) (BH: Kerr-Newman r+), glow in dark mode. Neutral = slate. Charged: RGB lerp toward red(+)/blue(-), intensity = |q|/5.
 - **Trails**: circular Float32Array[256], wrap-detection for periodic boundaries
-- **Force vectors**: component colors: gravity=red, coulomb=blue, magnetic=cyan, GM=rose, 1PN=orange, spin-curv=purple, radiation=yellow, yukawa=green, external=white, higgs=magenta, axion=orange
+- **Force vectors**: component colors: gravity=red, coulomb=blue, magnetic=cyan, GM=rose, 1PN=orange, spin-curv=purple, radiation=yellow, yukawa=green, external=brown, higgs=lime, axion=indigo
 - **Field overlays**: 64x64 offscreen canvas, bilinear-upscaled. Higgs: magenta/cyan. Axion: red/blue.
 - **Photons**: yellow (EM) / red (gravitons), alpha fades over PHOTON_LIFETIME=256
 - **Pions**: green circles (`_PALETTE.extended.green`), glow in dark mode, alpha fades over PION_LIFETIME=128

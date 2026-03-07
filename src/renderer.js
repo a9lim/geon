@@ -17,8 +17,8 @@ const _forceCompColors = {
     torqueTidal: _PAL.extended.red,
     yukawa:      _PAL.extended.green,
     external:    _PAL.extended.brown,
-    higgs:       _PAL.extended.magenta,
-    axion:       _PAL.extended.orange,
+    higgs:       _PAL.extended.lime,
+    axion:       _PAL.extended.indigo,
 };
 
 // Spin ring colors by sign
