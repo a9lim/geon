@@ -64,14 +64,53 @@ export default class Pion {
         sim.totalRadiatedPy -= this.energy * this.vel.y;
         const n = this.charge === 0 ? 2 : 1;
         const ePerPh = this.energy / n;
-        for (let i = 0; i < n; i++) {
-            const angle = this.charge === 0
-                ? Math.atan2(this.vel.y, this.vel.x) + (i === 0 ? Math.PI / 2 : -Math.PI / 2)
-                : Math.atan2(this.vel.y, this.vel.x);
+        const offset = spawnOffset(Math.cbrt(this.mass));
+        if (this.charge === 0) {
+            // pi0 -> 2 photons: back-to-back in rest frame, Lorentz-boosted to lab.
+            // Pick random rest-frame axis, emit E_rest = m/2 each, then boost.
+            const restAngle = Math.random() * Math.PI * 2;
+            const cosR = Math.cos(restAngle), sinR = Math.sin(restAngle);
+            const vx = this.vel.x, vy = this.vel.y;
+            const vSq = vx * vx + vy * vy;
+            const gamma = 1 / Math.sqrt(1 - vSq + 1e-30);
+            const eRest = this.mass * 0.5; // each photon in rest frame
+            for (let i = 0; i < 2; i++) {
+                const sign = i === 0 ? 1 : -1;
+                // Rest-frame photon 4-momentum: (eRest, eRest*cos, eRest*sin)
+                let pxR = sign * eRest * cosR;
+                let pyR = sign * eRest * sinR;
+                // Lorentz boost along pion velocity direction
+                if (vSq > 1e-12) {
+                    const v = Math.sqrt(vSq);
+                    const nx = vx / v, ny = vy / v;
+                    const pPar = pxR * nx + pyR * ny; // rest-frame parallel component
+                    const pPerpX = pxR - pPar * nx;
+                    const pPerpY = pyR - pPar * ny;
+                    const eBoosted = gamma * (eRest + v * pPar);
+                    const pParBoosted = gamma * (pPar + v * eRest);
+                    pxR = pParBoosted * nx + pPerpX;
+                    pyR = pParBoosted * ny + pPerpY;
+                }
+                const pMag = Math.sqrt(pxR * pxR + pyR * pyR);
+                const eBoosted = pMag; // massless: E = |p|
+                const cosA = pxR / pMag, sinA = pyR / pMag;
+                const ph = new Photon(
+                    this.pos.x + cosA * offset,
+                    this.pos.y + sinA * offset,
+                    cosA, sinA, eBoosted, -1
+                );
+                sim.photons.push(ph);
+                sim.totalRadiated += eBoosted;
+                sim.totalRadiatedPx += eBoosted * cosA;
+                sim.totalRadiatedPy += eBoosted * sinA;
+            }
+        } else {
+            // pi+/- -> 1 photon along flight direction (simplified channel)
+            const angle = Math.atan2(this.vel.y, this.vel.x);
             const cosA = Math.cos(angle), sinA = Math.sin(angle);
             const ph = new Photon(
-                this.pos.x + cosA * spawnOffset(Math.cbrt(this.mass)),
-                this.pos.y + sinA * spawnOffset(Math.cbrt(this.mass)),
+                this.pos.x + cosA * offset,
+                this.pos.y + sinA * offset,
                 cosA, sinA, ePerPh, -1
             );
             sim.photons.push(ph);

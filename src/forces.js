@@ -285,7 +285,7 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
         p.forceYukawa.x += rx * fDir;
         p.forceYukawa.y += ry * fDir;
         // Analytical jerk for radiation reaction (jBase * term1 == fDir)
-        const jRadial = -(3 * invRSq + 2 * mu * invR + mu * mu) * rDotVr * YUKAWA_COUPLING * ym * p.mass * sMass * expMuR * invRSq * invR;
+        const jRadial = -(3 * invRSq + 3 * mu * invR + mu * mu) * rDotVr * YUKAWA_COUPLING * ym * p.mass * sMass * expMuR * invRSq * invR;
         p.jerk.x += vrx * fDir + rx * jRadial;
         p.jerk.y += vry * fDir + ry * jRadial;
 

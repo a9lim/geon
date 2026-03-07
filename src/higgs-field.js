@@ -148,7 +148,8 @@ export default class HiggsField extends ScalarField {
         }
     }
 
-    /** Apply gradient force: F = +g·baseMass * grad(phi) where g = HIGGS_COUPLING.
+    /** Apply gradient force: F = +g·baseMass·sign(phi)·grad(phi) where g = HIGGS_COUPLING.
+     *  sign(phi) ensures consistency with mass generation m = baseMass·|phi|.
      *  PQS-interpolated grid gradients give C² continuous forces.
      */
     applyForces(particles, domainW, domainH) {
@@ -163,11 +164,13 @@ export default class HiggsField extends ScalarField {
             const p = particles[i];
             if (p.baseMass < EPSILON) continue;
 
+            const phiLocal = this.interpolate(p.pos.x, p.pos.y, invCellW, invCellH);
             const grad = this.gradient(p.pos.x, p.pos.y, invCellW, invCellH);
             if (!grad) continue;
 
-            const forceX = HIGGS_COUPLING * p.baseMass * grad.x;
-            const forceY = HIGGS_COUPLING * p.baseMass * grad.y;
+            const sign = phiLocal >= 0 ? 1 : -1;
+            const forceX = HIGGS_COUPLING * p.baseMass * sign * grad.x;
+            const forceY = HIGGS_COUPLING * p.baseMass * sign * grad.y;
 
             p.force.x += forceX;
             p.force.y += forceY;

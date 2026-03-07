@@ -46,7 +46,7 @@ Two dynamical scalar fields live on 64x64 grids, sharing a common PQS (cubic B-s
 - **Larmor radiation** -- Accelerating charges lose energy via the Landau-Lifshitz force (analytical jerk from gravity + Coulomb + Yukawa, numerical backward-difference for residual forces, power-dissipation terms with relativity). Photons are emitted in a dipole pattern with relativistic aberration.
 - **EM quadrupole radiation** -- d^3 Q\_ij/dt^3 formula with TT-projected angular emission via rejection sampling.
 - **Gravitational wave radiation** -- Mass quadrupole d^3 I\_ij/dt^3 formula. Gravitons rendered red.
-- **Pion emission (scalar Larmor)** -- Yukawa interactions radiate massive pions with power P = g^2 m^2 a^2 / 3. The scalar charge Q = g\*m (Yukawa couples to mass); the 1/3 angular factor reflects the single polarization of spin-0 radiation (vs 2/3 for spin-1 EM). Pions travel at v < c with proper velocity, experience gravitational deflection with the correct massive-particle factor (1 + v^2), and **decay into photons** (pi0 -> 2 gamma back-to-back, pi+/- -> 1 gamma along flight). Probabilistic decay via half-life, not lifetime.
+- **Pion emission (scalar Larmor)** -- Yukawa interactions radiate massive pions with power P = g^2 m^2 a^2 / 3. The scalar charge Q = g\*m (Yukawa couples to mass); the 1/3 angular factor reflects the single polarization of spin-0 radiation (vs 2/3 for spin-1 EM). Pions travel at v < c with proper velocity, experience gravitational deflection with the correct massive-particle factor (1 + v^2), and **decay into photons** (pi0 -> 2 gamma Lorentz-boosted from rest frame, pi+/- -> 1 gamma along flight). Probabilistic decay via half-life, not lifetime.
 - **Photon & pion absorption** -- Quadtree overlap query transfers momentum (and charge for pi+/-) to absorbing particles. Self-absorption guards prevent immediate reabsorption.
 - **Field excitations** -- Inelastic merge collisions deposit Gaussian wave packets into active scalar fields. The existing Klein-Gordon equation propagates them naturally as dispersive waves.
 
@@ -126,13 +126,13 @@ index.html                  509 lines  UI: 4-tab sidebar, reference overlay, zoo
 styles.css                  269 lines  Project-specific CSS overrides
 colors.js                    18 lines  Project color tokens (extends shared-tokens.js)
 src/
-  integrator.js            1384 lines  Physics: Boris substep loop, radiation, pion emission/absorption, field excitations,
+  integrator.js            1382 lines  Physics: Boris substep loop, radiation, pion emission/absorption, field excitations,
                                        tidal, GW quadrupole, expansion, Roche, external fields, Hertz bounce, scalar fields
   reference.js              697 lines  Physics reference content (KaTeX math)
   presets.js                694 lines  19 preset scenarios (Gravity / EM / Exotic / Cosmological)
   ui.js                     529 lines  DOM setup, declarative toggle dependencies, info tips, shortcuts
   renderer.js               528 lines  Canvas 2D: particles, trails, spin rings, vectors, photons, pions, field overlays
-  forces.js                 475 lines  Pairwise + Barnes-Hut force accumulation, 1PN (4 sectors), Yukawa + PQ modulation
+  forces.js                 477 lines  Pairwise + Barnes-Hut force accumulation, 1PN (4 sectors), Yukawa + PQ modulation
   scalar-field.js           392 lines  ScalarField base: PQS grid, topology-aware deposition, Laplacian, C^2 gradients,
                                        field energy, field excitations
   quadtree.js               274 lines  SoA pool-based Barnes-Hut tree (zero GC)
@@ -140,7 +140,7 @@ src/
   signal-delay.js           255 lines  Three-phase light-cone solver on circular history buffers
   heatmap.js                248 lines  Gravitational + electric + Yukawa potential field overlay
   axion-field.js            223 lines  AxionField: quadratic potential, scalar aF^2 coupling, Peccei-Quinn CP violation
-  higgs-field.js            206 lines  HiggsField: Mexican hat potential, mass modulation, thermal phase transitions
+  higgs-field.js            209 lines  HiggsField: Mexican hat potential, mass modulation, thermal phase transitions
   save-load.js              205 lines  State serialization, quick save/load, file export/import
   effective-potential.js    204 lines  V_eff(r) sidebar canvas with axMod/yukMod modulation
   potential.js              164 lines  PE computation (7 terms, pairwise + tree traversal)
@@ -151,7 +151,7 @@ src/
   particle.js               128 lines  Particle: 11 force Vec2s, axMod/yukMod, baseMass, antimatter, signal delay history
   phase-plot.js             117 lines  Phase space r-v_r plot (512-sample ring buffer)
   topology.js               112 lines  Torus / Klein / RP^2 min-image + wrapping
-  pion.js                    84 lines  Massive Yukawa force carrier: proper velocity, (1+v^2) GR deflection, decay
+  pion.js                   123 lines  Massive Yukawa force carrier: proper velocity, (1+v^2) GR deflection, Lorentz-boosted decay
   vec2.js                    61 lines  2D vector math
   boson-utils.js             58 lines  Shared BH tree walk for photon/pion gravitational lensing
   photon.js                  45 lines  Radiation photon with BH tree lensing
