@@ -399,7 +399,7 @@ class Simulation {
             this.topology, this.physics.blackHoleEnabled ? BH_SOFTENING_SQ : SOFTENING_SQ,
             this.physics.yukawaEnabled, this.physics.yukawaMu, this.deadParticles,
             this.physics.gravityEnabled, this.physics.coulombEnabled);
-        this.phasePlot.update(this.particles, this.selectedParticle);
+        this.phasePlot.update(this.particles, this.selectedParticle, this.physics);
         this.effPotPlot.update(this.particles, this.selectedParticle, this.physics);
         this.renderer.render(this.particles, PHYSICS_DT, this.camera, this.photons, this.pions);
         this.phasePlot.draw(this.renderer.isLight);

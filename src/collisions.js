@@ -47,8 +47,8 @@ export function handleCollisions(particles, pool, root, mode, bounceFriction, re
                 // Annihilation: matter + antimatter -> energy
                 if (p1.antimatter !== real2.antimatter && mode === 'merge') {
                     const annihilated = Math.min(p1.mass, real2.mass);
-                    const cx = (p1.pos.x + real2.pos.x) * 0.5;
-                    const cy = (p1.pos.y + real2.pos.y) * 0.5;
+                    const cx = p1.pos.x + dx * 0.5;
+                    const cy = p1.pos.y + dy * 0.5;
                     // Total momentum of annihilating mass
                     const apx = (p1.w.x + real2.w.x) * annihilated;
                     const apy = (p1.w.y + real2.w.y) * annihilated;
@@ -69,8 +69,9 @@ export function handleCollisions(particles, pool, root, mode, bounceFriction, re
                 } else if (mode === 'merge') {
                     // Compute KE before merge for field excitation energy (relativistic)
                     const keBefore = _particleKE(p1) + _particleKE(real2);
-                    const mx = (p1.pos.x * p1.mass + real2.pos.x * real2.mass) / (p1.mass + real2.mass);
-                    const my = (p1.pos.y * p1.mass + real2.pos.y * real2.mass) / (p1.mass + real2.mass);
+                    const p2miX = p1.pos.x + dx, p2miY = p1.pos.y + dy;
+                    const mx = (p1.pos.x * p1.mass + p2miX * real2.mass) / (p1.mass + real2.mass);
+                    const my = (p1.pos.y * p1.mass + p2miY * real2.mass) / (p1.mass + real2.mass);
                     // Save pre-merge mass for signal delay retirement
                     real2._deathMass = real2.mass;
                     resolveMerge(p1, real2, relativityEnabled, periodic, dx, dy);

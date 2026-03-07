@@ -3,8 +3,10 @@
 // Draws curve + current-position marker on a sidebar canvas.
 
 import { TWO_PI, SOFTENING_SQ, BH_SOFTENING_SQ, YUKAWA_COUPLING } from './config.js';
+import { TORUS, minImage } from './topology.js';
 
 const N_SAMPLES = 200;
+const _miOut = { x: 0, y: 0 };
 const MARGIN = 28;
 
 export default class EffectivePotentialPlot {
@@ -33,9 +35,17 @@ export default class EffectivePotentialPlot {
         }
         if (!ref) return;
 
-        // Relative state
-        const dx = sel.pos.x - ref.pos.x;
-        const dy = sel.pos.y - ref.pos.y;
+        // Relative state (minimum-image for periodic boundaries)
+        let dx, dy;
+        if (physics.periodic) {
+            minImage(ref.pos.x, ref.pos.y, sel.pos.x, sel.pos.y,
+                     physics._topologyConst || TORUS, physics.domainW, physics.domainH,
+                     physics.domainW * 0.5, physics.domainH * 0.5, _miOut);
+            dx = _miOut.x; dy = _miOut.y;
+        } else {
+            dx = sel.pos.x - ref.pos.x;
+            dy = sel.pos.y - ref.pos.y;
+        }
         const r = Math.sqrt(dx * dx + dy * dy) || 1;
         const dvx = sel.vel.x - ref.vel.x;
         const dvy = sel.vel.y - ref.vel.y;
