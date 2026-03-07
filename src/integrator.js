@@ -618,7 +618,7 @@ export default class Physics {
             }
 
             // Landau-Lifshitz radiation reaction (full 1/c² terms)
-            // F_rad = τ·[dF/dt / γ³ − v·F²/(m·γ²) + F·(v·F)/(m·γ⁴)]
+            // F_rad = τ·[dF/dt / γ³ − γ·v·(F² − (v·F)²)/m]
             if (this.radiationEnabled && this.coulombEnabled && this.sim) {
                 for (let i = 0; i < n; i++) {
                     const p = particles[i];
@@ -677,15 +677,11 @@ export default class Physics {
                         const invM = p.invMass;
                         const g2 = gamma * gamma;
 
-                        // Term 2: −τ·v·F²/(m·γ²)
-                        const t2 = -tau * fSq * invM / g2;
-                        fRadX += t2 * vx;
-                        fRadY += t2 * vy;
-
-                        // Term 3: +τ·F·(v·F)/(m·γ⁴)
-                        const t3 = tau * vDotF * invM / (g2 * g2);
-                        fRadX += t3 * fx;
-                        fRadY += t3 * fy;
+                        // Terms 2+3: −τ·γ·v·(F² − (v·F)²)/(m)
+                        // Standard LL form: both power-dissipation terms along v
+                        const t23 = -tau * gamma * (fSq - vDotF * vDotF) * invM;
+                        fRadX += t23 * vx;
+                        fRadY += t23 * vy;
                     }
 
                     // Clamp 1: LL validity — |F_rad| ≤ LL_FORCE_CLAMP · |F_ext|
@@ -769,7 +765,7 @@ export default class Physics {
                     let power;
                     if (disc > EPSILON) {
                         const rPlus = M + Math.sqrt(disc);
-                        const kappa = Math.sqrt(disc) / (rPlus * rPlus + a * a);
+                        const kappa = Math.sqrt(disc) / (2 * M * rPlus);
                         const T = kappa / TWO_PI;
                         const A = 4 * PI * (rPlus * rPlus + a * a);
                         const sigma = PI * PI / 60;

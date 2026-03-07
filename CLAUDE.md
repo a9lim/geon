@@ -22,14 +22,14 @@ index.html               511 lines  UI: 4-tab sidebar, reference overlay, zoom c
 styles.css               245 lines  Project-specific CSS overrides, toggle/slider theme colors
 colors.js                 18 lines  Project color tokens (particle hues, spin ring colors)
 src/
-  integrator.js         1381 lines  Physics class: Boris substep loop, radiation, pion emission/absorption, field excitations, tidal, GW quadrupole, expansion, Roche, external fields, Hertz bounce, scalar fields, _retireParticle
+  integrator.js         1382 lines  Physics class: Boris substep loop, radiation, pion emission/absorption, field excitations, tidal, GW quadrupole, expansion, Roche, external fields, Hertz bounce, scalar fields, _retireParticle
   ui.js                  529 lines  setupUI(), declarative dependency graph, info tips, reference overlay, keyboard shortcuts
   renderer.js            528 lines  Canvas 2D: particles, trails, spin rings, ergosphere, antimatter rings, vectors, torque arcs, photons, pions, delay ghosts, field overlays
-  forces.js              474 lines  pairForce(), computeAllForces(), calculateForce() (BH walk), compute1PNPairwise(), Yukawa, dead particle forces
+  forces.js              477 lines  pairForce(), computeAllForces(), calculateForce() (BH walk), compute1PNPairwise(), Yukawa, dead particle forces
   presets.js             694 lines  PRESETS (19 scenarios, 4 groups), loadPreset(), SLIDER_MAP, TOGGLE_MAP/TOGGLE_ORDER
-  reference.js           690 lines  REFERENCE object: physics reference content (KaTeX math)
+  reference.js           697 lines  REFERENCE object: physics reference content (KaTeX math)
   scalar-field.js        392 lines  ScalarField base class: PQS grid, topology-aware deposition, Laplacian, interpolation, gradient, field energy, field excitations
-  higgs-field.js         206 lines  HiggsField extends ScalarField: Mexican hat potential, thermal phase transitions, mass modulation
+  higgs-field.js         209 lines  HiggsField extends ScalarField: Mexican hat potential, thermal phase transitions, mass modulation
   axion-field.js         217 lines  AxionField extends ScalarField: quadratic potential, scalar aF^2 coupling, PQ pseudoscalar coupling, EM + Yukawa modulation
   quadtree.js            274 lines  QuadTreePool: SoA flat typed arrays, pool-based, zero GC, depth guard
   input.js               270 lines  InputHandler: mouse/touch, Place/Shoot/Orbit modes, hover tooltip
@@ -48,7 +48,7 @@ src/
   vec2.js                 61 lines  Vec2 class: set, clone, add, sub, scale, mag, magSq, normalize, dist, static sub
   boson-utils.js          58 lines  treeDeflectBoson(): shared BH tree walk for gravitational lensing of photons and pions
   photon.js               45 lines  Photon: pos, vel, energy, lifetime, type ('em'/'grav'), gravitational lensing via boson-utils
-  pion.js                 84 lines  Pion: massive Yukawa force carrier, proper velocity, (1+v^2) GR deflection, decay -> photons
+  pion.js                123 lines  Pion: massive Yukawa force carrier, proper velocity, (1+v^2) GR deflection, Lorentz-boosted decay -> photons
   relativity.js           22 lines  angwToAngVel(), setVelocity()
 ```
 
@@ -197,13 +197,13 @@ Field arrays are `field`/`fieldDot` (not `phi`/`phiDot` or `a`/`aDot`). Grid siz
 Independent toggle. Mexican hat potential `V(phi) = -1/2 mu^2 phi^2 + 1/4 lambda phi^4`. VEV=1; free parameter is m_H (slider 0.25-1.00, default 0.50). With VEV=1: `lambda = mu^2 = m_H^2/2`.
 
 - **Mass generation**: `m_eff = baseMass * |phi(x)|`. At VEV, m_eff = baseMass. Symmetric phase (phi->0): effectively massless (floored at EPSILON).
-- **Gradient force**: `F = +g * baseMass * grad(phi)` where g = HIGGS_COUPLING = 1. Into `forceHiggs`.
+- **Gradient force**: `F = +g * baseMass * sign(phi) * grad(phi)` where g = HIGGS_COUPLING = 1. Into `forceHiggs`. The `sign(phi)` ensures consistency with mass generation `m = baseMass * |phi|`.
 - **Field equation**: `d^2 phi/dt^2 = laplacian(phi) + mu^2_eff * phi - mu^2 * phi^3 + source/cellArea - 2*m_H * d(phi)/dt`. Symplectic Euler. Source: `g * baseMass` via PQS.
 - **Phase transitions**: `mu^2_eff = mu^2 - KE_local` (thermalK=1). When local KE > mu^2, field relaxes to phi=0.
 - **Boundary**: Despawn -> Dirichlet (phi=1). Bounce -> Neumann. Loop -> periodic (topology-aware).
 - **Energy**: delegates to `_fieldEnergy()` with Mexican hat potential lambda, shifted so V(1)=0 (vacOffset = mu^2/4).
 - **Damping**: Critical damping `damp = 2*m_H`.
-- **Rendering**: Lime = depleted (phi < 1), cyan = enhanced (phi > 1). Alpha proportional to |deviation|.
+- **Rendering**: Purple = depleted (phi < 1), lime = enhanced (phi > 1). Alpha proportional to |deviation|.
 - **baseMass sync**: All mass-modifying operations (merge, annihilation, Roche, disintegration, Hawking) proportionally scale baseMass. Toggle-off restores mass to baseMass.
 
 ### Axion Field
@@ -242,7 +242,7 @@ Proper velocity `w` (celerity): `vel = w / sqrt(1 + w^2)`, so `|v| < c` always. 
 
 ### Decay
 
-`pi0 -> 2 photons` (back-to-back perpendicular to flight), `pi+/- -> 1 photon` (along flight direction). Uses `sim._PhotonClass` reference to avoid circular import.
+`pi0 -> 2 photons` (back-to-back in rest frame, Lorentz-boosted to lab frame), `pi+/- -> 1 photon` (along flight direction). Uses `sim._PhotonClass` reference to avoid circular import.
 
 ### Absorption
 
@@ -293,7 +293,7 @@ Toggle under Relativity (requires Gravity). Locks collision to Merge.
 - **Kerr-Newman horizon**: `r+ = M + sqrt(M^2 - a^2 - Q^2)` where `a = INERTIA_K*r^2*|omega|`, naked singularity floor at `M*BH_NAKED_FLOOR`
 - **Ergosphere**: dashed ring at `r_ergo = M + sqrt(M^2 - a^2)` (visual only)
 - **Reduced softening**: BH_SOFTENING_SQ = 16
-- **Hawking radiation** (requires Radiation): `kappa = sqrt(disc)/(r+^2+a^2)`, `T = kappa/(2*pi)`, `P = sigma*T^4*A`. Extremal BHs stop radiating.
+- **Hawking radiation** (requires Radiation): `kappa = sqrt(disc)/(2*M*r+)`, `T = kappa/(2*pi)`, `P = sigma*T^4*A`. Extremal BHs stop radiating.
 - **Evaporation**: below MIN_MASS -> removed with photon burst via `emitPhotonBurst()`
 
 ### Signal Delay

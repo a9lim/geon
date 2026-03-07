@@ -93,7 +93,7 @@ export const REFERENCE = {
 <p>A spinning charged particle generates a magnetic dipole moment:</p>
 <p>$$\\mu = \\frac{q\\omega r^2}{5}$$</p>
 <p>Two dipoles interact with a force and potential:</p>
-<p>$$\\mathbf{F} = \\frac{3\\mu_1\\mu_2}{r^4}\\,\\hat{r}, \\qquad V = +\\frac{\\mu_1\\mu_2}{r^3}$$</p>
+<p>$$\\mathbf{F} = -\\frac{3\\mu_1\\mu_2}{r^4}\\,\\hat{r}, \\qquad V = +\\frac{\\mu_1\\mu_2}{r^3}$$</p>
 <p>Aligned perpendicular-to-plane dipoles repel. This is opposite to the gravitomagnetic case, where co-rotating masses attract — a consequence of gravity being spin-2 vs. electromagnetism being spin-1.</p>
 
 <h3>Connection to Maxwell's Equations</h3>
@@ -248,7 +248,7 @@ export const REFERENCE = {
 
 <h3>Hawking Radiation</h3>
 <p>Quantum effects near the horizon cause black holes to radiate thermally. The temperature depends on the surface gravity:</p>
-<p>$$\\kappa = \\frac{\\sqrt{M^2 - a^2 - Q^2}}{r_+^2 + a^2}, \\qquad T = \\frac{\\kappa}{2\\pi}$$</p>
+<p>$$\\kappa = \\frac{\\sqrt{M^2 - a^2 - Q^2}}{2M\\,r_+}, \\qquad T = \\frac{\\kappa}{2\\pi}$$</p>
 <p>Radiated power follows the Stefan-Boltzmann law:</p>
 <p>$$P = \\sigma T^4 A, \\qquad \\sigma = \\frac{\\pi^2}{60}, \\qquad A = 4\\pi(r_+^2+a^2)$$</p>
 <p>Smaller black holes are hotter and radiate faster, creating a runaway: mass decreases $\\to$ temperature rises $\\to$ radiation intensifies $\\to$ evaporation. The final instant produces a burst of photons.</p>
@@ -331,7 +331,7 @@ export const REFERENCE = {
 <p>The QCD axion's pseudoscalar coupling $a\\,F_{\\mu\\nu}\\tilde{F}^{\\mu\\nu} \\propto a\\,\\mathbf{E}\\cdot\\mathbf{B}$ vanishes identically in 2D, where $\\mathbf{E}$ lies in the plane and $\\mathbf{B}$ is perpendicular. Instead, this simulation uses the <em>scalar</em> coupling to the EM field invariant $F_{\\mu\\nu}F^{\\mu\\nu}$, which is non-zero in 2D and is physically motivated for axion-like particles (ALPs):</p>
 <p>$$\\mathcal{L}_{\\text{int}} = -\\tfrac{1}{4}\\bigl(1 + g\\,a\\bigr)\\,F_{\\mu\\nu}F^{\\mu\\nu}$$</p>
 <p>This makes the fine structure constant position-dependent:</p>
-<p>$$\\alpha_{\\text{eff}}(\\mathbf{x}) = \\alpha\\left(1 + a(\\mathbf{x})\\right)$$</p>
+<p>$$\\alpha_{\\text{eff}}(\\mathbf{x}) = \\alpha\\left(1 + g\\,a(\\mathbf{x})\\right)$$</p>
 <p>All electromagnetic forces — Coulomb, magnetic dipole, Biot-Savart — use the <em>local</em> coupling evaluated at each particle's position. Spatial variation in the field creates regions of stronger and weaker EM interaction.</p>
 
 <h3>Source and Gradient Force (EM)</h3>
@@ -355,7 +355,7 @@ export const REFERENCE = {
 </ul>
 
 <h3>Field Visualization</h3>
-<p>The field overlay shows $a > 0$ in blue and $a < 0$ in red, with opacity proportional to field amplitude. Watch how particles source field excitations that propagate outward, oscillating at frequency $m_a$. With Coulomb on, the field modulates local EM coupling. With Yukawa on, the Peccei\u2013Quinn coupling creates CP-violating asymmetry between matter and antimatter.</p>
+<p>The field overlay shows $a > 0$ in indigo and $a < 0$ in yellow, with opacity proportional to field amplitude. Watch how particles source field excitations that propagate outward, oscillating at frequency $m_a$. With Coulomb on, the field modulates local EM coupling. With Yukawa on, the Peccei\u2013Quinn coupling creates CP-violating asymmetry between matter and antimatter.</p>
 `,
     },
 
@@ -530,7 +530,7 @@ export const REFERENCE = {
 <p>The x-axis wraps normally, but the y-axis wraps with a reflection: exiting the top re-enters from the bottom with x-coordinate mirrored and horizontal velocity reversed. The Klein bottle is <em>non-orientable</em> — a clockwise-spinning particle becomes counterclockwise after a y-boundary crossing. This surface cannot be embedded in 3D without self-intersection.</p>
 
 <h3>Real Projective Plane ($\\mathbb{RP}^2$)</h3>
-<p>Both axes wrap with a perpendicular flip — each crossing reverses the perpendicular velocity component and reflects the perpendicular coordinate. $\\mathbb{RP}^2$ is the most exotic topology: non-orientable, and the only closed 2D surface where <em>every</em> closed loop is orientation-reversing. Force computation requires checking 4 minimum-image candidates.</p>
+<p>Both axes wrap with a perpendicular flip — each crossing reverses the perpendicular velocity component and reflects the perpendicular coordinate. $\\mathbb{RP}^2$ is the most exotic topology: non-orientable, and the only closed 2D surface where <em>every non-contractible</em> loop is orientation-reversing. Force computation requires checking 4 minimum-image candidates.</p>
 `,
     },
 
