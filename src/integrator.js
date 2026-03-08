@@ -8,7 +8,7 @@ import MasslessBoson from './massless-boson.js';
 import Pion from './pion.js';
 import { angwToAngVel } from './relativity.js';
 
-import { resetForces, computeAllForces, compute1PN } from './forces.js';
+import { resetForces, computeAllForces, compute1PN, computeBosonGravity } from './forces.js';
 import { handleCollisions } from './collisions.js';
 import { computePE } from './potential.js';
 import { minImage, wrapPosition } from './topology.js';
@@ -477,6 +477,7 @@ export default class Physics {
                 if (this.axionEnabled && this.sim && this.sim.axionField) {
                     this.sim.axionField.applyGravForces(particles, width, height, toggles.softeningSq, this.periodic, this._topologyConst);
                 }
+                if (this.sim) computeBosonGravity(particles, this.sim.photons, this.sim.pions, toggles.softeningSq);
             }
             if (collisionMode === COL_BOUNCE) this._applyRepulsion(particles, this.pool, initRoot);
             if (boundaryMode === BOUND_BOUNCE) this._applyBoundaryForces(particles, width, height, offX, offY);
@@ -1087,6 +1088,7 @@ export default class Physics {
                 if (this.axionEnabled && this.sim && this.sim.axionField) {
                     this.sim.axionField.applyGravForces(particles, width, height, toggles.softeningSq, this.periodic, this._topologyConst);
                 }
+                if (this.sim) computeBosonGravity(particles, this.sim.photons, this.sim.pions, toggles.softeningSq);
             }
             if (collisionMode === COL_BOUNCE) this._applyRepulsion(particles, this.pool, root);
             if (boundaryMode === BOUND_BOUNCE) this._applyBoundaryForces(particles, width, height, offX, offY);

@@ -58,7 +58,7 @@ src/
 main.js <- Physics (integrator), Renderer, InputHandler, Particle, HiggsField, AxionField,
            Heatmap, PhasePlot, EffectivePotentialPlot, StatsDisplay, setupUI, config, MasslessBoson, Pion, save-load
 
-integrator.js <- QuadTreePool, config, MasslessBoson, Pion, angwToAngVel, forces (resetForces/computeAllForces/compute1PN),                 handleCollisions, computePE, topology (accesses sim.higgsField/axionField via this.sim backref)
+integrator.js <- QuadTreePool, config, MasslessBoson, Pion, angwToAngVel, forces (resetForces/computeAllForces/compute1PN/computeBosonGravity),                 handleCollisions, computePE, topology (accesses sim.higgsField/axionField via this.sim backref)
 
 boson-utils.js <- config (BH_THETA, BOSON_SOFTENING_SQ)
 massless-boson.js <- Vec2, config (EPSILON), boson-utils (treeDeflectBoson)
@@ -258,6 +258,14 @@ Uses `sim._MasslessBosonClass` reference to avoid circular import. Photon decay 
 ### Absorption
 
 Quadtree overlap query after photon absorption. Transfers momentum and charge (pi+/-) to absorbing particle. Self-absorption permanently blocked: `emitterId != particle index`.
+
+### Boson Gravity
+
+Requires Gravity. All energy gravitates (stress-energy tensor). Two components:
+
+**Boson → particle** (`computeBosonGravity()` in forces.js, called from integrator per substep): Photon gravitational mass = `energy` (E=mc², c=1). Pion gravitational mass = total relativistic energy `m·√(1+w²)`. Force: `F = m_particle · m_boson / r²`, using particle softening. Accumulated into `forceGravity`. O(N_particles × N_bosons).
+
+**Boson ↔ boson** (`applyBosonBosonGravity()` in forces.js, called from main.js per accumulator step): Mutual gravity between photons, pions, and photon-pion pairs. GR deflection factors: 2 for photons (null geodesic), 1+v² for pions (massive). Uses `BOSON_SOFTENING_SQ` for point-like interactions. Symmetric pair loops (i < j). Photon velocities renormalized to |v|=c after all impulses; pion `_syncVel()` called. O(N_bosons²). No topology wrapping (bosons don't wrap).
 
 ### Constants
 

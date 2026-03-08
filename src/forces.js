@@ -2,7 +2,7 @@
 // Pairwise and Barnes-Hut force accumulation. Separates E-like (position-dependent)
 // from B-like (velocity-dependent) forces for the Boris integrator.
 
-import { BH_THETA, INERTIA_K, MAG_MOMENT_K, TIDAL_STRENGTH, YUKAWA_COUPLING, EPSILON, TORUS } from './config.js';
+import { BH_THETA, INERTIA_K, MAG_MOMENT_K, TIDAL_STRENGTH, YUKAWA_COUPLING, EPSILON, TORUS, BOSON_SOFTENING_SQ } from './config.js';
 import { getDelayedState } from './signal-delay.js';
 import { minImage } from './topology.js';
 
@@ -594,5 +594,141 @@ export function calculateForce(particle, pool, rootIdx, theta, out, toggles, per
             _bhStack[stackTop++] = pool.sw[nodeIdx];
             _bhStack[stackTop++] = pool.se[nodeIdx];
         }
+    }
+}
+
+/**
+ * Gravitational force from photons and pions onto particles.
+ * Photon gravitational mass = energy (E=mc², c=1).
+ * Pion gravitational mass = total energy = m·γ = m·√(1+w²).
+ */
+export function computeBosonGravity(particles, photons, pions, softeningSq) {
+    const n = particles.length;
+    const nPh = photons ? photons.length : 0;
+    const nPi = pions ? pions.length : 0;
+    if (n === 0 || (nPh === 0 && nPi === 0)) return;
+
+    for (let i = 0; i < n; i++) {
+        const p = particles[i];
+        const pm = p.mass;
+
+        for (let j = 0; j < nPh; j++) {
+            const ph = photons[j];
+            const dx = ph.pos.x - p.pos.x;
+            const dy = ph.pos.y - p.pos.y;
+            const rSq = dx * dx + dy * dy + softeningSq;
+            const invR3 = 1 / (rSq * Math.sqrt(rSq));
+            const f = pm * ph.energy * invR3;
+            p.force.x += dx * f;
+            p.force.y += dy * f;
+            p.forceGravity.x += dx * f;
+            p.forceGravity.y += dy * f;
+        }
+
+        for (let j = 0; j < nPi; j++) {
+            const pn = pions[j];
+            const dx = pn.pos.x - p.pos.x;
+            const dy = pn.pos.y - p.pos.y;
+            const rSq = dx * dx + dy * dy + softeningSq;
+            const invR3 = 1 / (rSq * Math.sqrt(rSq));
+            const wSq = pn.w.x * pn.w.x + pn.w.y * pn.w.y;
+            const f = pm * pn.mass * Math.sqrt(1 + wSq) * invR3;
+            p.force.x += dx * f;
+            p.force.y += dy * f;
+            p.forceGravity.x += dx * f;
+            p.forceGravity.y += dy * f;
+        }
+    }
+}
+
+/**
+ * Mutual gravitational interaction between bosons (photon-photon, photon-pion, pion-pion).
+ * GR deflection factors: 2 for photons (null geodesic), 1+v² for pions (massive).
+ * Uses BOSON_SOFTENING_SQ for point-like boson interactions.
+ */
+export function applyBosonBosonGravity(photons, pions, dt) {
+    const nPh = photons ? photons.length : 0;
+    const nPi = pions ? pions.length : 0;
+    if (nPh + nPi < 2) return;
+
+    // Photon-photon (symmetric pairs)
+    for (let i = 0; i < nPh; i++) {
+        const a = photons[i];
+        for (let j = i + 1; j < nPh; j++) {
+            const b = photons[j];
+            const dx = b.pos.x - a.pos.x;
+            const dy = b.pos.y - a.pos.y;
+            const rSq = dx * dx + dy * dy + BOSON_SOFTENING_SQ;
+            const invR3 = dt / (rSq * Math.sqrt(rSq));
+            // Both on null geodesics: GR factor 2
+            const fA = 2 * b.energy * invR3;
+            const fB = 2 * a.energy * invR3;
+            a.vel.x += dx * fA;
+            a.vel.y += dy * fA;
+            b.vel.x -= dx * fB;
+            b.vel.y -= dy * fB;
+        }
+    }
+
+    // Photon-pion
+    for (let i = 0; i < nPh; i++) {
+        const ph = photons[i];
+        for (let j = 0; j < nPi; j++) {
+            const pn = pions[j];
+            const dx = pn.pos.x - ph.pos.x;
+            const dy = pn.pos.y - ph.pos.y;
+            const rSq = dx * dx + dy * dy + BOSON_SOFTENING_SQ;
+            const invR3 = dt / (rSq * Math.sqrt(rSq));
+            const wSq = pn.w.x * pn.w.x + pn.w.y * pn.w.y;
+            const pionGravMass = pn.mass * Math.sqrt(1 + wSq);
+            // Photon deflected by pion: GR factor 2
+            const fPh = 2 * pionGravMass * invR3;
+            ph.vel.x += dx * fPh;
+            ph.vel.y += dy * fPh;
+            // Pion deflected by photon: GR factor 1+v²
+            const vSq = pn.vel.x * pn.vel.x + pn.vel.y * pn.vel.y;
+            const fPn = (1 + vSq) * ph.energy * invR3;
+            pn.w.x -= dx * fPn;
+            pn.w.y -= dy * fPn;
+        }
+    }
+
+    // Pion-pion (symmetric pairs)
+    for (let i = 0; i < nPi; i++) {
+        const a = pions[i];
+        const wSqA = a.w.x * a.w.x + a.w.y * a.w.y;
+        const gravMassA = a.mass * Math.sqrt(1 + wSqA);
+        const vSqA = a.vel.x * a.vel.x + a.vel.y * a.vel.y;
+        for (let j = i + 1; j < nPi; j++) {
+            const b = pions[j];
+            const dx = b.pos.x - a.pos.x;
+            const dy = b.pos.y - a.pos.y;
+            const rSq = dx * dx + dy * dy + BOSON_SOFTENING_SQ;
+            const invR3 = dt / (rSq * Math.sqrt(rSq));
+            const wSqB = b.w.x * b.w.x + b.w.y * b.w.y;
+            const gravMassB = b.mass * Math.sqrt(1 + wSqB);
+            const vSqB = b.vel.x * b.vel.x + b.vel.y * b.vel.y;
+            const fA = (1 + vSqA) * gravMassB * invR3;
+            a.w.x += dx * fA;
+            a.w.y += dy * fA;
+            const fB = (1 + vSqB) * gravMassA * invR3;
+            b.w.x -= dx * fB;
+            b.w.y -= dy * fB;
+        }
+    }
+
+    // Renormalize photon velocities to |v| = c = 1
+    for (let i = 0; i < nPh; i++) {
+        const ph = photons[i];
+        const v = Math.sqrt(ph.vel.x * ph.vel.x + ph.vel.y * ph.vel.y);
+        if (v > EPSILON) {
+            ph.vel.x /= v;
+            ph.vel.y /= v;
+        }
+    }
+
+    // Sync pion coordinate velocities from proper velocity
+    for (let i = 0; i < nPi; i++) {
+        pions[i]._syncVel();
     }
 }
