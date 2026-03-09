@@ -193,6 +193,7 @@ Field arrays: `field`/`fieldDot` (not `phi`/`phiDot`). Field clamp: SCALAR_FIELD
 Independent toggle. Mexican hat `V(φ) = -½μ²φ² + ¼λφ⁴`. VEV=1; `λ = μ² = m_H²/2`. Slider: m_H 0.25–0.75 (default 0.50).
 
 - **Mass generation**: `m_eff = baseMass · max(|φ(x)|, 0.05)`. Floor caps gradient-force acceleration at 20×.
+- **Mass rate clamp**: `HIGGS_MASS_MAX_DELTA = 4` — mass change per substep clamped to `±4·dt`. Prevents resonant oscillation where field source → φ overshoot → mass spike → velocity jitter.
 - **Gradient force**: `F = +g · baseMass · sign(φ) · ∇φ` (g = HIGGS_COUPLING = 1). Into `forceHiggs`.
 - **Field equation**: `φ̈ = ∇²φ + μ²_eff·φ - μ²φ³ + source/cellArea - 2m_H·φ̇`. Störmer-Verlet KDK.
 - **Phase transitions**: `μ²_eff = μ² - KE_local`. High local KE → symmetric phase (φ→0).
