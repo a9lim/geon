@@ -56,7 +56,7 @@ All particle state stored as Structure-of-Arrays in `GPUBuffer` instances with `
 | `forces2` | vec4\<f32\>[] | f1pn.xy, spinCurv.xy |
 | `forces3` | vec4\<f32\>[] | radiation.xy, yukawa.xy |
 | `forces4` | vec4\<f32\>[] | external.xy, higgs.xy |
-| `forces5` | vec2\<f32\>[] | axion.xy |
+| `forces5` | vec4\<f32\>[] | axion.xy, (pad), (pad) |
 | `torques` | vec4\<f32\>[] | spinOrbit, frameDrag, tidal, (pad) |
 | `bFields` | vec4\<f32\>[] | Bz, Bgz, extBz, (pad) |
 
@@ -64,7 +64,7 @@ All particle state stored as Structure-of-Arrays in `GPUBuffer` instances with `
 
 | Buffer | Type | Description |
 |--------|------|-------------|
-| `flags` | u32[] | Bitfield: alive, antimatter, BH mode, ghost |
+| `flags` | u32[] | Bitfield: alive, retired, antimatter, BH mode, ghost |
 | `color` | u32[] | Packed RGBA for rendering |
 | `creationTime` | f32[] | Signal delay causality |
 | `particleId` | u32[] | Unique ID (emitter tracking) |
@@ -90,6 +90,19 @@ histWriteIdx: u32[MAX_PARTICLES]
 
 HISTORY_LEN = 256. Total memory: ~24 MB for 4096 particles. Allocated on first relativity toggle.
 
+**Precision note**: The CPU path uses Float64 for history. On GPU, f32 has ~7 decimal digits. For `histTime`, this means simTime values above ~1000 lose sub-step resolution, degrading Newton-Raphson convergence. Mitigation: store **relative time** (`simTime - recordTime` as f32) rather than absolute simTime, giving full precision for recent history entries. The NR tolerance on GPU should be relaxed to ~1e-5 (vs CPU's 1e-12). This is an accepted precision trade-off — qualitative behavior matches, exact trajectories may diverge at long simulation times.
+
+### Dead Particles (Signal Delay Fade-Out)
+
+Particles removed during simulation (merge, annihilation, despawn) transition to RETIRED state (not FREE). Retired particles:
+- Keep their history buffers intact
+- Continue exerting forces via signal delay (pairwise only, excluded from BH tree)
+- Have `_deathMass`, `_deathAngVel` frozen at removal time (stored in their SoA slots)
+- Are garbage-collected when `simTime - deathTime > 2 * domainDiagonal`
+- Only then transition to FREE and their slot is pushed onto `freeStack`
+
+The `flags` bitfield encodes three states: ALIVE (bit 0), RETIRED (bit 1), with neither = FREE. The force computation iterates alive particles via tree walk AND retired particles via brute-force pairwise (matching CPU behavior).
+
 ### Uniforms Buffer
 
 Single `GPUBuffer` with all simulation parameters, uploaded from JS each frame:
@@ -101,7 +114,11 @@ struct SimUniforms {
     domainW: f32, domainH: f32,
     speedScale: f32,
     softening: f32, softeningSq: f32,
-    toggles: u32,  // bitfield: gravity, coulomb, magnetic, gm, 1pn, relativity, ...
+    // Toggle bitfield (2 × u32 = 64 bits, future-proof)
+    toggles0: u32,  // bits 0-15: gravity, coulomb, magnetic, gravitomag, 1pn, relativity,
+                    //   spinOrbit, radiation, blackHole, disintegration, expansion,
+                    //   yukawa, higgs, axion, barnesHut, bosonGrav
+    toggles1: u32,  // bits 0-3: fieldGrav, hertzBounce, (reserved)
     yukawaCoupling: f32, yukawaMu: f32,
     higgsMass: f32, axionMass: f32,
     extGravX: f32, extGravY: f32,
@@ -115,7 +132,21 @@ struct SimUniforms {
 };
 ```
 
-Toggle checks in WGSL via bitwise operations: `let gravityOn = (uniforms.toggles & GRAVITY_BIT) != 0u;`
+Toggle checks in WGSL via bitwise operations: `let gravityOn = (uniforms.toggles0 & GRAVITY_BIT) != 0u;`
+
+### baseMass Synchronization
+
+`baseMass` must stay in sync with `mass` across all modification sites:
+- **Higgs toggle-off**: mass restored to baseMass (field forces pass)
+- **Merge**: winner's baseMass += loser's baseMass (collision resolve pass)
+- **Hawking evaporation**: baseMass scaled proportionally (radiation pass)
+- **Higgs modulation**: mass = baseMass * max(|phi|, 0.05), rate-clamped ±4*dt (field forces pass)
+
+### Known Precision Differences from CPU
+
+- **Adaptive substepping**: `maxAcceleration` read from previous frame (1-frame latency). In high-acceleration scenarios, first frame may use stale dtSafe. Acceptable at 60 FPS.
+- **Signal delay**: f32 history with relative-time encoding vs CPU's Float64 absolute time. NR tolerance relaxed to ~1e-5.
+- **Force computation**: f32 vs f64 throughout. May affect energy conservation at ~1e-6 level. Qualitative behavior preserved.
 
 ## 2. Compute Pipeline Architecture
 
@@ -124,24 +155,36 @@ JS orchestrator encodes a single `GPUCommandBuffer` per frame containing all sub
 ### Per-Substep Pipeline
 
 ```
-Pass  1: resetForces           — zero force/torque/bField accumulators
-Pass  2: cacheParticleDerived  — radius, gamma, magMoment, angMomentum, axMod, yukMod
-Pass  3: buildQuadtree         — bounds reduction, iterative insertion, aggregate (3 dispatches)
-Pass  4: computeForces         — O(N²) tiled or BH tree walk (reads tree from Pass 3)
-Pass  5: borisHalfKick         — w += F_electric/m * dt/2
-Pass  6: borisRotation         — rotate w in Bz + Bgz + extBz plane
-Pass  7: borisHalfKick2        — second half-kick
-Pass  8: borisDrift            — vel = w/sqrt(1+w²), pos += vel*dt
-Pass  9: compute1PN_VV         — (if 1PN) rebuild tree, recompute 1PN, VV correction kick
-Pass 10: scalarFieldEvolve     — (per field) deposit, Laplacian, KDK, gradients
-Pass 11: scalarFieldForces     — PQS interpolation, gradient forces, Higgs mass modulation
-Pass 12: collisionDetect       — tree broadphase, write pairs to append buffer
-Pass 13: collisionResolve      — process pairs with atomic CAS on alive flags
-Pass 14: recordHistory         — (if relativity) append to ring buffers
-Pass 15: boundaryWrap          — wrap/bounce/despawn per topology
+Pass  1:  resetForces           — zero force/torque/bField accumulators
+Pass  2:  cacheParticleDerived  — radius, gamma, magMoment, angMomentum, axMod, yukMod
+Pass  3:  generateGhosts        — (if periodic) create ghost particles at domain edges
+Pass  4:  buildQuadtree         — bounds reduction, iterative insertion, aggregate (3 dispatches)
+Pass  5:  computeForces         — O(N²) tiled or BH tree walk + dead-particle pairwise
+Pass  6:  borisHalfKick         — w += F_electric/m * dt/2
+Pass  7:  borisRotation         — rotate w in Bz + Bgz + extBz plane
+Pass  8:  borisHalfKick2        — second half-kick
+Pass  9:  spinOrbitKick         — Stern-Gerlach + Mathisson-Papapetrou forces into w
+Pass 10:  applyTorques          — update angW from torques (tidal, frame-drag, contact)
+Pass 11:  radiationReaction     — Landau-Lifshitz (Larmor), Hawking, pion emission
+Pass 12:  borisDrift            — vel = w/sqrt(1+w²), pos += vel*dt
+Pass 13:  cosmologicalExpansion — (if enabled) pos += H*(pos-center)*dt, w *= (1-H*dt)
+Pass 14:  compute1PN_VV         — (if 1PN) rebuild tree, recompute 1PN, VV correction kick
+Pass 15:  scalarFieldEvolve     — (per field) deposit, Laplacian, KDK, gradients
+Pass 16:  scalarFieldForces     — PQS interpolation, gradient forces, Higgs mass modulation
+Pass 17:  collisionDetect       — tree broadphase, write pairs to append buffer
+Pass 18:  collisionResolve      — process pairs, merge mass/momentum, retire removed particles
+Pass 19:  fieldExcitations      — deposit merge KE as Gaussian wave packets into fields
+Pass 20:  disintegrationCheck   — (if enabled) tidal stress vs self-gravity, spawn fragments
+Pass 21:  bosonUpdate           — photon/pion drift, BH lensing, absorption, pion decay
+Pass 22:  pairProduction        — energetic photons near massive bodies → particle pairs
+Pass 23:  recordHistory         — (if relativity) append to ring buffers
+Pass 24:  boundaryWrap          — wrap/bounce/despawn per topology
+Pass 25:  deadParticleGC        — retire expired dead particles (simTime - deathTime > 2*diag)
 ```
 
-Post-substep: boson updates (drift, decay, absorption, lensing), trail append, color update.
+Post-substep: trail append, color update, boson tree build (if boson gravity on).
+
+**Boson gravity** (when enabled): requires separate boson tree build + traversal. A `buildBosonTree` dispatch constructs a second tree from photon/pion SoA pools. `computeBosonGravity` walks the boson tree for each particle. `applyBosonBosonGravity` handles mutual boson-boson gravity with GR deflection factors (2 for photons, 1+v² for pions).
 
 ### Adaptive Substepping
 
@@ -181,9 +224,23 @@ Buffer: `QTNode[6 * MAX_PARTICLES]`. Counter: `atomic<u32>` for next free slot.
 
 ### Build Pipeline (3 dispatches)
 
-1. **computeBounds**: parallel min/max reduction → root node bounds
-2. **insertParticles**: one thread per particle, walk from root, atomic CAS to claim/subdivide
-3. **computeAggregates**: bottom-up via atomic visitor flags, accumulate mass/CoM/charge/moments
+1. **computeBounds**: parallel min/max reduction over alive particles (dead/free slots filtered via alive flag) → root node bounds. Workgroup-local reduction, then atomicMin/atomicMax to global.
+2. **insertParticles**: one thread per particle, walk from root to appropriate leaf. Race resolution protocol:
+   - Each node has a lock bit (MSB of `particleIndex`). Thread acquires lock via `atomicCompareExchangeWeak`.
+   - If empty child: CAS to claim slot, write leaf node, release lock.
+   - If occupied leaf: lock owner subdivides (creates 4 children, reinserts displaced particle), then inserts own particle. Loser spins (bounded retry, max 64 iterations) then retries from current node.
+   - Depth guard: max 48 levels. If exceeded, particle is added to an overflow list (processed by a follow-up serial fixup dispatch — rare, only for degenerate particle distributions).
+   - **Alternative for future**: sort particles by Morton code first, then build top-down by finding split points (avoids all insertion races, Karras-style). Deferred to Phase 2 optimization.
+3. **computeAggregates**: bottom-up via atomic visitor flags. Each leaf thread walks to root via parent index (stored during insertion). First visitor to an internal node sets a flag and exits; second visitor computes aggregate (mass, CoM, charge, magMoment, angMomentum, momentumXY) from its children.
+
+### Ghost Generation (periodic boundaries)
+
+A `generateGhosts` compute dispatch runs before tree build for periodic boundaries. One thread per alive particle checks proximity to each domain edge (within `softening` distance). Ghost entries appended to particle SoA after alive particles (using `atomicAdd` on a ghost counter). Ghost flags encode:
+- Torus: position wrapped, velocity unchanged
+- Klein: y-wrap mirrors x-position and negates vx
+- RP²: x-wrap mirrors y + negates vy, y-wrap mirrors x + negates vx
+
+Ghosts are inserted into tree but skip force self-accumulation (GHOST bit in flags). Ghost slots are recycled each substep (counter reset to 0).
 
 ### Traversal
 
@@ -214,7 +271,7 @@ selfGravPhi, sgGradX, sgGradY: f32[GRID_RES²]
 
 ### Dispatch Sequence (per field, per substep)
 
-1. **clearAndDeposit**: clear source grid; particle-centric PQS deposition via atomic fixed-point i32 (WGSL lacks atomic f32)
+1. **clearAndDeposit**: clear source grid; particle-centric PQS deposition via two-pass approach: (a) each particle scatters its 4×4 PQS stencil contributions to a per-particle scratch buffer (`f32[MAX_PARTICLES × 16]`), (b) a grid-centric gather pass sums contributions per cell. This avoids atomic float issues entirely — no atomic operations needed. Alternative for higher particle counts: atomic fixed-point i32 with Q8.24 encoding (range ±128, precision 6e-8), sufficient for source values given mass ~0.01-100 and coupling ~0.05-14
 2. **computeLaplacian**: 5-point stencil, interior fast-path for bulk cells, boundary-aware edges
 3. **KDK half-kick + drift**: fieldDot += ddot * dt/2; field += fieldDot * dt; clamp
 4. **recomputeLaplacian**: same shader as step 2 (barrier needed, separate dispatch)
@@ -226,7 +283,7 @@ Self-gravity adds 5 more dispatches: computeEnergyDensity, downsampleRho, comput
 
 ### Field Excitations
 
-Post-collision dispatch deposits Gaussian wave packets into fieldDot via atomic fixed-point. Amplitude `0.5 * sqrt(keLost)`, σ = 2 cells. Split between Higgs/Axion by coupling-weighted ratio.
+Post-collision dispatch deposits Gaussian wave packets into fieldDot via the same two-pass scatter/gather approach as PQS deposition. Amplitude `0.5 * sqrt(keLost)`, σ = 2 cells. Split between Higgs/Axion by coupling-weighted ratio.
 
 ### Thermal Phase Transitions (Higgs)
 
@@ -247,7 +304,7 @@ UI overlays (sidebar, toolbar, intro) remain HTML/CSS floating over the canvas.
 
 ### Draw Calls (in order)
 
-1. **Field overlay**: fullscreen triangle, fragment shader samples field buffer, bilinear upscale, color-maps values. Depth write off, alpha blending.
+1. **Field / heatmap overlay**: fullscreen triangle, fragment shader samples field buffer or heatmap buffer, bilinear upscale, color-maps values. Heatmap computed via a `heatmap.wgsl` compute pass (gravity/Coulomb/Yukawa potential on configurable grid, tree-accelerated when BH on). Depth write off, alpha blending.
 2. **Trails**: instanced line strips from trail ring buffer. Vertex shader fades alpha by age, handles topology wrap-break.
 3. **Particles**: instanced point sprites. Vertex shader reads pos/radius/color from SoA buffers, applies camera matrix. Fragment shader draws circle with soft falloff (replaces shadowBlur glow). Dark mode: additive blend (`src-alpha, one`). Light mode: standard alpha blend.
 4. **Force arrows**: instanced triangles (shaft + head), 1 draw per force color. Vertex shader reads force vectors from accumulator buffers.
@@ -258,15 +315,16 @@ UI overlays (sidebar, toolbar, intro) remain HTML/CSS floating over the canvas.
 
 ### Camera
 
-2D affine transform as `mat3x3<f32>` uniform. Updated from JS on zoom/pan (shared-camera.js handlers unchanged).
+2D affine transform as `mat4x4<f32>` uniform (2D affine embedded in 4×4 for predictable 64-byte alignment — WGSL `mat3x3` has 48-byte stride due to vec4 column padding). Updated from JS on zoom/pan (shared-camera.js handlers unchanged).
 
 ```wgsl
 struct CameraUniforms {
-    viewMatrix: mat3x3<f32>,
-    invViewMatrix: mat3x3<f32>,
+    viewMatrix: mat4x4<f32>,      // 2D affine in top-left 3×3, w=1
+    invViewMatrix: mat4x4<f32>,   // for input hit-testing (clip → world)
     zoom: f32,
     canvasWidth: f32,
     canvasHeight: f32,
+    _pad: f32,
 };
 ```
 
@@ -361,8 +419,11 @@ physsim/
     ui.js                     # UI setup, dependency graph
     input.js                  # Mouse/touch (delegates hit-test to backend)
     save-load.js              # Serialize/deserialize adapter
-    topology.js               # minImage/wrapPosition (CPU path)
+    topology.js               # minImage/wrapPosition (CPU path + shared constants)
     vec2.js                   # Vec2 class (CPU path)
+    effective-potential.js    # V_eff sidebar canvas (shared, reads from readback)
+    phase-plot.js             # Phase space sidebar canvas (shared, reads from readback)
+    stats-display.js          # Stats tab readout (shared, reads from readback)
 
     # CPU Backend (existing code, moved + renamed)
     cpu/
@@ -384,9 +445,6 @@ physsim/
       cpu-pion.js
       cpu-boson-utils.js
       cpu-relativity.js
-      cpu-effective-potential.js
-      cpu-phase-plot.js
-      cpu-stats-display.js
 
     # GPU Backend (new)
     gpu/
@@ -412,30 +470,40 @@ physsim/
         field-excitation.wgsl
         collision.wgsl
         bosons.wgsl
+        boson-tree.wgsl       # Boson gravity: separate tree build + traversal
         history.wgsl
         boundary.wgsl
+        expansion.wgsl        # Cosmological expansion
+        disintegration.wgsl   # Tidal disintegration + Roche
+        pair-production.wgsl  # Photon → particle pair creation
+        ghost-gen.wgsl        # Ghost particle generation for periodic boundaries
+        spin-torques.wgsl     # Spin-orbit kick + torque application
+        radiation.wgsl        # Larmor, Hawking, pion emission
+        dead-gc.wgsl          # Dead particle garbage collection
         hit-test.wgsl
         update-colors.wgsl
         trails.wgsl
+        heatmap.wgsl          # Potential field heatmap compute
         particle.wgsl         # Render: particle sprites
         trail-render.wgsl     # Render: trail lines
         boson-render.wgsl     # Render: photon/pion sprites
-        field-render.wgsl     # Render: field overlay
+        field-render.wgsl     # Render: scalar field overlay
+        heatmap-render.wgsl   # Render: potential heatmap overlay
         arrow-render.wgsl     # Render: force arrows
         spin-render.wgsl      # Render: spin arcs
 ```
 
 ## 8. Migration Phases
 
-1. **Phase 0**: Move CPU files to `src/cpu/` with `cpu-` prefix, create `CPUPhysics` wrapper, verify nothing breaks
-2. **Phase 1**: Scaffold `gpu/`, implement buffer setup + simplest compute (reset, drift, boundary) + instanced particle rendering. Particles visible but non-interacting.
-3. **Phase 2**: Port pairwise force computation + Boris integrator. Physics becomes correct for basic gravity + Coulomb.
-4. **Phase 3**: Port quadtree build + BH tree walk + collision detection/resolution. Full N-body with tree acceleration.
-5. **Phase 4**: Port 1PN, radiation, Yukawa, pions, signal delay. Advanced physics parity.
-6. **Phase 5**: Port scalar fields (Higgs, Axion) with configurable resolution. Field-particle coupling.
-7. **Phase 6**: Polish — presets, save/load, error recovery, configurable grid resolution UI, performance tuning.
+1. **Phase 0**: Move CPU files to `src/cpu/` with `cpu-` prefix, create `CPUPhysics`/`CanvasRenderer` wrappers, move shared files (effective-potential, phase-plot, stats-display) up. Verify nothing breaks.
+2. **Phase 1**: Scaffold `gpu/`, implement SoA buffer setup + simplest compute (reset, cache derived, drift, boundary wrap) + instanced particle rendering. Particles visible, move in straight lines, bounce/wrap.
+3. **Phase 2**: Port pairwise force computation (all 11 types) + full Boris integrator (half-kick, rotation, drift) + spin-orbit kick + torque application. Physics correct for gravity + Coulomb + magnetic + GM with spin dynamics.
+4. **Phase 3**: Port quadtree build (GraphWaGu-style) + BH tree walk + ghost generation + tree-based collision detection/resolution + dead particle retirement. Full N-body with tree acceleration.
+5. **Phase 4**: Port 1PN velocity-Verlet + radiation reaction (Larmor, Hawking) + Yukawa + pion emission/decay/absorption + signal delay history + boson gravity. Advanced physics parity.
+6. **Phase 5**: Port scalar fields (Higgs, Axion) with configurable resolution + field excitations + thermal phase transitions + self-gravity + disintegration/Roche + cosmological expansion + pair production + heatmap. Full feature parity.
+7. **Phase 6**: Polish — presets, save/load cross-backend, error recovery, configurable grid resolution UI, performance tuning, GPU indicator badge.
 
-Each phase independently testable: run both backends, compare stats output.
+Each phase independently testable: run both backends side-by-side, compare energy/momentum stats output. Phases 2-5 each enable specific presets for validation.
 
 ## References
 
