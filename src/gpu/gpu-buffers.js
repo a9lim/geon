@@ -92,6 +92,14 @@ export function createParticleBuffers(device, maxParticles) {
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
 
+    // Max acceleration for adaptive substepping (single u32, atomicMax in force shader)
+    const maxAccelBuffer = storageBuffer('maxAccel', UINT_SIZE, 1);
+    const maxAccelStaging = device.createBuffer({
+        label: 'maxAccelStaging',
+        size: 4,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+
     return {
         maxParticles,
         // Core state
@@ -109,6 +117,8 @@ export function createParticleBuffers(device, maxParticles) {
         poolMgmt,
         // Stats
         statsBuffer, statsStagingA, statsStagingB,
+        // Adaptive substepping
+        maxAccelBuffer, maxAccelStaging,
 
         /** Destroy all buffers */
         destroy() {

@@ -67,6 +67,10 @@ export default class GPUPhysics {
         this._axionCoupling = 0.05;
         this._higgsCoupling = 1.0;
 
+        // Adaptive substepping state
+        this._maxAccel = 0;
+        this._maxAccelPending = false;
+
         this._ready = false;
     }
 
@@ -299,16 +303,38 @@ export default class GPUPhysics {
     }
 
     /**
-     * Run one substep: full Phase 2 force computation + Boris integrator.
+     * Run one frame: adaptive substepping with full Phase 2 force computation + Boris integrator.
      */
     update(dt) {
         if (!this._ready || this.aliveCount === 0) return;
 
-        this.simTime += dt;
+        // Adaptive substepping: use maxAccel from previous frame
+        const softening = this._blackHoleEnabled ? 4 : 8;
+        let dtSafe = this._maxAccel > 1e-9
+            ? Math.sqrt(softening / this._maxAccel)
+            : dt;
+        // Cyclotron limit would need Bz readback — for Phase 2, use conservative estimate
+        const maxSubsteps = 32;
+        const numSubsteps = Math.min(Math.ceil(dt / dtSafe), maxSubsteps);
+        const dtSub = dt / numSubsteps;
 
+        for (let step = 0; step < numSubsteps; step++) {
+            this.simTime += dtSub;
+            this._dispatchSubstep(dtSub);
+        }
+
+        // Readback maxAccel for next frame (non-blocking)
+        this._readbackMaxAccel();
+    }
+
+    /**
+     * Dispatch a single substep: all compute passes in sequence.
+     * @param {number} dtSub - Substep timestep
+     */
+    _dispatchSubstep(dtSub) {
         // Upload uniforms (now includes Phase 2 parameters)
         writeUniforms(this.device, this.uniformBuffer, {
-            dt,
+            dt: dtSub,
             simTime: this.simTime,
             domainW: this.domainW,
             domainH: this.domainH,
@@ -422,6 +448,27 @@ export default class GPUPhysics {
         passBoundary.end();
 
         this.device.queue.submit([encoder.finish()]);
+    }
+
+    /**
+     * Non-blocking readback of maxAccel from GPU for adaptive substepping.
+     * Uses 1-frame latency: reads previous frame's max acceleration.
+     */
+    async _readbackMaxAccel() {
+        if (this._maxAccelPending) return;
+        this._maxAccelPending = true;
+
+        const encoder = this.device.createCommandEncoder();
+        encoder.copyBufferToBuffer(this.buffers.maxAccelBuffer, 0,
+            this.buffers.maxAccelStaging, 0, 4);
+        this.device.queue.submit([encoder.finish()]);
+
+        await this.buffers.maxAccelStaging.mapAsync(GPUMapMode.READ);
+        const data = new Float32Array(this.buffers.maxAccelStaging.getMappedRange().slice(0));
+        this.buffers.maxAccelStaging.unmap();
+
+        this._maxAccel = data[0];
+        this._maxAccelPending = false;
     }
 
     reset() {
