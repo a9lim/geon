@@ -1,9 +1,22 @@
 /**
  * @fileoverview GPUPhysics — WebGPU compute pipeline orchestrator.
  *
- * Phase 1: drift + boundary only. Forces, Boris, fields added in later phases.
+ * Phase 2: Full force computation + Boris integrator.
+ * Dispatch sequence per substep:
+ *   1. resetForces
+ *   2. cacheDerived
+ *   3. pairForce (O(N^2) tiled)
+ *   4. externalFields
+ *   5. borisHalfKick (first)
+ *   6. borisRotate
+ *   7. borisHalfKick (second)
+ *   8. spinOrbit
+ *   9. applyTorques
+ *  10. borisDrift
+ *  11. boundary
  */
 import { createParticleBuffers, createUniformBuffer, writeUniforms } from './gpu-buffers.js';
+import { createPhase2Pipelines } from './gpu-pipelines.js';
 
 const MAX_PARTICLES = 4096;
 
@@ -27,11 +40,32 @@ export default class GPUPhysics {
         this.buffers = createParticleBuffers(device, MAX_PARTICLES);
         this.uniformBuffer = createUniformBuffer(device);
 
-        // Pipelines will be created in init()
+        // Phase 1 pipelines
         this._driftPipeline = null;
         this._boundaryPipeline = null;
         this._driftBindGroup = null;
         this._boundaryBindGroup = null;
+
+        // Phase 2 pipelines + bind groups
+        this._phase2 = null;
+
+        // Toggle state
+        this._toggles0 = 0;
+        this._toggles1 = 0;
+        this._blackHoleEnabled = false;
+        this._yukawaCoupling = 14;
+        this._yukawaMu = 0.15;
+        this._higgsMass = 0.5;
+        this._axionMass = 0.05;
+        this._extGravity = 0;
+        this._extGravityAngle = 0;
+        this._extElectric = 0;
+        this._extElectricAngle = 0;
+        this._extBz = 0;
+        this._bounceFriction = 0.4;
+        this._collisionMode = 0;
+        this._axionCoupling = 0.05;
+        this._higgsCoupling = 1.0;
 
         this._ready = false;
     }
@@ -42,7 +76,7 @@ export default class GPUPhysics {
         const driftWGSL = await fetchShader('drift.wgsl');
         const boundaryWGSL = await fetchShader('boundary.wgsl');
 
-        // --- Drift pipeline ---
+        // --- Drift pipeline (Phase 1, kept for reference/fallback) ---
         const driftModule = this.device.createShaderModule({
             label: 'drift',
             code: commonWGSL + '\n' + driftWGSL,
@@ -79,7 +113,7 @@ export default class GPUPhysics {
             ],
         });
 
-        // --- Boundary pipeline (same bind group layout + flags is read_write) ---
+        // --- Boundary pipeline ---
         const boundaryModule = this.device.createShaderModule({
             label: 'boundary',
             code: commonWGSL + '\n' + boundaryWGSL,
@@ -116,7 +150,76 @@ export default class GPUPhysics {
             ],
         });
 
+        // --- Phase 2 pipelines ---
+        this._phase2 = await createPhase2Pipelines(this.device);
+        this._createPhase2BindGroups();
+
         this._ready = true;
+    }
+
+    _createPhase2BindGroups() {
+        const b = this.buffers;
+        const p2 = this._phase2;
+
+        // Helper to create a bind group from layout + buffer list
+        const bg = (label, layout, buffers) =>
+            this.device.createBindGroup({
+                label,
+                layout,
+                entries: buffers.map((buf, i) => ({ binding: i, resource: { buffer: buf } })),
+            });
+
+        // resetForces: uniforms + 11 force/torque buffers
+        this._bg_resetForces = bg('resetForces', p2.resetForces.bindGroupLayouts[0],
+            [this.uniformBuffer, b.forces0, b.forces1, b.forces2, b.forces3,
+             b.forces4, b.forces5, b.torques, b.bFields, b.bFieldGrads,
+             b.totalForceX, b.totalForceY]);
+
+        // cacheDerived: uniforms + inputs + outputs
+        this._bg_cacheDerived = bg('cacheDerived', p2.cacheDerived.bindGroupLayouts[0],
+            [this.uniformBuffer, b.mass, b.velWX, b.velWY, b.angW, b.charge,
+             b.radius, b.gamma, b.magMoment, b.angMomentum, b.velX, b.velY,
+             b.angVel, b.invMass, b.radiusSq, b.flags]);
+
+        // pairForce: 3 bind groups
+        this._bg_pairForce0 = bg('pairForce_g0', p2.pairForce.bindGroupLayouts[0],
+            [this.uniformBuffer]);
+        this._bg_pairForce1 = bg('pairForce_g1', p2.pairForce.bindGroupLayouts[1],
+            [b.posX, b.posY, b.velX, b.velY, b.mass, b.charge, b.angVel,
+             b.magMoment, b.angMomentum, b.axMod, b.yukMod, b.flags, b.radiusSq,
+             b.velWX, b.velWY]);
+        this._bg_pairForce2 = bg('pairForce_g2', p2.pairForce.bindGroupLayouts[2],
+            [b.forces0, b.forces1, b.forces2, b.forces3, b.torques, b.bFields,
+             b.bFieldGrads, b.totalForceX, b.totalForceY]);
+
+        // externalFields
+        this._bg_extFields = bg('extFields', p2.externalFields.bindGroupLayouts[0],
+            [this.uniformBuffer, b.mass, b.charge, b.flags, b.forces4,
+             b.totalForceX, b.totalForceY, b.bFields]);
+
+        // borisHalfKick
+        this._bg_halfKick = bg('halfKick', p2.borisHalfKick.bindGroupLayouts[0],
+            [this.uniformBuffer, b.velWX, b.velWY, b.mass, b.totalForceX,
+             b.totalForceY, b.flags]);
+
+        // borisRotate
+        this._bg_rotate = bg('rotate', p2.borisRotate.bindGroupLayouts[0],
+            [this.uniformBuffer, b.velWX, b.velWY, b.charge, b.mass, b.bFields, b.flags]);
+
+        // borisDrift
+        this._bg_drift = bg('drift', p2.borisDrift.bindGroupLayouts[0],
+            [this.uniformBuffer, b.posX, b.posY, b.velWX, b.velWY, b.flags,
+             b.velX, b.velY]);
+
+        // spinOrbit
+        this._bg_spinOrbit = bg('spinOrbit', p2.spinOrbit.bindGroupLayouts[0],
+            [this.uniformBuffer, b.velWX, b.velWY, b.angW, b.mass, b.charge,
+             b.velX, b.velY, b.magMoment, b.angMomentum, b.radius, b.bFieldGrads,
+             b.flags, b.angVel, b.forces2]);
+
+        // applyTorques
+        this._bg_torques = bg('torques', p2.applyTorques.bindGroupLayouts[0],
+            [this.uniformBuffer, b.angW, b.mass, b.radius, b.torques, b.flags, b.angVel]);
     }
 
     /**
@@ -152,46 +255,171 @@ export default class GPUPhysics {
     }
 
     /**
-     * Run one substep: drift + boundary.
-     * Phase 1 only — no forces, no Boris rotation.
+     * Pack toggle booleans into u32 bitfields for GPU uniforms.
+     * Must be called whenever a toggle changes.
+     */
+    setToggles(physics) {
+        let t0 = 0;
+        if (physics.gravityEnabled) t0 |= 1;
+        if (physics.coulombEnabled) t0 |= 2;
+        if (physics.magneticEnabled) t0 |= 4;
+        if (physics.gravitomagEnabled) t0 |= 8;
+        if (physics.onePNEnabled) t0 |= 16;
+        if (physics.relativityEnabled) t0 |= 32;
+        if (physics.spinOrbitEnabled) t0 |= 64;
+        if (physics.radiationEnabled) t0 |= 128;
+        if (physics.blackHoleEnabled) t0 |= 256;
+        if (physics.disintegrationEnabled) t0 |= 512;
+        if (physics.expansionEnabled) t0 |= 1024;
+        if (physics.yukawaEnabled) t0 |= 2048;
+        if (physics.higgsEnabled) t0 |= 4096;
+        if (physics.axionEnabled) t0 |= 8192;
+        if (physics.barnesHutEnabled) t0 |= 16384;
+        if (physics.bosonGravEnabled) t0 |= 32768;
+        this._toggles0 = t0;
+
+        let t1 = 0;
+        if (physics.fieldGravEnabled) t1 |= 1;
+        this._toggles1 = t1;
+
+        this._blackHoleEnabled = physics.blackHoleEnabled;
+        this._yukawaCoupling = physics.yukawaEnabled ? 14 : 14;  // YUKAWA_COUPLING constant
+        this._yukawaMu = physics.yukawaMu;
+        this._higgsMass = physics.higgsEnabled ? 0.5 : 0.5;
+        this._axionMass = physics.axionMass;
+        this._extGravity = physics.extGravity;
+        this._extGravityAngle = physics.extGravityAngle;
+        this._extElectric = physics.extElectric;
+        this._extElectricAngle = physics.extElectricAngle;
+        this._extBz = physics.extBz;
+        this._bounceFriction = physics.bounceFriction;
+        this._collisionMode = 0; // Phase 3
+        this._axionCoupling = 0.05;
+        this._higgsCoupling = 1.0;
+    }
+
+    /**
+     * Run one substep: full Phase 2 force computation + Boris integrator.
      */
     update(dt) {
         if (!this._ready || this.aliveCount === 0) return;
 
         this.simTime += dt;
 
-        // Upload uniforms
+        // Upload uniforms (now includes Phase 2 parameters)
         writeUniforms(this.device, this.uniformBuffer, {
             dt,
             simTime: this.simTime,
             domainW: this.domainW,
             domainH: this.domainH,
             speedScale: 1,
-            softening: 8,
-            softeningSq: 64,
+            softening: this._blackHoleEnabled ? 4 : 8,
+            softeningSq: this._blackHoleEnabled ? 16 : 64,
+            toggles0: this._toggles0,
+            toggles1: this._toggles1,
+            yukawaCoupling: this._yukawaCoupling,
+            yukawaMu: this._yukawaMu,
+            higgsMass: this._higgsMass,
+            axionMass: this._axionMass,
             boundaryMode: this.boundaryMode,
             topologyMode: this.topologyMode,
-            maxParticles: MAX_PARTICLES,
+            collisionMode: this._collisionMode,
+            maxParticles: this.buffers.maxParticles,
             aliveCount: this.aliveCount,
+            extGravity: this._extGravity,
+            extGravityAngle: this._extGravityAngle,
+            extElectric: this._extElectric,
+            extElectricAngle: this._extElectricAngle,
+            extBz: this._extBz,
+            bounceFriction: this._bounceFriction,
+            axionCoupling: this._axionCoupling,
+            higgsCoupling: this._higgsCoupling,
+            particleCount: this.aliveCount,
         });
 
         const workgroups = Math.ceil(this.aliveCount / 64);
+        const p2 = this._phase2;
 
-        const encoder = this.device.createCommandEncoder({ label: 'physics' });
+        const encoder = this.device.createCommandEncoder({ label: 'physics-phase2' });
 
-        // Drift pass
-        const driftPass = encoder.beginComputePass({ label: 'drift' });
-        driftPass.setPipeline(this._driftPipeline);
-        driftPass.setBindGroup(0, this._driftBindGroup);
-        driftPass.dispatchWorkgroups(workgroups);
-        driftPass.end();
+        // Pass 1: resetForces
+        const pass1 = encoder.beginComputePass({ label: 'resetForces' });
+        pass1.setPipeline(p2.resetForces.pipeline);
+        pass1.setBindGroup(0, this._bg_resetForces);
+        pass1.dispatchWorkgroups(workgroups);
+        pass1.end();
 
-        // Boundary pass
-        const boundaryPass = encoder.beginComputePass({ label: 'boundary' });
-        boundaryPass.setPipeline(this._boundaryPipeline);
-        boundaryPass.setBindGroup(0, this._boundaryBindGroup);
-        boundaryPass.dispatchWorkgroups(workgroups);
-        boundaryPass.end();
+        // Pass 2: cacheDerived
+        const pass2 = encoder.beginComputePass({ label: 'cacheDerived' });
+        pass2.setPipeline(p2.cacheDerived.pipeline);
+        pass2.setBindGroup(0, this._bg_cacheDerived);
+        pass2.dispatchWorkgroups(workgroups);
+        pass2.end();
+
+        // Pass 5: pairForce (O(N^2) tiled)
+        const pass5 = encoder.beginComputePass({ label: 'pairForce' });
+        pass5.setPipeline(p2.pairForce.pipeline);
+        pass5.setBindGroup(0, this._bg_pairForce0);
+        pass5.setBindGroup(1, this._bg_pairForce1);
+        pass5.setBindGroup(2, this._bg_pairForce2);
+        pass5.dispatchWorkgroups(workgroups);
+        pass5.end();
+
+        // Pass 5b: externalFields
+        const pass5b = encoder.beginComputePass({ label: 'externalFields' });
+        pass5b.setPipeline(p2.externalFields.pipeline);
+        pass5b.setBindGroup(0, this._bg_extFields);
+        pass5b.dispatchWorkgroups(workgroups);
+        pass5b.end();
+
+        // Pass 6: borisHalfKick (first)
+        const pass6 = encoder.beginComputePass({ label: 'halfKick1' });
+        pass6.setPipeline(p2.borisHalfKick.pipeline);
+        pass6.setBindGroup(0, this._bg_halfKick);
+        pass6.dispatchWorkgroups(workgroups);
+        pass6.end();
+
+        // Pass 7: borisRotation
+        const pass7 = encoder.beginComputePass({ label: 'borisRotate' });
+        pass7.setPipeline(p2.borisRotate.pipeline);
+        pass7.setBindGroup(0, this._bg_rotate);
+        pass7.dispatchWorkgroups(workgroups);
+        pass7.end();
+
+        // Pass 8: borisHalfKick (second — reuse same pipeline + bind group)
+        const pass8 = encoder.beginComputePass({ label: 'halfKick2' });
+        pass8.setPipeline(p2.borisHalfKick.pipeline);
+        pass8.setBindGroup(0, this._bg_halfKick);
+        pass8.dispatchWorkgroups(workgroups);
+        pass8.end();
+
+        // Pass 9: spinOrbit
+        const pass9 = encoder.beginComputePass({ label: 'spinOrbit' });
+        pass9.setPipeline(p2.spinOrbit.pipeline);
+        pass9.setBindGroup(0, this._bg_spinOrbit);
+        pass9.dispatchWorkgroups(workgroups);
+        pass9.end();
+
+        // Pass 10: applyTorques
+        const pass10 = encoder.beginComputePass({ label: 'applyTorques' });
+        pass10.setPipeline(p2.applyTorques.pipeline);
+        pass10.setBindGroup(0, this._bg_torques);
+        pass10.dispatchWorkgroups(workgroups);
+        pass10.end();
+
+        // Pass 12: borisDrift
+        const pass12 = encoder.beginComputePass({ label: 'borisDrift' });
+        pass12.setPipeline(p2.borisDrift.pipeline);
+        pass12.setBindGroup(0, this._bg_drift);
+        pass12.dispatchWorkgroups(workgroups);
+        pass12.end();
+
+        // Pass 24: boundary (existing from Phase 1)
+        const passBoundary = encoder.beginComputePass({ label: 'boundary' });
+        passBoundary.setPipeline(this._boundaryPipeline);
+        passBoundary.setBindGroup(0, this._boundaryBindGroup);
+        passBoundary.dispatchWorkgroups(workgroups);
+        passBoundary.end();
 
         this.device.queue.submit([encoder.finish()]);
     }
