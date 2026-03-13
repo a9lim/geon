@@ -20,6 +20,23 @@ struct SimUniforms {
     collisionMode: u32,
     maxParticles: u32,
     aliveCount: u32,
+    // Phase 2 additions
+    extGravity: f32,
+    extGravityAngle: f32,
+    extElectric: f32,
+    extElectricAngle: f32,
+    extBz: f32,
+    bounceFriction: f32,
+    extGx: f32,
+    extGy: f32,
+    extEx: f32,
+    extEy: f32,
+    axionCoupling: f32,
+    higgsCoupling: f32,
+    particleCount: u32,
+    _pad2: u32,
+    _pad3: u32,
+    _pad4: u32,
 };
 
 // Toggle bit constants (toggles0)
@@ -60,3 +77,40 @@ const BOUND_LOOP: u32    = 2u;
 const TOPO_TORUS: u32 = 0u;
 const TOPO_KLEIN: u32 = 1u;
 const TOPO_RP2: u32   = 2u;
+
+// Physics constants (from config.js)
+const SOFTENING: f32 = 8.0;
+const SOFTENING_SQ: f32 = 64.0;
+const BH_SOFTENING: f32 = 4.0;
+const BH_SOFTENING_SQ: f32 = 16.0;
+const INERTIA_K: f32 = 0.4;
+const MAG_MOMENT_K: f32 = 0.2;
+const TIDAL_STRENGTH: f32 = 0.3;
+const YUKAWA_COUPLING_DEFAULT: f32 = 14.0;
+const EPSILON: f32 = 1e-9;
+const EPSILON_SQ: f32 = 1e-18;
+const PI: f32 = 3.14159265358979;
+const TWO_PI: f32 = 6.28318530717959;
+
+// Toggle query helpers
+fn hasToggle0(bit: u32) -> bool {
+    return (uniforms.toggles0 & bit) != 0u;
+}
+
+fn hasToggle1(bit: u32) -> bool {
+    return (uniforms.toggles1 & bit) != 0u;
+}
+
+// Minimum image displacement for torus topology (most common case).
+// Returns displacement vector from observer at (ox, oy) to source at (sx, sy).
+fn torusMinImage(ox: f32, oy: f32, sx: f32, sy: f32) -> vec2<f32> {
+    let w = uniforms.domainW;
+    let h = uniforms.domainH;
+    let halfW = w * 0.5;
+    let halfH = h * 0.5;
+    var rx = sx - ox;
+    if (rx > halfW) { rx -= w; } else if (rx < -halfW) { rx += w; }
+    var ry = sy - oy;
+    if (ry > halfH) { ry -= h; } else if (ry < -halfH) { ry += h; }
+    return vec2(rx, ry);
+}
