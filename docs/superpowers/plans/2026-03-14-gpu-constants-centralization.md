@@ -274,14 +274,12 @@ const COL_PASS: u32 = ${COL_PASS}u;
 const COL_MERGE: u32 = ${COL_MERGE}u;
 const COL_BOUNCE: u32 = ${COL_BOUNCE}u;
 
-// Particle flag bits (canonical names + aliases used by standalone shaders)
+// Particle flag bits (standardized FLAG_* prefix)
 const FLAG_ALIVE: u32 = 1u;
 const FLAG_RETIRED: u32 = 2u;
 const FLAG_ANTIMATTER: u32 = 4u;
 const FLAG_BH: u32 = 8u;
 const FLAG_GHOST: u32 = 16u;
-const ALIVE_BIT: u32 = 1u;          // alias for standalone shaders
-const ANTIMATTER_BIT: u32 = 4u;     // alias for standalone shaders
 
 // Toggle bit constants (toggles0)
 const GRAVITY_BIT: u32 = 1u;
@@ -289,7 +287,6 @@ const COULOMB_BIT: u32 = 2u;
 const MAGNETIC_BIT: u32 = 4u;
 const GRAVITOMAG_BIT: u32 = 8u;
 const ONE_PN_BIT: u32 = 16u;
-const ONEPN_BIT: u32 = 16u;         // alias used by forces-tree.wgsl
 const RELATIVITY_BIT: u32 = 32u;
 const SPIN_ORBIT_BIT: u32 = 64u;
 const RADIATION_BIT: u32 = 128u;
@@ -599,6 +596,8 @@ For each file, remove the local `const` lines identified in the audit. The gener
 
 Remove lines 6–12 (MAX_PHOTONS, MAX_PIONS, BOSON_SOFTENING_SQ, BOSON_MIN_AGE_TIME, BOSON_MIN_AGE, PHOTON_LIFETIME, EPSILON), lines 17–21 (PION_DECAY_PROB, CHARGED_PION_DECAY_PROB, ELECTRON_MASS, MAX_SPEED_RATIO, MAX_PARTICLES), lines 24–25 (ALIVE_BIT, ANTIMATTER_BIT). Keep PCG hash/RNG functions.
 
+**Rename in shader body:** `ALIVE_BIT` → `FLAG_ALIVE`, `ANTIMATTER_BIT` → `FLAG_ANTIMATTER` (find-and-replace all occurrences).
+
 - [ ] **Step 2: Clean boson-tree.wgsl**
 
 Remove lines 8–13 (MAX_PHOTONS, MAX_PIONS, BOSON_SOFTENING_SQ, BH_THETA_SQ, EPSILON, MAX_DEPTH), line 112 (FLAG_ALIVE). Keep node accessor functions.
@@ -606,6 +605,8 @@ Remove lines 8–13 (MAX_PHOTONS, MAX_PIONS, BOSON_SOFTENING_SQ, BH_THETA_SQ, EP
 - [ ] **Step 3: Clean radiation.wgsl**
 
 Remove lines 12–20 (ALIVE_BIT, LL_FORCE_CLAMP, MIN_MASS, EPSILON, MAX_PHOTONS, MAX_PIONS, MAX_SPEED_RATIO, INERTIA_K, BH_NAKED_FLOOR), lines 33–37 (COULOMB_BIT, RELATIVITY_BIT, RADIATION_BIT, BLACK_HOLE_BIT, YUKAWA_BIT). Keep PCG hash/RNG functions.
+
+**Rename in shader body:** `ALIVE_BIT` → `FLAG_ALIVE` (find-and-replace all occurrences).
 
 - [ ] **Step 4: Clean collision.wgsl**
 
@@ -615,7 +616,9 @@ Note: NONE (-1), MAX_STACK (48), MERGE_ANNIHILATION (0), MERGE_INELASTIC (1), NO
 
 - [ ] **Step 5: Clean forces-tree.wgsl**
 
-Remove lines 6–11 (NONE, MAX_STACK, EPSILON, FLAG_ALIVE/RETIRED/GHOST), lines 13–20 (toggle bits), lines 23–25 (MAG_MOMENT_K, INERTIA_K, TIDAL_STRENGTH), lines 28–31 (topology constants), line 95 (NODE_STRIDE), lines 226–227 (ABERRATION_CLAMP_MIN/MAX). Keep topology helper functions, node accessors.
+Remove lines 6–11 (NONE, MAX_STACK, EPSILON, FLAG_ALIVE/RETIRED/GHOST), lines 13–20 (toggle bits including ONEPN_BIT), lines 23–25 (MAG_MOMENT_K, INERTIA_K, TIDAL_STRENGTH), lines 28–31 (topology constants), line 95 (NODE_STRIDE), lines 226–227 (ABERRATION_CLAMP_MIN/MAX). Keep topology helper functions, node accessors.
+
+**Rename in shader body:** `ONEPN_BIT` → `ONE_PN_BIT` (find-and-replace all occurrences).
 
 Note: NONE, MAX_STACK, NODE_STRIDE, ABERRATION_CLAMP_MIN/MAX are shader-specific — keep local.
 
@@ -627,9 +630,13 @@ Remove lines 59–60 (HGRID, HGRID_SQ), lines 63–67 (HISTORY_LEN, HISTORY_MASK
 
 Remove lines 7–11 (HISTORY_LEN, HISTORY_MASK, NR_MAX_ITER, NR_TOLERANCE, EPSILON), line 56 (ALIVE_BIT), lines 101–103 (TOPO_TORUS/KLEIN/RP2). Keep minImageDisp, getDelayedStateGPU functions.
 
+**Rename in shader body:** `ALIVE_BIT` → `FLAG_ALIVE` (find-and-replace all occurrences).
+
 - [ ] **Step 8: Clean trails.wgsl**
 
 Remove line 6 (TRAIL_LEN), line 23 (ALIVE_BIT).
+
+**Rename in shader body:** `ALIVE_BIT` → `FLAG_ALIVE` (find-and-replace all occurrences).
 
 - [ ] **Step 9: Clean ghost-gen.wgsl**
 
@@ -646,6 +653,8 @@ Remove lines 10 (MAX_DEPTH), lines 18–19 (FLAG_ALIVE, FLAG_GHOST). Keep QT_CAP
 - [ ] **Step 12: Clean onePN.wgsl**
 
 Remove line 14 (ALIVE_BIT), lines 75–78 (GRAVITOMAG_BIT, MAGNETIC_BIT, YUKAWA_BIT, RELATIVITY_BIT), lines 80–83 (EPSILON, BOUND_LOOP, TOPO_TORUS, TOPO_KLEIN).
+
+**Rename in shader body:** `ALIVE_BIT` → `FLAG_ALIVE` (find-and-replace all occurrences).
 
 - [ ] **Step 13: Clean disintegration.wgsl**
 
@@ -693,6 +702,8 @@ Serve the project and test:
 
 Remove lines 30–31 (ALIVE_BIT, ANTIMATTER_BIT).
 
+**Rename in shader body:** `ALIVE_BIT` → `FLAG_ALIVE`, `ANTIMATTER_BIT` → `FLAG_ANTIMATTER` (find-and-replace all occurrences).
+
 Replace lines 33–46 (SLATE_R/G/B, POS_R/G/B, NEG_R/G/B individual constants) with usage of `COLOR_SLATE`, `COLOR_RED`, `COLOR_BLUE` from the generated block. Update the main function to use `COLOR_SLATE.r` instead of `SLATE_R`, etc.
 
 - [ ] **Step 2: Clean boson-render.wgsl**
@@ -709,6 +720,8 @@ Replace hardcoded `/ 256.0` at line ~76 with `/ PHOTON_LIFETIME`.
 - [ ] **Step 3: Clean spin-render.wgsl**
 
 Remove line 53 (ALIVE_BIT), lines 54–58 (ARC_SEGMENTS, PI, TWO_PI, HALF_PI, MIN_ANGVEL — PI/TWO_PI/HALF_PI now from generated block; keep ARC_SEGMENTS and MIN_ANGVEL as shader-specific).
+
+**Rename in shader body:** `ALIVE_BIT` → `FLAG_ALIVE` (find-and-replace all occurrences).
 
 Replace lines 62–63:
 - `const COLOR_CW_RGB: vec3f = vec3f(0.278, 0.878, 0.780);` → use `COLOR_SPIN_CW` from generated block
@@ -729,13 +742,15 @@ Replace hardcoded color values in the fragment shader:
 
 Remove line 84 (ALIVE_BIT), line 90 (VELOCITY_VECTOR_SCALE — now from generated block). Keep SHAFT_HALF_W, HEAD_HALF_W, HEAD_LEN (shader-specific arrow geometry).
 
+**Rename in shader body:** `ALIVE_BIT` → `FLAG_ALIVE` (find-and-replace all occurrences).
+
 - [ ] **Step 6: Clean trail-render.wgsl**
 
-Remove line 44 (ALIVE_BIT).
+Remove line 44 (ALIVE_BIT). **Rename in shader body:** `ALIVE_BIT` → `FLAG_ALIVE`.
 
 - [ ] **Step 7: Clean hit-test.wgsl**
 
-Remove line 49 (ALIVE_BIT).
+Remove line 49 (ALIVE_BIT). **Rename in shader body:** `ALIVE_BIT` → `FLAG_ALIVE`.
 
 - [ ] **Step 8: Clean particle.wgsl**
 
