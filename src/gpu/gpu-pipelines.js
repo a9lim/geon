@@ -1095,3 +1095,377 @@ export async function createFieldForcesPipelines(device) {
 
     return { applyHiggsForces, applyAxionForces, bindGroupLayouts };
 }
+
+/**
+ * Create field self-gravity pipelines (Phase 5: coarse grid O(SG^4) potential).
+ * Entry points from field-selfgrav.wgsl (prepended with field-common.wgsl):
+ *   computeEnergyDensityHiggs, computeEnergyDensityAxion,
+ *   downsampleRho, computeCoarsePotential, upsamplePhi, computeSelfGravGradients
+ *
+ * Single bind group layout:
+ *   Group 0: field arrays (12 bindings: field, fieldDot, gradX, gradY, energyDensity,
+ *            coarseRho, coarsePhi, sgPhiFull, sgGradX, sgGradY, sgInvR, FieldUniforms)
+ */
+export async function createFieldSelfGravPipelines(device) {
+    const fieldCommonWGSL = await fetchShader('field-common.wgsl');
+    const sgWGSL = await fetchShader('field-selfgrav.wgsl');
+    const code = fieldCommonWGSL + '\n' + sgWGSL;
+    const module = device.createShaderModule({ label: 'fieldSelfGrav', code });
+
+    const group0Layout = device.createBindGroupLayout({
+        label: 'fieldSelfGrav_group0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // field
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // fieldDot
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // gradX
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // gradY
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // energyDensity
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // coarseRho
+            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // coarsePhi
+            { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // sgPhiFull
+            { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // sgGradX
+            { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // sgGradY
+            { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // sgInvR
+            { binding: 11, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },          // FieldUniforms
+        ],
+    });
+
+    const bindGroupLayouts = [group0Layout];
+    const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts });
+
+    const entryPoints = [
+        'computeEnergyDensityHiggs', 'computeEnergyDensityAxion',
+        'downsampleRho', 'computeCoarsePotential', 'upsamplePhi', 'computeSelfGravGradients',
+    ];
+    const pipelines = {};
+    for (const entry of entryPoints) {
+        pipelines[entry] = device.createComputePipeline({
+            label: entry,
+            layout: pipelineLayout,
+            compute: { module, entryPoint: entry },
+        });
+    }
+
+    return { ...pipelines, bindGroupLayouts };
+}
+
+/**
+ * Create field excitation pipeline (Phase 5: Gaussian wave packets from merges).
+ * Entry point from field-excitation.wgsl (prepended with field-common.wgsl):
+ *   depositExcitations
+ *
+ * Bind group:
+ *   Group 0: fieldDot (rw), events (ro), FieldUniforms (uniform), eventCount (ro)
+ */
+export async function createFieldExcitationPipeline(device) {
+    const fieldCommonWGSL = await fetchShader('field-common.wgsl');
+    const excWGSL = await fetchShader('field-excitation.wgsl');
+    const code = fieldCommonWGSL + '\n' + excWGSL;
+    const module = device.createShaderModule({ label: 'fieldExcitation', code });
+
+    const group0Layout = device.createBindGroupLayout({
+        label: 'fieldExcitation_group0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // fieldDot
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // events
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },           // FieldUniforms
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // eventCount
+        ],
+    });
+
+    const bindGroupLayouts = [group0Layout];
+    const pipeline = device.createComputePipeline({
+        label: 'depositExcitations',
+        layout: device.createPipelineLayout({ bindGroupLayouts }),
+        compute: { module, entryPoint: 'depositExcitations' },
+    });
+
+    return { pipeline, bindGroupLayouts };
+}
+
+/**
+ * Create heatmap compute pipelines (Phase 5: potential field + blur).
+ * Entry points from heatmap.wgsl:
+ *   computeHeatmap, blurHorizontal, blurVertical
+ *
+ * Two bind group layouts:
+ *   heatmapLayout:
+ *     Group 0: particle SoA (5 read-only bindings)
+ *     Group 1: potential grids (3 rw) + HeatmapUniforms (uniform)
+ *   blurLayout:
+ *     Group 0: arr (rw) + blurTemp (rw)
+ */
+export async function createHeatmapPipelines(device) {
+    const code = await fetchShader('heatmap.wgsl');
+    const module = device.createShaderModule({ label: 'heatmap', code });
+
+    // Heatmap compute layout
+    const hmG0 = device.createBindGroupLayout({
+        label: 'heatmap_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // posX
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // posY
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // mass
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // charge
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // flags
+        ],
+    });
+    const hmG1 = device.createBindGroupLayout({
+        label: 'heatmap_g1',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // gravPotential
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // elecPotential
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // yukawaPotential
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }, // HeatmapUniforms
+        ],
+    });
+    const heatmapLayouts = [hmG0, hmG1];
+
+    const computeHeatmap = device.createComputePipeline({
+        label: 'computeHeatmap',
+        layout: device.createPipelineLayout({ bindGroupLayouts: heatmapLayouts }),
+        compute: { module, entryPoint: 'computeHeatmap' },
+    });
+
+    // Blur layout (separate — different bindings than heatmap compute)
+    const blurG0 = device.createBindGroupLayout({
+        label: 'heatmapBlur_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // arr
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // blurTemp
+        ],
+    });
+    const blurLayouts = [blurG0];
+    const blurPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: blurLayouts });
+
+    const blurHorizontal = device.createComputePipeline({
+        label: 'blurHorizontal',
+        layout: blurPipelineLayout,
+        compute: { module, entryPoint: 'blurHorizontal' },
+    });
+    const blurVertical = device.createComputePipeline({
+        label: 'blurVertical',
+        layout: blurPipelineLayout,
+        compute: { module, entryPoint: 'blurVertical' },
+    });
+
+    return {
+        computeHeatmap, blurHorizontal, blurVertical,
+        heatmapLayouts, blurLayouts,
+    };
+}
+
+/**
+ * Create expansion compute pipeline (Phase 5: cosmological expansion).
+ * Entry point from expansion.wgsl: applyExpansion
+ *
+ * Bind group:
+ *   Group 0: posX (rw), posY (rw), velWX (rw), velWY (rw), flags (ro), ExpansionUniforms (uniform)
+ */
+export async function createExpansionPipeline(device) {
+    const code = await fetchShader('expansion.wgsl');
+    const module = device.createShaderModule({ label: 'expansion', code });
+
+    const group0Layout = device.createBindGroupLayout({
+        label: 'expansion_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // posX
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // posY
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // velWX
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // velWY
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // flags
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },           // ExpansionUniforms
+        ],
+    });
+
+    const bindGroupLayouts = [group0Layout];
+    const pipeline = device.createComputePipeline({
+        label: 'applyExpansion',
+        layout: device.createPipelineLayout({ bindGroupLayouts }),
+        compute: { module, entryPoint: 'applyExpansion' },
+    });
+
+    return { pipeline, bindGroupLayouts };
+}
+
+/**
+ * Create disintegration compute pipeline (Phase 5: tidal + Roche).
+ * Entry point from disintegration.wgsl: checkDisintegration
+ *
+ * Bind groups:
+ *   Group 0: particle SoA (10 read-only bindings)
+ *   Group 1: events (rw), eventCounter (rw), DisintUniforms (uniform)
+ */
+export async function createDisintegrationPipeline(device) {
+    const code = await fetchShader('disintegration.wgsl');
+    const module = device.createShaderModule({ label: 'disintegration', code });
+
+    // Group 0: 10 particle read-only bindings
+    const g0Entries = [];
+    for (let i = 0; i < 10; i++) {
+        g0Entries.push({
+            binding: i, visibility: GPUShaderStage.COMPUTE,
+            buffer: { type: 'read-only-storage' },
+        });
+    }
+    const group0Layout = device.createBindGroupLayout({
+        label: 'disint_g0', entries: g0Entries,
+    });
+
+    const group1Layout = device.createBindGroupLayout({
+        label: 'disint_g1',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // events
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // eventCounter
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },           // DisintUniforms
+        ],
+    });
+
+    const bindGroupLayouts = [group0Layout, group1Layout];
+    const pipeline = device.createComputePipeline({
+        label: 'checkDisintegration',
+        layout: device.createPipelineLayout({ bindGroupLayouts }),
+        compute: { module, entryPoint: 'checkDisintegration' },
+    });
+
+    return { pipeline, bindGroupLayouts };
+}
+
+/**
+ * Create pair production compute pipeline (Phase 5).
+ * Entry point from pair-production.wgsl: checkPairProduction
+ *
+ * Bind groups:
+ *   Group 0: photon SoA (7 read-only bindings)
+ *   Group 1: particle SoA (4 read-only bindings)
+ *   Group 2: pairEvents (rw), pairCounter (rw), PairProdUniforms (uniform)
+ */
+export async function createPairProductionPipeline(device) {
+    const code = await fetchShader('pair-production.wgsl');
+    const module = device.createShaderModule({ label: 'pairProduction', code });
+
+    // Group 0: photon pool (7 read-only)
+    const g0Entries = [];
+    for (let i = 0; i < 7; i++) {
+        g0Entries.push({
+            binding: i, visibility: GPUShaderStage.COMPUTE,
+            buffer: { type: 'read-only-storage' },
+        });
+    }
+    const group0Layout = device.createBindGroupLayout({
+        label: 'pairProd_g0', entries: g0Entries,
+    });
+
+    // Group 1: particle SoA (4 read-only)
+    const g1Entries = [];
+    for (let i = 0; i < 4; i++) {
+        g1Entries.push({
+            binding: i, visibility: GPUShaderStage.COMPUTE,
+            buffer: { type: 'read-only-storage' },
+        });
+    }
+    const group1Layout = device.createBindGroupLayout({
+        label: 'pairProd_g1', entries: g1Entries,
+    });
+
+    const group2Layout = device.createBindGroupLayout({
+        label: 'pairProd_g2',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // pairEvents
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // pairCounter
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },  // PairProdUniforms
+        ],
+    });
+
+    const bindGroupLayouts = [group0Layout, group1Layout, group2Layout];
+    const pipeline = device.createComputePipeline({
+        label: 'checkPairProduction',
+        layout: device.createPipelineLayout({ bindGroupLayouts }),
+        compute: { module, entryPoint: 'checkPairProduction' },
+    });
+
+    return { pipeline, bindGroupLayouts };
+}
+
+/**
+ * Create field overlay render pipeline (Phase 5: fullscreen field visualization).
+ * Uses field-render.wgsl (prepended with field-common.wgsl for GRID constant).
+ *
+ * Bind group:
+ *   Group 0: field (read-only storage), FieldRenderUniforms (uniform)
+ */
+export async function createFieldRenderPipeline(device, format, isLight) {
+    const fieldCommonWGSL = await fetchShader('field-common.wgsl');
+    const renderWGSL = await fetchShader('field-render.wgsl');
+    const code = fieldCommonWGSL + '\n' + renderWGSL;
+    const module = device.createShaderModule({ label: 'fieldRender', code });
+
+    const group0Layout = device.createBindGroupLayout({
+        label: 'fieldRender_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } }, // field
+            { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },           // FieldRenderUniforms
+        ],
+    });
+
+    const bindGroupLayouts = [group0Layout];
+    const blendState = {
+        color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+        alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+    };
+
+    const pipeline = device.createRenderPipeline({
+        label: 'fieldRender',
+        layout: device.createPipelineLayout({ bindGroupLayouts }),
+        vertex: { module, entryPoint: 'vsFullscreen' },
+        fragment: {
+            module, entryPoint: 'fsFieldOverlay',
+            targets: [{ format, blend: blendState }],
+        },
+        primitive: { topology: 'triangle-list' },
+    });
+
+    return { pipeline, bindGroupLayouts };
+}
+
+/**
+ * Create heatmap overlay render pipeline (Phase 5: fullscreen heatmap visualization).
+ * Uses heatmap-render.wgsl.
+ *
+ * Bind group:
+ *   Group 0: gravPotential (ro), elecPotential (ro), yukawaPotential (ro),
+ *            HeatmapRenderUniforms (uniform)
+ */
+export async function createHeatmapRenderPipeline(device, format, isLight) {
+    const code = await fetchShader('heatmap-render.wgsl');
+    const module = device.createShaderModule({ label: 'heatmapRender', code });
+
+    const group0Layout = device.createBindGroupLayout({
+        label: 'heatmapRender_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } }, // gravPotential
+            { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } }, // elecPotential
+            { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } }, // yukawaPotential
+            { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },           // HeatmapRenderUniforms
+        ],
+    });
+
+    const bindGroupLayouts = [group0Layout];
+    const blendState = {
+        color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+        alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+    };
+
+    const pipeline = device.createRenderPipeline({
+        label: 'heatmapRender',
+        layout: device.createPipelineLayout({ bindGroupLayouts }),
+        vertex: { module, entryPoint: 'vsFullscreen' },
+        fragment: {
+            module, entryPoint: 'fsHeatmapOverlay',
+            targets: [{ format, blend: blendState }],
+        },
+        primitive: { topology: 'triangle-list' },
+    });
+
+    return { pipeline, bindGroupLayouts };
+}

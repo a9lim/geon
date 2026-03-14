@@ -501,6 +501,53 @@ export function createHeatmapBuffers(device, gridSize = 64) {
     };
 }
 
+/**
+ * Allocate excitation event buffers for field excitation deposits.
+ * @param {GPUDevice} device
+ * @param {number} maxEvents - max events per frame (default 64)
+ */
+export function createExcitationBuffers(device, maxEvents = 64) {
+    const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+    return {
+        events: device.createBuffer({ label: 'excitation-events', size: maxEvents * 16, usage }), // ExcitationEvent = 16 bytes
+        counter: device.createBuffer({ label: 'excitation-counter', size: 4, usage }),
+    };
+}
+
+/**
+ * Allocate disintegration event buffers for tidal fragmentation / Roche transfer.
+ * @param {GPUDevice} device
+ * @param {number} maxEvents - max events per frame (default 64)
+ */
+export function createDisintegrationBuffers(device, maxEvents = 64) {
+    const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+    return {
+        events: device.createBuffer({ label: 'disint-events', size: maxEvents * 32, usage }), // DisintEvent = 32 bytes
+        counter: device.createBuffer({ label: 'disint-counter', size: 4, usage }),
+        staging: device.createBuffer({ label: 'disint-staging', size: maxEvents * 32,
+            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }),
+        counterStaging: device.createBuffer({ label: 'disint-count-staging', size: 4,
+            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }),
+    };
+}
+
+/**
+ * Allocate pair production event buffers.
+ * @param {GPUDevice} device
+ * @param {number} maxEvents - max events per frame (default 32)
+ */
+export function createPairProductionBuffers(device, maxEvents = 32) {
+    const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+    return {
+        events: device.createBuffer({ label: 'pairprod-events', size: maxEvents * 32, usage }), // PairEvent = 32 bytes
+        counter: device.createBuffer({ label: 'pairprod-counter', size: 4, usage }),
+        staging: device.createBuffer({ label: 'pairprod-staging', size: maxEvents * 32,
+            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }),
+        counterStaging: device.createBuffer({ label: 'pairprod-count-staging', size: 4,
+            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }),
+    };
+}
+
 export { FIELD_GRID_RES, FIELD_GRID_SQ, COARSE_RES, COARSE_SQ, PQS_STENCIL_SIZE };
 
 /**

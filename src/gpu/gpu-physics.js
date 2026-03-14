@@ -1,8 +1,9 @@
 /**
  * @fileoverview GPUPhysics — WebGPU compute pipeline orchestrator.
  *
- * Phase 2+3+4: Full force computation, Boris integrator, tree build, collisions,
- * dead GC, radiation, 1PN VV, boson lifecycle, boson gravity, signal delay history.
+ * Phase 2+3+4+5: Full force computation, Boris integrator, tree build, collisions,
+ * dead GC, radiation, 1PN VV, boson lifecycle, boson gravity, signal delay history,
+ * scalar fields, heatmap, expansion, disintegration, pair production.
  *
  * Dispatch sequence per substep:
  *   1. resetForces
@@ -18,18 +19,25 @@
  *  10. applyTorques
  *  11. radiationReaction      (Phase 4 — Larmor, Hawking, pion emission)
  *  12. borisDrift
+ *  13. cosmologicalExpansion  (Phase 5 — if expansionEnabled)
  *  14. compute1PN_VV          (Phase 4 — 1PN recompute + VV correction kick)
+ *  15. scalarFieldEvolve      (Phase 5 — deposit → [self-grav] → KDK → gradients)
+ *  16. scalarFieldForces      (Phase 5 — Higgs mass mod + Axion axMod/yukMod)
  *  17-18. collisions          (Phase 3 — detect + resolve)
+ *  19. fieldExcitations       (Phase 5 — merge KE → wave packets)
+ *  20. disintegrationCheck    (Phase 5 — tidal + Roche)
  *  21. bosonUpdate            (Phase 4 — photon/pion drift, absorption, decay)
+ *  22. pairProduction         (Phase 5 — photon → particle pair)
  *  24. boundary
  *
  * Post-substep (once per frame):
+ *  - heatmap compute + blur   (Phase 5 — every HEATMAP_INTERVAL frames)
  *  - bosonGravity             (Phase 4 — build boson tree + particle/boson gravity)
  *  - deadParticleGC           (Phase 3)
  *  - recordHistory            (Phase 4 — every HISTORY_STRIDE frames)
  */
-import { createParticleBuffers, createUniformBuffer, writeUniforms, createFieldBuffers, createPQSScratchBuffer, createPQSIndexBuffer, createHeatmapBuffers } from './gpu-buffers.js';
-import { createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createDeadGCPipeline, createPhase4Pipelines } from './gpu-pipelines.js';
+import { createParticleBuffers, createUniformBuffer, writeUniforms, createFieldBuffers, createPQSScratchBuffer, createPQSIndexBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createPairProductionBuffers, FIELD_GRID_RES, COARSE_RES, COARSE_SQ } from './gpu-buffers.js';
+import { createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldSelfGravPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createPairProductionPipeline } from './gpu-pipelines.js';
 
 const MAX_PARTICLES = 4096;
 const HISTORY_STRIDE = 64;
@@ -129,9 +137,51 @@ export default class GPUPhysics {
         this._pqsScratch = null;
         this._pqsIndices = null;
         this._heatmapBuffers = null;
+        this._excitationBuffers = null;
+        this._disintBuffers = null;
+        this._pairProdBuffers = null;
         this._higgsEnabled = false;
         this._axionEnabled = false;
         this._fieldGravEnabled = false;
+        this._expansionEnabled = false;
+        this._disintegrationEnabled = false;
+        this._hubbleParam = 0.001;
+        this._heatmapEnabled = false;
+        this._heatmapFrame = 0;
+
+        // Phase 5: Pipelines (lazy-initialized)
+        this._fieldDeposit = null;
+        this._fieldEvolve = null;
+        this._fieldForces = null;
+        this._fieldSelfGrav = null;
+        this._fieldExcitation = null;
+        this._heatmapPipelines = null;
+        this._expansionPipeline = null;
+        this._disintPipeline = null;
+        this._pairProdPipeline = null;
+
+        // Phase 5: Bind groups (lazy-created per field)
+        this._fieldDepositBGs = {};
+        this._fieldEvolveBGs = {};
+        this._fieldGradBGs = {};
+        this._fieldForcesBGs = null;
+        this._fieldSelfGravBGs = {};
+        this._fieldExcitationBGs = {};
+        this._heatmapBGs = null;
+        this._heatmapBlurBGs = {};
+        this._expansionBG = null;
+        this._disintBGs = null;
+        this._pairProdBGs = null;
+
+        // Phase 5: FieldUniforms buffer (shared)
+        this._fieldUniformBuffer = null;
+        this._heatmapUniformBuffer = null;
+        this._expansionUniformBuffer = null;
+        this._disintUniformBuffer = null;
+        this._pairProdUniformBuffer = null;
+
+        // Phase 5: sgInvR table upload tracking
+        this._sgInvRUploaded = { higgs: false, axion: false };
 
         // Adaptive substepping state
         this._maxAccel = 0;
@@ -1207,21 +1257,35 @@ export default class GPUPhysics {
         this._axionCoupling = 0.05;
         this._higgsCoupling = 1.0;
 
-        // Lazily allocate scalar field buffers on first toggle-on (matching CPU pattern)
+        // Phase 5 toggle state
         this._higgsEnabled = physics.higgsEnabled;
         this._axionEnabled = physics.axionEnabled;
         this._fieldGravEnabled = physics.fieldGravEnabled;
+        this._expansionEnabled = physics.expansionEnabled;
+        this._disintegrationEnabled = physics.disintegrationEnabled;
+        this._hubbleParam = physics.hubbleParam || 0.001;
+        this._heatmapEnabled = physics.heatmapEnabled || false;
+
+        // Lazily allocate scalar field buffers on first toggle-on (matching CPU pattern)
         if (physics.higgsEnabled && !this._higgsBuffers) {
             this._ensureFieldBuffers('higgs');
         }
         if (physics.axionEnabled && !this._axionBuffers) {
             this._ensureFieldBuffers('axion');
         }
+
+        // Lazily initialize Phase 5 pipelines when any Phase 5 feature is enabled
+        const needsPhase5 = physics.higgsEnabled || physics.axionEnabled ||
+            physics.expansionEnabled || physics.disintegrationEnabled || this._heatmapEnabled;
+        if (needsPhase5 && !this._fieldDeposit) {
+            this._ensurePhase5Pipelines();
+        }
     }
 
     /**
      * Lazily allocate GPU buffers for a scalar field.
      * Also ensures shared PQS scratch/index buffers are allocated.
+     * Initializes field values: Higgs=1.0 (VEV), Axion=0.0.
      * @param {'higgs'|'axion'} which
      */
     _ensureFieldBuffers(which) {
@@ -1229,13 +1293,1000 @@ export default class GPUPhysics {
             this._pqsScratch = createPQSScratchBuffer(this.device, MAX_PARTICLES);
             this._pqsIndices = createPQSIndexBuffer(this.device, MAX_PARTICLES);
         }
+        if (!this._fieldUniformBuffer) {
+            this._fieldUniformBuffer = this.device.createBuffer({
+                label: 'fieldUniforms',
+                size: 256,
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+            });
+        }
         if (which === 'higgs' && !this._higgsBuffers) {
             this._higgsBuffers = createFieldBuffers(this.device, 'higgs', MAX_PARTICLES);
+            this._initFieldToVacuum('higgs');
         }
         if (which === 'axion' && !this._axionBuffers) {
             this._axionBuffers = createFieldBuffers(this.device, 'axion', MAX_PARTICLES);
+            this._initFieldToVacuum('axion');
         }
     }
+
+    /**
+     * Initialize field buffers to vacuum values.
+     * Higgs VEV = 1.0, Axion vacuum = 0.0. All other arrays zeroed.
+     */
+    _initFieldToVacuum(which) {
+        const gridSq = FIELD_GRID_RES * FIELD_GRID_RES;
+        const fb = which === 'higgs' ? this._higgsBuffers : this._axionBuffers;
+        if (!fb) return;
+
+        const vacValue = which === 'higgs' ? 1.0 : 0.0;
+        const fieldData = new Float32Array(gridSq).fill(vacValue);
+        this.device.queue.writeBuffer(fb.field, 0, fieldData);
+
+        const zeros = new Float32Array(gridSq);
+        this.device.queue.writeBuffer(fb.fieldDot, 0, zeros);
+        this.device.queue.writeBuffer(fb.gradX, 0, zeros);
+        this.device.queue.writeBuffer(fb.gradY, 0, zeros);
+        this.device.queue.writeBuffer(fb.source, 0, zeros);
+        this.device.queue.writeBuffer(fb.laplacian, 0, zeros);
+        this.device.queue.writeBuffer(fb.thermal, 0, zeros);
+        this.device.queue.writeBuffer(fb.energyDensity, 0, zeros);
+        this.device.queue.writeBuffer(fb.sgPhiFull, 0, zeros);
+        this.device.queue.writeBuffer(fb.sgGradX, 0, zeros);
+        this.device.queue.writeBuffer(fb.sgGradY, 0, zeros);
+
+        this._sgInvRUploaded[which] = false;
+    }
+
+    /**
+     * Lazily initialize Phase 5 pipelines on first use.
+     * Called when any Phase 5 feature is first enabled.
+     */
+    async _ensurePhase5Pipelines() {
+        if (this._fieldDeposit) return; // already initialized
+
+        // Initialize all Phase 5 pipelines in parallel
+        const [deposit, evolve, forces, selfGrav, excitation, heatmap, expansion, disint, pairProd] =
+            await Promise.all([
+                createFieldDepositPipelines(this.device),
+                createFieldEvolvePipelines(this.device),
+                createFieldForcesPipelines(this.device),
+                createFieldSelfGravPipelines(this.device),
+                createFieldExcitationPipeline(this.device),
+                createHeatmapPipelines(this.device),
+                createExpansionPipeline(this.device),
+                createDisintegrationPipeline(this.device),
+                createPairProductionPipeline(this.device),
+            ]);
+
+        this._fieldDeposit = deposit;
+        this._fieldEvolve = evolve;
+        this._fieldForces = forces;
+        this._fieldSelfGrav = selfGrav;
+        this._fieldExcitation = excitation;
+        this._heatmapPipelines = heatmap;
+        this._expansionPipeline = expansion;
+        this._disintPipeline = disint;
+        this._pairProdPipeline = pairProd;
+    }
+
+    /**
+     * Build sgInvR table for field self-gravity (CPU-side O(SG^4=4096) computation).
+     * Uploaded once per field, rebuilt on domain size change.
+     */
+    _buildSgInvRTable(which) {
+        const fb = which === 'higgs' ? this._higgsBuffers : this._axionBuffers;
+        if (!fb) return;
+
+        const SG = COARSE_RES;
+        const SG_SQ = COARSE_SQ;
+        const cellW = this.domainW / SG;
+        const cellH = this.domainH / SG;
+        const table = new Float32Array(SG_SQ * SG_SQ);
+
+        for (let i = 0; i < SG_SQ; i++) {
+            const ix = i % SG;
+            const iy = (i / SG) | 0;
+            const cx = (ix + 0.5) * cellW;
+            const cy = (iy + 0.5) * cellH;
+            const rowBase = i * SG_SQ;
+            for (let j = 0; j < SG_SQ; j++) {
+                if (i === j) {
+                    table[rowBase + j] = 0;
+                    continue;
+                }
+                const jx = j % SG;
+                const jy = (j / SG) | 0;
+                const dx = cx - (jx + 0.5) * cellW;
+                const dy = cy - (jy + 0.5) * cellH;
+                table[rowBase + j] = 1.0 / Math.sqrt(dx * dx + dy * dy);
+            }
+        }
+
+        this.device.queue.writeBuffer(fb.sgInvR, 0, table);
+        this._sgInvRUploaded[which] = true;
+    }
+
+    /**
+     * Write FieldUniforms to the shared field uniform buffer.
+     */
+    _writeFieldUniforms(dt) {
+        if (!this._fieldUniformBuffer) return;
+        const data = new ArrayBuffer(256);
+        const f = new Float32Array(data);
+        const u = new Uint32Array(data);
+        f[0] = dt;
+        f[1] = this.domainW;
+        f[2] = this.domainH;
+        u[3] = this.boundaryMode;
+        u[4] = this.topologyMode;
+        f[5] = this._higgsMass;
+        f[6] = this._axionMass;
+        f[7] = this._higgsCoupling;
+        f[8] = this._axionCoupling;
+        u[9] = this.aliveCount;
+        u[10] = this._fieldGravEnabled ? 1 : 0;
+        this.device.queue.writeBuffer(this._fieldUniformBuffer, 0, data);
+    }
+
+    /**
+     * Ensure deposit bind groups exist for a given field.
+     */
+    _ensureDepositBindGroups(which) {
+        if (this._fieldDepositBGs[which]) return;
+        const fb = which === 'higgs' ? this._higgsBuffers : this._axionBuffers;
+        if (!fb || !this._fieldDeposit) return;
+        const b = this.buffers;
+        const dep = this._fieldDeposit;
+
+        // Group 0: particle SoA
+        const g0 = this.device.createBindGroup({
+            label: `fieldDeposit_g0_${which}`,
+            layout: dep.bindGroupLayouts[0],
+            entries: [
+                { binding: 0, resource: { buffer: b.posX } },
+                { binding: 1, resource: { buffer: b.posY } },
+                { binding: 2, resource: { buffer: b.mass } },
+                { binding: 3, resource: { buffer: b.baseMass } },
+                { binding: 4, resource: { buffer: b.charge } },
+                { binding: 5, resource: { buffer: b.flags } },
+                { binding: 6, resource: { buffer: b.velWX } },
+                { binding: 7, resource: { buffer: b.velWY } },
+            ],
+        });
+
+        // Group 1: scratch + target grid + uniforms (for source deposition)
+        const g1Source = this.device.createBindGroup({
+            label: `fieldDeposit_g1_source_${which}`,
+            layout: dep.bindGroupLayouts[1],
+            entries: [
+                { binding: 0, resource: { buffer: this._pqsScratch } },
+                { binding: 1, resource: { buffer: this._pqsIndices } },
+                { binding: 2, resource: { buffer: fb.source } },
+                { binding: 3, resource: { buffer: this._fieldUniformBuffer } },
+            ],
+        });
+
+        // Group 1 for thermal (Higgs only, but create for both for simplicity)
+        const g1Thermal = this.device.createBindGroup({
+            label: `fieldDeposit_g1_thermal_${which}`,
+            layout: dep.bindGroupLayouts[1],
+            entries: [
+                { binding: 0, resource: { buffer: this._pqsScratch } },
+                { binding: 1, resource: { buffer: this._pqsIndices } },
+                { binding: 2, resource: { buffer: fb.thermal } },
+                { binding: 3, resource: { buffer: this._fieldUniformBuffer } },
+            ],
+        });
+
+        this._fieldDepositBGs[which] = { g0, g1Source, g1Thermal };
+    }
+
+    /**
+     * Ensure evolve bind groups exist for a given field.
+     */
+    _ensureEvolveBindGroups(which) {
+        if (this._fieldEvolveBGs[which]) return;
+        const fb = which === 'higgs' ? this._higgsBuffers : this._axionBuffers;
+        if (!fb || !this._fieldEvolve) return;
+
+        // Evolve bind group (gradX/Y are read-only for self-gravity cross-terms)
+        this._fieldEvolveBGs[which] = this.device.createBindGroup({
+            label: `fieldEvolve_${which}`,
+            layout: this._fieldEvolve.evolveBindGroupLayouts[0],
+            entries: [
+                { binding: 0, resource: { buffer: fb.field } },
+                { binding: 1, resource: { buffer: fb.fieldDot } },
+                { binding: 2, resource: { buffer: fb.laplacian } },
+                { binding: 3, resource: { buffer: fb.source } },
+                { binding: 4, resource: { buffer: fb.thermal } },
+                { binding: 5, resource: { buffer: fb.sgPhiFull } },
+                { binding: 6, resource: { buffer: fb.sgGradX } },
+                { binding: 7, resource: { buffer: fb.sgGradY } },
+                { binding: 8, resource: { buffer: fb.gradX } },
+                { binding: 9, resource: { buffer: fb.gradY } },
+                { binding: 10, resource: { buffer: this._fieldUniformBuffer } },
+            ],
+        });
+
+        // Gradient bind group (gradX/Y are read_write for output)
+        this._fieldGradBGs[which] = this.device.createBindGroup({
+            label: `fieldGrad_${which}`,
+            layout: this._fieldEvolve.gradBindGroupLayouts[0],
+            entries: [
+                { binding: 0, resource: { buffer: fb.field } },
+                { binding: 1, resource: { buffer: fb.fieldDot } },
+                { binding: 2, resource: { buffer: fb.laplacian } },
+                { binding: 3, resource: { buffer: fb.source } },
+                { binding: 4, resource: { buffer: fb.thermal } },
+                { binding: 5, resource: { buffer: fb.sgPhiFull } },
+                { binding: 6, resource: { buffer: fb.sgGradX } },
+                { binding: 7, resource: { buffer: fb.sgGradY } },
+                { binding: 8, resource: { buffer: fb.gradX } },
+                { binding: 9, resource: { buffer: fb.gradY } },
+                { binding: 10, resource: { buffer: this._fieldUniformBuffer } },
+            ],
+        });
+    }
+
+    /**
+     * Ensure self-gravity bind groups exist for a given field.
+     */
+    _ensureSelfGravBindGroups(which) {
+        if (this._fieldSelfGravBGs[which]) return;
+        const fb = which === 'higgs' ? this._higgsBuffers : this._axionBuffers;
+        if (!fb || !this._fieldSelfGrav) return;
+
+        this._fieldSelfGravBGs[which] = this.device.createBindGroup({
+            label: `fieldSelfGrav_${which}`,
+            layout: this._fieldSelfGrav.bindGroupLayouts[0],
+            entries: [
+                { binding: 0, resource: { buffer: fb.field } },
+                { binding: 1, resource: { buffer: fb.fieldDot } },
+                { binding: 2, resource: { buffer: fb.gradX } },
+                { binding: 3, resource: { buffer: fb.gradY } },
+                { binding: 4, resource: { buffer: fb.energyDensity } },
+                { binding: 5, resource: { buffer: fb.coarseRho } },
+                { binding: 6, resource: { buffer: fb.coarsePhi } },
+                { binding: 7, resource: { buffer: fb.sgPhiFull } },
+                { binding: 8, resource: { buffer: fb.sgGradX } },
+                { binding: 9, resource: { buffer: fb.sgGradY } },
+                { binding: 10, resource: { buffer: fb.sgInvR } },
+                { binding: 11, resource: { buffer: this._fieldUniformBuffer } },
+            ],
+        });
+    }
+
+    /**
+     * Ensure field forces bind groups exist (shared for both Higgs and Axion).
+     */
+    _ensureFieldForcesBGs() {
+        if (this._fieldForcesBGs) return;
+        if (!this._fieldForces || !this._higgsBuffers || !this._axionBuffers) return;
+        // Need both field buffers — use dummy if one missing
+        const hb = this._higgsBuffers;
+        const ab = this._axionBuffers;
+        // If one field is missing, we can't create force BGs yet
+        // They'll be created when both are available, or on first use with dummies
+        if (!hb || !ab) return;
+        const b = this.buffers;
+        const ff = this._fieldForces;
+
+        const g0 = this.device.createBindGroup({
+            label: 'fieldForces_g0',
+            layout: ff.bindGroupLayouts[0],
+            entries: [
+                { binding: 0, resource: { buffer: b.posX } },
+                { binding: 1, resource: { buffer: b.posY } },
+                { binding: 2, resource: { buffer: b.mass } },
+                { binding: 3, resource: { buffer: b.baseMass } },
+                { binding: 4, resource: { buffer: b.charge } },
+                { binding: 5, resource: { buffer: b.flags } },
+                { binding: 6, resource: { buffer: b.velWX } },
+                { binding: 7, resource: { buffer: b.velWY } },
+                { binding: 8, resource: { buffer: b.angW } },
+                { binding: 9, resource: { buffer: b.radius } },
+                { binding: 10, resource: { buffer: b.invMass } },
+            ],
+        });
+
+        const g1 = this.device.createBindGroup({
+            label: 'fieldForces_g1',
+            layout: ff.bindGroupLayouts[1],
+            entries: [
+                { binding: 0, resource: { buffer: hb.field } },
+                { binding: 1, resource: { buffer: hb.gradX } },
+                { binding: 2, resource: { buffer: hb.gradY } },
+                { binding: 3, resource: { buffer: ab.field } },
+                { binding: 4, resource: { buffer: ab.gradX } },
+                { binding: 5, resource: { buffer: ab.gradY } },
+            ],
+        });
+
+        const g2 = this.device.createBindGroup({
+            label: 'fieldForces_g2',
+            layout: ff.bindGroupLayouts[2],
+            entries: [
+                { binding: 0, resource: { buffer: b.forces4 } },
+                { binding: 1, resource: { buffer: b.forces5 } },
+                { binding: 2, resource: { buffer: b.totalForceX } },
+                { binding: 3, resource: { buffer: b.axMod } },
+                { binding: 4, resource: { buffer: b.yukMod } },
+            ],
+        });
+
+        const g3 = this.device.createBindGroup({
+            label: 'fieldForces_g3',
+            layout: ff.bindGroupLayouts[3],
+            entries: [
+                { binding: 0, resource: { buffer: this._fieldUniformBuffer } },
+            ],
+        });
+
+        this._fieldForcesBGs = { g0, g1, g2, g3 };
+    }
+
+    /**
+     * Dispatch scalar field evolution for one field (Higgs or Axion).
+     * Full sequence: deposit → [self-gravity] → Laplacian → halfKick → drift →
+     * Laplacian → halfKick → NaN fixup → compute gradients
+     */
+    _dispatchFieldEvolve(encoder, which, dt) {
+        const fb = which === 'higgs' ? this._higgsBuffers : this._axionBuffers;
+        if (!fb || !this._fieldDeposit || !this._fieldEvolve) return;
+
+        this._ensureDepositBindGroups(which);
+        this._ensureEvolveBindGroups(which);
+        const depBGs = this._fieldDepositBGs[which];
+        const evolveBG = this._fieldEvolveBGs[which];
+        const gradBG = this._fieldGradBGs[which];
+        const dep = this._fieldDeposit;
+        const evo = this._fieldEvolve;
+        const gridWG = Math.ceil(FIELD_GRID_RES / 8); // 8x8 workgroup
+        const particleWG = Math.ceil(this.aliveCount / 256);
+
+        // Step 1: Clear source grid
+        {
+            const p = encoder.beginComputePass({ label: `clearSource_${which}` });
+            p.setPipeline(dep.clearGrid);
+            p.setBindGroup(0, depBGs.g0);
+            p.setBindGroup(1, depBGs.g1Source);
+            p.dispatchWorkgroups(gridWG, gridWG);
+            p.end();
+        }
+
+        // Step 2: Scatter deposit (source)
+        if (this.aliveCount > 0) {
+            const scatterPipeline = which === 'axion'
+                ? dep.scatterDepositAxion
+                : dep.scatterDeposit;
+            const p = encoder.beginComputePass({ label: `scatterDeposit_${which}` });
+            p.setPipeline(scatterPipeline);
+            p.setBindGroup(0, depBGs.g0);
+            p.setBindGroup(1, depBGs.g1Source);
+            p.dispatchWorkgroups(particleWG);
+            p.end();
+        }
+
+        // Step 3: Gather deposit (source)
+        {
+            const p = encoder.beginComputePass({ label: `gatherDeposit_${which}` });
+            p.setPipeline(dep.gatherDeposit);
+            p.setBindGroup(0, depBGs.g0);
+            p.setBindGroup(1, depBGs.g1Source);
+            p.dispatchWorkgroups(gridWG, gridWG);
+            p.end();
+        }
+
+        // Step 4: Higgs thermal deposition (Higgs only)
+        if (which === 'higgs') {
+            // Clear thermal
+            {
+                const p = encoder.beginComputePass({ label: 'clearThermal' });
+                p.setPipeline(dep.clearGrid);
+                p.setBindGroup(0, depBGs.g0);
+                p.setBindGroup(1, depBGs.g1Thermal);
+                p.dispatchWorkgroups(gridWG, gridWG);
+                p.end();
+            }
+            // Scatter thermal
+            if (this.aliveCount > 0) {
+                const p = encoder.beginComputePass({ label: 'scatterThermal' });
+                p.setPipeline(dep.scatterDepositThermal);
+                p.setBindGroup(0, depBGs.g0);
+                p.setBindGroup(1, depBGs.g1Thermal);
+                p.dispatchWorkgroups(particleWG);
+                p.end();
+            }
+            // Gather thermal
+            {
+                const p = encoder.beginComputePass({ label: 'gatherThermal' });
+                p.setPipeline(dep.gatherDeposit);
+                p.setBindGroup(0, depBGs.g0);
+                p.setBindGroup(1, depBGs.g1Thermal);
+                p.dispatchWorkgroups(gridWG, gridWG);
+                p.end();
+            }
+        }
+
+        // Step 5: Self-gravity (if field gravity enabled)
+        if (this._fieldGravEnabled) {
+            this._ensureSelfGravBindGroups(which);
+            if (!this._sgInvRUploaded[which]) {
+                this._buildSgInvRTable(which);
+            }
+            const sgBG = this._fieldSelfGravBGs[which];
+            const sg = this._fieldSelfGrav;
+            const coarseWG = 1; // 8x8 = one workgroup for 8x8 coarse grid
+
+            // Energy density
+            const edPipeline = which === 'higgs'
+                ? sg.computeEnergyDensityHiggs
+                : sg.computeEnergyDensityAxion;
+            {
+                const p = encoder.beginComputePass({ label: `energyDensity_${which}` });
+                p.setPipeline(edPipeline);
+                p.setBindGroup(0, sgBG);
+                p.dispatchWorkgroups(gridWG, gridWG);
+                p.end();
+            }
+            // Downsample
+            {
+                const p = encoder.beginComputePass({ label: `downsampleRho_${which}` });
+                p.setPipeline(sg.downsampleRho);
+                p.setBindGroup(0, sgBG);
+                p.dispatchWorkgroups(coarseWG, coarseWG);
+                p.end();
+            }
+            // Coarse potential
+            {
+                const p = encoder.beginComputePass({ label: `coarsePotential_${which}` });
+                p.setPipeline(sg.computeCoarsePotential);
+                p.setBindGroup(0, sgBG);
+                p.dispatchWorkgroups(coarseWG, coarseWG);
+                p.end();
+            }
+            // Upsample
+            {
+                const p = encoder.beginComputePass({ label: `upsamplePhi_${which}` });
+                p.setPipeline(sg.upsamplePhi);
+                p.setBindGroup(0, sgBG);
+                p.dispatchWorkgroups(gridWG, gridWG);
+                p.end();
+            }
+            // SG gradients
+            {
+                const p = encoder.beginComputePass({ label: `sgGradients_${which}` });
+                p.setPipeline(sg.computeSelfGravGradients);
+                p.setBindGroup(0, sgBG);
+                p.dispatchWorkgroups(gridWG, gridWG);
+                p.end();
+            }
+        }
+
+        // Step 6: KDK Störmer-Verlet
+        const halfKickPipeline = which === 'higgs'
+            ? evo.higgsHalfKick
+            : evo.axionHalfKick;
+
+        // Laplacian (1st)
+        {
+            const p = encoder.beginComputePass({ label: `laplacian1_${which}` });
+            p.setPipeline(evo.computeLaplacian);
+            p.setBindGroup(0, evolveBG);
+            p.dispatchWorkgroups(gridWG, gridWG);
+            p.end();
+        }
+        // Half-kick (1st)
+        {
+            const p = encoder.beginComputePass({ label: `halfKick1_${which}` });
+            p.setPipeline(halfKickPipeline);
+            p.setBindGroup(0, evolveBG);
+            p.dispatchWorkgroups(gridWG, gridWG);
+            p.end();
+        }
+        // Field drift
+        {
+            const p = encoder.beginComputePass({ label: `fieldDrift_${which}` });
+            p.setPipeline(evo.fieldDrift);
+            p.setBindGroup(0, evolveBG);
+            p.dispatchWorkgroups(gridWG, gridWG);
+            p.end();
+        }
+        // Laplacian (2nd)
+        {
+            const p = encoder.beginComputePass({ label: `laplacian2_${which}` });
+            p.setPipeline(evo.computeLaplacian);
+            p.setBindGroup(0, evolveBG);
+            p.dispatchWorkgroups(gridWG, gridWG);
+            p.end();
+        }
+        // Half-kick (2nd)
+        {
+            const p = encoder.beginComputePass({ label: `halfKick2_${which}` });
+            p.setPipeline(halfKickPipeline);
+            p.setBindGroup(0, evolveBG);
+            p.dispatchWorkgroups(gridWG, gridWG);
+            p.end();
+        }
+        // NaN fixup
+        {
+            const nanPipeline = which === 'higgs'
+                ? evo.nanFixupHiggs
+                : evo.nanFixupAxion;
+            const p = encoder.beginComputePass({ label: `nanFixup_${which}` });
+            p.setPipeline(nanPipeline);
+            p.setBindGroup(0, evolveBG);
+            p.dispatchWorkgroups(gridWG, gridWG);
+            p.end();
+        }
+        // Compute grid gradients (uses grad layout — bindings 8-9 are rw)
+        {
+            const p = encoder.beginComputePass({ label: `gridGradients_${which}` });
+            p.setPipeline(evo.computeGridGradients);
+            p.setBindGroup(0, gradBG);
+            p.dispatchWorkgroups(gridWG, gridWG);
+            p.end();
+        }
+    }
+
+    /**
+     * Dispatch scalar field force application (Pass 16).
+     * Applies Higgs mass modulation + gradient force, Axion axMod/yukMod + gradient force.
+     */
+    _dispatchFieldForces(encoder) {
+        if (!this._fieldForces || this.aliveCount === 0) return;
+        if (!this._higgsEnabled && !this._axionEnabled) return;
+
+        // Ensure both field buffers exist for the shared bind group
+        // If only one is enabled, the other's arrays are at vacuum (zero/VEV) — safe.
+        if (this._higgsEnabled && !this._axionBuffers) {
+            this._ensureFieldBuffers('axion');
+        }
+        if (this._axionEnabled && !this._higgsBuffers) {
+            this._ensureFieldBuffers('higgs');
+        }
+        this._ensureFieldForcesBGs();
+        if (!this._fieldForcesBGs) return;
+
+        const workgroups = Math.ceil(this.aliveCount / 256);
+        const fg = this._fieldForcesBGs;
+        const ff = this._fieldForces;
+
+        if (this._higgsEnabled) {
+            const p = encoder.beginComputePass({ label: 'applyHiggsForces' });
+            p.setPipeline(ff.applyHiggsForces);
+            p.setBindGroup(0, fg.g0);
+            p.setBindGroup(1, fg.g1);
+            p.setBindGroup(2, fg.g2);
+            p.setBindGroup(3, fg.g3);
+            p.dispatchWorkgroups(workgroups);
+            p.end();
+        }
+
+        if (this._axionEnabled) {
+            const p = encoder.beginComputePass({ label: 'applyAxionForces' });
+            p.setPipeline(ff.applyAxionForces);
+            p.setBindGroup(0, fg.g0);
+            p.setBindGroup(1, fg.g1);
+            p.setBindGroup(2, fg.g2);
+            p.setBindGroup(3, fg.g3);
+            p.dispatchWorkgroups(workgroups);
+            p.end();
+        }
+    }
+
+    /**
+     * Dispatch field excitation deposits (Pass 19).
+     * Deposits Gaussian wave packets from merge events into active field(s).
+     */
+    _dispatchFieldExcitations(encoder) {
+        if (!this._fieldExcitation) return;
+        if (!this._higgsEnabled && !this._axionEnabled) return;
+
+        // Excitation events come from merge results (already on GPU in mergeResultBuffer)
+        const mergeCount = this._pendingMergeEvents.length;
+        if (mergeCount === 0) return;
+
+        if (!this._excitationBuffers) {
+            this._excitationBuffers = createExcitationBuffers(this.device);
+        }
+
+        // Upload excitation events from pending merge events
+        const maxEvents = 64;
+        const eventCount = Math.min(mergeCount, maxEvents);
+        const eventData = new Float32Array(eventCount * 4); // ExcitationEvent = 4 floats
+        for (let i = 0; i < eventCount; i++) {
+            const me = this._pendingMergeEvents[i];
+            if (me.type !== 'merge') continue;
+            eventData[i * 4] = me.x;
+            eventData[i * 4 + 1] = me.y;
+            eventData[i * 4 + 2] = me.energy;
+            eventData[i * 4 + 3] = 0; // padding
+        }
+        this.device.queue.writeBuffer(this._excitationBuffers.events, 0, eventData);
+        this.device.queue.writeBuffer(this._excitationBuffers.counter, 0, new Uint32Array([eventCount]));
+
+        const gridWG = Math.ceil(FIELD_GRID_RES / 8);
+        const exc = this._fieldExcitation;
+
+        const dispatchForField = (which) => {
+            const fb = which === 'higgs' ? this._higgsBuffers : this._axionBuffers;
+            if (!fb) return;
+
+            if (!this._fieldExcitationBGs[which]) {
+                this._fieldExcitationBGs[which] = this.device.createBindGroup({
+                    label: `fieldExcitation_${which}`,
+                    layout: exc.bindGroupLayouts[0],
+                    entries: [
+                        { binding: 0, resource: { buffer: fb.fieldDot } },
+                        { binding: 1, resource: { buffer: this._excitationBuffers.events } },
+                        { binding: 2, resource: { buffer: this._fieldUniformBuffer } },
+                        { binding: 3, resource: { buffer: this._excitationBuffers.counter } },
+                    ],
+                });
+            }
+
+            const p = encoder.beginComputePass({ label: `depositExcitations_${which}` });
+            p.setPipeline(exc.pipeline);
+            p.setBindGroup(0, this._fieldExcitationBGs[which]);
+            p.dispatchWorkgroups(gridWG, gridWG);
+            p.end();
+        };
+
+        if (this._higgsEnabled) dispatchForField('higgs');
+        if (this._axionEnabled) dispatchForField('axion');
+    }
+
+    /**
+     * Dispatch cosmological expansion (Pass 13).
+     */
+    _dispatchExpansion(encoder, dt) {
+        if (!this._expansionEnabled || !this._expansionPipeline) return;
+        if (this.aliveCount === 0) return;
+
+        if (!this._expansionUniformBuffer) {
+            this._expansionUniformBuffer = this.device.createBuffer({
+                label: 'expansionUniforms',
+                size: 32, // 8 floats
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+            });
+        }
+
+        // Write ExpansionUniforms
+        const data = new ArrayBuffer(32);
+        const f = new Float32Array(data);
+        const u = new Uint32Array(data);
+        f[0] = this._hubbleParam;
+        f[1] = dt;
+        f[2] = this.domainW * 0.5;
+        f[3] = this.domainH * 0.5;
+        u[4] = this.aliveCount;
+        this.device.queue.writeBuffer(this._expansionUniformBuffer, 0, data);
+
+        if (!this._expansionBG) {
+            const b = this.buffers;
+            this._expansionBG = this.device.createBindGroup({
+                label: 'expansion_g0',
+                layout: this._expansionPipeline.bindGroupLayouts[0],
+                entries: [
+                    { binding: 0, resource: { buffer: b.posX } },
+                    { binding: 1, resource: { buffer: b.posY } },
+                    { binding: 2, resource: { buffer: b.velWX } },
+                    { binding: 3, resource: { buffer: b.velWY } },
+                    { binding: 4, resource: { buffer: b.flags } },
+                    { binding: 5, resource: { buffer: this._expansionUniformBuffer } },
+                ],
+            });
+        }
+
+        const workgroups = Math.ceil(this.aliveCount / 256);
+        const p = encoder.beginComputePass({ label: 'expansion' });
+        p.setPipeline(this._expansionPipeline.pipeline);
+        p.setBindGroup(0, this._expansionBG);
+        p.dispatchWorkgroups(workgroups);
+        p.end();
+    }
+
+    /**
+     * Dispatch disintegration check (Pass 20).
+     */
+    _dispatchDisintegration(encoder) {
+        if (!this._disintegrationEnabled || !this._disintPipeline) return;
+        if (this.aliveCount === 0) return;
+
+        if (!this._disintBuffers) {
+            this._disintBuffers = createDisintegrationBuffers(this.device);
+        }
+
+        if (!this._disintUniformBuffer) {
+            this._disintUniformBuffer = this.device.createBuffer({
+                label: 'disintUniforms',
+                size: 48, // 12 floats/u32
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+            });
+        }
+
+        // Write DisintUniforms
+        const data = new ArrayBuffer(48);
+        const f = new Float32Array(data);
+        const u = new Uint32Array(data);
+        f[0] = this._blackHoleEnabled ? 16 : 64; // softeningSq
+        f[1] = this.domainW;
+        f[2] = this.domainH;
+        f[3] = 0.3;   // tidalStrength
+        f[4] = 0.9;   // rocheThreshold
+        f[5] = 0.01;  // rocheTransferRate
+        f[6] = 0.01;  // minMass
+        u[7] = 4;     // spawnCount
+        u[8] = this.aliveCount;
+        u[9] = this.boundaryMode === BOUND_LOOP ? 1 : 0;
+        u[10] = this.topologyMode;
+        this.device.queue.writeBuffer(this._disintUniformBuffer, 0, data);
+
+        // Reset event counter
+        this.device.queue.writeBuffer(this._disintBuffers.counter, 0, new Uint32Array([0]));
+
+        if (!this._disintBGs) {
+            const b = this.buffers;
+            const g0 = this.device.createBindGroup({
+                label: 'disint_g0',
+                layout: this._disintPipeline.bindGroupLayouts[0],
+                entries: [
+                    { binding: 0, resource: { buffer: b.posX } },
+                    { binding: 1, resource: { buffer: b.posY } },
+                    { binding: 2, resource: { buffer: b.mass } },
+                    { binding: 3, resource: { buffer: b.charge } },
+                    { binding: 4, resource: { buffer: b.angVel } },
+                    { binding: 5, resource: { buffer: b.radius } },
+                    { binding: 6, resource: { buffer: b.radiusSq } },
+                    { binding: 7, resource: { buffer: b.velX } },
+                    { binding: 8, resource: { buffer: b.velY } },
+                    { binding: 9, resource: { buffer: b.flags } },
+                ],
+            });
+            const g1 = this.device.createBindGroup({
+                label: 'disint_g1',
+                layout: this._disintPipeline.bindGroupLayouts[1],
+                entries: [
+                    { binding: 0, resource: { buffer: this._disintBuffers.events } },
+                    { binding: 1, resource: { buffer: this._disintBuffers.counter } },
+                    { binding: 2, resource: { buffer: this._disintUniformBuffer } },
+                ],
+            });
+            this._disintBGs = [g0, g1];
+        }
+
+        const workgroups = Math.ceil(this.aliveCount / 256);
+        const p = encoder.beginComputePass({ label: 'disintegration' });
+        p.setPipeline(this._disintPipeline.pipeline);
+        p.setBindGroup(0, this._disintBGs[0]);
+        p.setBindGroup(1, this._disintBGs[1]);
+        p.dispatchWorkgroups(workgroups);
+        p.end();
+    }
+
+    /**
+     * Dispatch pair production check (Pass 22).
+     */
+    _dispatchPairProduction(encoder) {
+        if (this._blackHoleEnabled) return;
+        if (!this._pairProdPipeline) return;
+
+        if (!this._pairProdBuffers) {
+            this._pairProdBuffers = createPairProductionBuffers(this.device);
+        }
+
+        if (!this._pairProdUniformBuffer) {
+            this._pairProdUniformBuffer = this.device.createBuffer({
+                label: 'pairProdUniforms',
+                size: 48, // 12 floats/u32
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+            });
+        }
+
+        // Write PairProdUniforms
+        const data = new ArrayBuffer(48);
+        const f = new Float32Array(data);
+        const u = new Uint32Array(data);
+        f[0] = 0.5;     // minEnergy
+        f[1] = 8.0;     // proximity
+        f[2] = 0.005;   // probability
+        u[3] = 64;      // minAge
+        u[4] = 32;      // maxParticles (PAIR_PROD_MAX_PARTICLES)
+        u[5] = this.aliveCount;
+        u[6] = MAX_PHOTONS;
+        u[7] = this._blackHoleEnabled ? 1 : 0;
+        f[8] = this.simTime;
+        this.device.queue.writeBuffer(this._pairProdUniformBuffer, 0, data);
+
+        // Reset pair counter
+        this.device.queue.writeBuffer(this._pairProdBuffers.counter, 0, new Uint32Array([0]));
+
+        if (!this._pairProdBGs) {
+            const b = this.buffers;
+            const g0 = this.device.createBindGroup({
+                label: 'pairProd_g0',
+                layout: this._pairProdPipeline.bindGroupLayouts[0],
+                entries: [
+                    { binding: 0, resource: { buffer: b.phPosX } },
+                    { binding: 1, resource: { buffer: b.phPosY } },
+                    { binding: 2, resource: { buffer: b.phEnergy } },
+                    { binding: 3, resource: { buffer: b.phVelX } },
+                    { binding: 4, resource: { buffer: b.phVelY } },
+                    { binding: 5, resource: { buffer: b.phAge } },
+                    { binding: 6, resource: { buffer: b.phFlags } },
+                ],
+            });
+            const g1 = this.device.createBindGroup({
+                label: 'pairProd_g1',
+                layout: this._pairProdPipeline.bindGroupLayouts[1],
+                entries: [
+                    { binding: 0, resource: { buffer: b.posX } },
+                    { binding: 1, resource: { buffer: b.posY } },
+                    { binding: 2, resource: { buffer: b.mass } },
+                    { binding: 3, resource: { buffer: b.flags } },
+                ],
+            });
+            const g2 = this.device.createBindGroup({
+                label: 'pairProd_g2',
+                layout: this._pairProdPipeline.bindGroupLayouts[2],
+                entries: [
+                    { binding: 0, resource: { buffer: this._pairProdBuffers.events } },
+                    { binding: 1, resource: { buffer: this._pairProdBuffers.counter } },
+                    { binding: 2, resource: { buffer: this._pairProdUniformBuffer } },
+                ],
+            });
+            this._pairProdBGs = [g0, g1, g2];
+        }
+
+        const workgroups = Math.ceil(MAX_PHOTONS / 256);
+        const p = encoder.beginComputePass({ label: 'pairProduction' });
+        p.setPipeline(this._pairProdPipeline.pipeline);
+        p.setBindGroup(0, this._pairProdBGs[0]);
+        p.setBindGroup(1, this._pairProdBGs[1]);
+        p.setBindGroup(2, this._pairProdBGs[2]);
+        p.dispatchWorkgroups(workgroups);
+        p.end();
+    }
+
+    /**
+     * Dispatch heatmap compute pass (runs once every HEATMAP_INTERVAL frames).
+     * @param {Object} camera - camera state for viewport bounds
+     */
+    dispatchHeatmap(encoder, camera) {
+        if (!this._heatmapEnabled || !this._heatmapPipelines) return;
+        if (this.aliveCount === 0) return;
+
+        if (!this._heatmapBuffers) {
+            this._heatmapBuffers = createHeatmapBuffers(this.device);
+        }
+
+        if (!this._heatmapUniformBuffer) {
+            this._heatmapUniformBuffer = this.device.createBuffer({
+                label: 'heatmapUniforms',
+                size: 96, // HeatmapUniforms struct size (22 fields, padded)
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+            });
+        }
+
+        // Compute viewport bounds from camera
+        const halfW = (camera?.canvasW || 800) / (2 * (camera?.zoom || 16));
+        const halfH = (camera?.canvasH || 600) / (2 * (camera?.zoom || 16));
+        const viewLeft = (camera?.x || 0) - halfW;
+        const viewTop = (camera?.y || 0) - halfH;
+        const cellW = (2 * halfW) / 64;
+        const cellH = (2 * halfH) / 64;
+
+        // Write HeatmapUniforms
+        const data = new ArrayBuffer(96);
+        const f = new Float32Array(data);
+        const u = new Uint32Array(data);
+        f[0] = viewLeft;
+        f[1] = viewTop;
+        f[2] = cellW;
+        f[3] = cellH;
+        f[4] = this._blackHoleEnabled ? 16 : 64; // softeningSq
+        f[5] = this._yukawaCoupling;
+        f[6] = this._yukawaMu;
+        f[7] = this.simTime;
+        f[8] = this.domainW;
+        f[9] = this.domainH;
+        u[10] = (this._toggles0 & 1) ? 1 : 0; // doGravity
+        u[11] = (this._toggles0 & 2) ? 1 : 0; // doCoulomb
+        u[12] = (this._toggles0 & 2048) ? 1 : 0; // doYukawa
+        u[13] = 0; // useDelay (not on GPU)
+        u[14] = this.boundaryMode === BOUND_LOOP ? 1 : 0;
+        u[15] = this.topologyMode;
+        u[16] = this.aliveCount;
+        u[17] = 0; // deadCount (not tracked on GPU yet)
+        this.device.queue.writeBuffer(this._heatmapUniformBuffer, 0, data);
+
+        if (!this._heatmapBGs) {
+            const b = this.buffers;
+            const hm = this._heatmapPipelines;
+            const hmBuf = this._heatmapBuffers;
+            this._heatmapBGs = {
+                g0: this.device.createBindGroup({
+                    label: 'heatmap_g0',
+                    layout: hm.heatmapLayouts[0],
+                    entries: [
+                        { binding: 0, resource: { buffer: b.posX } },
+                        { binding: 1, resource: { buffer: b.posY } },
+                        { binding: 2, resource: { buffer: b.mass } },
+                        { binding: 3, resource: { buffer: b.charge } },
+                        { binding: 4, resource: { buffer: b.flags } },
+                    ],
+                }),
+                g1: this.device.createBindGroup({
+                    label: 'heatmap_g1',
+                    layout: hm.heatmapLayouts[1],
+                    entries: [
+                        { binding: 0, resource: { buffer: hmBuf.gravPotential } },
+                        { binding: 1, resource: { buffer: hmBuf.elecPotential } },
+                        { binding: 2, resource: { buffer: hmBuf.yukawaPotential } },
+                        { binding: 3, resource: { buffer: this._heatmapUniformBuffer } },
+                    ],
+                }),
+            };
+        }
+
+        const gridWG = Math.ceil(64 / 8);
+
+        // Compute heatmap
+        {
+            const p = encoder.beginComputePass({ label: 'computeHeatmap' });
+            p.setPipeline(this._heatmapPipelines.computeHeatmap);
+            p.setBindGroup(0, this._heatmapBGs.g0);
+            p.setBindGroup(1, this._heatmapBGs.g1);
+            p.dispatchWorkgroups(gridWG, gridWG);
+            p.end();
+        }
+
+        // Blur each active channel
+        const channels = ['gravPotential', 'elecPotential', 'yukawaPotential'];
+        const channelToggles = [this._toggles0 & 1, this._toggles0 & 2, this._toggles0 & 2048];
+        const hmBuf = this._heatmapBuffers;
+
+        for (let c = 0; c < 3; c++) {
+            if (!channelToggles[c]) continue;
+            const chName = channels[c];
+            if (!this._heatmapBlurBGs[chName]) {
+                this._heatmapBlurBGs[chName] = this.device.createBindGroup({
+                    label: `heatmapBlur_${chName}`,
+                    layout: this._heatmapPipelines.blurLayouts[0],
+                    entries: [
+                        { binding: 0, resource: { buffer: hmBuf[chName] } },
+                        { binding: 1, resource: { buffer: hmBuf.blurTemp } },
+                    ],
+                });
+            }
+            // Horizontal blur
+            {
+                const p = encoder.beginComputePass({ label: `blurH_${chName}` });
+                p.setPipeline(this._heatmapPipelines.blurHorizontal);
+                p.setBindGroup(0, this._heatmapBlurBGs[chName]);
+                p.dispatchWorkgroups(gridWG, gridWG);
+                p.end();
+            }
+            // Vertical blur
+            {
+                const p = encoder.beginComputePass({ label: `blurV_${chName}` });
+                p.setPipeline(this._heatmapPipelines.blurVertical);
+                p.setBindGroup(0, this._heatmapBlurBGs[chName]);
+                p.dispatchWorkgroups(gridWG, gridWG);
+                p.end();
+            }
+        }
+    }
+
+    /** Expose field buffers for renderer overlay drawing */
+    getFieldBuffers(which) {
+        return which === 'higgs' ? this._higgsBuffers : this._axionBuffers;
+    }
+
+    /** Expose heatmap buffers for renderer overlay drawing */
+    getHeatmapBuffers() { return this._heatmapBuffers; }
 
     /**
      * Run one frame: adaptive substepping with full Phase 2 force computation + Boris integrator.
@@ -1263,6 +2314,13 @@ export default class GPUPhysics {
         // Post-substep passes (once per frame)
         {
             const encoder = this.device.createCommandEncoder({ label: 'post-substep' });
+
+            // Heatmap compute (every HEATMAP_INTERVAL=4 frames)
+            this._heatmapFrame++;
+            if (this._heatmapEnabled && this._heatmapFrame >= 4) {
+                this._heatmapFrame = 0;
+                this.dispatchHeatmap(encoder, this._lastCamera);
+            }
 
             // Boson gravity (if enabled): build boson tree + particle<-boson + boson<->boson
             this._dispatchBosonGravity(encoder);
@@ -1426,15 +2484,37 @@ export default class GPUPhysics {
         pass12.dispatchWorkgroups(workgroups);
         pass12.end();
 
+        // Pass 13: cosmological expansion — Phase 5
+        this._dispatchExpansion(encoder, dtSub);
+
         // Pass 14: 1PN velocity-Verlet correction — Phase 4
         this._dispatch1PNVV(encoder);
+
+        // Pass 15: scalar field evolution (Higgs, Axion) — Phase 5
+        if (this._fieldDeposit) {
+            this._writeFieldUniforms(dtSub);
+            if (this._higgsEnabled) this._dispatchFieldEvolve(encoder, 'higgs', dtSub);
+            if (this._axionEnabled) this._dispatchFieldEvolve(encoder, 'axion', dtSub);
+        }
+
+        // Pass 16: scalar field forces — Phase 5
+        this._dispatchFieldForces(encoder);
 
         // Pass 17-18: collision detection + resolution (Phase 3)
         // Runs after drift, uses tree built earlier in the substep
         this._dispatchCollisions(encoder);
 
+        // Pass 19: field excitations from merge events — Phase 5
+        this._dispatchFieldExcitations(encoder);
+
+        // Pass 20: disintegration check — Phase 5
+        this._dispatchDisintegration(encoder);
+
         // Pass 21: boson update (photon/pion drift, absorption, decay) — Phase 4
         this._dispatchBosonUpdate(encoder);
+
+        // Pass 22: pair production — Phase 5
+        this._dispatchPairProduction(encoder);
 
         // Pass 24: boundary (existing from Phase 1)
         const passBoundary = encoder.beginComputePass({ label: 'boundary' });
@@ -1467,11 +2547,24 @@ export default class GPUPhysics {
         this._maxAccelPending = false;
     }
 
+    /** Store camera state for heatmap viewport calculation */
+    setCamera(camera) {
+        this._lastCamera = camera;
+    }
+
     reset() {
         this.aliveCount = 0;
         this.simTime = 0;
         this._histStride = 0;
         this._frameCount = 0;
+        this._heatmapFrame = 0;
+        this._pendingMergeEvents = [];
+    }
+
+    /** Reset field buffers to vacuum on preset load */
+    resetFields() {
+        if (this._higgsBuffers) this._initFieldToVacuum('higgs');
+        if (this._axionBuffers) this._initFieldToVacuum('axion');
     }
 
     destroy() {
