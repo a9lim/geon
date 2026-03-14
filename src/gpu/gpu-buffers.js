@@ -206,6 +206,20 @@ export function createParticleBuffers(device, maxParticles) {
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
 
+    // ── Death metadata buffers (Phase 3: dead particle GC) ──
+    // Written when a particle is retired (merged/annihilated/despawned)
+    const deathTime = storageBuffer('deathTime', FLOAT_SIZE, soaCapacity);
+    const deathMass = storageBuffer('deathMass', FLOAT_SIZE, soaCapacity);
+    const deathAngVel = storageBuffer('deathAngVel', FLOAT_SIZE, soaCapacity);
+
+    // Free stack for slot reuse (managed by dead GC shader)
+    const freeStack = storageBuffer('freeStack', UINT_SIZE, maxParticles);
+    const freeTop = device.createBuffer({
+        label: 'freeTop',
+        size: 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+    });
+
     // Max acceleration for adaptive substepping (single u32, atomicMax in force shader)
     const maxAccelBuffer = storageBuffer('maxAccel', UINT_SIZE, 1);
     const maxAccelStaging = device.createBuffer({
@@ -246,6 +260,9 @@ export function createParticleBuffers(device, maxParticles) {
         collisionPairBuffer, collisionPairCounter,
         mergeResultBuffer, mergeResultCounter,
         mergeCountStaging, mergeResultStaging,
+        // Death metadata (Phase 3: dead particle GC)
+        deathTime, deathMass, deathAngVel,
+        freeStack, freeTop,
 
         /** Destroy all buffers */
         destroy() {

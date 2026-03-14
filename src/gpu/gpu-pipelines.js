@@ -224,9 +224,9 @@ export async function createTreeForcePipeline(device) {
         ],
     });
 
-    // Group 1: particle SoA inputs (15 read-only bindings)
+    // Group 1: particle SoA inputs (16 read-only bindings, including deathMass)
     const group1Entries = [];
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 16; i++) {
         group1Entries.push({
             binding: i,
             visibility: GPUShaderStage.COMPUTE,
@@ -308,7 +308,7 @@ export async function createCollisionPipelines(device) {
         ],
     });
 
-    // Group 2: collision pairs + counters + merge results
+    // Group 2: collision pairs + counters + merge results + death metadata
     const group2Layout = device.createBindGroupLayout({
         label: 'collision_group2',
         entries: [
@@ -316,6 +316,9 @@ export async function createCollisionPipelines(device) {
             { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
         ],
     });
 
@@ -335,6 +338,37 @@ export async function createCollisionPipelines(device) {
     });
 
     return { detectCollisions, resolveCollisions, bindGroupLayouts };
+}
+
+/**
+ * Create dead particle GC compute pipeline (Phase 3).
+ * Transitions RETIRED particles to FREE when their signal delay history expires.
+ * Single compute pipeline, dispatched once per frame.
+ * Bind group:
+ *   Group 0: flags (read-write), deathTime (read-only), uniforms, freeStack (read-write), freeTop (read-write)
+ */
+export async function createDeadGCPipeline(device) {
+    const code = await fetchShader('dead-gc.wgsl');
+    const module = device.createShaderModule({ label: 'deadGC', code });
+
+    const group0Layout = device.createBindGroupLayout({
+        label: 'deadGC_group0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        ],
+    });
+
+    const pipeline = device.createComputePipeline({
+        label: 'deadGC',
+        layout: device.createPipelineLayout({ bindGroupLayouts: [group0Layout] }),
+        compute: { module, entryPoint: 'main' },
+    });
+
+    return { pipeline, bindGroupLayouts: [group0Layout] };
 }
 
 /**
