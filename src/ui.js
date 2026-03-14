@@ -235,6 +235,11 @@ export function setupUI(sim) {
         hubbleGroup.style.display = tEl['expansion-toggle'].checked ? '' : 'none';
         if (higgsSliders) higgsSliders.style.display = tEl['higgs-toggle'].checked ? '' : 'none';
         updateFrictionVisibility();
+
+        // 5. Sync toggle state to GPU backend
+        if (sim._gpuPhysics && sim._gpuPhysics.setToggles) {
+            sim._gpuPhysics.setToggles(sim.physics);
+        }
     };
 
     // Wire every toggle: sync physics prop + re-evaluate all deps

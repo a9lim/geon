@@ -250,6 +250,8 @@ class Simulation {
                     await this._gpuPhysics.init();
                     await this._gpuRenderer.init();
                     this._gpuReady = true;
+                    // Sync CPU toggle state to GPU uniforms
+                    this._gpuPhysics.setToggles(this.physics);
                     console.log('[physsim] GPU backend initialized');
 
                     // Register device.lost handler for error recovery
