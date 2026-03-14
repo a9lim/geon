@@ -88,6 +88,9 @@ struct SimUniforms {
 @group(2) @binding(1) var<storage, read_write> pairCounter: atomic<u32>;
 @group(2) @binding(2) var<storage, read_write> mergeResults: array<vec4<f32>>;
 @group(2) @binding(3) var<storage, read_write> mergeCounter: atomic<u32>;
+@group(2) @binding(4) var<storage, read_write> deathTime_buf: array<f32>;
+@group(2) @binding(5) var<storage, read_write> deathMass_buf: array<f32>;
+@group(2) @binding(6) var<storage, read_write> deathAngVel_buf: array<f32>;
 
 // ─── detectCollisions ───
 // Tree query: for each alive particle, find overlapping particles via tree walk
@@ -232,10 +235,16 @@ fn resolveCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (mass_buf[idx1] == 0.0) {
             atomicAnd(&flags_buf[idx1], ~FLAG_ALIVE);
             atomicOr(&flags_buf[idx1], FLAG_RETIRED);
+            deathTime_buf[idx1] = uniforms.simTime;
+            deathMass_buf[idx1] = annihilated; // pre-removal mass
+            deathAngVel_buf[idx1] = angW_buf[idx1];
         }
         if (mass_buf[idx2] == 0.0) {
             atomicAnd(&flags_buf[idx2], ~FLAG_ALIVE);
             atomicOr(&flags_buf[idx2], FLAG_RETIRED);
+            deathTime_buf[idx2] = uniforms.simTime;
+            deathMass_buf[idx2] = annihilated; // pre-removal mass
+            deathAngVel_buf[idx2] = angW_buf[idx2];
         }
     } else {
         // Inelastic merge: p2 merges into p1
@@ -278,7 +287,12 @@ fn resolveCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
             angW_buf[idx1] = 0.0;
         }
 
-        // Retire p2 (loser)
+        // Retire p2 (loser) — save death metadata before zeroing mass
+        let preMergeMass2 = mass_buf[idx2];
+        deathTime_buf[idx2] = uniforms.simTime;
+        deathMass_buf[idx2] = preMergeMass2;
+        deathAngVel_buf[idx2] = angW_buf[idx2];
+
         mass_buf[idx2] = 0.0;
         baseMass_buf[idx2] = 0.0;
         atomicAnd(&flags_buf[idx2], ~FLAG_ALIVE);

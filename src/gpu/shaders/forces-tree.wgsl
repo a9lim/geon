@@ -6,8 +6,9 @@
 const NONE: i32 = -1;
 const MAX_STACK: u32 = 48u;
 const EPSILON: f32 = 1e-9;
-const FLAG_ALIVE: u32 = 1u;
-const FLAG_GHOST: u32 = 16u;
+const FLAG_ALIVE:   u32 = 1u;
+const FLAG_RETIRED: u32 = 2u;
+const FLAG_GHOST:   u32 = 16u;
 
 const GRAVITY_BIT:     u32 = 1u;
 const COULOMB_BIT:     u32 = 2u;
@@ -94,6 +95,9 @@ struct SimUniforms {
 
 // Ghost->original mapping
 @group(1) @binding(14) var<storage, read> ghostOriginalIdx: array<u32>;
+
+// Death metadata (for retired particle forces)
+@group(1) @binding(15) var<storage, read> deathMass_in: array<f32>;
 
 // Force accumulators (output, same layout as Phase 2)
 @group(2) @binding(0) var<storage, read_write> forces0: array<vec4<f32>>; // gravity.xy, coulomb.xy
@@ -323,5 +327,23 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 stack[stackTop] = u32(getSE(nodeIdx)); stackTop += 1u;
             }
         }
+    }
+
+    // After tree walk, iterate retired particles (pairwise, matching CPU behavior)
+    for (var ri = 0u; ri < uniforms.aliveCount; ri++) {
+        let rf = flags_in[ri];
+        if ((rf & FLAG_RETIRED) == 0u) { continue; }
+        if ((rf & FLAG_ALIVE) != 0u) { continue; }
+        // Phase 4 will add signal delay lookup here
+        // For now, use current (frozen) position as approximation
+        accumulateForce(
+            pIdx, px, py, pMass, pCharge,
+            pMagMoment, pAngMomentum, pAngVel, pVelX, pVelY, pAxMod,
+            posX[ri], posY[ri], 0.0, 0.0, // vel = 0 for dead
+            deathMass_in[ri], charge_in[ri],
+            0.0, 0.0, 0.0, // no spin data from dead
+            1.0, 1.0,
+            pBodyRadiusSq,
+        );
     }
 }

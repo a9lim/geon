@@ -1,22 +1,30 @@
 /**
  * @fileoverview GPUPhysics — WebGPU compute pipeline orchestrator.
  *
- * Phase 2: Full force computation + Boris integrator.
+ * Phase 2+3: Full force computation + Boris integrator + tree build + collisions + dead GC.
  * Dispatch sequence per substep:
  *   1. resetForces
  *   2. cacheDerived
- *   3. pairForce (O(N^2) tiled)
- *   4. externalFields
- *   5. borisHalfKick (first)
- *   6. borisRotate
- *   7. borisHalfKick (second)
- *   8. spinOrbit
- *   9. applyTorques
- *  10. borisDrift
- *  11. boundary
+ *   3. generateGhosts        (Phase 3 — if periodic boundary)
+ *   4a. computeBounds         (Phase 3 — if BH enabled)
+ *   4b. initRoot              (Phase 3 — if BH enabled)
+ *   4c. insertParticles       (Phase 3 — if BH enabled)
+ *   4d. computeAggregates     (Phase 3 — if BH enabled)
+ *   5. computeForces          (Phase 2 pairwise OR Phase 3 tree walk)
+ *   6. borisHalfKick (first)
+ *   7. borisRotate
+ *   8. borisHalfKick (second)
+ *   9. spinOrbit
+ *  10. applyTorques
+ *  11. borisDrift
+ *  12. boundary
+ *  13. collisionDetect        (Phase 3 — if merge mode)
+ *  14. collisionResolve       (Phase 3 — if merge mode)
+ * Post-substep (once per frame):
+ *  15. deadParticleGC         (Phase 3)
  */
 import { createParticleBuffers, createUniformBuffer, writeUniforms } from './gpu-buffers.js';
-import { createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines } from './gpu-pipelines.js';
+import { createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createDeadGCPipeline } from './gpu-pipelines.js';
 
 const MAX_PARTICLES = 4096;
 
@@ -69,6 +77,10 @@ export default class GPUPhysics {
         this._collisionBindGroups = null;
         this._mergeResultsPending = false;
         this._pendingMergeEvents = [];
+
+        // Phase 3: Dead particle GC
+        this._deadGCPipeline = null;
+        this._deadGCBindGroup = null;
 
         // Toggle state
         this._toggles0 = 0;
@@ -196,6 +208,11 @@ export default class GPUPhysics {
         // --- Phase 3: Collision detection/resolution pipelines ---
         this._collisionPipelines = await createCollisionPipelines(this.device);
         this._createCollisionBindGroups(this._collisionPipelines.bindGroupLayouts);
+
+        // --- Phase 3: Dead particle GC pipeline ---
+        const deadGC = await createDeadGCPipeline(this.device);
+        this._deadGCPipeline = deadGC.pipeline;
+        this._createDeadGCBindGroup(deadGC.bindGroupLayouts);
 
         this._ready = true;
     }
@@ -414,7 +431,7 @@ export default class GPUPhysics {
             ],
         });
 
-        // Group 1: particle SoA (matches shader @group(1) bindings 0-14)
+        // Group 1: particle SoA (matches shader @group(1) bindings 0-15)
         this._treeForceGroup1 = this.device.createBindGroup({
             label: 'treeForce_g1',
             layout: layouts[1],
@@ -434,6 +451,7 @@ export default class GPUPhysics {
                 { binding: 12, resource: { buffer: b.yukMod } },
                 { binding: 13, resource: { buffer: b.particleId } },
                 { binding: 14, resource: { buffer: b.ghostOriginalIdx } },
+                { binding: 15, resource: { buffer: b.deathMass } },
             ],
         });
 
@@ -488,7 +506,7 @@ export default class GPUPhysics {
             ],
         });
 
-        // Group 2: collision pairs + counters + merge results
+        // Group 2: collision pairs + counters + merge results + death metadata
         this._collisionBG2 = this.device.createBindGroup({
             label: 'collision_g2',
             layout: layouts[2],
@@ -497,8 +515,43 @@ export default class GPUPhysics {
                 { binding: 1, resource: { buffer: b.collisionPairCounter } },
                 { binding: 2, resource: { buffer: b.mergeResultBuffer } },
                 { binding: 3, resource: { buffer: b.mergeResultCounter } },
+                { binding: 4, resource: { buffer: b.deathTime } },
+                { binding: 5, resource: { buffer: b.deathMass } },
+                { binding: 6, resource: { buffer: b.deathAngVel } },
             ],
         });
+    }
+
+    /**
+     * Create bind group for dead particle GC pipeline.
+     */
+    _createDeadGCBindGroup(layouts) {
+        const b = this.buffers;
+        this._deadGCBindGroup = this.device.createBindGroup({
+            label: 'deadGC_g0',
+            layout: layouts[0],
+            entries: [
+                { binding: 0, resource: { buffer: b.flags } },
+                { binding: 1, resource: { buffer: b.deathTime } },
+                { binding: 2, resource: { buffer: this.uniformBuffer } },
+                { binding: 3, resource: { buffer: b.freeStack } },
+                { binding: 4, resource: { buffer: b.freeTop } },
+            ],
+        });
+    }
+
+    /**
+     * Dispatch dead particle garbage collection (Phase 3).
+     * Runs once per frame (not per substep), after all substeps complete.
+     */
+    _dispatchDeadGC(encoder) {
+        if (this.aliveCount === 0) return;
+
+        const pass = encoder.beginComputePass({ label: 'deadGC' });
+        pass.setPipeline(this._deadGCPipeline);
+        pass.setBindGroup(0, this._deadGCBindGroup);
+        pass.dispatchWorkgroups(Math.ceil(this.buffers.maxParticles / 64));
+        pass.end();
     }
 
     /**
@@ -798,6 +851,13 @@ export default class GPUPhysics {
         for (let step = 0; step < numSubsteps; step++) {
             this.simTime += dtSub;
             this._dispatchSubstep(dtSub);
+        }
+
+        // Dead particle garbage collection (once per frame, after all substeps)
+        {
+            const encoder = this.device.createCommandEncoder({ label: 'deadGC-frame' });
+            this._dispatchDeadGC(encoder);
+            this.device.queue.submit([encoder.finish()]);
         }
 
         // Readback maxAccel for next frame (non-blocking)
