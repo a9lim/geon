@@ -4,7 +4,7 @@
 // Also writes radius to ParticleAux (used by other shaders independently).
 
 @group(0) @binding(0) var<uniform> uniforms: SimUniforms;
-@group(0) @binding(1) var<storage, read> particles: array<ParticleState>;
+@group(0) @binding(1) var<storage, read_write> particles: array<ParticleState>;
 @group(0) @binding(2) var<storage, read_write> derived: array<ParticleDerived>;
 @group(0) @binding(3) var<storage, read_write> particleAux: array<ParticleAux>;
 

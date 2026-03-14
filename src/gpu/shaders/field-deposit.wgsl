@@ -14,7 +14,7 @@ struct ParticleState {
 };
 
 // Bindings: 1 packed buffer replaces 8 individual SoA arrays
-@group(0) @binding(0) var<storage, read> particles: array<ParticleState>;
+@group(0) @binding(0) var<storage, read_write> particles: array<ParticleState>;
 
 @group(1) @binding(0) var<storage, read_write> scratchWeights: array<f32>;  // maxParticles * 16
 @group(1) @binding(1) var<storage, read_write> scratchIndices: array<i32>;  // maxParticles * 2 (ix, iy)

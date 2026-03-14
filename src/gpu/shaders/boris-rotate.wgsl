@@ -5,7 +5,7 @@
 
 @group(0) @binding(0) var<uniform> uniforms: SimUniforms;
 @group(0) @binding(1) var<storage, read_write> particles: array<ParticleState>;
-@group(0) @binding(2) var<storage, read> allForces: array<AllForces>;
+@group(0) @binding(2) var<storage, read_write> allForces: array<AllForces>;
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {

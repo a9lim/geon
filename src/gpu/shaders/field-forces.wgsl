@@ -46,19 +46,19 @@ struct AllForces_FF {
     _pad: vec2<f32>,
 };
 
-// Group 0: particleState (rw) + particleAux (ro) + derived (rw)
+// Group 0: particleState (rw) + particleAux (rw for encoder compat) + derived (rw)
 @group(0) @binding(0) var<storage, read_write> particles: array<ParticleState_FF>;
-@group(0) @binding(1) var<storage, read> particleAux: array<ParticleAux_FF>;
+@group(0) @binding(1) var<storage, read_write> particleAux: array<ParticleAux_FF>;
 @group(0) @binding(2) var<storage, read_write> derived: array<ParticleDerived_FF>;
 
-// Higgs field arrays
-@group(1) @binding(0) var<storage, read> higgsField: array<f32>;
-@group(1) @binding(1) var<storage, read> higgsGradX: array<f32>;
-@group(1) @binding(2) var<storage, read> higgsGradY: array<f32>;
-// Axion field arrays
-@group(1) @binding(3) var<storage, read> axionField: array<f32>;
-@group(1) @binding(4) var<storage, read> axionGradX: array<f32>;
-@group(1) @binding(5) var<storage, read> axionGradY: array<f32>;
+// Higgs field arrays (read_write for encoder compat)
+@group(1) @binding(0) var<storage, read_write> higgsField: array<f32>;
+@group(1) @binding(1) var<storage, read_write> higgsGradX: array<f32>;
+@group(1) @binding(2) var<storage, read_write> higgsGradY: array<f32>;
+// Axion field arrays (read_write for encoder compat)
+@group(1) @binding(3) var<storage, read_write> axionField: array<f32>;
+@group(1) @binding(4) var<storage, read_write> axionGradX: array<f32>;
+@group(1) @binding(5) var<storage, read_write> axionGradY: array<f32>;
 
 // Packed force accumulators + axYukMod output
 @group(2) @binding(0) var<storage, read_write> allForces: array<AllForces_FF>;
@@ -67,7 +67,7 @@ struct AllForces_FF {
 @group(3) @binding(0) var<uniform> uniforms: FieldUniforms;
 
 // PQS interpolation: returns field value at particle position
-fn pqsInterpolate(fieldArr: ptr<storage, array<f32>, read>,
+fn pqsInterpolate(fieldArr: ptr<storage, array<f32>, read_write>,
                   px: f32, py: f32, invCellW: f32, invCellH: f32,
                   bcMode: u32, topoMode: u32, vacValue: f32) -> f32 {
     let pqs = pqsWeights(px, py, invCellW, invCellH);
@@ -95,8 +95,8 @@ fn pqsInterpolate(fieldArr: ptr<storage, array<f32>, read>,
 }
 
 // PQS gradient interpolation: returns (gx, gy) in world units
-fn pqsGradient(gradXArr: ptr<storage, array<f32>, read>,
-               gradYArr: ptr<storage, array<f32>, read>,
+fn pqsGradient(gradXArr: ptr<storage, array<f32>, read_write>,
+               gradYArr: ptr<storage, array<f32>, read_write>,
                px: f32, py: f32, invCellW: f32, invCellH: f32,
                bcMode: u32, topoMode: u32) -> vec2<f32> {
     let pqs = pqsWeights(px, py, invCellW, invCellH);

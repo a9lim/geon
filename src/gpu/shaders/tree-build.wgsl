@@ -96,9 +96,9 @@ struct SimUniforms {
 @group(0) @binding(2) var<storage, read_write> bounds: array<atomic<i32>>;
 @group(0) @binding(3) var<storage, read_write> visitorFlags: array<atomic<u32>>;
 
-// Group 1: packed particle state + derived
-@group(1) @binding(0) var<storage, read> particleState: array<ParticleState>;
-@group(1) @binding(1) var<storage, read> derived_in: array<ParticleDerived>;
+// Group 1: packed particle state + derived (read_write for encoder compat)
+@group(1) @binding(0) var<storage, read_write> particleState: array<ParticleState>;
+@group(1) @binding(1) var<storage, read_write> derived_in: array<ParticleDerived>;
 
 @group(2) @binding(0) var<uniform> uniforms: SimUniforms;
 

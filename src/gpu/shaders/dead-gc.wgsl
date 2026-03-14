@@ -61,7 +61,7 @@ struct SimUniforms {
 };
 
 @group(0) @binding(0) var<storage, read_write> particleState: array<ParticleState>;
-@group(0) @binding(1) var<storage, read> particleAux: array<ParticleAux>;
+@group(0) @binding(1) var<storage, read_write> particleAux: array<ParticleAux>;
 @group(0) @binding(2) var<uniform> uniforms: SimUniforms;
 @group(0) @binding(3) var<storage, read_write> freeStack: array<u32>;
 @group(0) @binding(4) var<storage, read_write> freeTop: atomic<u32>;

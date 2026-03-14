@@ -134,15 +134,15 @@ struct SimUniforms {
     _pad4: u32,
 };
 
-@group(0) @binding(0) var<storage, read> nodes: array<u32>;
+@group(0) @binding(0) var<storage, read_write> nodes: array<u32>;
 @group(0) @binding(1) var<uniform> uniforms: SimUniforms;
 
-// Group 1: packed particle structs
-@group(1) @binding(0) var<storage, read> particleState: array<ParticleState>;
-@group(1) @binding(1) var<storage, read> particleAux: array<ParticleAux>;
-@group(1) @binding(2) var<storage, read> derived_in: array<ParticleDerived>;
-@group(1) @binding(3) var<storage, read> axYukMod_in: array<vec2<f32>>; // packed: axMod, yukMod
-@group(1) @binding(4) var<storage, read> ghostOriginalIdx: array<u32>;
+// Group 1: packed particle structs (read_write for encoder compat)
+@group(1) @binding(0) var<storage, read_write> particleState: array<ParticleState>;
+@group(1) @binding(1) var<storage, read_write> particleAux: array<ParticleAux>;
+@group(1) @binding(2) var<storage, read_write> derived_in: array<ParticleDerived>;
+@group(1) @binding(3) var<storage, read_write> axYukMod_in: array<vec2<f32>>; // packed: axMod, yukMod
+@group(1) @binding(4) var<storage, read_write> ghostOriginalIdx: array<u32>;
 
 // Group 2: force accumulators
 @group(2) @binding(0) var<storage, read_write> allForces: array<AllForces>;

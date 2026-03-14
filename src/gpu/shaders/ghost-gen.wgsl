@@ -78,15 +78,15 @@ struct SimUniforms {
     _pad4: u32,
 };
 
-// Group 0: packed particle state (read-only)
-@group(0) @binding(0) var<storage, read> particleState: array<ParticleState>;
+// Group 0: packed particle state (read_write for encoder compat)
+@group(0) @binding(0) var<storage, read_write> particleState: array<ParticleState>;
 
-// Group 1: ghost outputs + derived + particleAux
+// Group 1: ghost outputs + derived + particleAux (read_write for encoder compat)
 @group(1) @binding(0) var<storage, read_write> ghostState: array<ParticleState>;
 @group(1) @binding(1) var<storage, read_write> ghostAux: array<ParticleAux>;
-@group(1) @binding(2) var<storage, read> derived_in: array<ParticleDerived>;
+@group(1) @binding(2) var<storage, read_write> derived_in: array<ParticleDerived>;
 @group(1) @binding(3) var<storage, read_write> ghostDerived: array<ParticleDerived>;
-@group(1) @binding(4) var<storage, read> particleAux_in: array<ParticleAux>;
+@group(1) @binding(4) var<storage, read_write> particleAux_in: array<ParticleAux>;
 
 // Group 2: ghostCounter + uniforms + ghostOriginalIdx
 @group(2) @binding(0) var<storage, read_write> ghostCounter: atomic<u32>;

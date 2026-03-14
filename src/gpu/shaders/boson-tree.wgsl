@@ -122,8 +122,8 @@ const FLAG_ALIVE: u32 = 1u;
 @group(2) @binding(0) var<storage, read_write> pions: array<Pion>;
 @group(2) @binding(1) var<storage, read_write> piCount: atomic<u32>;
 
-// Group 3: particle state + force accumulators
-@group(3) @binding(0) var<storage, read> particles: array<ParticleState>;
+// Group 3: particle state + force accumulators (read_write for encoder compat)
+@group(3) @binding(0) var<storage, read_write> particles: array<ParticleState>;
 @group(3) @binding(1) var<storage, read_write> allForces: array<AllForces>;
 
 // Helper: read f32 from tree node

@@ -5,11 +5,11 @@
 @group(0) @binding(0) var<storage, read_write> field: array<f32>;
 @group(0) @binding(1) var<storage, read_write> fieldDot: array<f32>;
 @group(0) @binding(2) var<storage, read_write> laplacian: array<f32>;
-@group(0) @binding(3) var<storage, read> source: array<f32>;
-@group(0) @binding(4) var<storage, read> thermal: array<f32>;  // Higgs only
-@group(0) @binding(5) var<storage, read> sgPhiFull: array<f32>;  // self-gravity potential
-@group(0) @binding(6) var<storage, read> sgGradX: array<f32>;
-@group(0) @binding(7) var<storage, read> sgGradY: array<f32>;
+@group(0) @binding(3) var<storage, read_write> source: array<f32>;     // rw for encoder compat
+@group(0) @binding(4) var<storage, read_write> thermal: array<f32>;    // rw for encoder compat
+@group(0) @binding(5) var<storage, read_write> sgPhiFull: array<f32>;  // rw for encoder compat
+@group(0) @binding(6) var<storage, read_write> sgGradX: array<f32>;    // rw for encoder compat
+@group(0) @binding(7) var<storage, read_write> sgGradY: array<f32>;    // rw for encoder compat
 @group(0) @binding(8) var<storage, read_write> fieldGradX: array<f32>;  // field gradients (rw for computeGridGradients)
 @group(0) @binding(9) var<storage, read_write> fieldGradY: array<f32>;
 @group(0) @binding(10) var<uniform> uniforms: FieldUniforms;

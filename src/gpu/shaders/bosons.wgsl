@@ -104,7 +104,7 @@ struct SimUniforms {
 
 // Packed particle state (rw: absorption writes velW, decay spawns electrons)
 @group(1) @binding(0) var<storage, read_write> particles: array<ParticleState>;
-@group(1) @binding(1) var<storage, read> particleAux: array<ParticleAux>;
+@group(1) @binding(1) var<storage, read_write> particleAux: array<ParticleAux>;
 
 // Photon pool (packed)
 @group(2) @binding(0) var<storage, read_write> photons: array<Photon>;

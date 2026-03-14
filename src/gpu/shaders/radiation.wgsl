@@ -141,13 +141,13 @@ struct Uniforms {
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
-// Group 1: packed particle data
+// Group 1: packed particle data (read_write for encoder compat on shared buffers)
 @group(1) @binding(0) var<storage, read_write> particles: array<ParticleState>;
-@group(1) @binding(1) var<storage, read> particleAux: array<ParticleAux>;
+@group(1) @binding(1) var<storage, read_write> particleAux: array<ParticleAux>;
 @group(1) @binding(2) var<storage, read_write> derived: array<ParticleDerived>;
-@group(1) @binding(3) var<storage, read> allForces: array<AllForces>;
+@group(1) @binding(3) var<storage, read_write> allForces: array<AllForces>;
 @group(1) @binding(4) var<storage, read_write> radState: array<RadiationState>;
-@group(1) @binding(5) var<storage, read> axYukMod: array<vec2<f32>>;
+@group(1) @binding(5) var<storage, read_write> axYukMod: array<vec2<f32>>;
 
 // Group 2: photon pool
 @group(2) @binding(0) var<storage, read_write> photons: array<Photon>;

@@ -1,17 +1,17 @@
 // ─── Field Self-Gravity ───
 // Coarse 8x8 grid O(SG^4=4096) direct potential, bilinear upsampled to 64x64
 
-@group(0) @binding(0) var<storage, read> field: array<f32>;
-@group(0) @binding(1) var<storage, read> fieldDot: array<f32>;
-@group(0) @binding(2) var<storage, read> gradX: array<f32>;
-@group(0) @binding(3) var<storage, read> gradY: array<f32>;
+@group(0) @binding(0) var<storage, read_write> field: array<f32>;          // rw for encoder compat
+@group(0) @binding(1) var<storage, read_write> fieldDot: array<f32>;       // rw for encoder compat
+@group(0) @binding(2) var<storage, read_write> gradX: array<f32>;          // rw for encoder compat
+@group(0) @binding(3) var<storage, read_write> gradY: array<f32>;          // rw for encoder compat
 @group(0) @binding(4) var<storage, read_write> energyDensity: array<f32>;
 @group(0) @binding(5) var<storage, read_write> coarseRho: array<f32>;
 @group(0) @binding(6) var<storage, read_write> coarsePhi: array<f32>;
 @group(0) @binding(7) var<storage, read_write> sgPhiFull: array<f32>;
 @group(0) @binding(8) var<storage, read_write> sgGradX: array<f32>;
 @group(0) @binding(9) var<storage, read_write> sgGradY: array<f32>;
-@group(0) @binding(10) var<storage, read> sgInvR: array<f32>;
+@group(0) @binding(10) var<storage, read_write> sgInvR: array<f32>;        // rw for encoder compat
 @group(0) @binding(11) var<uniform> uniforms: FieldUniforms;
 
 // ─── Energy Density: ρ = ½φ̇² + ½|∇φ|² + V(φ) ───
