@@ -372,6 +372,438 @@ export async function createDeadGCPipeline(device) {
 }
 
 /**
+ * Create Phase 4 compute pipelines: history, 1PN, radiation, bosons, boson-tree.
+ * Each pipeline has its own bind group layouts matching the shader declarations.
+ */
+export async function createPhase4Pipelines(device) {
+    // ── recordHistory (history.wgsl, entry: recordHistory) ──
+    // Group 0: uniform + particle state (7 bindings)
+    // Group 1: history ring buffers + meta (7 bindings)
+    const historyCode = await fetchShader('history.wgsl');
+    const historyModule = device.createShaderModule({ label: 'history', code: historyCode });
+
+    const historyG0 = device.createBindGroupLayout({
+        label: 'history_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        ],
+    });
+    const historyG1 = device.createBindGroupLayout({
+        label: 'history_g1',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        ],
+    });
+    const historyLayouts = [historyG0, historyG1];
+    const recordHistory = {
+        pipeline: device.createComputePipeline({
+            label: 'recordHistory',
+            layout: device.createPipelineLayout({ bindGroupLayouts: historyLayouts }),
+            compute: { module: historyModule, entryPoint: 'recordHistory' },
+        }),
+        bindGroupLayouts: historyLayouts,
+    };
+
+    // ── 1PN (onePN.wgsl, entries: compute1PN, vvKick1PN) ──
+    // Group 0: uniforms (1 binding)
+    // Group 1: particle state (9 read-only)
+    // Group 2: forces2 (rw) + f1pnOld (ro) + velWX_rw (rw) + velWY_rw (rw) = 4 bindings
+    const onePNCode = await fetchShader('onePN.wgsl');
+    const onePNModule = device.createShaderModule({ label: 'onePN', code: onePNCode });
+
+    const onePNG0 = device.createBindGroupLayout({
+        label: 'onePN_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        ],
+    });
+    const onePNG1 = device.createBindGroupLayout({
+        label: 'onePN_g1',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        ],
+    });
+    const onePNG2 = device.createBindGroupLayout({
+        label: 'onePN_g2',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },     // forces2
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // f1pnOld
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },     // velWX_rw
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },     // velWY_rw
+        ],
+    });
+    const onePNLayouts = [onePNG0, onePNG1, onePNG2];
+    const onePNPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: onePNLayouts });
+
+    const compute1PN = {
+        pipeline: device.createComputePipeline({
+            label: 'compute1PN',
+            layout: onePNPipelineLayout,
+            compute: { module: onePNModule, entryPoint: 'compute1PN' },
+        }),
+        bindGroupLayouts: onePNLayouts,
+    };
+    const vvKick1PN = {
+        pipeline: device.createComputePipeline({
+            label: 'vvKick1PN',
+            layout: onePNPipelineLayout,
+            compute: { module: onePNModule, entryPoint: 'vvKick1PN' },
+        }),
+        bindGroupLayouts: onePNLayouts,
+    };
+
+    // ── Radiation (radiation.wgsl, entries: lamrorRadiation, hawkingRadiation, pionEmission) ──
+    // Group 0: uniforms (1 binding)
+    // Group 1: particle state (17 bindings: 0-16)
+    // Group 2: radiation accumulators + display (5 bindings)
+    // Group 3: photon pool (9) + pion pool (11) + charge_rw (1) = 21 bindings
+    const radiationCode = await fetchShader('radiation.wgsl');
+    const radiationModule = device.createShaderModule({ label: 'radiation', code: radiationCode });
+
+    const radG0 = device.createBindGroupLayout({
+        label: 'radiation_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        ],
+    });
+    const radG1Entries = [];
+    // bindings 0-1: posX, posY (read)
+    // bindings 2-3: velWX, velWY (read_write)
+    // binding 4: mass (read_write)
+    // binding 5: charge_buf (read)
+    // binding 6: flags (read)
+    // binding 7: invMass (read_write)
+    // binding 8: baseMass (read_write)
+    // binding 9: radius (read)
+    // binding 10: angW_buf (read)
+    // binding 11: particleId (read)
+    // bindings 12-13: force_totalX/Y (read)
+    // binding 14: jerk_buf (read)
+    // bindings 15-16: yukForceX/Y (read)
+    const radG1Types = [
+        'read-only-storage', 'read-only-storage',
+        'storage', 'storage',
+        'storage',
+        'read-only-storage', 'read-only-storage',
+        'storage', 'storage',
+        'read-only-storage', 'read-only-storage', 'read-only-storage',
+        'read-only-storage', 'read-only-storage', 'read-only-storage',
+        'read-only-storage', 'read-only-storage',
+    ];
+    for (let i = 0; i < radG1Types.length; i++) {
+        radG1Entries.push({
+            binding: i, visibility: GPUShaderStage.COMPUTE,
+            buffer: { type: radG1Types[i] },
+        });
+    }
+    const radG1 = device.createBindGroupLayout({ label: 'radiation_g1', entries: radG1Entries });
+
+    const radG2 = device.createBindGroupLayout({
+        label: 'radiation_g2',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // radAccum
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // hawkAccum
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // yukawaRadAccum
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // radDisplayX
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // radDisplayY
+        ],
+    });
+
+    // Group 3: photon pool (0-8) + pion pool (9-19) + charge_rw (20) = 21 bindings
+    const radG3Entries = [];
+    for (let i = 0; i < 21; i++) {
+        radG3Entries.push({
+            binding: i, visibility: GPUShaderStage.COMPUTE,
+            buffer: { type: 'storage' },
+        });
+    }
+    const radG3 = device.createBindGroupLayout({ label: 'radiation_g3', entries: radG3Entries });
+
+    const radLayouts = [radG0, radG1, radG2, radG3];
+    const radPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: radLayouts });
+
+    const lamrorRadiation = {
+        pipeline: device.createComputePipeline({
+            label: 'lamrorRadiation',
+            layout: radPipelineLayout,
+            compute: { module: radiationModule, entryPoint: 'lamrorRadiation' },
+        }),
+        bindGroupLayouts: radLayouts,
+    };
+    const hawkingRadiation = {
+        pipeline: device.createComputePipeline({
+            label: 'hawkingRadiation',
+            layout: radPipelineLayout,
+            compute: { module: radiationModule, entryPoint: 'hawkingRadiation' },
+        }),
+        bindGroupLayouts: radLayouts,
+    };
+    const pionEmission = {
+        pipeline: device.createComputePipeline({
+            label: 'pionEmission',
+            layout: radPipelineLayout,
+            compute: { module: radiationModule, entryPoint: 'pionEmission' },
+        }),
+        bindGroupLayouts: radLayouts,
+    };
+
+    // ── Bosons (bosons.wgsl, entries: updatePhotons, updatePions, absorbPhotons, absorbPions, decayPions) ──
+    // Group 0: uniforms + aliveCountAtomic (2 bindings)
+    // Group 1: particle SoA (11 bindings, read_write)
+    // Group 2: photon pool (9 bindings)
+    // Group 3: pion pool (11 bindings)
+    const bosonsCode = await fetchShader('bosons.wgsl');
+    const bosonsModule = device.createShaderModule({ label: 'bosons', code: bosonsCode });
+
+    const bosG0 = device.createBindGroupLayout({
+        label: 'bosons_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // aliveCountAtomic
+        ],
+    });
+    // Group 1: 11 particle bindings — mix of read and read_write
+    const bosG1Types = [
+        'storage', 'storage',       // posX, posY (rw for decay spawn)
+        'storage',                   // mass (rw)
+        'read-only-storage',         // radius (ro)
+        'storage',                   // flags (rw)
+        'read-only-storage',         // particleId (ro)
+        'storage', 'storage',       // velWX, velWY (rw for absorption)
+        'storage',                   // charge_buf (rw)
+        'storage',                   // baseMass (rw)
+        'storage',                   // angW_buf (rw)
+    ];
+    const bosG1Entries = bosG1Types.map((type, i) => ({
+        binding: i, visibility: GPUShaderStage.COMPUTE,
+        buffer: { type },
+    }));
+    const bosG1 = device.createBindGroupLayout({ label: 'bosons_g1', entries: bosG1Entries });
+
+    // Group 2: photon pool (9 bindings, all storage)
+    const bosG2Entries = [];
+    for (let i = 0; i < 9; i++) {
+        bosG2Entries.push({
+            binding: i, visibility: GPUShaderStage.COMPUTE,
+            buffer: { type: 'storage' },
+        });
+    }
+    const bosG2 = device.createBindGroupLayout({ label: 'bosons_g2', entries: bosG2Entries });
+
+    // Group 3: pion pool (11 bindings, all storage)
+    const bosG3Entries = [];
+    for (let i = 0; i < 11; i++) {
+        bosG3Entries.push({
+            binding: i, visibility: GPUShaderStage.COMPUTE,
+            buffer: { type: 'storage' },
+        });
+    }
+    const bosG3 = device.createBindGroupLayout({ label: 'bosons_g3', entries: bosG3Entries });
+
+    const bosLayouts = [bosG0, bosG1, bosG2, bosG3];
+    const bosPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: bosLayouts });
+
+    const bosonEntries = ['updatePhotons', 'updatePions', 'absorbPhotons', 'absorbPions', 'decayPions'];
+    const bosonPipelines = {};
+    for (const entry of bosonEntries) {
+        bosonPipelines[entry] = {
+            pipeline: device.createComputePipeline({
+                label: entry,
+                layout: bosPipelineLayout,
+                compute: { module: bosonsModule, entryPoint: entry },
+            }),
+            bindGroupLayouts: bosLayouts,
+        };
+    }
+
+    // ── Boson Tree (boson-tree.wgsl, entries: insertBosonsIntoTree, computeBosonAggregates,
+    //    computeBosonGravity, applyBosonBosonGravity) ──
+    // Group 0: uniforms (1 binding)
+    // Group 1: boson tree nodes + counter (2 bindings)
+    // Group 2: photon pool (7 bindings)
+    // Group 3: pion pool (7 bindings)
+    // Group 4: particle SoA (5 bindings) — for computeBosonGravity
+    const bosonTreeCode = await fetchShader('boson-tree.wgsl');
+    const bosonTreeModule = device.createShaderModule({ label: 'bosonTree', code: bosonTreeCode });
+
+    const btG0 = device.createBindGroupLayout({
+        label: 'bosonTree_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        ],
+    });
+    const btG1 = device.createBindGroupLayout({
+        label: 'bosonTree_g1',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // bosonTree
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // bosonNodeCounter
+        ],
+    });
+    // Group 2: photon pool (7 bindings): posX, posY, velX, velY (rw), energy, flags, count
+    const btG2Types = [
+        'read-only-storage', 'read-only-storage',
+        'storage', 'storage',  // velX, velY (rw for boson-boson gravity)
+        'read-only-storage', 'read-only-storage',
+        'storage',  // phCount (atomic)
+    ];
+    const btG2 = device.createBindGroupLayout({
+        label: 'bosonTree_g2',
+        entries: btG2Types.map((type, i) => ({
+            binding: i, visibility: GPUShaderStage.COMPUTE,
+            buffer: { type },
+        })),
+    });
+    // Group 3: pion pool (7 bindings): posX, posY, wX(rw), wY(rw), mass, flags, count
+    const btG3Types = [
+        'read-only-storage', 'read-only-storage',
+        'storage', 'storage',  // wX, wY (rw)
+        'read-only-storage', 'read-only-storage',
+        'storage',  // piCount (atomic)
+    ];
+    const btG3 = device.createBindGroupLayout({
+        label: 'bosonTree_g3',
+        entries: btG3Types.map((type, i) => ({
+            binding: i, visibility: GPUShaderStage.COMPUTE,
+            buffer: { type },
+        })),
+    });
+    // Group 4: particle SoA (5 bindings) for computeBosonGravity
+    const btG4 = device.createBindGroupLayout({
+        label: 'bosonTree_g4',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // posX
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // posY
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // mass
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // flags
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // forces0
+        ],
+    });
+    const btLayouts = [btG0, btG1, btG2, btG3, btG4];
+    const btPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: btLayouts });
+
+    const bosonTreeEntries = [
+        'insertBosonsIntoTree', 'computeBosonAggregates',
+        'computeBosonGravity', 'applyBosonBosonGravity',
+    ];
+    const bosonTreePipelines = {};
+    for (const entry of bosonTreeEntries) {
+        bosonTreePipelines[entry] = {
+            pipeline: device.createComputePipeline({
+                label: entry,
+                layout: btPipelineLayout,
+                compute: { module: bosonTreeModule, entryPoint: entry },
+            }),
+            bindGroupLayouts: btLayouts,
+        };
+    }
+
+    return {
+        recordHistory,
+        compute1PN, vvKick1PN,
+        lamrorRadiation, hawkingRadiation, pionEmission,
+        ...bosonPipelines,
+        ...bosonTreePipelines,
+    };
+}
+
+/**
+ * Create boson render pipelines (boson-render.wgsl).
+ * Two render pipelines: photon rendering + pion rendering.
+ * Returns { photonPipeline, pionPipeline, bindGroupLayouts }.
+ */
+export async function createBosonRenderPipelines(device, format, isLight) {
+    const code = await fetchShader('boson-render.wgsl');
+    const module = device.createShaderModule({ label: 'bosonRender', code });
+
+    // Group 0: camera uniforms
+    const g0 = device.createBindGroupLayout({
+        label: 'bosonRender_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+        ],
+    });
+    // Group 1: photon pool (5 read-only bindings)
+    const g1 = device.createBindGroupLayout({
+        label: 'bosonRender_g1',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+            { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+            { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+            { binding: 3, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+            { binding: 4, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+        ],
+    });
+    // Group 2: pion pool (5 read-only bindings)
+    const g2 = device.createBindGroupLayout({
+        label: 'bosonRender_g2',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+            { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+            { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+            { binding: 3, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+            { binding: 4, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+        ],
+    });
+
+    const bindGroupLayouts = [g0, g1, g2];
+    const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts });
+
+    const blendState = isLight
+        ? {
+            color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+            alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+        }
+        : {
+            color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'add' },
+            alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
+        };
+
+    const photonPipeline = device.createRenderPipeline({
+        label: 'photonRender',
+        layout: pipelineLayout,
+        vertex: { module, entryPoint: 'vertexPhoton' },
+        fragment: {
+            module, entryPoint: 'fragmentBoson',
+            targets: [{ format, blend: blendState }],
+        },
+        primitive: { topology: 'triangle-strip' },
+    });
+
+    const pionPipeline = device.createRenderPipeline({
+        label: 'pionRender',
+        layout: pipelineLayout,
+        vertex: { module, entryPoint: 'vertexPion' },
+        fragment: {
+            module, entryPoint: 'fragmentBoson',
+            targets: [{ format, blend: blendState }],
+        },
+        primitive: { topology: 'triangle-strip' },
+    });
+
+    return { photonPipeline, pionPipeline, bindGroupLayouts };
+}
+
+/**
  * Create ghost generation compute pipeline.
  * Standalone shader (not prepended with common.wgsl) — defines its own SimUniforms.
  * Bind groups:

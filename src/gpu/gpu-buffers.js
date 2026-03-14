@@ -238,6 +238,8 @@ export function createParticleBuffers(device, maxParticles) {
     // Analytical jerk accumulated in pair-force pass, consumed by radiation shader
     const jerkX = storageBuffer('jerkX', FLOAT_SIZE, maxParticles);
     const jerkY = storageBuffer('jerkY', FLOAT_SIZE, maxParticles);
+    // Interleaved jerk buffer [x0, y0, x1, y1, ...] for radiation shader binding 14
+    const jerkInterleaved = storageBuffer('jerkInterleaved', FLOAT_SIZE, maxParticles * 2);
 
     // ── Phase 4: Radiation accumulators ──
     // Per-particle energy accumulators for photon/pion emission thresholds
@@ -248,6 +250,10 @@ export function createParticleBuffers(device, maxParticles) {
     // Radiation display forces (for renderer force arrows)
     const radDisplayX = storageBuffer('radDisplayX', FLOAT_SIZE, maxParticles);
     const radDisplayY = storageBuffer('radDisplayY', FLOAT_SIZE, maxParticles);
+
+    // Yukawa force components (separate f32 arrays for radiation shader pion emission)
+    const yukForceX = storageBuffer('yukForceX', FLOAT_SIZE, maxParticles);
+    const yukForceY = storageBuffer('yukForceY', FLOAT_SIZE, maxParticles);
 
     // Max acceleration for adaptive substepping (single u32, atomicMax in force shader)
     const maxAccelBuffer = storageBuffer('maxAccel', UINT_SIZE, 1);
@@ -334,9 +340,9 @@ export function createParticleBuffers(device, maxParticles) {
         // 1PN VV correction (Phase 4)
         f1pnOld,
         // Jerk + radiation accumulators (Phase 4)
-        jerkX, jerkY,
+        jerkX, jerkY, jerkInterleaved,
         radAccum, hawkAccum, yukawaRadAccum,
-        radDisplayX, radDisplayY,
+        radDisplayX, radDisplayY, yukForceX, yukForceY,
         // Photon pool (Phase 4)
         phPosX, phPosY, phVelX, phVelY, phEnergy, phEmitterId, phAge, phFlags, phCount,
         MAX_PHOTONS,
@@ -470,6 +476,8 @@ export function writeUniforms(device, buffer, params) {
     f[29] = params.higgsCoupling || 1.0;
     u[30] = params.particleCount || 0;  // actual alive particle count for dispatch sizing
     f[31] = params.bhTheta || 0.5;     // Barnes-Hut opening angle
+    // _pad3 at index 32, _pad4 at index 33 in common.wgsl — reuse for Phase 4
+    u[32] = params.frameCount || 0;    // frame counter for RNG seed
 
     device.queue.writeBuffer(buffer, 0, data);
 }
