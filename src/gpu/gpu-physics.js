@@ -39,11 +39,14 @@
 import { createParticleBuffers, createUniformBuffer, writeUniforms, createFieldBuffers, createPQSScratchBuffer, createPQSIndexBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createPairProductionBuffers, createTrailBuffers, FIELD_GRID_RES, COARSE_RES, COARSE_SQ, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
 import { createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldSelfGravPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createPairProductionPipeline, createUpdateColorsPipeline, createTrailRecordPipeline } from './gpu-pipelines.js';
 import { buildWGSLConstants } from './gpu-constants.js';
+import {
+    HISTORY_STRIDE, MAX_PHOTONS, MAX_PIONS,
+    GPU_MAX_PARTICLES,
+    COL_MERGE, COL_BOUNCE, BOUND_LOOP,
+    COL_NAMES, BOUND_NAMES, TOPO_NAMES,
+} from '../config.js';
 
-const MAX_PARTICLES = 4096;
-const HISTORY_STRIDE = 64;
-const MAX_PHOTONS = 1024;
-const MAX_PIONS = 256;
+const MAX_PARTICLES = GPU_MAX_PARTICLES;
 
 // Pre-allocated typed arrays for per-frame writeBuffer calls (avoid GC pressure)
 const _qtNodeCounterData = new Uint32Array([1]);
@@ -2988,18 +2991,10 @@ export default class GPUPhysics {
     }
 }
 
-// Constants (must match common.wgsl / config.js)
+// Flag constants (must match common.wgsl)
 const FLAG_ALIVE = 1;
 const FLAG_RETIRED = 2;
 const FLAG_ANTIMATTER = 4;
-const BOUND_LOOP = 2;
-const COL_MERGE = 1;
-const COL_BOUNCE = 2;
-
-// Save/load name tables (must match config.js)
-const COL_NAMES = ['pass', 'merge', 'bounce'];
-const BOUND_NAMES = ['despawn', 'bounce', 'loop'];
-const TOPO_NAMES = ['torus', 'klein', 'rp2'];
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 async function fetchShader(filename) {
