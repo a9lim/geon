@@ -16,7 +16,7 @@
  *  11. boundary
  */
 import { createParticleBuffers, createUniformBuffer, writeUniforms } from './gpu-buffers.js';
-import { createPhase2Pipelines, createGhostGenPipeline } from './gpu-pipelines.js';
+import { createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines } from './gpu-pipelines.js';
 
 const MAX_PARTICLES = 4096;
 
@@ -54,6 +54,11 @@ export default class GPUPhysics {
         this._ghostGenBindGroups = null;
         this._ghostCount = 0;
         this._ghostCountPending = false;
+
+        // Phase 3: Tree build (GPU Barnes-Hut)
+        this._treeBuild = null;
+        this._treeBuildBindGroups = null;
+        this._barnesHutEnabled = false;
 
         // Toggle state
         this._toggles0 = 0;
@@ -168,6 +173,10 @@ export default class GPUPhysics {
         const ghostGen = await createGhostGenPipeline(this.device);
         this._ghostGenPipeline = ghostGen.pipeline;
         this._createGhostGenBindGroups(ghostGen.bindGroupLayouts);
+
+        // --- Phase 3: Tree build pipelines ---
+        this._treeBuild = await createTreeBuildPipelines(this.device);
+        this._createTreeBuildBindGroups(this._treeBuild.bindGroupLayouts);
 
         this._ready = true;
     }
@@ -322,6 +331,130 @@ export default class GPUPhysics {
     }
 
     /**
+     * Create bind groups for tree build pipelines.
+     * All 4 entry points share the same bind group layouts.
+     */
+    _createTreeBuildBindGroups(layouts) {
+        const b = this.buffers;
+
+        // Group 0: tree state buffers
+        this._treeBuildBG0 = this.device.createBindGroup({
+            label: 'treeBuild_g0',
+            layout: layouts[0],
+            entries: [
+                { binding: 0, resource: { buffer: b.qtNodeBuffer } },
+                { binding: 1, resource: { buffer: b.qtNodeCounter } },
+                { binding: 2, resource: { buffer: b.qtBoundsBuffer } },
+                { binding: 3, resource: { buffer: b.qtVisitorFlags } },
+            ],
+        });
+
+        // Group 1: particle SoA inputs (read-only)
+        this._treeBuildBG1 = this.device.createBindGroup({
+            label: 'treeBuild_g1',
+            layout: layouts[1],
+            entries: [
+                { binding: 0, resource: { buffer: b.posX } },
+                { binding: 1, resource: { buffer: b.posY } },
+                { binding: 2, resource: { buffer: b.velWX } },
+                { binding: 3, resource: { buffer: b.velWY } },
+                { binding: 4, resource: { buffer: b.mass } },
+                { binding: 5, resource: { buffer: b.charge } },
+                { binding: 6, resource: { buffer: b.magMoment } },
+                { binding: 7, resource: { buffer: b.angMomentum } },
+                { binding: 8, resource: { buffer: b.flags } },
+            ],
+        });
+
+        // Group 2: uniforms
+        this._treeBuildBG2 = this.device.createBindGroup({
+            label: 'treeBuild_g2',
+            layout: layouts[2],
+            entries: [
+                { binding: 0, resource: { buffer: this.uniformBuffer } },
+            ],
+        });
+    }
+
+    /**
+     * Dispatch tree build sequence when Barnes-Hut is enabled.
+     * Runs after ghost generation, before force computation.
+     *
+     * Sequence:
+     *   1. Reset nodeCounter to 1 (root = node 0, pre-allocated)
+     *   2. Reset bounds to (INT_MAX, INT_MAX, INT_MIN, INT_MIN)
+     *   3. Clear visitor flags to 0
+     *   4. computeBounds: ceil(totalCount / 256) workgroups
+     *   5. initRoot: 1 workgroup (single thread)
+     *   6. insertParticles: ceil(totalCount / 64) workgroups
+     *   7. computeAggregates: ceil(totalCount / 64) workgroups
+     */
+    _dispatchTreeBuild(encoder) {
+        if (!this._barnesHutEnabled) return;
+
+        const totalCount = this.aliveCount + this._ghostCount;
+        if (totalCount === 0) return;
+
+        const b = this.buffers;
+
+        // 1. Reset nodeCounter to 1 (root is node 0, already allocated)
+        this.device.queue.writeBuffer(b.qtNodeCounter, 0, new Uint32Array([1]));
+
+        // 2. Reset bounds: minX=INT_MAX, minY=INT_MAX, maxX=INT_MIN, maxY=INT_MIN
+        this.device.queue.writeBuffer(b.qtBoundsBuffer, 0, new Int32Array([
+            2147483647,   // minX = i32 max
+            2147483647,   // minY = i32 max
+            -2147483647,  // maxX = i32 min
+            -2147483647,  // maxY = i32 min
+        ]));
+
+        // 3. Clear visitor flags to 0 (write zeros for all nodes)
+        // Only clear up to a reasonable bound based on expected tree size
+        const clearSize = Math.min(b.QT_MAX_NODES, totalCount * 6) * 4;
+        const zeroData = new Uint8Array(clearSize);
+        this.device.queue.writeBuffer(b.qtVisitorFlags, 0, zeroData);
+
+        // 4. computeBounds dispatch
+        const boundsWG = Math.ceil(totalCount / 256);
+        const pass1 = encoder.beginComputePass({ label: 'computeBounds' });
+        pass1.setPipeline(this._treeBuild.computeBounds);
+        pass1.setBindGroup(0, this._treeBuildBG0);
+        pass1.setBindGroup(1, this._treeBuildBG1);
+        pass1.setBindGroup(2, this._treeBuildBG2);
+        pass1.dispatchWorkgroups(boundsWG);
+        pass1.end();
+
+        // 5. initRoot dispatch (single thread reads bounds, writes root node)
+        const pass2 = encoder.beginComputePass({ label: 'initRoot' });
+        pass2.setPipeline(this._treeBuild.initRoot);
+        pass2.setBindGroup(0, this._treeBuildBG0);
+        pass2.setBindGroup(1, this._treeBuildBG1);
+        pass2.setBindGroup(2, this._treeBuildBG2);
+        pass2.dispatchWorkgroups(1);
+        pass2.end();
+
+        // 6. insertParticles dispatch
+        const insertWG = Math.ceil(totalCount / 64);
+        const pass3 = encoder.beginComputePass({ label: 'insertParticles' });
+        pass3.setPipeline(this._treeBuild.insertParticles);
+        pass3.setBindGroup(0, this._treeBuildBG0);
+        pass3.setBindGroup(1, this._treeBuildBG1);
+        pass3.setBindGroup(2, this._treeBuildBG2);
+        pass3.dispatchWorkgroups(insertWG);
+        pass3.end();
+
+        // 7. computeAggregates dispatch
+        const aggWG = Math.ceil(totalCount / 64);
+        const pass4 = encoder.beginComputePass({ label: 'computeAggregates' });
+        pass4.setPipeline(this._treeBuild.computeAggregates);
+        pass4.setBindGroup(0, this._treeBuildBG0);
+        pass4.setBindGroup(1, this._treeBuildBG1);
+        pass4.setBindGroup(2, this._treeBuildBG2);
+        pass4.dispatchWorkgroups(aggWG);
+        pass4.end();
+    }
+
+    /**
      * Non-blocking readback of ghost count for tree build sizing.
      * Uses 1-frame latency like maxAccel readback.
      */
@@ -407,6 +540,7 @@ export default class GPUPhysics {
         this._toggles1 = t1;
 
         this._blackHoleEnabled = physics.blackHoleEnabled;
+        this._barnesHutEnabled = physics.barnesHutEnabled;
         this._yukawaCoupling = physics.yukawaEnabled ? 14 : 14;  // YUKAWA_COUPLING constant
         this._yukawaMu = physics.yukawaMu;
         this._higgsMass = physics.higgsEnabled ? 0.5 : 0.5;
@@ -483,7 +617,7 @@ export default class GPUPhysics {
             bounceFriction: this._bounceFriction,
             axionCoupling: this._axionCoupling,
             higgsCoupling: this._higgsCoupling,
-            particleCount: this.aliveCount,
+            particleCount: this.aliveCount + this._ghostCount,
             bhTheta: 0.5,
         });
 
@@ -494,6 +628,9 @@ export default class GPUPhysics {
 
         // Pass 0: ghost generation (Phase 3 — before tree build)
         this._dispatchGhostGen(encoder);
+
+        // Pass 0b: tree build (Phase 3 — after ghost gen, before force computation)
+        this._dispatchTreeBuild(encoder);
 
         // Pass 1: resetForces
         const pass1 = encoder.beginComputePass({ label: 'resetForces' });
