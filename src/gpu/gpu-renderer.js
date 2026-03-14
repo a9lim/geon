@@ -1,8 +1,9 @@
 /**
- * @fileoverview GPURenderer — WebGPU instanced rendering for particles.
+ * @fileoverview GPURenderer — WebGPU instanced rendering for particles + bosons.
  *
- * Phase 1: particles only. Trails, fields, bosons, arrows added later.
+ * Phase 1: particles. Phase 4: photon/pion boson rendering.
  */
+import { createBosonRenderPipelines } from './gpu-pipelines.js';
 
 export default class GPURenderer {
     /**
@@ -41,6 +42,12 @@ export default class GPURenderer {
         this._pipeline = null;
         this._bindGroup = null;
         this._ready = false;
+
+        // Boson rendering (Phase 4)
+        this._photonPipeline = null;
+        this._pionPipeline = null;
+        this._bosonBindGroups = null;
+        this._bosonReady = false;
     }
 
     /** Create render pipeline. Must be called after GPUPhysics.init(). */
@@ -107,6 +114,58 @@ export default class GPURenderer {
         });
 
         this._ready = true;
+
+        // --- Boson render pipelines (Phase 4) ---
+        await this._initBosonRendering();
+    }
+
+    /** Create boson (photon + pion) render pipelines. */
+    async _initBosonRendering() {
+        const { photonPipeline, pionPipeline, bindGroupLayouts } =
+            await createBosonRenderPipelines(this.device, this.format, this.isLight);
+
+        this._photonPipeline = photonPipeline;
+        this._pionPipeline = pionPipeline;
+
+        const b = this.buffers;
+
+        // Group 0: camera uniforms
+        const g0 = this.device.createBindGroup({
+            label: 'bosonRender_g0',
+            layout: bindGroupLayouts[0],
+            entries: [
+                { binding: 0, resource: { buffer: this.cameraBuffer } },
+            ],
+        });
+
+        // Group 1: photon pool (5 read-only)
+        const g1 = this.device.createBindGroup({
+            label: 'bosonRender_g1',
+            layout: bindGroupLayouts[1],
+            entries: [
+                { binding: 0, resource: { buffer: b.phPosX } },
+                { binding: 1, resource: { buffer: b.phPosY } },
+                { binding: 2, resource: { buffer: b.phAge } },
+                { binding: 3, resource: { buffer: b.phFlags } },
+                { binding: 4, resource: { buffer: b.phCount } },
+            ],
+        });
+
+        // Group 2: pion pool (5 read-only)
+        const g2 = this.device.createBindGroup({
+            label: 'bosonRender_g2',
+            layout: bindGroupLayouts[2],
+            entries: [
+                { binding: 0, resource: { buffer: b.piPosX } },
+                { binding: 1, resource: { buffer: b.piPosY } },
+                { binding: 2, resource: { buffer: b.piAge } },
+                { binding: 3, resource: { buffer: b.piFlags } },
+                { binding: 4, resource: { buffer: b.piCount } },
+            ],
+        });
+
+        this._bosonBindGroups = [g0, g1, g2];
+        this._bosonReady = true;
     }
 
     /** Update camera uniform buffer. Call before render(). */
@@ -180,6 +239,36 @@ export default class GPURenderer {
         // 6 vertices per quad (2 triangles), aliveCount instances
         pass.draw(6, aliveCount);
         pass.end();
+
+        // Boson rendering pass (Phase 4) — same texture, load to preserve particles
+        if (this._bosonReady) {
+            const bosonPass = encoder.beginRenderPass({
+                label: 'boson render',
+                colorAttachments: [{
+                    view: textureView,
+                    loadOp: 'load',  // preserve particle rendering
+                    storeOp: 'store',
+                }],
+            });
+
+            const bgs = this._bosonBindGroups;
+
+            // Draw photons: 4 vertices per quad (triangle strip), MAX_PHOTONS instances
+            bosonPass.setPipeline(this._photonPipeline);
+            bosonPass.setBindGroup(0, bgs[0]);
+            bosonPass.setBindGroup(1, bgs[1]);
+            bosonPass.setBindGroup(2, bgs[2]);
+            bosonPass.draw(4, 512); // MAX_PHOTONS, shader culls inactive
+
+            // Draw pions: 4 vertices per quad (triangle strip), MAX_PIONS instances
+            bosonPass.setPipeline(this._pionPipeline);
+            bosonPass.setBindGroup(0, bgs[0]);
+            bosonPass.setBindGroup(1, bgs[1]);
+            bosonPass.setBindGroup(2, bgs[2]);
+            bosonPass.draw(4, 256); // MAX_PIONS, shader culls inactive
+
+            bosonPass.end();
+        }
 
         this.device.queue.submit([encoder.finish()]);
     }

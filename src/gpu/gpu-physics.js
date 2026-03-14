@@ -1,32 +1,40 @@
 /**
  * @fileoverview GPUPhysics — WebGPU compute pipeline orchestrator.
  *
- * Phase 2+3: Full force computation + Boris integrator + tree build + collisions + dead GC.
+ * Phase 2+3+4: Full force computation, Boris integrator, tree build, collisions,
+ * dead GC, radiation, 1PN VV, boson lifecycle, boson gravity, signal delay history.
+ *
  * Dispatch sequence per substep:
  *   1. resetForces
  *   2. cacheDerived
  *   3. generateGhosts        (Phase 3 — if periodic boundary)
- *   4a. computeBounds         (Phase 3 — if BH enabled)
- *   4b. initRoot              (Phase 3 — if BH enabled)
- *   4c. insertParticles       (Phase 3 — if BH enabled)
- *   4d. computeAggregates     (Phase 3 — if BH enabled)
+ *   4a-d. treeBuild           (Phase 3 — if BH enabled)
  *   5. computeForces          (Phase 2 pairwise OR Phase 3 tree walk)
+ *   5b. externalFields
  *   6. borisHalfKick (first)
  *   7. borisRotate
  *   8. borisHalfKick (second)
  *   9. spinOrbit
  *  10. applyTorques
- *  11. borisDrift
- *  12. boundary
- *  13. collisionDetect        (Phase 3 — if merge mode)
- *  14. collisionResolve       (Phase 3 — if merge mode)
+ *  11. radiationReaction      (Phase 4 — Larmor, Hawking, pion emission)
+ *  12. borisDrift
+ *  14. compute1PN_VV          (Phase 4 — 1PN recompute + VV correction kick)
+ *  17-18. collisions          (Phase 3 — detect + resolve)
+ *  21. bosonUpdate            (Phase 4 — photon/pion drift, absorption, decay)
+ *  24. boundary
+ *
  * Post-substep (once per frame):
- *  15. deadParticleGC         (Phase 3)
+ *  - bosonGravity             (Phase 4 — build boson tree + particle/boson gravity)
+ *  - deadParticleGC           (Phase 3)
+ *  - recordHistory            (Phase 4 — every HISTORY_STRIDE frames)
  */
 import { createParticleBuffers, createUniformBuffer, writeUniforms } from './gpu-buffers.js';
-import { createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createDeadGCPipeline } from './gpu-pipelines.js';
+import { createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createDeadGCPipeline, createPhase4Pipelines } from './gpu-pipelines.js';
 
 const MAX_PARTICLES = 4096;
+const HISTORY_STRIDE = 64;
+const MAX_PHOTONS = 512;
+const MAX_PIONS = 256;
 
 export default class GPUPhysics {
     /**
@@ -81,6 +89,21 @@ export default class GPUPhysics {
         // Phase 3: Dead particle GC
         this._deadGCPipeline = null;
         this._deadGCBindGroup = null;
+
+        // Phase 4: Advanced physics pipelines
+        this._phase4 = null;
+        this._phase4BindGroups = {};
+
+        // Phase 4: History stride counter
+        this._histStride = 0;
+        this._frameCount = 0;
+
+        // Phase 4: Toggle state for advanced passes
+        this._relativityEnabled = false;
+        this._onePNEnabled = false;
+        this._radiationEnabled = false;
+        this._yukawaEnabled = false;
+        this._bosonGravEnabled = false;
 
         // Toggle state
         this._toggles0 = 0;
@@ -213,6 +236,10 @@ export default class GPUPhysics {
         const deadGC = await createDeadGCPipeline(this.device);
         this._deadGCPipeline = deadGC.pipeline;
         this._createDeadGCBindGroup(deadGC.bindGroupLayouts);
+
+        // --- Phase 4: Advanced physics pipelines ---
+        this._phase4 = await createPhase4Pipelines(this.device);
+        this._createPhase4BindGroups();
 
         this._ready = true;
     }
@@ -541,6 +568,335 @@ export default class GPUPhysics {
     }
 
     /**
+     * Create bind groups for all Phase 4 pipelines.
+     */
+    _createPhase4BindGroups() {
+        const b = this.buffers;
+        const p4 = this._phase4;
+        const bg = (label, layout, buffers) =>
+            this.device.createBindGroup({
+                label,
+                layout,
+                entries: buffers.map((buf, i) => ({ binding: i, resource: { buffer: buf } })),
+            });
+
+        // ── recordHistory ──
+        // Bind groups created lazily when history buffers are allocated
+        this._phase4BindGroups.historyG0Buffers = [
+            this.uniformBuffer, b.posX, b.posY, b.velWX, b.velWY, b.angW, b.flags,
+        ];
+        this._phase4BindGroups.historyG0 = null; // lazy
+        this._phase4BindGroups.historyG1 = null; // lazy
+
+        // ── 1PN (compute1PN + vvKick1PN share bind groups) ──
+        this._phase4BindGroups.onePNG0 = bg('onePN_g0', p4.compute1PN.bindGroupLayouts[0],
+            [this.uniformBuffer]);
+        this._phase4BindGroups.onePNG1 = bg('onePN_g1', p4.compute1PN.bindGroupLayouts[1],
+            [b.posX, b.posY, b.velWX, b.velWY, b.mass, b.charge, b.flags, b.yukMod, b.invMass]);
+        this._phase4BindGroups.onePNG2 = bg('onePN_g2', p4.compute1PN.bindGroupLayouts[2],
+            [b.forces2, b.f1pnOld, b.velWX, b.velWY]);
+
+        // ── Radiation (lamrorRadiation, hawkingRadiation, pionEmission share bind groups) ──
+        this._phase4BindGroups.radG0 = bg('radiation_g0', p4.lamrorRadiation.bindGroupLayouts[0],
+            [this.uniformBuffer]);
+        // Group 1: particle state (17 bindings)
+        // binding 14: jerkInterleaved [x0,y0,x1,y1...]
+        // bindings 15-16: separate yukForceX/Y buffers
+        this._phase4BindGroups.radG1 = bg('radiation_g1', p4.lamrorRadiation.bindGroupLayouts[1],
+            [b.posX, b.posY, b.velWX, b.velWY, b.mass, b.charge, b.flags,
+             b.invMass, b.baseMass, b.radius, b.angW, b.particleId,
+             b.totalForceX, b.totalForceY, b.jerkInterleaved,
+             b.yukForceX, b.yukForceY]);
+        this._phase4BindGroups.radG2 = bg('radiation_g2', p4.lamrorRadiation.bindGroupLayouts[2],
+            [b.radAccum, b.hawkAccum, b.yukawaRadAccum, b.radDisplayX, b.radDisplayY]);
+        // Group 3: photon pool (9) + pion pool (11) + charge_rw (1) = 21 bindings
+        this._phase4BindGroups.radG3 = bg('radiation_g3', p4.lamrorRadiation.bindGroupLayouts[3],
+            [b.phPosX, b.phPosY, b.phVelX, b.phVelY, b.phEnergy, b.phEmitterId, b.phAge, b.phFlags, b.phCount,
+             b.piPosX, b.piPosY, b.piWX, b.piWY, b.piMass, b.piCharge, b.piEnergy, b.piEmitterId, b.piAge, b.piFlags, b.piCount,
+             b.charge]);
+
+        // ── Bosons (updatePhotons, updatePions, absorbPhotons, absorbPions, decayPions) ──
+        this._phase4BindGroups.bosG0 = bg('bosons_g0', p4.updatePhotons.bindGroupLayouts[0],
+            [this.uniformBuffer, b.poolMgmt]);
+        this._phase4BindGroups.bosG1 = bg('bosons_g1', p4.updatePhotons.bindGroupLayouts[1],
+            [b.posX, b.posY, b.mass, b.radius, b.flags, b.particleId,
+             b.velWX, b.velWY, b.charge, b.baseMass, b.angW]);
+        this._phase4BindGroups.bosG2 = bg('bosons_g2', p4.updatePhotons.bindGroupLayouts[2],
+            [b.phPosX, b.phPosY, b.phVelX, b.phVelY, b.phEnergy, b.phEmitterId, b.phAge, b.phFlags, b.phCount]);
+        this._phase4BindGroups.bosG3 = bg('bosons_g3', p4.updatePhotons.bindGroupLayouts[3],
+            [b.piPosX, b.piPosY, b.piWX, b.piWY, b.piMass, b.piCharge, b.piEnergy, b.piEmitterId, b.piAge, b.piFlags, b.piCount]);
+
+        // ── Boson Tree (insertBosonsIntoTree, computeBosonAggregates, computeBosonGravity, applyBosonBosonGravity) ──
+        this._phase4BindGroups.btG0 = bg('bosonTree_g0', p4.insertBosonsIntoTree.bindGroupLayouts[0],
+            [this.uniformBuffer]);
+        this._phase4BindGroups.btG1 = bg('bosonTree_g1', p4.insertBosonsIntoTree.bindGroupLayouts[1],
+            [b.bosonTreeNodes, b.bosonTreeCounter]);
+        this._phase4BindGroups.btG2 = bg('bosonTree_g2', p4.insertBosonsIntoTree.bindGroupLayouts[2],
+            [b.phPosX, b.phPosY, b.phVelX, b.phVelY, b.phEnergy, b.phFlags, b.phCount]);
+        this._phase4BindGroups.btG3 = bg('bosonTree_g3', p4.insertBosonsIntoTree.bindGroupLayouts[3],
+            [b.piPosX, b.piPosY, b.piWX, b.piWY, b.piMass, b.piFlags, b.piCount]);
+        this._phase4BindGroups.btG4 = bg('bosonTree_g4', p4.insertBosonsIntoTree.bindGroupLayouts[4],
+            [b.posX, b.posY, b.mass, b.flags, b.forces0]);
+    }
+
+    /**
+     * Ensure history bind groups exist (lazy allocation).
+     * Called when relativity is first enabled.
+     */
+    _ensureHistoryBindGroups() {
+        if (this._phase4BindGroups.historyG0) return;
+        if (!this.buffers.historyAllocated) {
+            this.buffers.allocateHistoryBuffers(this.device);
+        }
+        const b = this.buffers;
+        const p4 = this._phase4;
+        const bg = (label, layout, buffers) =>
+            this.device.createBindGroup({
+                label, layout,
+                entries: buffers.map((buf, i) => ({ binding: i, resource: { buffer: buf } })),
+            });
+
+        this._phase4BindGroups.historyG0 = bg('history_g0', p4.recordHistory.bindGroupLayouts[0],
+            [this.uniformBuffer, b.posX, b.posY, b.velWX, b.velWY, b.angW, b.flags]);
+        this._phase4BindGroups.historyG1 = bg('history_g1', p4.recordHistory.bindGroupLayouts[1],
+            [b.histPosX, b.histPosY, b.histVelWX, b.histVelWY, b.histAngW, b.histTime, b.histMeta]);
+    }
+
+    /**
+     * Dispatch radiation reaction passes (Phase 4, Pass 11).
+     * Runs after Boris half-kick 2 and torques, before drift.
+     */
+    _dispatchRadiation(encoder) {
+        if (!this._radiationEnabled) return;
+
+        const workgroups = Math.ceil(this.aliveCount / 64);
+        const bgs = this._phase4BindGroups;
+        const p4 = this._phase4;
+
+        // Larmor radiation (requires Coulomb + Radiation)
+        const passLarmor = encoder.beginComputePass({ label: 'lamrorRadiation' });
+        passLarmor.setPipeline(p4.lamrorRadiation.pipeline);
+        passLarmor.setBindGroup(0, bgs.radG0);
+        passLarmor.setBindGroup(1, bgs.radG1);
+        passLarmor.setBindGroup(2, bgs.radG2);
+        passLarmor.setBindGroup(3, bgs.radG3);
+        passLarmor.dispatchWorkgroups(workgroups);
+        passLarmor.end();
+
+        // Hawking radiation (requires Black Hole + Radiation)
+        if (this._blackHoleEnabled) {
+            const passHawking = encoder.beginComputePass({ label: 'hawkingRadiation' });
+            passHawking.setPipeline(p4.hawkingRadiation.pipeline);
+            passHawking.setBindGroup(0, bgs.radG0);
+            passHawking.setBindGroup(1, bgs.radG1);
+            passHawking.setBindGroup(2, bgs.radG2);
+            passHawking.setBindGroup(3, bgs.radG3);
+            passHawking.dispatchWorkgroups(workgroups);
+            passHawking.end();
+        }
+
+        // Pion emission (requires Yukawa + Radiation)
+        if (this._yukawaEnabled) {
+            const passPion = encoder.beginComputePass({ label: 'pionEmission' });
+            passPion.setPipeline(p4.pionEmission.pipeline);
+            passPion.setBindGroup(0, bgs.radG0);
+            passPion.setBindGroup(1, bgs.radG1);
+            passPion.setBindGroup(2, bgs.radG2);
+            passPion.setBindGroup(3, bgs.radG3);
+            passPion.dispatchWorkgroups(workgroups);
+            passPion.end();
+        }
+    }
+
+    /**
+     * Dispatch 1PN velocity-Verlet correction (Phase 4, Pass 14).
+     * After drift: rebuild tree if BH on, recompute 1PN, apply VV kick.
+     */
+    _dispatch1PNVV(encoder) {
+        if (!this._onePNEnabled) return;
+
+        const workgroups = Math.ceil(this.aliveCount / 64);
+        const bgs = this._phase4BindGroups;
+        const p4 = this._phase4;
+
+        // Step 1: Recompute 1PN forces at post-drift positions
+        const passCompute = encoder.beginComputePass({ label: 'compute1PN' });
+        passCompute.setPipeline(p4.compute1PN.pipeline);
+        passCompute.setBindGroup(0, bgs.onePNG0);
+        passCompute.setBindGroup(1, bgs.onePNG1);
+        passCompute.setBindGroup(2, bgs.onePNG2);
+        passCompute.dispatchWorkgroups(workgroups);
+        passCompute.end();
+
+        // Step 2: Apply VV correction kick
+        const passKick = encoder.beginComputePass({ label: 'vvKick1PN' });
+        passKick.setPipeline(p4.vvKick1PN.pipeline);
+        passKick.setBindGroup(0, bgs.onePNG0);
+        passKick.setBindGroup(1, bgs.onePNG1);
+        passKick.setBindGroup(2, bgs.onePNG2);
+        passKick.dispatchWorkgroups(workgroups);
+        passKick.end();
+    }
+
+    /**
+     * Dispatch boson update passes (Phase 4, Pass 21).
+     * Photon/pion drift, absorption, pion decay.
+     */
+    _dispatchBosonUpdate(encoder) {
+        const p4 = this._phase4;
+        const bgs = this._phase4BindGroups;
+
+        // updatePhotons: drift + lensing
+        const phWG = Math.ceil(MAX_PHOTONS / 64);
+        const passPhotons = encoder.beginComputePass({ label: 'updatePhotons' });
+        passPhotons.setPipeline(p4.updatePhotons.pipeline);
+        passPhotons.setBindGroup(0, bgs.bosG0);
+        passPhotons.setBindGroup(1, bgs.bosG1);
+        passPhotons.setBindGroup(2, bgs.bosG2);
+        passPhotons.setBindGroup(3, bgs.bosG3);
+        passPhotons.dispatchWorkgroups(phWG);
+        passPhotons.end();
+
+        // updatePions: drift with proper velocity
+        const piWG = Math.ceil(MAX_PIONS / 64);
+        const passPions = encoder.beginComputePass({ label: 'updatePions' });
+        passPions.setPipeline(p4.updatePions.pipeline);
+        passPions.setBindGroup(0, bgs.bosG0);
+        passPions.setBindGroup(1, bgs.bosG1);
+        passPions.setBindGroup(2, bgs.bosG2);
+        passPions.setBindGroup(3, bgs.bosG3);
+        passPions.dispatchWorkgroups(piWG);
+        passPions.end();
+
+        // absorbPhotons
+        const passAbsorbPh = encoder.beginComputePass({ label: 'absorbPhotons' });
+        passAbsorbPh.setPipeline(p4.absorbPhotons.pipeline);
+        passAbsorbPh.setBindGroup(0, bgs.bosG0);
+        passAbsorbPh.setBindGroup(1, bgs.bosG1);
+        passAbsorbPh.setBindGroup(2, bgs.bosG2);
+        passAbsorbPh.setBindGroup(3, bgs.bosG3);
+        passAbsorbPh.dispatchWorkgroups(phWG);
+        passAbsorbPh.end();
+
+        // absorbPions
+        const passAbsorbPi = encoder.beginComputePass({ label: 'absorbPions' });
+        passAbsorbPi.setPipeline(p4.absorbPions.pipeline);
+        passAbsorbPi.setBindGroup(0, bgs.bosG0);
+        passAbsorbPi.setBindGroup(1, bgs.bosG1);
+        passAbsorbPi.setBindGroup(2, bgs.bosG2);
+        passAbsorbPi.setBindGroup(3, bgs.bosG3);
+        passAbsorbPi.dispatchWorkgroups(piWG);
+        passAbsorbPi.end();
+
+        // decayPions
+        const passDecay = encoder.beginComputePass({ label: 'decayPions' });
+        passDecay.setPipeline(p4.decayPions.pipeline);
+        passDecay.setBindGroup(0, bgs.bosG0);
+        passDecay.setBindGroup(1, bgs.bosG1);
+        passDecay.setBindGroup(2, bgs.bosG2);
+        passDecay.setBindGroup(3, bgs.bosG3);
+        passDecay.dispatchWorkgroups(piWG);
+        passDecay.end();
+    }
+
+    /**
+     * Dispatch boson gravity passes (Phase 4).
+     * Runs once per frame after all substeps: build boson tree, compute gravity.
+     */
+    _dispatchBosonGravity(encoder) {
+        if (!this._bosonGravEnabled) return;
+
+        const p4 = this._phase4;
+        const bgs = this._phase4BindGroups;
+        const b = this.buffers;
+
+        // Reset boson tree node counter to 1 (root = node 0)
+        this.device.queue.writeBuffer(b.bosonTreeCounter, 0, new Uint32Array([1]));
+
+        // Initialize root node bounds (will be set by insertBosonsIntoTree)
+        // For boson tree we use domain bounds directly
+        const rootInit = new Uint32Array(20);
+        const rootF32 = new Float32Array(rootInit.buffer);
+        rootF32[0] = 0;              // minX
+        rootF32[1] = 0;              // minY
+        rootF32[2] = this.domainW;   // maxX
+        rootF32[3] = this.domainH;   // maxY
+        this.device.queue.writeBuffer(b.bosonTreeNodes, 0, rootInit);
+
+        const totalBosons = MAX_PHOTONS + MAX_PIONS;
+        const bosonWG = Math.ceil(totalBosons / 64);
+
+        // insertBosonsIntoTree
+        const passInsert = encoder.beginComputePass({ label: 'insertBosonsIntoTree' });
+        passInsert.setPipeline(p4.insertBosonsIntoTree.pipeline);
+        passInsert.setBindGroup(0, bgs.btG0);
+        passInsert.setBindGroup(1, bgs.btG1);
+        passInsert.setBindGroup(2, bgs.btG2);
+        passInsert.setBindGroup(3, bgs.btG3);
+        passInsert.setBindGroup(4, bgs.btG4);
+        passInsert.dispatchWorkgroups(bosonWG);
+        passInsert.end();
+
+        // computeBosonAggregates
+        const maxBosonNodes = b.MAX_BOSON_NODES;
+        const aggWG = Math.ceil(maxBosonNodes / 64);
+        const passAgg = encoder.beginComputePass({ label: 'computeBosonAggregates' });
+        passAgg.setPipeline(p4.computeBosonAggregates.pipeline);
+        passAgg.setBindGroup(0, bgs.btG0);
+        passAgg.setBindGroup(1, bgs.btG1);
+        passAgg.setBindGroup(2, bgs.btG2);
+        passAgg.setBindGroup(3, bgs.btG3);
+        passAgg.setBindGroup(4, bgs.btG4);
+        passAgg.dispatchWorkgroups(aggWG);
+        passAgg.end();
+
+        // computeBosonGravity: particle <- boson gravity
+        const particleWG = Math.ceil(this.aliveCount / 64);
+        if (particleWG > 0) {
+            const passGrav = encoder.beginComputePass({ label: 'computeBosonGravity' });
+            passGrav.setPipeline(p4.computeBosonGravity.pipeline);
+            passGrav.setBindGroup(0, bgs.btG0);
+            passGrav.setBindGroup(1, bgs.btG1);
+            passGrav.setBindGroup(2, bgs.btG2);
+            passGrav.setBindGroup(3, bgs.btG3);
+            passGrav.setBindGroup(4, bgs.btG4);
+            passGrav.dispatchWorkgroups(particleWG);
+            passGrav.end();
+        }
+
+        // applyBosonBosonGravity: boson <-> boson mutual gravity
+        const passBosonBoson = encoder.beginComputePass({ label: 'applyBosonBosonGravity' });
+        passBosonBoson.setPipeline(p4.applyBosonBosonGravity.pipeline);
+        passBosonBoson.setBindGroup(0, bgs.btG0);
+        passBosonBoson.setBindGroup(1, bgs.btG1);
+        passBosonBoson.setBindGroup(2, bgs.btG2);
+        passBosonBoson.setBindGroup(3, bgs.btG3);
+        passBosonBoson.setBindGroup(4, bgs.btG4);
+        passBosonBoson.dispatchWorkgroups(bosonWG);
+        passBosonBoson.end();
+    }
+
+    /**
+     * Dispatch signal delay history recording (Phase 4, Pass 23).
+     * Runs once every HISTORY_STRIDE frames when relativity is enabled.
+     */
+    _dispatchRecordHistory(encoder) {
+        if (!this._relativityEnabled) return;
+        if (!this._phase4BindGroups.historyG0) return;
+
+        const workgroups = Math.ceil(this.aliveCount / 64);
+        const p4 = this._phase4;
+        const bgs = this._phase4BindGroups;
+
+        const pass = encoder.beginComputePass({ label: 'recordHistory' });
+        pass.setPipeline(p4.recordHistory.pipeline);
+        pass.setBindGroup(0, bgs.historyG0);
+        pass.setBindGroup(1, bgs.historyG1);
+        pass.dispatchWorkgroups(workgroups);
+        pass.end();
+    }
+
+    /**
      * Dispatch dead particle garbage collection (Phase 3).
      * Runs once per frame (not per substep), after all substeps complete.
      */
@@ -817,7 +1173,17 @@ export default class GPUPhysics {
 
         this._blackHoleEnabled = physics.blackHoleEnabled;
         this._barnesHutEnabled = physics.barnesHutEnabled;
+        this._relativityEnabled = physics.relativityEnabled;
+        this._onePNEnabled = physics.onePNEnabled;
+        this._radiationEnabled = physics.radiationEnabled;
+        this._yukawaEnabled = physics.yukawaEnabled;
+        this._bosonGravEnabled = physics.bosonGravEnabled;
         this._yukawaCoupling = physics.yukawaEnabled ? 14 : 14;  // YUKAWA_COUPLING constant
+
+        // Lazily allocate history buffers when relativity is first enabled
+        if (this._relativityEnabled && this._phase4) {
+            this._ensureHistoryBindGroups();
+        }
         this._yukawaMu = physics.yukawaMu;
         this._higgsMass = physics.higgsEnabled ? 0.5 : 0.5;
         this._axionMass = physics.axionMass;
@@ -853,10 +1219,25 @@ export default class GPUPhysics {
             this._dispatchSubstep(dtSub);
         }
 
-        // Dead particle garbage collection (once per frame, after all substeps)
+        this._frameCount++;
+
+        // Post-substep passes (once per frame)
         {
-            const encoder = this.device.createCommandEncoder({ label: 'deadGC-frame' });
+            const encoder = this.device.createCommandEncoder({ label: 'post-substep' });
+
+            // Boson gravity (if enabled): build boson tree + particle<-boson + boson<->boson
+            this._dispatchBosonGravity(encoder);
+
+            // Dead particle garbage collection
             this._dispatchDeadGC(encoder);
+
+            // Record signal delay history (once every HISTORY_STRIDE frames)
+            this._histStride++;
+            if (this._relativityEnabled && this._histStride >= HISTORY_STRIDE) {
+                this._histStride = 0;
+                this._dispatchRecordHistory(encoder);
+            }
+
             this.device.queue.submit([encoder.finish()]);
         }
 
@@ -905,6 +1286,7 @@ export default class GPUPhysics {
             higgsCoupling: this._higgsCoupling,
             particleCount: this.aliveCount + this._ghostCount,
             bhTheta: 0.5,
+            frameCount: this._frameCount,
         });
 
         const workgroups = Math.ceil(this.aliveCount / 64);
@@ -995,6 +1377,9 @@ export default class GPUPhysics {
         pass10.dispatchWorkgroups(workgroups);
         pass10.end();
 
+        // Pass 11: radiation reaction (Larmor, Hawking, pion emission) — Phase 4
+        this._dispatchRadiation(encoder);
+
         // Pass 12: borisDrift
         const pass12 = encoder.beginComputePass({ label: 'borisDrift' });
         pass12.setPipeline(p2.borisDrift.pipeline);
@@ -1002,16 +1387,22 @@ export default class GPUPhysics {
         pass12.dispatchWorkgroups(workgroups);
         pass12.end();
 
+        // Pass 14: 1PN velocity-Verlet correction — Phase 4
+        this._dispatch1PNVV(encoder);
+
+        // Pass 17-18: collision detection + resolution (Phase 3)
+        // Runs after drift, uses tree built earlier in the substep
+        this._dispatchCollisions(encoder);
+
+        // Pass 21: boson update (photon/pion drift, absorption, decay) — Phase 4
+        this._dispatchBosonUpdate(encoder);
+
         // Pass 24: boundary (existing from Phase 1)
         const passBoundary = encoder.beginComputePass({ label: 'boundary' });
         passBoundary.setPipeline(this._boundaryPipeline);
         passBoundary.setBindGroup(0, this._boundaryBindGroup);
         passBoundary.dispatchWorkgroups(workgroups);
         passBoundary.end();
-
-        // Pass 25: collision detection + resolution (Phase 3)
-        // Runs after drift + boundary, uses tree built earlier in the substep
-        this._dispatchCollisions(encoder);
 
         this.device.queue.submit([encoder.finish()]);
     }
@@ -1040,6 +1431,8 @@ export default class GPUPhysics {
     reset() {
         this.aliveCount = 0;
         this.simTime = 0;
+        this._histStride = 0;
+        this._frameCount = 0;
     }
 
     destroy() {
