@@ -107,6 +107,7 @@
                     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
             </button>
+            <span id="backend-badge" class="backend-badge" title="Compute backend">CPU</span>
             <div class="tool-sep"></div>
             <button id="themeToggleBtn" class="tool-btn" title="Toggle Theme" aria-label="Toggle theme">
                 <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24">
@@ -276,6 +277,14 @@
                         <h2 class="group-label">Simulation</h2>
                         <div class="control-group">
                             <label class="checkbox-label"><span>Barnes-Hut <button class="info-trigger" data-info="barneshut" aria-label="Barnes-Hut info">?</button></span> <input type="checkbox" id="barneshut-toggle"></label>
+                        </div>
+                        <div class="control-group" id="grid-res-group" style="display:none">
+                            <label><span>Field Grid Resolution</span></label>
+                            <div class="mode-toggles" id="grid-res-toggles">
+                                <button class="mode-btn" data-gridres="64">64</button>
+                                <button class="mode-btn active" data-gridres="128">128</button>
+                                <button class="mode-btn" data-gridres="256">256</button>
+                            </div>
                         </div>
                         <div class="control-group">
                             <label><span>Collision Mode <button class="info-trigger" data-info="collision" aria-label="Collision modes info">?</button></span></label>

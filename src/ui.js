@@ -123,6 +123,23 @@ export function setupUI(sim) {
     });
     bindToggleGroup('topology-toggles', 'topology', (v) => { sim.topology = topoFromString(v); });
 
+    // ─── Grid resolution (GPU backend only) ───
+    const gridResGroup = document.getElementById('grid-res-group');
+    const gridResToggles = document.getElementById('grid-res-toggles');
+    if (gridResGroup && gridResToggles) {
+        // Show only on GPU backend
+        gridResGroup.style.display = sim.backend === 'gpu' ? '' : 'none';
+
+        bindToggleGroup('grid-res-toggles', 'gridres', (v) => {
+            const res = parseInt(v, 10);
+            const gpuPhys = sim._gpuPhysics;
+            if (gpuPhys && gpuPhys.setFieldResolution) {
+                gpuPhys.setFieldResolution(res);
+            }
+            sim._dirty = true;
+        });
+    }
+
     // ─── Physics toggles ───
     const toggleDefs = [
         { id: 'gravity-toggle', prop: 'gravityEnabled' },

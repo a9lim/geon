@@ -69,6 +69,30 @@ body {
     stroke-width: 2.5;
 }
 
+/* GPU/CPU backend indicator badge */
+.backend-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    user-select: none;
+    transition: background 0.3s var(--ease-out), color 0.3s var(--ease-out);
+}
+
+.backend-badge.gpu {
+    color: #509878;
+    background: #50987814;
+    border-color: #50987830;
+}
+
 
 /* ═══════════════════════════════════════════════
    Control Panel — Overrides
