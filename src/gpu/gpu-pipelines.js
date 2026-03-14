@@ -114,3 +114,74 @@ export async function createPhase2Pipelines(device) {
         borisHalfKick, borisRotate, borisDrift, spinOrbit, applyTorques,
     };
 }
+
+/**
+ * Create ghost generation compute pipeline.
+ * Standalone shader (not prepended with common.wgsl) — defines its own SimUniforms.
+ * Bind groups:
+ *   Group 0: read-only particle SoA (posX, posY, velWX, velWY, angW, mass, charge, flags)
+ *   Group 1: read-write ghost output SoA + read-only derived + ghost versions + particleId
+ *   Group 2: ghostCounter atomic + uniforms + ghostOriginalIdx
+ */
+export async function createGhostGenPipeline(device) {
+    const code = await fetchShader('ghost-gen.wgsl');
+    const module = device.createShaderModule({ label: 'ghostGen', code });
+
+    // Group 0: read-only particle inputs (8 bindings)
+    const group0Layout = device.createBindGroupLayout({
+        label: 'ghostGen_group0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        ],
+    });
+
+    // Group 1: ghost output (read-write) + derived inputs (read-only) (16 bindings)
+    const group1Layout = device.createBindGroupLayout({
+        label: 'ghostGen_group1',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 11, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 12, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 13, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 14, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 15, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        ],
+    });
+
+    // Group 2: ghostCounter + uniforms + ghostOriginalIdx (3 bindings)
+    const group2Layout = device.createBindGroupLayout({
+        label: 'ghostGen_group2',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        ],
+    });
+
+    const pipeline = device.createComputePipeline({
+        label: 'ghostGen',
+        layout: device.createPipelineLayout({
+            bindGroupLayouts: [group0Layout, group1Layout, group2Layout],
+        }),
+        compute: { module, entryPoint: 'main' },
+    });
+
+    return { pipeline, bindGroupLayouts: [group0Layout, group1Layout, group2Layout] };
+}
