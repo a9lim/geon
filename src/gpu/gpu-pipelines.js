@@ -1011,3 +1011,87 @@ export async function createFieldEvolvePipelines(device) {
         gradBindGroupLayouts,
     };
 }
+
+/**
+ * Create field force application pipelines (Phase 5: field → particle forces).
+ * Entry points from field-forces.wgsl (prepended with field-common.wgsl):
+ *   applyHiggsForces, applyAxionForces
+ *
+ * Bind groups:
+ *   Group 0: particle SoA (11 bindings, mix of read and read_write)
+ *   Group 1: field arrays (6 read-only bindings: higgs field/gradX/gradY, axion field/gradX/gradY)
+ *   Group 2: force accumulators + axMod/yukMod (5 read_write bindings)
+ *   Group 3: FieldUniforms (1 uniform binding)
+ */
+export async function createFieldForcesPipelines(device) {
+    const fieldCommonWGSL = await fetchShader('field-common.wgsl');
+    const forcesWGSL = await fetchShader('field-forces.wgsl');
+    const code = fieldCommonWGSL + '\n' + forcesWGSL;
+    const module = device.createShaderModule({ label: 'fieldForces', code });
+
+    // Group 0: particle SoA (11 bindings)
+    const g0Types = [
+        'read-only-storage', 'read-only-storage',  // posX, posY
+        'storage', 'read-only-storage',             // mass (rw), baseMass
+        'read-only-storage', 'read-only-storage',   // charge, flags
+        'storage', 'storage',                        // velWX (rw), velWY (rw)
+        'storage', 'storage', 'storage',             // angW (rw), radius (rw), invMass (rw)
+    ];
+    const group0Layout = device.createBindGroupLayout({
+        label: 'fieldForces_group0',
+        entries: g0Types.map((type, i) => ({
+            binding: i, visibility: GPUShaderStage.COMPUTE,
+            buffer: { type },
+        })),
+    });
+
+    // Group 1: field arrays (6 read-only bindings)
+    const group1Layout = device.createBindGroupLayout({
+        label: 'fieldForces_group1',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // higgsField
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // higgsGradX
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // higgsGradY
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // axionField
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // axionGradX
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // axionGradY
+        ],
+    });
+
+    // Group 2: force accumulators + modulation outputs (5 bindings)
+    const group2Layout = device.createBindGroupLayout({
+        label: 'fieldForces_group2',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // forces4
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // forces5
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // totalForce
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // axMod
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // yukMod
+        ],
+    });
+
+    // Group 3: uniforms
+    const group3Layout = device.createBindGroupLayout({
+        label: 'fieldForces_group3',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        ],
+    });
+
+    const bindGroupLayouts = [group0Layout, group1Layout, group2Layout, group3Layout];
+    const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts });
+
+    const applyHiggsForces = device.createComputePipeline({
+        label: 'applyHiggsForces',
+        layout: pipelineLayout,
+        compute: { module, entryPoint: 'applyHiggsForces' },
+    });
+
+    const applyAxionForces = device.createComputePipeline({
+        label: 'applyAxionForces',
+        layout: pipelineLayout,
+        compute: { module, entryPoint: 'applyAxionForces' },
+    });
+
+    return { applyHiggsForces, applyAxionForces, bindGroupLayouts };
+}
