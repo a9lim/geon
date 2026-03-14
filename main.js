@@ -256,6 +256,10 @@ class Simulation {
                     const gpuToggles = Object.create(this.physics);
                     gpuToggles.heatmapEnabled = this.heatmap && this.heatmap.enabled;
                     this._gpuPhysics.setToggles(gpuToggles);
+                    // Sync boundary/collision/topology (live on sim, not sim.physics)
+                    this._gpuPhysics.boundaryMode = this.boundaryMode;
+                    this._gpuPhysics.topologyMode = this.topology;
+                    this._gpuPhysics._collisionMode = this.collisionMode;
 
                     // Sync any CPU particles that were added before GPU was ready
                     // (e.g., preset loaded while shaders were still compiling)
@@ -265,6 +269,7 @@ class Simulation {
                                 x: p.pos.x, y: p.pos.y,
                                 vx: p.w.x, vy: p.w.y,
                                 mass: p.mass, charge: p.charge,
+                                angw: p.angw,
                             });
                         }
                     }
@@ -382,15 +387,6 @@ class Simulation {
     }
 
     addParticle(x, y, vx, vy, options = {}) {
-        if (this._gpuReady && this.backend === BACKEND_GPU) {
-            // GPU path: write directly to GPU SoA buffers
-            this._gpuPhysics.addParticle({
-                x, y, vx, vy,
-                mass: options.mass ?? 10,
-                charge: options.charge ?? 0,
-            });
-        }
-
         // Always maintain CPU-side particle array (needed for presets, sidebar, etc.)
         const p = new Particle(x, y);
         p.mass = options.mass ?? 10;
@@ -408,6 +404,18 @@ class Simulation {
         p.angw = absSV > 0 ? Math.sign(sv) * absSV / (p.radius * Math.sqrt(1 - absSV * absSV)) : 0;
         setVelocity(p, vx, vy);
         p.angVel = this.physics.relativityEnabled ? angwToAngVel(p.angw, p.radius) : p.angw;
+
+        if (this._gpuReady && this.backend === BACKEND_GPU) {
+            // GPU path: write directly to GPU SoA buffers (after CPU particle is fully built)
+            this._gpuPhysics.addParticle({
+                x, y, vx, vy,
+                mass: p.mass,
+                charge: p.charge,
+                angw: p.angw,
+                antimatter: p.antimatter,
+            });
+        }
+
         this.particles.push(p);
         if (!options.skipBaseline) this.stats.resetBaseline();
         this._dirty = true;
