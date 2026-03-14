@@ -10,7 +10,21 @@
  */
 import { createBosonRenderPipelines, createFieldRenderPipeline, createHeatmapRenderPipeline, createArrowRenderPipeline, createSpinRenderPipeline, createTrailRenderPipeline } from './gpu-pipelines.js';
 import { TRAIL_LEN } from './gpu-buffers.js';
-import { buildWGSLConstants } from './gpu-constants.js';
+import { buildWGSLConstants, paletteRGB } from './gpu-constants.js';
+import { HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA } from '../config.js';
+
+// Palette-derived colors (computed once at module load from _PALETTE)
+const _PAL = window._PALETTE;
+const _bgLight = (() => { const [r,g,b] = paletteRGB(_PAL.light.canvas); return {r,g,b,a:1}; })();
+const _bgDark = (() => { const [r,g,b] = paletteRGB(_PAL.dark.canvas); return {r,g,b,a:1}; })();
+const _accentLight = paletteRGB(_PAL.accent);
+const _accentDark = paletteRGB(_PAL.accentLight);
+const _textLight = paletteRGB(_PAL.light.text);
+const _textDark = paletteRGB(_PAL.dark.text);
+const _fieldColors = {
+    higgs: [paletteRGB(_PAL.extended.purple), paletteRGB(_PAL.extended.lime)],
+    axion: [paletteRGB(_PAL.extended.indigo), paletteRGB(_PAL.extended.yellow)],
+};
 
 /** Standard premultiplied alpha-over blend (light mode). */
 const BLEND_ALPHA = {
@@ -443,9 +457,7 @@ export default class GPURenderer {
                     label: 'trail render',
                     colorAttachments: [{
                         view: textureView,
-                        clearValue: this.isLight
-                            ? { r: 0.941, g: 0.922, b: 0.894, a: 1 }  // --bg-canvas light: #F0EBE4
-                            : { r: 0.047, g: 0.043, b: 0.035, a: 1 },  // --bg-canvas dark: #0C0B09
+                        clearValue: this.isLight ? _bgLight : _bgDark,
                         loadOp: 'clear',
                         storeOp: 'store',
                     }],
@@ -468,9 +480,7 @@ export default class GPURenderer {
             colorAttachments: [{
                 view: textureView,
                 ...(!trailsDrawn ? {
-                    clearValue: this.isLight
-                        ? { r: 0.941, g: 0.922, b: 0.894, a: 1 }  // --bg-canvas light: #F0EBE4
-                        : { r: 0.047, g: 0.043, b: 0.035, a: 1 },  // --bg-canvas dark: #0C0B09
+                    clearValue: this.isLight ? _bgLight : _bgDark,
                 } : {}),
                 loadOp: trailsDrawn ? 'load' : 'clear',
                 storeOp: 'store',
@@ -615,14 +625,14 @@ export default class GPURenderer {
                         this._drawArrows(arrowPass, aliveCount, forceTypes, arrowScale, minMag);
                     }
                 } else if (this.showForce) {
-                    // Total force arrow (accent color: #FE3B01 light / #FF7642 dark)
-                    const accentColor = this.isLight ? [0.996, 0.231, 0.004] : [1.0, 0.463, 0.259];
+                    // Total force arrow (accent color)
+                    const accentColor = this.isLight ? _accentLight : _accentDark;
                     this._drawArrowsCustomColor(arrowPass, aliveCount, 11, accentColor, arrowScale, minMag);
                 }
 
                 if (this.showVelocity) {
-                    // Velocity arrows (text color: #1A1612 light / #E8DED4 dark)
-                    const textColor = this.isLight ? [0.102, 0.086, 0.071] : [0.910, 0.871, 0.831];
+                    // Velocity arrows (text color)
+                    const textColor = this.isLight ? _textLight : _textDark;
                     this._drawArrowsCustomColor(arrowPass, aliveCount, 12, textColor, 1.0, minMag);
                 }
 
@@ -639,19 +649,23 @@ export default class GPURenderer {
      * Force type colors matching CPU renderer (from renderer.js).
      * Index matches getForceVector() in arrow-render.wgsl.
      */
-    static FORCE_COLORS = [
-        [0.753, 0.314, 0.282], // 0: gravity — red #C05048
-        [0.361, 0.573, 0.659], // 1: coulomb — blue #5C92A8
-        [0.290, 0.675, 0.627], // 2: magnetic — cyan #4AACA0
-        [0.769, 0.384, 0.447], // 3: gravitomag — rose #C46272
-        [0.800, 0.557, 0.306], // 4: 1pn — orange #CC8E4E
-        [0.612, 0.494, 0.690], // 5: spinCurv — purple #9C7EB0
-        [0.800, 0.659, 0.298], // 6: radiation — yellow #CCA84C
-        [0.314, 0.596, 0.471], // 7: yukawa — green #509878
-        [0.612, 0.408, 0.251], // 8: external — brown #9C6840
-        [0.510, 0.659, 0.341], // 9: higgs — lime #82A857
-        [0.424, 0.475, 0.675], // 10: axion — indigo #6C79AC
-    ];
+    static FORCE_COLORS = (() => {
+        const ext = window._PALETTE.extended;
+        const rgb = paletteRGB;
+        return [
+            rgb(ext.red),       // 0: gravity
+            rgb(ext.blue),      // 1: coulomb
+            rgb(ext.cyan),      // 2: magnetic
+            rgb(ext.rose),      // 3: gravitomag
+            rgb(ext.orange),    // 4: 1pn
+            rgb(ext.purple),    // 5: spinCurv
+            rgb(ext.yellow),    // 6: radiation
+            rgb(ext.green),     // 7: yukawa
+            rgb(ext.brown),     // 8: external
+            rgb(ext.lime),      // 9: higgs
+            rgb(ext.indigo),    // 10: axion
+        ];
+    })();
 
     /**
      * Render force arrows for one or more force types.
@@ -796,17 +810,9 @@ export default class GPURenderer {
         u[7] = this.isLight ? 1 : 0;
         u[8] = which === 'higgs' ? 0 : 1;
         // Colors: Higgs depleted=purple, enhanced=lime; Axion positive=indigo, negative=yellow
-        if (which === 'higgs') {
-            // color0 (depleted/purple): #9C7EB0
-            f[12] = 0.612; f[13] = 0.494; f[14] = 0.690; f[15] = 1.0;
-            // color1 (enhanced/lime): #82A857
-            f[16] = 0.510; f[17] = 0.659; f[18] = 0.341; f[19] = 1.0;
-        } else {
-            // color0 (positive/indigo): #6C79AC
-            f[12] = 0.424; f[13] = 0.475; f[14] = 0.675; f[15] = 1.0;
-            // color1 (negative/yellow): #CCA84C
-            f[16] = 0.800; f[17] = 0.659; f[18] = 0.298; f[19] = 1.0;
-        }
+        const [c0, c1] = _fieldColors[which];
+        f[12] = c0[0]; f[13] = c0[1]; f[14] = c0[2]; f[15] = 1.0;
+        f[16] = c1[0]; f[17] = c1[1]; f[18] = c1[2]; f[19] = 1.0;
         this.device.queue.writeBuffer(this._fieldRenderUniformBuffers[which], 0, data);
 
         pass.setPipeline(this._fieldRenderPipeline);
@@ -849,8 +855,8 @@ export default class GPURenderer {
         f[6] = opts.viewTop || 0;
         f[7] = opts.cellW || 1;
         f[8] = opts.cellH || 1;
-        f[9] = 2.0;    // HEATMAP_SENSITIVITY
-        f[10] = 100.0 / 255.0; // HEATMAP_MAX_ALPHA
+        f[9] = HEATMAP_SENSITIVITY;
+        f[10] = HEATMAP_MAX_ALPHA / 255;
         u[11] = this.isLight ? 1 : 0;
         u[12] = opts.doGravity ? 1 : 0;
         u[13] = opts.doCoulomb ? 1 : 0;
