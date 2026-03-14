@@ -8,10 +8,11 @@ const NR_MAX_ITER: u32 = 8u;
 const NR_TOLERANCE: f32 = 1e-5;
 const EPSILON: f32 = 1e-9;
 
+// Must match SimUniforms byte layout in common.wgsl / writeUniforms() exactly.
+// Only simTime is used here; preceding fields kept as padding for alignment.
 struct SimUniforms {
-    // ... (same as existing common.wgsl uniforms struct)
-    simTime: f32,
-    // ...
+    _dt: f32,               // [0] dt (unused here)
+    simTime: f32,           // [1] simTime
 };
 
 @group(0) @binding(0) var<uniform> u: SimUniforms;

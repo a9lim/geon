@@ -44,6 +44,10 @@ const HISTORY_STRIDE = 64;
 const MAX_PHOTONS = 512;
 const MAX_PIONS = 256;
 
+// Pre-allocated typed arrays for per-frame writeBuffer calls (avoid GC pressure)
+const _qtNodeCounterData = new Uint32Array([1]);
+const _qtBoundsResetData = new Int32Array([2147483647, 2147483647, -2147483647, -2147483647]);
+
 export default class GPUPhysics {
     /**
      * @param {GPUDevice} device
@@ -65,9 +69,7 @@ export default class GPUPhysics {
         this.uniformBuffer = createUniformBuffer(device);
 
         // Phase 1 pipelines
-        this._driftPipeline = null;
         this._boundaryPipeline = null;
-        this._driftBindGroup = null;
         this._boundaryBindGroup = null;
 
         // Phase 2 pipelines + bind groups
@@ -194,45 +196,7 @@ export default class GPUPhysics {
     /** Load WGSL shaders and create compute pipelines. Must be called before update(). */
     async init() {
         const commonWGSL = await fetchShader('common.wgsl');
-        const driftWGSL = await fetchShader('drift.wgsl');
         const boundaryWGSL = await fetchShader('boundary.wgsl');
-
-        // --- Drift pipeline (Phase 1, kept for reference/fallback) ---
-        const driftModule = this.device.createShaderModule({
-            label: 'drift',
-            code: commonWGSL + '\n' + driftWGSL,
-        });
-
-        const driftBindGroupLayout = this.device.createBindGroupLayout({
-            label: 'drift',
-            entries: [
-                { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-                { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-                { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-                { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-                { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-                { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            ],
-        });
-
-        this._driftPipeline = this.device.createComputePipeline({
-            label: 'drift',
-            layout: this.device.createPipelineLayout({ bindGroupLayouts: [driftBindGroupLayout] }),
-            compute: { module: driftModule, entryPoint: 'main' },
-        });
-
-        this._driftBindGroup = this.device.createBindGroup({
-            label: 'drift',
-            layout: driftBindGroupLayout,
-            entries: [
-                { binding: 0, resource: { buffer: this.uniformBuffer } },
-                { binding: 1, resource: { buffer: this.buffers.posX } },
-                { binding: 2, resource: { buffer: this.buffers.posY } },
-                { binding: 3, resource: { buffer: this.buffers.velWX } },
-                { binding: 4, resource: { buffer: this.buffers.velWY } },
-                { binding: 5, resource: { buffer: this.buffers.flags } },
-            ],
-        });
 
         // --- Boundary pipeline ---
         const boundaryModule = this.device.createShaderModule({
@@ -249,6 +213,7 @@ export default class GPUPhysics {
                 { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
                 { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
                 { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+                { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             ],
         });
 
@@ -268,6 +233,7 @@ export default class GPUPhysics {
                 { binding: 3, resource: { buffer: this.buffers.velWX } },
                 { binding: 4, resource: { buffer: this.buffers.velWY } },
                 { binding: 5, resource: { buffer: this.buffers.flags } },
+                { binding: 6, resource: { buffer: this.buffers.angW } },
             ],
         });
 
@@ -334,7 +300,7 @@ export default class GPUPhysics {
         this._bg_pairForce2 = bg('pairForce_g2', p2.pairForce.bindGroupLayouts[2],
             [b.allForces]);
         this._bg_pairForce3 = bg('pairForce_g3', p2.pairForce.bindGroupLayouts[3],
-            [b.jerk]);
+            [b.jerk, b.maxAccelBuffer]);
 
         // externalFields (packed allForces)
         this._bg_extFields = bg('extFields', p2.externalFields.bindGroupLayouts[0],
@@ -415,8 +381,7 @@ export default class GPUPhysics {
         }
 
         // Reset ghost counter to 0
-        const zero = new Uint32Array([0]);
-        this.device.queue.writeBuffer(this.buffers.ghostCounter, 0, zero);
+        encoder.clearBuffer(this.buffers.ghostCounter, 0, 4);
 
         const pass = encoder.beginComputePass({ label: 'ghostGen' });
         pass.setPipeline(this._ghostGenPipeline);
@@ -861,7 +826,7 @@ export default class GPUPhysics {
         const b = this.buffers;
 
         // Reset boson tree node counter to 1 (root = node 0)
-        this.device.queue.writeBuffer(b.bosonTreeCounter, 0, new Uint32Array([1]));
+        this.device.queue.writeBuffer(b.bosonTreeCounter, 0, _qtNodeCounterData);
 
         // Initialize root node bounds (will be set by insertBosonsIntoTree)
         // For boson tree we use domain bounds directly
@@ -974,9 +939,8 @@ export default class GPUPhysics {
         const b = this.buffers;
 
         // Reset pair counter and merge counter to 0
-        const zero = new Uint32Array([0]);
-        this.device.queue.writeBuffer(b.collisionPairCounter, 0, zero);
-        this.device.queue.writeBuffer(b.mergeResultCounter, 0, zero);
+        encoder.clearBuffer(b.collisionPairCounter, 0, 4);
+        encoder.clearBuffer(b.mergeResultCounter, 0, 4);
 
         // Dispatch detectCollisions: one thread per alive particle
         const detectWG = Math.ceil(this.aliveCount / 64);
@@ -1080,21 +1044,15 @@ export default class GPUPhysics {
         const b = this.buffers;
 
         // 1. Reset nodeCounter to 1 (root is node 0, already allocated)
-        this.device.queue.writeBuffer(b.qtNodeCounter, 0, new Uint32Array([1]));
+        this.device.queue.writeBuffer(b.qtNodeCounter, 0, _qtNodeCounterData);
 
         // 2. Reset bounds: minX=INT_MAX, minY=INT_MAX, maxX=INT_MIN, maxY=INT_MIN
-        this.device.queue.writeBuffer(b.qtBoundsBuffer, 0, new Int32Array([
-            2147483647,   // minX = i32 max
-            2147483647,   // minY = i32 max
-            -2147483647,  // maxX = i32 min
-            -2147483647,  // maxY = i32 min
-        ]));
+        this.device.queue.writeBuffer(b.qtBoundsBuffer, 0, _qtBoundsResetData);
 
         // 3. Clear visitor flags to 0 (write zeros for all nodes)
-        // Only clear up to a reasonable bound based on expected tree size
+        // Use clearBuffer instead of allocating a zero array each frame
         const clearSize = Math.min(b.QT_MAX_NODES, totalCount * 6) * 4;
-        const zeroData = new Uint8Array(clearSize);
-        this.device.queue.writeBuffer(b.qtVisitorFlags, 0, zeroData);
+        encoder.clearBuffer(b.qtVisitorFlags, 0, clearSize);
 
         // 4. computeBounds dispatch
         const boundsWG = Math.ceil(totalCount / 256);
@@ -1247,15 +1205,15 @@ export default class GPUPhysics {
         this._radiationEnabled = physics.radiationEnabled;
         this._yukawaEnabled = physics.yukawaEnabled;
         this._bosonGravEnabled = physics.bosonGravEnabled;
-        this._yukawaCoupling = physics.yukawaEnabled ? 14 : 14;  // YUKAWA_COUPLING constant
+        this._yukawaCoupling = physics.yukawaCoupling ?? 14;
 
         // Lazily allocate history buffers when relativity is first enabled
         if (this._relativityEnabled && this._phase4) {
             this._ensureHistoryBindGroups();
         }
         this._yukawaMu = physics.yukawaMu;
-        this._higgsMass = physics.higgsEnabled ? 0.5 : 0.5;
-        this._axionMass = physics.axionMass;
+        this._higgsMass = physics.higgsMass ?? 0.5;
+        this._axionMass = physics.axionMass ?? 0.05;
         this._extGravity = physics.extGravity;
         this._extGravityAngle = physics.extGravityAngle;
         this._extElectric = physics.extElectric;
@@ -2031,7 +1989,7 @@ export default class GPUPhysics {
         this.device.queue.writeBuffer(this._disintUniformBuffer, 0, data);
 
         // Reset event counter
-        this.device.queue.writeBuffer(this._disintBuffers.counter, 0, new Uint32Array([0]));
+        encoder.clearBuffer(this._disintBuffers.counter, 0, 4);
 
         if (!this._disintBGs) {
             const b = this.buffers;
@@ -2104,7 +2062,7 @@ export default class GPUPhysics {
         this.device.queue.writeBuffer(this._pairProdUniformBuffer, 0, data);
 
         // Reset pair counter
-        this.device.queue.writeBuffer(this._pairProdBuffers.counter, 0, new Uint32Array([0]));
+        encoder.clearBuffer(this._pairProdBuffers.counter, 0, 4);
 
         if (!this._pairProdBGs) {
             const b = this.buffers;
@@ -2394,13 +2352,16 @@ export default class GPUPhysics {
         const workgroups = Math.ceil(this.aliveCount / 64);
         const p2 = this._phase2;
 
-        const encoder = this.device.createCommandEncoder({ label: 'physics-phase2' });
+        const encoder = this.device.createCommandEncoder({ label: 'physics-substep' });
 
         // Pass 0: ghost generation (Phase 3 — before tree build)
         this._dispatchGhostGen(encoder);
 
         // Pass 0b: tree build (Phase 3 — after ghost gen, before force computation)
         this._dispatchTreeBuild(encoder);
+
+        // Clear maxAccel for adaptive substepping (reset before force computation)
+        encoder.clearBuffer(this.buffers.maxAccelBuffer, 0, 4);
 
         // Pass 1: resetForces
         const pass1 = encoder.beginComputePass({ label: 'resetForces' });
@@ -2480,12 +2441,48 @@ export default class GPUPhysics {
         pass10.dispatchWorkgroups(workgroups);
         pass10.end();
 
+        // ── Radiation + drift + advanced passes (same encoder) ──
+
+        // Pass 11: radiation reaction (Larmor, Hawking, pion emission) — BEFORE drift
+        this._dispatchRadiation(encoder);
+
         // Pass 12: borisDrift
         const pass12 = encoder.beginComputePass({ label: 'borisDrift' });
         pass12.setPipeline(p2.borisDrift.pipeline);
         pass12.setBindGroup(0, this._bg_drift);
         pass12.dispatchWorkgroups(workgroups);
         pass12.end();
+
+        // Pass 13: cosmological expansion
+        this._dispatchExpansion(encoder, dtSub);
+
+        // Pass 14: 1PN velocity-Verlet correction
+        this._dispatch1PNVV(encoder);
+
+        // Pass 15: scalar field evolution (Higgs, Axion)
+        if (this._fieldDeposit) {
+            this._writeFieldUniforms(dtSub);
+            if (this._higgsEnabled) this._dispatchFieldEvolve(encoder, 'higgs', dtSub);
+            if (this._axionEnabled) this._dispatchFieldEvolve(encoder, 'axion', dtSub);
+        }
+
+        // Pass 16: scalar field forces
+        this._dispatchFieldForces(encoder);
+
+        // Pass 17-18: collision detection + resolution
+        this._dispatchCollisions(encoder);
+
+        // Pass 19: field excitations from merge events
+        this._dispatchFieldExcitations(encoder);
+
+        // Pass 20: disintegration check
+        this._dispatchDisintegration(encoder);
+
+        // Pass 21: boson update (photon/pion drift, absorption, decay)
+        this._dispatchBosonUpdate(encoder);
+
+        // Pass 22: pair production
+        this._dispatchPairProduction(encoder);
 
         // Pass 24: boundary
         const passBoundary = encoder.beginComputePass({ label: 'boundary' });
@@ -2494,52 +2491,7 @@ export default class GPUPhysics {
         passBoundary.dispatchWorkgroups(workgroups);
         passBoundary.end();
 
-        // Submit core physics (forces + Boris + drift + boundary) — MUST succeed
         this.device.queue.submit([encoder.finish()]);
-
-        // ── Advanced passes (Phase 3-5) — isolated so failures don't affect core ──
-        // Each group in its own try/catch + command encoder
-        try {
-            const enc2 = this.device.createCommandEncoder({ label: 'advanced-physics' });
-
-            // Pass 11: radiation reaction (Larmor, Hawking, pion emission) — Phase 4
-            this._dispatchRadiation(enc2);
-
-            // Pass 13: cosmological expansion — Phase 5
-            this._dispatchExpansion(enc2, dtSub);
-
-            // Pass 14: 1PN velocity-Verlet correction — Phase 4
-            this._dispatch1PNVV(enc2);
-
-            // Pass 15: scalar field evolution (Higgs, Axion) — Phase 5
-            if (this._fieldDeposit) {
-                this._writeFieldUniforms(dtSub);
-                if (this._higgsEnabled) this._dispatchFieldEvolve(enc2, 'higgs', dtSub);
-                if (this._axionEnabled) this._dispatchFieldEvolve(enc2, 'axion', dtSub);
-            }
-
-            // Pass 16: scalar field forces — Phase 5
-            this._dispatchFieldForces(enc2);
-
-            // Pass 17-18: collision detection + resolution (Phase 3)
-            this._dispatchCollisions(enc2);
-
-            // Pass 19: field excitations from merge events — Phase 5
-            this._dispatchFieldExcitations(enc2);
-
-            // Pass 20: disintegration check — Phase 5
-            this._dispatchDisintegration(enc2);
-
-            // Pass 21: boson update (photon/pion drift, absorption, decay) — Phase 4
-            this._dispatchBosonUpdate(enc2);
-
-            // Pass 22: pair production — Phase 5
-            this._dispatchPairProduction(enc2);
-
-            this.device.queue.submit([enc2.finish()]);
-        } catch (e) {
-            // Advanced passes failed — core physics still ran
-        }
     }
 
     /**

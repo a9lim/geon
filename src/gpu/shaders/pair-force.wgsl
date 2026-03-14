@@ -43,8 +43,9 @@ var<workgroup> tile: array<TileParticle, TILE_SIZE>;
 // Bind group 2: force accumulators (read_write) — 1 binding
 @group(2) @binding(0) var<storage, read_write> allForces: array<AllForces>;
 
-// Bind group 3: jerk accumulators for radiation (read_write) — 1 binding
+// Bind group 3: jerk accumulators + maxAccel for adaptive substepping
 @group(3) @binding(0) var<storage, read_write> jerk: array<vec2<f32>>;
+@group(3) @binding(1) var<storage, read_write> maxAccel: array<atomic<u32>>;
 
 // Aberration constants
 const ABERRATION_CLAMP_MIN: f32 = 0.01;
@@ -361,9 +362,9 @@ fn main(
                     let expMuR = exp(-yukMu * r_dist);
                     let yukModPair = sqrt(pYukMod * s.yukMod);
                     let coupling = uniforms.yukawaCoupling;
-                    let invR3a_factor = invR * invRSq * aberr;
+                    let yukInvRa = select(invR, invR * aberr, signalDelayed);
                     let fDir = coupling * yukModPair * pMass * s.mass * expMuR
-                               * (invRSq + yukMu * invR) * invR3a_factor;
+                               * (invRSq + yukMu * invR) * yukInvRa;
                     accYukX += rx * fDir;
                     accYukY += ry * fDir;
                     accTotalX += rx * fDir;
@@ -373,7 +374,7 @@ fn main(
                     if (radOn) {
                         let jRadial = -(3.0 * invRSq + 3.0 * yukMu * invR + yukMu * yukMu)
                                       * rDotVr * coupling * yukModPair * pMass * s.mass
-                                      * expMuR * invRSq * invR3a_factor;
+                                      * expMuR * invRSq * yukInvRa;
                         accJerkX += vrx * fDir + rx * jRadial;
                         accJerkY += vry * fDir + ry * jRadial;
                     }
@@ -419,5 +420,13 @@ fn main(
         allForces[idx] = af;
         // Analytical jerk for radiation reaction (Phase 4)
         jerk[idx] = vec2(accJerkX, accJerkY);
+
+        // Adaptive substepping: atomicMax of |F/m|² as fixed-point u32
+        // dtSafe = sqrt(softening / a_max), so we track max acceleration magnitude
+        let totalFSq = accTotalX * accTotalX + accTotalY * accTotalY;
+        let accelSq = totalFSq * pInvMass * pInvMass;
+        // Encode as u32 via bitcast of f32 (works for positive f32: same ordering as u32)
+        let accelBits = bitcast<u32>(sqrt(accelSq));
+        atomicMax(&maxAccel[0], accelBits);
     }
 }
