@@ -1,8 +1,15 @@
 /**
- * @fileoverview GPU buffer allocation for SoA particle state.
+ * @fileoverview GPU buffer allocation for particle state.
  *
  * Creates and manages all GPUBuffer instances for the particle system.
  * Buffers are fixed-capacity (MAX_PARTICLES), indexed by particle slot.
+ *
+ * Packed struct buffers reduce storage buffer count per shader stage:
+ *   ParticleState  (36 bytes) — posX,posY,velWX,velWY,mass,charge,angW,baseMass,flags
+ *   ParticleAux    (20 bytes) — radius,particleId,deathTime,deathMass,deathAngVel
+ *   RadiationState (32 bytes) — jerk,radAccum,hawkAccum,yukawaRadAccum,radDisplay,pad
+ *   Photon         (32 bytes) — pos,vel,energy,emitterId,age,flags
+ *   Pion           (48 bytes) — pos,w,mass,charge,energy,emitterId,age,flags,pad
  */
 
 // Signal delay history constants
@@ -14,6 +21,16 @@ const MAX_PIONS = 256;
 
 // Quadtree node size in bytes (20 u32 words = 80 bytes, must match tree-build.wgsl)
 const QTNODE_SIZE_BYTES = 80;
+
+// Packed struct sizes (must match common.wgsl struct definitions)
+const PARTICLE_STATE_SIZE = 36;  // 9 × 4 bytes
+const PARTICLE_AUX_SIZE = 20;   // 5 × 4 bytes
+const RADIATION_STATE_SIZE = 32; // 8 × 4 bytes
+const PHOTON_SIZE = 32;          // 8 × 4 bytes
+const PION_SIZE = 48;            // 12 × 4 bytes
+const DERIVED_SIZE = 32;         // 8 × f32 (ParticleDerived)
+const VEC2_SIZE = 8;             // 2 × f32
+const ALLFORCES_SIZE = 160;      // 10 × vec4
 
 /** @param {GPUDevice} device */
 export function createParticleBuffers(device, maxParticles) {
@@ -37,40 +54,35 @@ export function createParticleBuffers(device, maxParticles) {
         });
     }
 
-    // Core state (f32 per particle) — sized for particles + ghosts
-    const posX = storageBuffer('posX', FLOAT_SIZE, soaCapacity);
-    const posY = storageBuffer('posY', FLOAT_SIZE, soaCapacity);
-    const velWX = storageBuffer('velWX', FLOAT_SIZE, soaCapacity);
-    const velWY = storageBuffer('velWY', FLOAT_SIZE, soaCapacity);
-    const angW = storageBuffer('angW', FLOAT_SIZE, soaCapacity);
-    const mass = storageBuffer('mass', FLOAT_SIZE, soaCapacity);
-    const baseMass = storageBuffer('baseMass', FLOAT_SIZE, maxParticles);
-    const charge = storageBuffer('charge', FLOAT_SIZE, soaCapacity);
+    // ── Packed particle struct buffers ──
 
-    // Derived/cached — sized for particles + ghosts
-    const radius = storageBuffer('radius', FLOAT_SIZE, soaCapacity);
+    // ParticleState (36 bytes): posX,posY,velWX,velWY,mass,charge,angW,baseMass,flags
+    // Sized for particles + ghosts
+    const particleState = storageBuffer('particleState', PARTICLE_STATE_SIZE, soaCapacity);
+
+    // ParticleAux (20 bytes): radius,particleId,deathTime,deathMass,deathAngVel
+    // Sized for particles + ghosts
+    const particleAux = storageBuffer('particleAux', PARTICLE_AUX_SIZE, soaCapacity);
 
     // Packed derived state: ParticleDerived struct (32 bytes per particle)
     // Replaces: magAngMom, invMassRadSq, vel, angVel (4 buffers → 1)
-    const DERIVED_SIZE = 32; // 8 x f32
     const derived = storageBuffer('derived', DERIVED_SIZE, soaCapacity);
 
     // Packed axMod + yukMod (vec2, 8 bytes per particle)
-    const VEC2_SIZE = 8;
     const axYukMod = storageBuffer('axYukMod', VEC2_SIZE, soaCapacity);
 
     // Packed AllForces struct (160 bytes per particle)
     // Replaces: forces0-5, torques, bFields, bFieldGrads, totalForce (10 buffers → 1)
-    const ALLFORCES_SIZE = 160; // 10 x vec4 (9 vec4 + 1 vec2 + 1 vec2 padding = 10 vec4)
     const allForces = storageBuffer('allForces', ALLFORCES_SIZE, maxParticles);
 
-    // Particle metadata — flags sized for particles + ghosts
-    const flags = storageBuffer('flags', UINT_SIZE, soaCapacity);
+    // Particle color (u32 per particle, not packed — only used by renderer)
     const color = storageBuffer('color', UINT_SIZE, maxParticles);
 
-    // Particle ID for ghost->original mapping
-    const particleId = storageBuffer('particleId', UINT_SIZE, soaCapacity);
+    // ── Radiation state (packed struct) ──
+    // RadiationState (32 bytes): jerkX,jerkY,radAccum,hawkAccum,yukawaRadAccum,radDisplayX,radDisplayY,pad
+    const radiationState = storageBuffer('radiationState', RADIATION_STATE_SIZE, maxParticles);
 
+    // ── Ghost generation ──
     // Ghost particle counter (single atomic u32)
     const ghostCounter = device.createBuffer({
         label: 'ghostCounter',
@@ -78,19 +90,11 @@ export function createParticleBuffers(device, maxParticles) {
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
 
-    // Ghost output SoA buffers (separate from particle buffers to avoid aliasing)
-    // After dispatch, ghost data is copied into the main SoA arrays at offset aliveCount.
-    const ghostPosX = storageBuffer('ghostPosX', FLOAT_SIZE, maxParticles);
-    const ghostPosY = storageBuffer('ghostPosY', FLOAT_SIZE, maxParticles);
-    const ghostVelWX = storageBuffer('ghostVelWX', FLOAT_SIZE, maxParticles);
-    const ghostVelWY = storageBuffer('ghostVelWY', FLOAT_SIZE, maxParticles);
-    const ghostAngW = storageBuffer('ghostAngW', FLOAT_SIZE, maxParticles);
-    const ghostMass = storageBuffer('ghostMass', FLOAT_SIZE, maxParticles);
-    const ghostCharge = storageBuffer('ghostCharge', FLOAT_SIZE, maxParticles);
-    const ghostFlags = storageBuffer('ghostFlags', UINT_SIZE, maxParticles);
-    const ghostRadius = storageBuffer('ghostRadius', FLOAT_SIZE, maxParticles);
+    // Ghost output struct buffers (separate from particle buffers to avoid aliasing)
+    // After dispatch, ghost data is copied into the main arrays at offset aliveCount.
+    const ghostState = storageBuffer('ghostState', PARTICLE_STATE_SIZE, maxParticles);
+    const ghostAux = storageBuffer('ghostAux', PARTICLE_AUX_SIZE, maxParticles);
     const ghostDerived = storageBuffer('ghostDerived', DERIVED_SIZE, maxParticles);
-    const ghostParticleId = storageBuffer('ghostParticleId', UINT_SIZE, maxParticles);
 
     // Ghost original index mapping (which alive particle each ghost copies)
     const ghostOriginalIdx = storageBuffer('ghostOriginalIdx', UINT_SIZE, maxParticles);
@@ -159,23 +163,18 @@ export function createParticleBuffers(device, maxParticles) {
     });
 
     // ── Collision buffers (Phase 3: collision detection/resolution) ──
-    // Collision pair append buffer: stores (idx1, idx2) pairs found by broadphase
-    // Max pairs = MAX_PARTICLES (generous upper bound)
     const collisionPairBuffer = device.createBuffer({
         label: 'collisionPairs',
-        size: 8 * maxParticles, // u32 pairs: (idx1, idx2) = 8 bytes each
+        size: 8 * maxParticles,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // Collision pair counter (atomic u32)
     const collisionPairCounter = device.createBuffer({
         label: 'collisionPairCounter',
         size: 4,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
 
-    // Merge results buffer: stores merge/annihilation events for post-processing
-    // Each event: { x, y, energy, type } = 16 bytes
     const mergeResultBuffer = device.createBuffer({
         label: 'mergeResults',
         size: 16 * maxParticles,
@@ -188,7 +187,6 @@ export function createParticleBuffers(device, maxParticles) {
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
 
-    // Staging buffers for readback of merge results
     const mergeCountStaging = device.createBuffer({
         label: 'mergeCountStaging',
         size: 4,
@@ -201,12 +199,6 @@ export function createParticleBuffers(device, maxParticles) {
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
 
-    // ── Death metadata buffers (Phase 3: dead particle GC) ──
-    // Written when a particle is retired (merged/annihilated/despawned)
-    const deathTime = storageBuffer('deathTime', FLOAT_SIZE, soaCapacity);
-    const deathMass = storageBuffer('deathMass', FLOAT_SIZE, soaCapacity);
-    const deathAngVel = storageBuffer('deathAngVel', FLOAT_SIZE, soaCapacity);
-
     // Free stack for slot reuse (managed by dead GC shader)
     const freeStack = storageBuffer('freeStack', UINT_SIZE, maxParticles);
     const freeTop = device.createBuffer({
@@ -216,26 +208,7 @@ export function createParticleBuffers(device, maxParticles) {
     });
 
     // ── Phase 4: 1PN velocity-Verlet correction ──
-    // Old 1PN forces for VV correction: vec2<f32> per particle (stored as f32[maxParticles * 2])
     const f1pnOld = storageBuffer('f1pnOld', FLOAT_SIZE, maxParticles * 2);
-
-    // ── Phase 4: Jerk accumulators for radiation ──
-    // Packed jerk vec2 — written by pair-force, read by radiation shader
-    const jerk = storageBuffer('jerk', VEC2_SIZE, maxParticles);
-
-    // ── Phase 4: Radiation accumulators ──
-    // Per-particle energy accumulators for photon/pion emission thresholds
-    const radAccum = storageBuffer('radAccum', FLOAT_SIZE, maxParticles);
-    const hawkAccum = storageBuffer('hawkAccum', FLOAT_SIZE, maxParticles);
-    const yukawaRadAccum = storageBuffer('yukawaRadAccum', FLOAT_SIZE, maxParticles);
-
-    // Radiation display forces (for renderer force arrows)
-    const radDisplayX = storageBuffer('radDisplayX', FLOAT_SIZE, maxParticles);
-    const radDisplayY = storageBuffer('radDisplayY', FLOAT_SIZE, maxParticles);
-
-    // Yukawa force components (separate f32 arrays for radiation shader pion emission)
-    const yukForceX = storageBuffer('yukForceX', FLOAT_SIZE, maxParticles);
-    const yukForceY = storageBuffer('yukForceY', FLOAT_SIZE, maxParticles);
 
     // Max acceleration for adaptive substepping (single u32, atomicMax in force shader)
     const maxAccelBuffer = storageBuffer('maxAccel', UINT_SIZE, 1);
@@ -245,32 +218,22 @@ export function createParticleBuffers(device, maxParticles) {
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
 
-    // ── Boson pool buffers (Phase 4: photon/pion SoA) ──
-    // Photon pool (SoA)
-    const phSize = MAX_PHOTONS * FLOAT_SIZE;
-    const phPosX = device.createBuffer({ size: phSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'phPosX' });
-    const phPosY = device.createBuffer({ size: phSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'phPosY' });
-    const phVelX = device.createBuffer({ size: phSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'phVelX' });
-    const phVelY = device.createBuffer({ size: phSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'phVelY' });
-    const phEnergy = device.createBuffer({ size: phSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'phEnergy' });
-    const phEmitterId = device.createBuffer({ size: MAX_PHOTONS * UINT_SIZE, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'phEmitterId' });
-    const phAge = device.createBuffer({ size: MAX_PHOTONS * UINT_SIZE, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'phAge' }); // u32
-    const phFlags = device.createBuffer({ size: MAX_PHOTONS * UINT_SIZE, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'phFlags' }); // u32: alive, type (em/grav)
-    const phCount = device.createBuffer({ size: 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, label: 'phCount' }); // atomic<u32>
+    // ── Boson pool buffers (Phase 4: packed photon/pion structs) ──
+    // Photon pool: array<Photon, MAX_PHOTONS> (32 bytes each)
+    const photonPool = storageBuffer('photonPool', PHOTON_SIZE, MAX_PHOTONS);
+    const phCount = device.createBuffer({
+        size: 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+        label: 'phCount',
+    }); // atomic<u32>
 
-    // Pion pool (SoA)
-    const piSize = MAX_PIONS * FLOAT_SIZE;
-    const piPosX = device.createBuffer({ size: piSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'piPosX' });
-    const piPosY = device.createBuffer({ size: piSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'piPosY' });
-    const piWX = device.createBuffer({ size: piSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'piWX' }); // proper velocity
-    const piWY = device.createBuffer({ size: piSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'piWY' });
-    const piMass = device.createBuffer({ size: piSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'piMass' });
-    const piCharge = device.createBuffer({ size: MAX_PIONS * UINT_SIZE, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'piCharge' }); // i32: +1, -1, 0
-    const piEnergy = device.createBuffer({ size: piSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'piEnergy' });
-    const piEmitterId = device.createBuffer({ size: MAX_PIONS * UINT_SIZE, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'piEmitterId' });
-    const piAge = device.createBuffer({ size: MAX_PIONS * UINT_SIZE, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'piAge' }); // u32
-    const piFlags = device.createBuffer({ size: MAX_PIONS * UINT_SIZE, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: 'piFlags' }); // u32: alive
-    const piCount = device.createBuffer({ size: 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, label: 'piCount' }); // atomic<u32>
+    // Pion pool: array<Pion, MAX_PIONS> (48 bytes each)
+    const pionPool = storageBuffer('pionPool', PION_SIZE, MAX_PIONS);
+    const piCount = device.createBuffer({
+        size: 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+        label: 'piCount',
+    }); // atomic<u32>
 
     // ── Boson tree buffers (Phase 4: boson gravity BH tree) ──
     const MAX_BOSON_NODES = (MAX_PHOTONS + MAX_PIONS) * 6;
@@ -287,14 +250,16 @@ export function createParticleBuffers(device, maxParticles) {
     return {
         maxParticles,
         soaCapacity,
-        // Core state
-        posX, posY, velWX, velWY, angW, mass, baseMass, charge,
+        // Packed particle structs
+        particleState, particleAux,
         // Derived (packed struct)
-        radius, derived, axYukMod,
-        // Metadata
-        flags, color, particleId,
+        derived, axYukMod,
+        // Color (separate — renderer only)
+        color,
         // Forces (packed AllForces struct)
         allForces,
+        // Radiation (packed RadiationState struct)
+        radiationState,
         // Pool
         poolMgmt,
         // Stats
@@ -303,9 +268,7 @@ export function createParticleBuffers(device, maxParticles) {
         maxAccelBuffer, maxAccelStaging,
         // Ghost generation
         ghostCounter, ghostOriginalIdx, ghostCountStaging,
-        ghostPosX, ghostPosY, ghostVelWX, ghostVelWY, ghostAngW,
-        ghostMass, ghostCharge, ghostFlags,
-        ghostRadius, ghostDerived, ghostParticleId,
+        ghostState, ghostAux, ghostDerived,
         // Quadtree (Phase 3)
         qtNodeBuffer, qtNodeCounter, qtBoundsBuffer, qtVisitorFlags,
         QT_MAX_NODES,
@@ -313,20 +276,15 @@ export function createParticleBuffers(device, maxParticles) {
         collisionPairBuffer, collisionPairCounter,
         mergeResultBuffer, mergeResultCounter,
         mergeCountStaging, mergeResultStaging,
-        // Death metadata (Phase 3: dead particle GC)
-        deathTime, deathMass, deathAngVel,
+        // Free stack (Phase 3: dead particle GC)
         freeStack, freeTop,
         // 1PN VV correction (Phase 4)
         f1pnOld,
-        // Jerk (packed vec2) + radiation accumulators (Phase 4)
-        jerk,
-        radAccum, hawkAccum, yukawaRadAccum,
-        radDisplayX, radDisplayY, yukForceX, yukForceY,
-        // Photon pool (Phase 4)
-        phPosX, phPosY, phVelX, phVelY, phEnergy, phEmitterId, phAge, phFlags, phCount,
+        // Photon pool (Phase 4, packed struct)
+        photonPool, phCount,
         MAX_PHOTONS,
-        // Pion pool (Phase 4)
-        piPosX, piPosY, piWX, piWY, piMass, piCharge, piEnergy, piEmitterId, piAge, piFlags, piCount,
+        // Pion pool (Phase 4, packed struct)
+        pionPool, piCount,
         MAX_PIONS,
         // Boson tree (Phase 4)
         bosonTreeNodes, bosonTreeCounter, MAX_BOSON_NODES,
@@ -527,7 +485,11 @@ export function createPairProductionBuffers(device, maxEvents = 32) {
     };
 }
 
-export { FIELD_GRID_RES, FIELD_GRID_SQ, COARSE_RES, COARSE_SQ, PQS_STENCIL_SIZE };
+export {
+    FIELD_GRID_RES, FIELD_GRID_SQ, COARSE_RES, COARSE_SQ, PQS_STENCIL_SIZE,
+    PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE,
+    PHOTON_SIZE, PION_SIZE, DERIVED_SIZE, VEC2_SIZE, ALLFORCES_SIZE,
+};
 
 /**
  * Create the uniform buffer for simulation parameters.
