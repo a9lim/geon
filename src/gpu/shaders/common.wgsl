@@ -169,7 +169,7 @@ struct Photon {
     posX: f32, posY: f32,
     velX: f32, velY: f32,
     energy: f32,
-    emitterId: u32, age: u32, flags: u32,
+    emitterId: u32, lifetime: f32, flags: u32,
 };
 
 // Packed pion pool entry.

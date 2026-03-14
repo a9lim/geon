@@ -17,6 +17,7 @@ const MAX_PHOTONS: u32 = 1024u;
 const MAX_PIONS: u32 = 256u;
 const MAX_SPEED_RATIO: f32 = 0.9999;
 const INERTIA_K: f32 = 0.4;
+const BH_NAKED_FLOOR: f32 = 0.5;
 
 // PCG hash RNG (high quality, replaces sin-based LCG)
 fn pcgHash(seed: u32) -> u32 {
@@ -89,7 +90,7 @@ struct Photon {
     posX: f32, posY: f32,
     velX: f32, velY: f32,
     energy: f32,
-    emitterId: u32, age: u32, flags: u32,
+    emitterId: u32, lifetime: f32, flags: u32,
 };
 
 struct Pion {
@@ -286,7 +287,7 @@ fn lamrorRadiation(@builtin(global_invocation_id) gid: vec3u) {
             ph.velX = cosA; ph.velY = sinA;
             ph.energy = rs.radAccum;
             ph.emitterId = particleAux[i].particleId;
-            ph.age = 0u; ph.flags = 1u;
+            ph.lifetime = 0.0; ph.flags = 1u;
             photons[phIdx] = ph;
             rs.radAccum = 0.0;
         } else {
@@ -333,10 +334,21 @@ fn hawkingRadiation(@builtin(global_invocation_id) gid: vec3u) {
     if (dE <= 0.0) { return; }
 
     particles[i].mass -= dE;
-    var drd = derived[i];
-    drd.invMass = 1.0 / particles[i].mass;
-    derived[i] = drd;
     particles[i].baseMass *= 1.0 - dE / (particles[i].mass + dE);
+
+    // Update derived state after mass loss (match CPU integrator.js Hawking path)
+    let newM = particles[i].mass;
+    let newBodyRSq = pow(newM, 2.0 / 3.0);
+    let newAngVel = particles[i].angW / sqrt(1.0 + particles[i].angW * particles[i].angW * newBodyRSq);
+    let newA = INERTIA_K * newBodyRSq * abs(newAngVel);
+    let newDisc = newM * newM - newA * newA - Q * Q;
+    let newRadius = select(newM * BH_NAKED_FLOOR, newM + sqrt(max(0.0, newDisc)), newDisc >= 0.0);
+
+    var drd = derived[i];
+    drd.invMass = 1.0 / newM;
+    drd.radiusSq = newRadius * newRadius;
+    derived[i] = drd;
+    particleAux[i].radius = newRadius;
 
     var rs = radState[i];
     rs.hawkAccum += dE;
@@ -347,14 +359,14 @@ fn hawkingRadiation(@builtin(global_invocation_id) gid: vec3u) {
             // Isotropic emission with pseudo-random angle
             let angle = pcgRand((i * 12345u) ^ u.frameCount) * 6.2831853;
             let cosA = cos(angle); let sinA = sin(angle);
-            let offset = max(particleAux[i].radius * 1.5, 1.0);
+            let offset = max(newRadius * 1.5, 1.0);
             var ph: Photon;
             ph.posX = particles[i].posX + cosA * offset;
             ph.posY = particles[i].posY + sinA * offset;
             ph.velX = cosA; ph.velY = sinA;
             ph.energy = rs.hawkAccum;
             ph.emitterId = particleAux[i].particleId;
-            ph.age = 0u; ph.flags = 1u;
+            ph.lifetime = 0.0; ph.flags = 1u;
             photons[phIdx] = ph;
             rs.hawkAccum = 0.0;
         } else { atomicSub(&phCount, 1u); }
