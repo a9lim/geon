@@ -36,7 +36,7 @@
  *  - deadParticleGC           (Phase 3)
  *  - recordHistory            (Phase 4 — every HISTORY_STRIDE frames)
  */
-import { createParticleBuffers, createUniformBuffer, writeUniforms, createFieldBuffers, createPQSScratchBuffer, createPQSIndexBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createPairProductionBuffers, FIELD_GRID_RES, COARSE_RES, COARSE_SQ } from './gpu-buffers.js';
+import { createParticleBuffers, createUniformBuffer, writeUniforms, createFieldBuffers, createPQSScratchBuffer, createPQSIndexBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createPairProductionBuffers, FIELD_GRID_RES, COARSE_RES, COARSE_SQ, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
 import { createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldSelfGravPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createPairProductionPipeline } from './gpu-pipelines.js';
 
 const MAX_PARTICLES = 4096;
@@ -209,11 +209,6 @@ export default class GPUPhysics {
             entries: [
                 { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
                 { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-                { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-                { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-                { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-                { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-                { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             ],
         });
 
@@ -228,12 +223,7 @@ export default class GPUPhysics {
             layout: boundaryBindGroupLayout,
             entries: [
                 { binding: 0, resource: { buffer: this.uniformBuffer } },
-                { binding: 1, resource: { buffer: this.buffers.posX } },
-                { binding: 2, resource: { buffer: this.buffers.posY } },
-                { binding: 3, resource: { buffer: this.buffers.velWX } },
-                { binding: 4, resource: { buffer: this.buffers.velWY } },
-                { binding: 5, resource: { buffer: this.buffers.flags } },
-                { binding: 6, resource: { buffer: this.buffers.angW } },
+                { binding: 1, resource: { buffer: this.buffers.particleState } },
             ],
         });
 
@@ -287,47 +277,43 @@ export default class GPUPhysics {
         this._bg_resetForces = bg('resetForces', p2.resetForces.bindGroupLayouts[0],
             [this.uniformBuffer, b.allForces]);
 
-        // cacheDerived: uniforms + inputs + packed outputs (derived replaces magAngMom+invMassRadSq+vel+angVel, gamma removed)
+        // cacheDerived: uniforms + particleState (packed) + derived + particleAux
         this._bg_cacheDerived = bg('cacheDerived', p2.cacheDerived.bindGroupLayouts[0],
-            [this.uniformBuffer, b.mass, b.velWX, b.velWY, b.angW, b.charge,
-             b.radius, b.derived, b.flags]);
+            [this.uniformBuffer, b.particleState, b.derived, b.particleAux]);
 
-        // pairForce: 4 bind groups (packed: derived, axYukMod, allForces, jerk)
+        // pairForce: 4 bind groups (packed structs)
         this._bg_pairForce0 = bg('pairForce_g0', p2.pairForce.bindGroupLayouts[0],
             [this.uniformBuffer]);
         this._bg_pairForce1 = bg('pairForce_g1', p2.pairForce.bindGroupLayouts[1],
-            [b.posX, b.posY, b.mass, b.charge, b.derived, b.axYukMod, b.flags]);
+            [b.particleState, b.derived, b.axYukMod]);
         this._bg_pairForce2 = bg('pairForce_g2', p2.pairForce.bindGroupLayouts[2],
             [b.allForces]);
         this._bg_pairForce3 = bg('pairForce_g3', p2.pairForce.bindGroupLayouts[3],
-            [b.jerk, b.maxAccelBuffer]);
+            [b.radiationState, b.maxAccelBuffer]);
 
-        // externalFields (packed allForces)
+        // externalFields (packed particleState + allForces)
         this._bg_extFields = bg('extFields', p2.externalFields.bindGroupLayouts[0],
-            [this.uniformBuffer, b.mass, b.charge, b.flags, b.allForces]);
+            [this.uniformBuffer, b.particleState, b.allForces]);
 
-        // borisHalfKick (reads totalForce from allForces)
+        // borisHalfKick (reads from particleState + allForces)
         this._bg_halfKick = bg('halfKick', p2.borisHalfKick.bindGroupLayouts[0],
-            [this.uniformBuffer, b.velWX, b.velWY, b.mass, b.allForces,
-             b.flags]);
+            [this.uniformBuffer, b.particleState, b.allForces]);
 
-        // borisRotate (reads bFields from allForces)
+        // borisRotate (reads from particleState + allForces)
         this._bg_rotate = bg('rotate', p2.borisRotate.bindGroupLayouts[0],
-            [this.uniformBuffer, b.velWX, b.velWY, b.charge, b.mass, b.allForces, b.flags]);
+            [this.uniformBuffer, b.particleState, b.allForces]);
 
-        // borisDrift (writes vel to derived)
+        // borisDrift (writes vel to derived, reads/writes particleState)
         this._bg_drift = bg('drift', p2.borisDrift.bindGroupLayouts[0],
-            [this.uniformBuffer, b.posX, b.posY, b.velWX, b.velWY, b.flags,
-             b.derived]);
+            [this.uniformBuffer, b.particleState, b.derived]);
 
-        // spinOrbit (packed derived, allForces)
+        // spinOrbit (packed particleState, derived, allForces)
         this._bg_spinOrbit = bg('spinOrbit', p2.spinOrbit.bindGroupLayouts[0],
-            [this.uniformBuffer, b.velWX, b.velWY, b.angW, b.mass, b.charge,
-             b.radius, b.derived, b.flags, b.allForces]);
+            [this.uniformBuffer, b.particleState, b.derived, b.allForces]);
 
-        // applyTorques (reads torques from allForces, writes angVel to derived)
+        // applyTorques (reads from particleState, allForces, writes derived)
         this._bg_torques = bg('torques', p2.applyTorques.bindGroupLayouts[0],
-            [this.uniformBuffer, b.angW, b.mass, b.radius, b.allForces, b.flags, b.derived]);
+            [this.uniformBuffer, b.particleState, b.allForces, b.derived]);
     }
 
     /**
@@ -345,22 +331,13 @@ export default class GPUPhysics {
                 entries: entries.map((buf, i) => ({ binding: i, resource: { buffer: buf } })),
             });
 
-        // Group 0: read-only particle SoA inputs
+        // Group 0: read-only particle state (packed struct)
         const group0 = bg('ghostGen_g0', layouts[0],
-            [b.posX, b.posY, b.velWX, b.velWY, b.angW, b.mass, b.charge, b.flags]);
+            [b.particleState]);
 
-        // Group 1: ghost output SoA (dedicated ghost buffers to avoid aliasing)
-        //   bindings 0-7: ghost output (read-write)
-        //   bindings 8-9: particle derived inputs (read-only, packed magAngMom)
-        //   bindings 10-11: ghost derived output (read-write, packed ghostMagAngMom)
-        //   binding 12: particle ID input (read-only)
-        //   binding 13: ghost particle ID output (read-write)
+        // Group 1: ghost output + derived inputs/outputs + aux
         const group1 = bg('ghostGen_g1', layouts[1],
-            [b.ghostPosX, b.ghostPosY, b.ghostVelWX, b.ghostVelWY,
-             b.ghostAngW, b.ghostMass, b.ghostCharge, b.ghostFlags,
-             b.radius, b.derived,
-             b.ghostRadius, b.ghostDerived,
-             b.particleId, b.ghostParticleId]);
+            [b.ghostState, b.ghostAux, b.derived, b.ghostDerived, b.particleAux]);
 
         // Group 2: ghostCounter + uniforms + ghostOriginalIdx
         const group2 = bg('ghostGen_g2', layouts[2],
@@ -391,27 +368,23 @@ export default class GPUPhysics {
         pass.dispatchWorkgroups(Math.ceil(this.aliveCount / 64));
         pass.end();
 
-        // Copy ghost data from dedicated buffers into main SoA arrays at offset aliveCount.
+        // Copy ghost data from dedicated buffers into main arrays at offset aliveCount.
         // Uses previous frame's ghost count for copy size (1-frame latency, safe for tree build).
         const ghostCount = this._ghostCount;
         if (ghostCount > 0) {
-            const ghostBytes = ghostCount * 4;
-            const offset = this.aliveCount * 4;
             const b = this.buffers;
-            encoder.copyBufferToBuffer(b.ghostPosX, 0, b.posX, offset, ghostBytes);
-            encoder.copyBufferToBuffer(b.ghostPosY, 0, b.posY, offset, ghostBytes);
-            encoder.copyBufferToBuffer(b.ghostVelWX, 0, b.velWX, offset, ghostBytes);
-            encoder.copyBufferToBuffer(b.ghostVelWY, 0, b.velWY, offset, ghostBytes);
-            encoder.copyBufferToBuffer(b.ghostAngW, 0, b.angW, offset, ghostBytes);
-            encoder.copyBufferToBuffer(b.ghostMass, 0, b.mass, offset, ghostBytes);
-            encoder.copyBufferToBuffer(b.ghostCharge, 0, b.charge, offset, ghostBytes);
-            encoder.copyBufferToBuffer(b.ghostFlags, 0, b.flags, offset, ghostBytes);
-            encoder.copyBufferToBuffer(b.ghostRadius, 0, b.radius, offset, ghostBytes);
-            // ghostDerived is ParticleDerived struct (32 bytes per element)
-            const derivedOffset = this.aliveCount * 32;
-            const derivedBytes = ghostCount * 32;
+            // Copy packed ParticleState structs (36 bytes per element)
+            const stateOffset = this.aliveCount * PARTICLE_STATE_SIZE;
+            const stateBytes = ghostCount * PARTICLE_STATE_SIZE;
+            encoder.copyBufferToBuffer(b.ghostState, 0, b.particleState, stateOffset, stateBytes);
+            // Copy packed ParticleAux structs (20 bytes per element)
+            const auxOffset = this.aliveCount * PARTICLE_AUX_SIZE;
+            const auxBytes = ghostCount * PARTICLE_AUX_SIZE;
+            encoder.copyBufferToBuffer(b.ghostAux, 0, b.particleAux, auxOffset, auxBytes);
+            // Copy ParticleDerived structs (32 bytes per element)
+            const derivedOffset = this.aliveCount * DERIVED_SIZE;
+            const derivedBytes = ghostCount * DERIVED_SIZE;
             encoder.copyBufferToBuffer(b.ghostDerived, 0, b.derived, derivedOffset, derivedBytes);
-            encoder.copyBufferToBuffer(b.ghostParticleId, 0, b.particleId, offset, ghostBytes);
         }
     }
 
@@ -434,19 +407,13 @@ export default class GPUPhysics {
             ],
         });
 
-        // Group 1: particle SoA inputs (read-only)
+        // Group 1: particle state (packed struct) + derived
         this._treeBuildBG1 = this.device.createBindGroup({
             label: 'treeBuild_g1',
             layout: layouts[1],
             entries: [
-                { binding: 0, resource: { buffer: b.posX } },
-                { binding: 1, resource: { buffer: b.posY } },
-                { binding: 2, resource: { buffer: b.velWX } },
-                { binding: 3, resource: { buffer: b.velWY } },
-                { binding: 4, resource: { buffer: b.mass } },
-                { binding: 5, resource: { buffer: b.charge } },
-                { binding: 6, resource: { buffer: b.derived } },
-                { binding: 7, resource: { buffer: b.flags } },
+                { binding: 0, resource: { buffer: b.particleState } },
+                { binding: 1, resource: { buffer: b.derived } },
             ],
         });
 
@@ -479,34 +446,27 @@ export default class GPUPhysics {
             ],
         });
 
-        // Group 1: particle SoA (matches shader @group(1) bindings 0-13, packed derived + axYukMod)
+        // Group 1: packed particle structs + derived + axYukMod
         this._treeForceGroup1 = this.device.createBindGroup({
             label: 'treeForce_g1',
             layout: layouts[1],
             entries: [
-                { binding: 0, resource: { buffer: b.posX } },
-                { binding: 1, resource: { buffer: b.posY } },
-                { binding: 2, resource: { buffer: b.velWX } },
-                { binding: 3, resource: { buffer: b.velWY } },
-                { binding: 4, resource: { buffer: b.mass } },
-                { binding: 5, resource: { buffer: b.charge } },
-                { binding: 6, resource: { buffer: b.angW } },
-                { binding: 7, resource: { buffer: b.flags } },
-                { binding: 8, resource: { buffer: b.radius } },
-                { binding: 9, resource: { buffer: b.derived } },
-                { binding: 10, resource: { buffer: b.axYukMod } },
-                { binding: 11, resource: { buffer: b.particleId } },
-                { binding: 12, resource: { buffer: b.ghostOriginalIdx } },
-                { binding: 13, resource: { buffer: b.deathMass } },
+                { binding: 0, resource: { buffer: b.particleState } },
+                { binding: 1, resource: { buffer: b.particleAux } },
+                { binding: 2, resource: { buffer: b.derived } },
+                { binding: 3, resource: { buffer: b.axYukMod } },
+                { binding: 4, resource: { buffer: b.ghostOriginalIdx } },
             ],
         });
 
-        // Group 2: allForces (packed)
+        // Group 2: allForces + radiationState + maxAccel
         this._treeForceGroup2 = this.device.createBindGroup({
             label: 'treeForce_g2',
             layout: layouts[2],
             entries: [
                 { binding: 0, resource: { buffer: b.allForces } },
+                { binding: 1, resource: { buffer: b.radiationState } },
+                { binding: 2, resource: { buffer: b.maxAccelBuffer } },
             ],
         });
     }
@@ -528,27 +488,18 @@ export default class GPUPhysics {
             ],
         });
 
-        // Group 1: particle SoA (12 bindings)
+        // Group 1: packed particle structs + ghost mapping
         this._collisionBG1 = this.device.createBindGroup({
             label: 'collision_g1',
             layout: layouts[1],
             entries: [
-                { binding: 0, resource: { buffer: b.posX } },
-                { binding: 1, resource: { buffer: b.posY } },
-                { binding: 2, resource: { buffer: b.velWX } },
-                { binding: 3, resource: { buffer: b.velWY } },
-                { binding: 4, resource: { buffer: b.angW } },
-                { binding: 5, resource: { buffer: b.mass } },
-                { binding: 6, resource: { buffer: b.baseMass } },
-                { binding: 7, resource: { buffer: b.charge } },
-                { binding: 8, resource: { buffer: b.flags } },
-                { binding: 9, resource: { buffer: b.radius } },
-                { binding: 10, resource: { buffer: b.particleId } },
-                { binding: 11, resource: { buffer: b.ghostOriginalIdx } },
+                { binding: 0, resource: { buffer: b.particleState } },
+                { binding: 1, resource: { buffer: b.particleAux } },
+                { binding: 2, resource: { buffer: b.ghostOriginalIdx } },
             ],
         });
 
-        // Group 2: collision pairs + counters + merge results + death metadata
+        // Group 2: collision pairs + counters + merge results
         this._collisionBG2 = this.device.createBindGroup({
             label: 'collision_g2',
             layout: layouts[2],
@@ -557,9 +508,6 @@ export default class GPUPhysics {
                 { binding: 1, resource: { buffer: b.collisionPairCounter } },
                 { binding: 2, resource: { buffer: b.mergeResultBuffer } },
                 { binding: 3, resource: { buffer: b.mergeResultCounter } },
-                { binding: 4, resource: { buffer: b.deathTime } },
-                { binding: 5, resource: { buffer: b.deathMass } },
-                { binding: 6, resource: { buffer: b.deathAngVel } },
             ],
         });
     }
@@ -573,8 +521,8 @@ export default class GPUPhysics {
             label: 'deadGC_g0',
             layout: layouts[0],
             entries: [
-                { binding: 0, resource: { buffer: b.flags } },
-                { binding: 1, resource: { buffer: b.deathTime } },
+                { binding: 0, resource: { buffer: b.particleState } },
+                { binding: 1, resource: { buffer: b.particleAux } },
                 { binding: 2, resource: { buffer: this.uniformBuffer } },
                 { binding: 3, resource: { buffer: b.freeStack } },
                 { binding: 4, resource: { buffer: b.freeTop } },
@@ -598,7 +546,7 @@ export default class GPUPhysics {
         // ── recordHistory ──
         // Bind groups created lazily when history buffers are allocated
         this._phase4BindGroups.historyG0Buffers = [
-            this.uniformBuffer, b.posX, b.posY, b.velWX, b.velWY, b.angW, b.flags,
+            this.uniformBuffer, b.particleState,
         ];
         this._phase4BindGroups.historyG0 = null; // lazy
         this._phase4BindGroups.historyG1 = null; // lazy
@@ -607,39 +555,32 @@ export default class GPUPhysics {
         this._phase4BindGroups.onePNG0 = bg('onePN_g0', p4.compute1PN.bindGroupLayouts[0],
             [this.uniformBuffer]);
         this._phase4BindGroups.onePNG1 = bg('onePN_g1', p4.compute1PN.bindGroupLayouts[1],
-            [b.posX, b.posY, b.velWX, b.velWY, b.mass, b.charge, b.flags, b.axYukMod, b.derived]);
+            [b.particleState, b.derived, b.axYukMod]);
         this._phase4BindGroups.onePNG2 = bg('onePN_g2', p4.compute1PN.bindGroupLayouts[2],
-            [b.allForces, b.f1pnOld, b.velWX, b.velWY]);
+            [b.allForces, b.f1pnOld, b.particleState]);
 
         // ── Radiation (lamrorRadiation, hawkingRadiation, pionEmission share bind groups) ──
         this._phase4BindGroups.radG0 = bg('radiation_g0', p4.lamrorRadiation.bindGroupLayouts[0],
             [this.uniformBuffer]);
-        // Group 1: particle state (17 bindings)
-        // binding 14: jerkInterleaved [x0,y0,x1,y1...]
-        // bindings 15-16: separate yukForceX/Y buffers
+        // Group 1: packed particle state + aux + derived + allForces + radiationState + axYukMod
         this._phase4BindGroups.radG1 = bg('radiation_g1', p4.lamrorRadiation.bindGroupLayouts[1],
-            [b.posX, b.posY, b.velWX, b.velWY, b.mass, b.charge, b.flags,
-             b.derived, b.baseMass, b.radius, b.angW, b.particleId,
-             b.allForces, b.jerk,
-             b.yukForceX, b.yukForceY]);
+            [b.particleState, b.particleAux, b.derived, b.allForces, b.radiationState, b.axYukMod]);
+        // Group 2: photon pool (packed) + phCount
         this._phase4BindGroups.radG2 = bg('radiation_g2', p4.lamrorRadiation.bindGroupLayouts[2],
-            [b.radAccum, b.hawkAccum, b.yukawaRadAccum, b.radDisplayX, b.radDisplayY]);
-        // Group 3: photon pool (9) + pion pool (11) + charge_rw (1) = 21 bindings
+            [b.photonPool, b.phCount]);
+        // Group 3: pion pool (packed) + piCount
         this._phase4BindGroups.radG3 = bg('radiation_g3', p4.lamrorRadiation.bindGroupLayouts[3],
-            [b.phPosX, b.phPosY, b.phVelX, b.phVelY, b.phEnergy, b.phEmitterId, b.phAge, b.phFlags, b.phCount,
-             b.piPosX, b.piPosY, b.piWX, b.piWY, b.piMass, b.piCharge, b.piEnergy, b.piEmitterId, b.piAge, b.piFlags, b.piCount,
-             b.charge]);
+            [b.pionPool, b.piCount]);
 
         // ── Bosons (updatePhotons, updatePions, absorbPhotons, absorbPions, decayPions) ──
         this._phase4BindGroups.bosG0 = bg('bosons_g0', p4.updatePhotons.bindGroupLayouts[0],
             [this.uniformBuffer, b.poolMgmt]);
         this._phase4BindGroups.bosG1 = bg('bosons_g1', p4.updatePhotons.bindGroupLayouts[1],
-            [b.posX, b.posY, b.mass, b.radius, b.flags, b.particleId,
-             b.velWX, b.velWY, b.charge, b.baseMass, b.angW]);
+            [b.particleState, b.particleAux]);
         this._phase4BindGroups.bosG2 = bg('bosons_g2', p4.updatePhotons.bindGroupLayouts[2],
-            [b.phPosX, b.phPosY, b.phVelX, b.phVelY, b.phEnergy, b.phEmitterId, b.phAge, b.phFlags, b.phCount]);
+            [b.photonPool, b.phCount]);
         this._phase4BindGroups.bosG3 = bg('bosons_g3', p4.updatePhotons.bindGroupLayouts[3],
-            [b.piPosX, b.piPosY, b.piWX, b.piWY, b.piMass, b.piCharge, b.piEnergy, b.piEmitterId, b.piAge, b.piFlags, b.piCount]);
+            [b.pionPool, b.piCount]);
 
         // ── Boson Tree (insertBosonsIntoTree, computeBosonAggregates, computeBosonGravity, applyBosonBosonGravity) ──
         this._phase4BindGroups.btG0 = bg('bosonTree_g0', p4.insertBosonsIntoTree.bindGroupLayouts[0],
@@ -647,11 +588,11 @@ export default class GPUPhysics {
         this._phase4BindGroups.btG1 = bg('bosonTree_g1', p4.insertBosonsIntoTree.bindGroupLayouts[1],
             [b.bosonTreeNodes, b.bosonTreeCounter]);
         this._phase4BindGroups.btG2 = bg('bosonTree_g2', p4.insertBosonsIntoTree.bindGroupLayouts[2],
-            [b.phPosX, b.phPosY, b.phVelX, b.phVelY, b.phEnergy, b.phFlags, b.phCount]);
+            [b.photonPool, b.phCount]);
         this._phase4BindGroups.btG3 = bg('bosonTree_g3', p4.insertBosonsIntoTree.bindGroupLayouts[3],
-            [b.piPosX, b.piPosY, b.piWX, b.piWY, b.piMass, b.piFlags, b.piCount]);
+            [b.pionPool, b.piCount]);
         this._phase4BindGroups.btG4 = bg('bosonTree_g4', p4.insertBosonsIntoTree.bindGroupLayouts[4],
-            [b.posX, b.posY, b.mass, b.flags, b.allForces]);
+            [b.particleState, b.allForces]);
     }
 
     /**
@@ -672,7 +613,7 @@ export default class GPUPhysics {
             });
 
         this._phase4BindGroups.historyG0 = bg('history_g0', p4.recordHistory.bindGroupLayouts[0],
-            [this.uniformBuffer, b.posX, b.posY, b.velWX, b.velWY, b.angW, b.flags]);
+            [this.uniformBuffer, b.particleState]);
         this._phase4BindGroups.historyG1 = bg('history_g1', p4.recordHistory.bindGroupLayouts[1],
             [b.histPosX, b.histPosY, b.histVelWX, b.histVelWY, b.histAngW, b.histTime, b.histMeta]);
     }
@@ -1143,28 +1084,38 @@ export default class GPUPhysics {
         const idx = this.aliveCount;
         if (idx >= MAX_PARTICLES) return -1;
 
-        const f32 = new Float32Array([0]);
-        const u32 = new Uint32Array([0]);
+        // Write packed ParticleState struct (36 bytes = 9 × f32/u32)
+        const stateData = new ArrayBuffer(PARTICLE_STATE_SIZE);
+        const stateF32 = new Float32Array(stateData);
+        const stateU32 = new Uint32Array(stateData);
+        stateF32[0] = x;          // posX
+        stateF32[1] = y;          // posY
+        stateF32[2] = vx;         // velWX
+        stateF32[3] = vy;         // velWY
+        stateF32[4] = m;          // mass
+        stateF32[5] = q;          // charge
+        stateF32[6] = 0;          // angW
+        stateF32[7] = m;          // baseMass
+        stateU32[8] = FLAG_ALIVE; // flags
+        this.device.queue.writeBuffer(this.buffers.particleState, idx * PARTICLE_STATE_SIZE, stateData);
 
-        f32[0] = x; this.device.queue.writeBuffer(this.buffers.posX, idx * 4, f32);
-        f32[0] = y; this.device.queue.writeBuffer(this.buffers.posY, idx * 4, f32);
-        f32[0] = vx; this.device.queue.writeBuffer(this.buffers.velWX, idx * 4, f32);
-        f32[0] = vy; this.device.queue.writeBuffer(this.buffers.velWY, idx * 4, f32);
-        f32[0] = 0; this.device.queue.writeBuffer(this.buffers.angW, idx * 4, f32);
-        f32[0] = m; this.device.queue.writeBuffer(this.buffers.mass, idx * 4, f32);
-        f32[0] = m; this.device.queue.writeBuffer(this.buffers.baseMass, idx * 4, f32);
-        f32[0] = q; this.device.queue.writeBuffer(this.buffers.charge, idx * 4, f32);
-        // radius is in its own buffer (read by renderer)
-        if (this.buffers.radius) {
-            f32[0] = Math.cbrt(m); this.device.queue.writeBuffer(this.buffers.radius, idx * 4, f32);
-        }
-        // gamma was packed into particleDerived — computed by cacheDerived shader
-        // No need to init here; cacheDerived runs before forces each substep.
-        u32[0] = FLAG_ALIVE; this.device.queue.writeBuffer(this.buffers.flags, idx * 4, u32);
+        // Write packed ParticleAux struct (20 bytes = 5 × f32/u32)
+        const auxData = new ArrayBuffer(PARTICLE_AUX_SIZE);
+        const auxF32 = new Float32Array(auxData);
+        const auxU32 = new Uint32Array(auxData);
+        auxF32[0] = Math.cbrt(m); // radius
+        auxU32[1] = idx;          // particleId
+        auxF32[2] = Infinity;     // deathTime (not dead)
+        auxF32[3] = 0;            // deathMass
+        auxF32[4] = 0;            // deathAngVel
+        this.device.queue.writeBuffer(this.buffers.particleAux, idx * PARTICLE_AUX_SIZE, auxData);
 
         // Pack color: neutral slate = #8A7E72 -> RGBA
-        u32[0] = 0xFF727E8A; // ABGR packed
+        const u32 = new Uint32Array([0xFF727E8A]); // ABGR packed
         this.device.queue.writeBuffer(this.buffers.color, idx * 4, u32);
+
+        // cacheDerived shader computes derived state before forces each substep.
+        // No need to initialize derived/axYukMod here.
 
         this.aliveCount++;
         return idx;
@@ -1406,19 +1357,12 @@ export default class GPUPhysics {
         const b = this.buffers;
         const dep = this._fieldDeposit;
 
-        // Group 0: particle SoA
+        // Group 0: packed particle state
         const g0 = this.device.createBindGroup({
             label: `fieldDeposit_g0_${which}`,
             layout: dep.bindGroupLayouts[0],
             entries: [
-                { binding: 0, resource: { buffer: b.posX } },
-                { binding: 1, resource: { buffer: b.posY } },
-                { binding: 2, resource: { buffer: b.mass } },
-                { binding: 3, resource: { buffer: b.baseMass } },
-                { binding: 4, resource: { buffer: b.charge } },
-                { binding: 5, resource: { buffer: b.flags } },
-                { binding: 6, resource: { buffer: b.velWX } },
-                { binding: 7, resource: { buffer: b.velWY } },
+                { binding: 0, resource: { buffer: b.particleState } },
             ],
         });
 
@@ -1543,17 +1487,9 @@ export default class GPUPhysics {
             label: 'fieldForces_g0',
             layout: ff.bindGroupLayouts[0],
             entries: [
-                { binding: 0, resource: { buffer: b.posX } },
-                { binding: 1, resource: { buffer: b.posY } },
-                { binding: 2, resource: { buffer: b.mass } },
-                { binding: 3, resource: { buffer: b.baseMass } },
-                { binding: 4, resource: { buffer: b.charge } },
-                { binding: 5, resource: { buffer: b.flags } },
-                { binding: 6, resource: { buffer: b.velWX } },
-                { binding: 7, resource: { buffer: b.velWY } },
-                { binding: 8, resource: { buffer: b.angW } },
-                { binding: 9, resource: { buffer: b.radius } },
-                { binding: 10, resource: { buffer: b.derived } },
+                { binding: 0, resource: { buffer: b.particleState } },
+                { binding: 1, resource: { buffer: b.particleAux } },
+                { binding: 2, resource: { buffer: b.derived } },
             ],
         });
 
@@ -1934,12 +1870,8 @@ export default class GPUPhysics {
                 label: 'expansion_g0',
                 layout: this._expansionPipeline.bindGroupLayouts[0],
                 entries: [
-                    { binding: 0, resource: { buffer: b.posX } },
-                    { binding: 1, resource: { buffer: b.posY } },
-                    { binding: 2, resource: { buffer: b.velWX } },
-                    { binding: 3, resource: { buffer: b.velWY } },
-                    { binding: 4, resource: { buffer: b.flags } },
-                    { binding: 5, resource: { buffer: this._expansionUniformBuffer } },
+                    { binding: 0, resource: { buffer: b.particleState } },
+                    { binding: 1, resource: { buffer: this._expansionUniformBuffer } },
                 ],
             });
         }
@@ -1997,13 +1929,9 @@ export default class GPUPhysics {
                 label: 'disint_g0',
                 layout: this._disintPipeline.bindGroupLayouts[0],
                 entries: [
-                    { binding: 0, resource: { buffer: b.posX } },
-                    { binding: 1, resource: { buffer: b.posY } },
-                    { binding: 2, resource: { buffer: b.mass } },
-                    { binding: 3, resource: { buffer: b.charge } },
-                    { binding: 4, resource: { buffer: b.radius } },
-                    { binding: 5, resource: { buffer: b.derived } },
-                    { binding: 6, resource: { buffer: b.flags } },
+                    { binding: 0, resource: { buffer: b.particleState } },
+                    { binding: 1, resource: { buffer: b.particleAux } },
+                    { binding: 2, resource: { buffer: b.derived } },
                 ],
             });
             const g1 = this.device.createBindGroup({
@@ -2070,23 +1998,15 @@ export default class GPUPhysics {
                 label: 'pairProd_g0',
                 layout: this._pairProdPipeline.bindGroupLayouts[0],
                 entries: [
-                    { binding: 0, resource: { buffer: b.phPosX } },
-                    { binding: 1, resource: { buffer: b.phPosY } },
-                    { binding: 2, resource: { buffer: b.phEnergy } },
-                    { binding: 3, resource: { buffer: b.phVelX } },
-                    { binding: 4, resource: { buffer: b.phVelY } },
-                    { binding: 5, resource: { buffer: b.phAge } },
-                    { binding: 6, resource: { buffer: b.phFlags } },
+                    { binding: 0, resource: { buffer: b.photonPool } },
+                    { binding: 1, resource: { buffer: b.phCount } },
                 ],
             });
             const g1 = this.device.createBindGroup({
                 label: 'pairProd_g1',
                 layout: this._pairProdPipeline.bindGroupLayouts[1],
                 entries: [
-                    { binding: 0, resource: { buffer: b.posX } },
-                    { binding: 1, resource: { buffer: b.posY } },
-                    { binding: 2, resource: { buffer: b.mass } },
-                    { binding: 3, resource: { buffer: b.flags } },
+                    { binding: 0, resource: { buffer: b.particleState } },
                 ],
             });
             const g2 = this.device.createBindGroup({
@@ -2172,11 +2092,7 @@ export default class GPUPhysics {
                     label: 'heatmap_g0',
                     layout: hm.heatmapLayouts[0],
                     entries: [
-                        { binding: 0, resource: { buffer: b.posX } },
-                        { binding: 1, resource: { buffer: b.posY } },
-                        { binding: 2, resource: { buffer: b.mass } },
-                        { binding: 3, resource: { buffer: b.charge } },
-                        { binding: 4, resource: { buffer: b.flags } },
+                        { binding: 0, resource: { buffer: b.particleState } },
                     ],
                 }),
                 g1: this.device.createBindGroup({
@@ -2528,53 +2444,28 @@ export default class GPUPhysics {
      */
     async serialize(sim) {
         const count = this.aliveCount;
-        const byteLen = count * 4;
+        const stateByteLen = count * PARTICLE_STATE_SIZE;
 
-        // Create staging buffers for readback
-        const stagingPosX = this.device.createBuffer({ size: byteLen, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-        const stagingPosY = this.device.createBuffer({ size: byteLen, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-        const stagingWX = this.device.createBuffer({ size: byteLen, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-        const stagingWY = this.device.createBuffer({ size: byteLen, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-        const stagingMass = this.device.createBuffer({ size: byteLen, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-        const stagingBaseMass = this.device.createBuffer({ size: byteLen, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-        const stagingCharge = this.device.createBuffer({ size: byteLen, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-        const stagingAngW = this.device.createBuffer({ size: byteLen, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-        const stagingFlags = this.device.createBuffer({ size: byteLen, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+        // Create staging buffer for packed ParticleState readback
+        const stagingState = this.device.createBuffer({
+            size: stateByteLen,
+            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+        });
 
         const encoder = this.device.createCommandEncoder({ label: 'serialize-readback' });
-        encoder.copyBufferToBuffer(this.buffers.posX, 0, stagingPosX, 0, byteLen);
-        encoder.copyBufferToBuffer(this.buffers.posY, 0, stagingPosY, 0, byteLen);
-        encoder.copyBufferToBuffer(this.buffers.velWX, 0, stagingWX, 0, byteLen);
-        encoder.copyBufferToBuffer(this.buffers.velWY, 0, stagingWY, 0, byteLen);
-        encoder.copyBufferToBuffer(this.buffers.mass, 0, stagingMass, 0, byteLen);
-        encoder.copyBufferToBuffer(this.buffers.baseMass, 0, stagingBaseMass, 0, byteLen);
-        encoder.copyBufferToBuffer(this.buffers.charge, 0, stagingCharge, 0, byteLen);
-        encoder.copyBufferToBuffer(this.buffers.angW, 0, stagingAngW, 0, byteLen);
-        encoder.copyBufferToBuffer(this.buffers.flags, 0, stagingFlags, 0, byteLen);
+        encoder.copyBufferToBuffer(this.buffers.particleState, 0, stagingState, 0, stateByteLen);
         this.device.queue.submit([encoder.finish()]);
 
-        // Map all staging buffers
-        await Promise.all([
-            stagingPosX.mapAsync(GPUMapMode.READ),
-            stagingPosY.mapAsync(GPUMapMode.READ),
-            stagingWX.mapAsync(GPUMapMode.READ),
-            stagingWY.mapAsync(GPUMapMode.READ),
-            stagingMass.mapAsync(GPUMapMode.READ),
-            stagingBaseMass.mapAsync(GPUMapMode.READ),
-            stagingCharge.mapAsync(GPUMapMode.READ),
-            stagingAngW.mapAsync(GPUMapMode.READ),
-            stagingFlags.mapAsync(GPUMapMode.READ),
-        ]);
+        await stagingState.mapAsync(GPUMapMode.READ);
+        const stateRaw = new ArrayBuffer(stateByteLen);
+        new Uint8Array(stateRaw).set(new Uint8Array(stagingState.getMappedRange()));
+        stagingState.unmap();
+        stagingState.destroy();
 
-        const posX = new Float32Array(stagingPosX.getMappedRange());
-        const posY = new Float32Array(stagingPosY.getMappedRange());
-        const wx = new Float32Array(stagingWX.getMappedRange());
-        const wy = new Float32Array(stagingWY.getMappedRange());
-        const mass = new Float32Array(stagingMass.getMappedRange());
-        const baseMass = new Float32Array(stagingBaseMass.getMappedRange());
-        const charge = new Float32Array(stagingCharge.getMappedRange());
-        const angw = new Float32Array(stagingAngW.getMappedRange());
-        const flags = new Uint32Array(stagingFlags.getMappedRange());
+        // Parse packed ParticleState structs (9 × 4 bytes each)
+        const stateF32 = new Float32Array(stateRaw);
+        const stateU32 = new Uint32Array(stateRaw);
+        const STRIDE = PARTICLE_STATE_SIZE / 4; // 9 u32/f32 per particle
 
         const state = {
             version: 1,
@@ -2595,26 +2486,21 @@ export default class GPUPhysics {
         };
 
         for (let i = 0; i < count; i++) {
-            if (!(flags[i] & FLAG_ALIVE)) continue;
+            const base = i * STRIDE;
+            const flags = stateU32[base + 8];
+            if (!(flags & FLAG_ALIVE)) continue;
             state.particles.push({
-                x: posX[i], y: posY[i],
-                wx: wx[i], wy: wy[i],
-                mass: mass[i], baseMass: baseMass[i],
-                charge: charge[i], angw: angw[i],
-                antimatter: !!(flags[i] & FLAG_ANTIMATTER),
+                x: stateF32[base + 0],      // posX
+                y: stateF32[base + 1],      // posY
+                wx: stateF32[base + 2],     // velWX
+                wy: stateF32[base + 3],     // velWY
+                mass: stateF32[base + 4],   // mass
+                charge: stateF32[base + 5], // charge
+                angw: stateF32[base + 6],   // angW
+                baseMass: stateF32[base + 7], // baseMass
+                antimatter: !!(flags & FLAG_ANTIMATTER),
             });
         }
-
-        // Unmap and destroy staging buffers
-        stagingPosX.unmap(); stagingPosX.destroy();
-        stagingPosY.unmap(); stagingPosY.destroy();
-        stagingWX.unmap(); stagingWX.destroy();
-        stagingWY.unmap(); stagingWY.destroy();
-        stagingMass.unmap(); stagingMass.destroy();
-        stagingBaseMass.unmap(); stagingBaseMass.destroy();
-        stagingCharge.unmap(); stagingCharge.destroy();
-        stagingAngW.unmap(); stagingAngW.destroy();
-        stagingFlags.unmap(); stagingFlags.destroy();
 
         // Pack toggle state
         const toggleKeys = [
@@ -2665,26 +2551,44 @@ export default class GPUPhysics {
 
         this.reset();
 
-        // Upload particles to GPU
+        // Upload particles to GPU using packed structs
         for (const pd of state.particles) {
-            this.addParticle({
-                x: pd.x, y: pd.y,
-                vx: pd.wx, vy: pd.wy,
-                mass: pd.mass,
-                charge: pd.charge,
-            });
-            // Set baseMass, angw, antimatter flags for the last added particle
-            const idx = this.aliveCount - 1;
-            const f32 = new Float32Array([0]);
-            const u32 = new Uint32Array([0]);
-            f32[0] = pd.baseMass ?? pd.mass;
-            this.device.queue.writeBuffer(this.buffers.baseMass, idx * 4, f32);
-            f32[0] = pd.angw || 0;
-            this.device.queue.writeBuffer(this.buffers.angW, idx * 4, f32);
-            if (pd.antimatter) {
-                u32[0] = FLAG_ALIVE | FLAG_ANTIMATTER;
-                this.device.queue.writeBuffer(this.buffers.flags, idx * 4, u32);
-            }
+            const idx = this.aliveCount;
+            if (idx >= MAX_PARTICLES) break;
+
+            const m = pd.mass || 1;
+            const bm = pd.baseMass ?? m;
+            const q = pd.charge || 0;
+            const angw = pd.angw || 0;
+            const flagBits = FLAG_ALIVE | (pd.antimatter ? FLAG_ANTIMATTER : 0);
+
+            // Write packed ParticleState struct (36 bytes)
+            const stateData = new ArrayBuffer(PARTICLE_STATE_SIZE);
+            const sf = new Float32Array(stateData);
+            const su = new Uint32Array(stateData);
+            sf[0] = pd.x;    sf[1] = pd.y;
+            sf[2] = pd.wx || 0;  sf[3] = pd.wy || 0;
+            sf[4] = m;        sf[5] = q;
+            sf[6] = angw;     sf[7] = bm;
+            su[8] = flagBits;
+            this.device.queue.writeBuffer(this.buffers.particleState, idx * PARTICLE_STATE_SIZE, stateData);
+
+            // Write packed ParticleAux struct (20 bytes)
+            const auxData = new ArrayBuffer(PARTICLE_AUX_SIZE);
+            const af = new Float32Array(auxData);
+            const au = new Uint32Array(auxData);
+            af[0] = Math.cbrt(m); // radius
+            au[1] = idx;          // particleId
+            af[2] = Infinity;     // deathTime
+            af[3] = 0;            // deathMass
+            af[4] = 0;            // deathAngVel
+            this.device.queue.writeBuffer(this.buffers.particleAux, idx * PARTICLE_AUX_SIZE, auxData);
+
+            // Write color
+            const u32 = new Uint32Array([0xFF727E8A]);
+            this.device.queue.writeBuffer(this.buffers.color, idx * 4, u32);
+
+            this.aliveCount++;
         }
 
         this.syncUniforms();

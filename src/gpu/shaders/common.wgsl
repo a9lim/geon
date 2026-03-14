@@ -132,6 +132,56 @@ struct ParticleDerived {
     _pad: f32,
 };
 
+// ── Packed particle state structs (reduces storage buffer count per shader stage) ──
+
+// Core particle state: position, proper velocity, mass, charge, angW, baseMass, flags.
+// 36 bytes = 9 × f32/u32. Replaces 9 individual SoA buffers → 1.
+struct ParticleState {
+    posX: f32, posY: f32,
+    velWX: f32, velWY: f32,
+    mass: f32, charge: f32, angW: f32,
+    baseMass: f32,
+    flags: u32,
+};
+
+// Auxiliary per-particle metadata: radius, particleId, death state.
+// 20 bytes = 5 × f32/u32. Replaces 5 individual SoA buffers → 1.
+struct ParticleAux {
+    radius: f32,
+    particleId: u32,
+    deathTime: f32,
+    deathMass: f32,
+    deathAngVel: f32,
+};
+
+// Radiation accumulator state per particle.
+// 32 bytes = 8 × f32. Replaces 8 individual SoA buffers → 1.
+struct RadiationState {
+    jerkX: f32, jerkY: f32,
+    radAccum: f32, hawkAccum: f32, yukawaRadAccum: f32,
+    radDisplayX: f32, radDisplayY: f32,
+    _pad: f32,
+};
+
+// Packed photon pool entry.
+// 32 bytes = 8 × f32/u32. Replaces 8 individual SoA buffers → 1.
+struct Photon {
+    posX: f32, posY: f32,
+    velX: f32, velY: f32,
+    energy: f32,
+    emitterId: u32, age: u32, flags: u32,
+};
+
+// Packed pion pool entry.
+// 48 bytes = 12 × f32/u32 (with padding for alignment). Replaces 10 individual SoA buffers → 1.
+struct Pion {
+    posX: f32, posY: f32,
+    wX: f32, wY: f32,
+    mass: f32, charge: i32, energy: f32,
+    emitterId: u32, age: u32, flags: u32,
+    _pad0: u32, _pad1: u32,
+};
+
 // Minimum image displacement for torus topology (most common case).
 // Returns displacement vector from observer at (ox, oy) to source at (sx, sy).
 fn torusMinImage(ox: f32, oy: f32, sx: f32, sy: f32) -> vec2<f32> {
