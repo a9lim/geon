@@ -30,10 +30,10 @@ var<workgroup> tile: array<TileParticle, TILE_SIZE>;
 // Bind group 0: uniforms
 @group(0) @binding(0) var<uniform> uniforms: SimUniforms;
 
-// Bind group 1: particle state (read-only) — 3 bindings
-@group(1) @binding(0) var<storage, read> particles: array<ParticleState>;
-@group(1) @binding(1) var<storage, read> derived: array<ParticleDerived>;
-@group(1) @binding(2) var<storage, read> axYukMod: array<vec2<f32>>;  // packed: axMod, yukMod
+// Bind group 1: particle state (read_write for encoder compat) — 3 bindings
+@group(1) @binding(0) var<storage, read_write> particles: array<ParticleState>;
+@group(1) @binding(1) var<storage, read_write> derived: array<ParticleDerived>;
+@group(1) @binding(2) var<storage, read_write> axYukMod: array<vec2<f32>>;  // packed: axMod, yukMod
 
 // Bind group 2: force accumulators (read_write) — 1 binding
 @group(2) @binding(0) var<storage, read_write> allForces: array<AllForces>;

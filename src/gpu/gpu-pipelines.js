@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 2;
+const SHADER_VERSION = 3;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 async function fetchShader(filename) {
@@ -56,40 +56,40 @@ export async function createPhase2Pipelines(device) {
     ]);
 
     // --- cacheDerived ---
-    // uniforms + particleState (ro) + derived (rw) + particleAux (rw) = 3 storage
+    // uniforms + particleState (rw) + derived (rw) + particleAux (rw) = 3 storage
     const cacheDerived = await makePipeline('cacheDerived', 'cache-derived.wgsl', [
-        ['uniform', 'read-only-storage', 'storage', 'storage'],
+        ['uniform', 'storage', 'storage', 'storage'],
     ]);
 
     // --- pairForce (4 bind groups) ---
     // Group 0: uniforms
-    // Group 1: particleState (ro) + derived (ro) + axYukMod (ro) = 3 storage
+    // Group 1: particleState (rw) + derived (rw) + axYukMod (rw) = 3 storage
     // Group 2: allForces (rw) = 1 storage
     // Group 3: radiationState (rw) + maxAccel (rw) = 2 storage
     // Total: 6 storage buffers per stage
     const pairForce = await makePipeline('pairForce', 'pair-force.wgsl', [
         ['uniform'],
-        ['read-only-storage', 'read-only-storage', 'read-only-storage'],
+        ['storage', 'storage', 'storage'],
         ['storage'],
         ['storage', 'storage'],
     ]);
 
     // --- externalFields ---
-    // uniforms + particleState (ro) + allForces (rw) = 2 storage
+    // uniforms + particleState (rw) + allForces (rw) = 2 storage
     const externalFields = await makePipeline('externalFields', 'external-fields.wgsl', [
-        ['uniform', 'read-only-storage', 'storage'],
+        ['uniform', 'storage', 'storage'],
     ]);
 
     // --- borisHalfKick ---
-    // uniforms + particleState (rw) + allForces (ro) = 2 storage
+    // uniforms + particleState (rw) + allForces (rw) = 2 storage
     const borisHalfKick = await makePipeline('borisHalfKick', 'boris-half-kick.wgsl', [
-        ['uniform', 'storage', 'read-only-storage'],
+        ['uniform', 'storage', 'storage'],
     ]);
 
     // --- borisRotate ---
-    // uniforms + particleState (rw) + allForces (ro) = 2 storage
+    // uniforms + particleState (rw) + allForces (rw) = 2 storage
     const borisRotate = await makePipeline('borisRotate', 'boris-rotate.wgsl', [
-        ['uniform', 'storage', 'read-only-storage'],
+        ['uniform', 'storage', 'storage'],
     ]);
 
     // --- borisDrift ---
@@ -105,9 +105,9 @@ export async function createPhase2Pipelines(device) {
     ]);
 
     // --- applyTorques ---
-    // uniforms + particleState (ro) + allForces (ro) + derived (rw) = 3 storage
+    // uniforms + particleState (rw) + allForces (rw) + derived (rw) = 3 storage
     const applyTorques = await makePipeline('applyTorques', 'apply-torques.wgsl', [
-        ['uniform', 'read-only-storage', 'read-only-storage', 'storage'],
+        ['uniform', 'storage', 'storage', 'storage'],
     ]);
 
     return {
@@ -140,12 +140,12 @@ export async function createTreeBuildPipelines(device) {
         ],
     });
 
-    // Group 1: packed particle state + derived = 2 bindings
+    // Group 1: packed particle state + derived = 2 bindings (rw for encoder compat)
     const group1Layout = device.createBindGroupLayout({
         label: 'treeBuild_group1',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
         ],
     });
 
@@ -208,20 +208,20 @@ export async function createTreeForcePipeline(device) {
     const group0Layout = device.createBindGroupLayout({
         label: 'treeForce_group0',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // nodes (rw for encoder compat)
             { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
         ],
     });
 
-    // Group 1: packed particle structs
+    // Group 1: packed particle structs (rw for encoder compat — shared buffers written by other passes)
     const group1Layout = device.createBindGroupLayout({
         label: 'treeForce_group1',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleState
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleAux
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // derived
-            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // axYukMod
-            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // ghostOriginalIdx
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleState
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleAux
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // derived
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // axYukMod
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // ghostOriginalIdx
         ],
     });
 
@@ -260,18 +260,18 @@ export async function createCollisionPipelines(device) {
     const group0Layout = device.createBindGroupLayout({
         label: 'collision_group0',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // nodes (rw for encoder compat)
             { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
         ],
     });
 
-    // Group 1: packed particle structs (rw for resolve)
+    // Group 1: packed particle structs (rw for resolve + encoder compat)
     const group1Layout = device.createBindGroupLayout({
         label: 'collision_group1',
         entries: [
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleState
             { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleAux
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // ghostOriginalIdx
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // ghostOriginalIdx (rw for encoder compat)
         ],
     });
 
@@ -317,7 +317,7 @@ export async function createDeadGCPipeline(device) {
         label: 'deadGC_group0',
         entries: [
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleState (flags)
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleAux (deathTime)
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleAux (rw for encoder compat)
             { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
             { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
@@ -347,7 +347,7 @@ export async function createPhase4Pipelines(device) {
         label: 'history_g0',
         entries: [
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleState
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleState (rw for encoder compat)
         ],
     });
     const historyG1 = device.createBindGroupLayout({
@@ -388,9 +388,9 @@ export async function createPhase4Pipelines(device) {
     const onePNG1 = device.createBindGroupLayout({
         label: 'onePN_g1',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleState
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // derived
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // axYukMod
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleState (rw for encoder compat)
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // derived (rw for encoder compat)
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // axYukMod (rw for encoder compat)
         ],
     });
     const onePNG2 = device.createBindGroupLayout({
@@ -440,11 +440,11 @@ export async function createPhase4Pipelines(device) {
         label: 'radiation_g1',
         entries: [
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleState (rw)
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleAux
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleAux (rw for encoder compat)
             { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // derived (rw)
-            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // allForces
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // allForces (rw for encoder compat)
             { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // radiationState (rw)
-            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // axYukMod
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // axYukMod (rw for encoder compat)
         ],
     });
     const radG2 = device.createBindGroupLayout({
@@ -507,7 +507,7 @@ export async function createPhase4Pipelines(device) {
         label: 'bosons_g1',
         entries: [
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleState (rw)
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleAux (ro)
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleAux (rw for encoder compat)
         ],
     });
     const bosG2 = device.createBindGroupLayout({
@@ -574,7 +574,7 @@ export async function createPhase4Pipelines(device) {
     const btG3 = device.createBindGroupLayout({
         label: 'bosonTree_g3',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleState
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleState (rw for encoder compat)
             { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // allForces
         ],
     });
@@ -687,23 +687,23 @@ export async function createGhostGenPipeline(device) {
     const code = await fetchShader('ghost-gen.wgsl');
     const module = device.createShaderModule({ label: 'ghostGen', code });
 
-    // Group 0: packed particle state (read-only)
+    // Group 0: packed particle state (rw for encoder compat)
     const group0Layout = device.createBindGroupLayout({
         label: 'ghostGen_group0',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleState
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleState (rw for encoder compat)
         ],
     });
 
-    // Group 1: ghost output + derived + aux
+    // Group 1: ghost output + derived + aux (rw for encoder compat on shared buffers)
     const group1Layout = device.createBindGroupLayout({
         label: 'ghostGen_group1',
         entries: [
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // ghostState
             { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // ghostAux
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // derived_in
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // derived_in (rw for encoder compat)
             { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // ghostDerived
-            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleAux_in
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleAux_in (rw for encoder compat)
         ],
     });
 
@@ -744,7 +744,7 @@ export async function createFieldDepositPipelines(device) {
     const group0Layout = device.createBindGroupLayout({
         label: 'fieldDeposit_group0',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleState
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleState (rw for encoder compat)
         ],
     });
 
@@ -789,11 +789,11 @@ export async function createFieldEvolvePipelines(device) {
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // source (rw for encoder compat)
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // thermal (rw for encoder compat)
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // sgPhiFull (rw for encoder compat)
+            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // sgGradX (rw for encoder compat)
+            { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // sgGradY (rw for encoder compat)
             { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // fieldGradX (rw for computeGridGradients)
             { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // fieldGradY (rw for computeGridGradients)
             { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
@@ -808,11 +808,11 @@ export async function createFieldEvolvePipelines(device) {
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // source (rw for encoder compat)
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // thermal (rw for encoder compat)
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // sgPhiFull (rw for encoder compat)
+            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // sgGradX (rw for encoder compat)
+            { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // sgGradY (rw for encoder compat)
             { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
@@ -857,7 +857,7 @@ export async function createFieldForcesPipelines(device) {
         label: 'fieldForces_group0',
         entries: [
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleState (rw)
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleAux (ro)
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleAux (rw for encoder compat)
             { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // derived (rw)
         ],
     });
@@ -865,12 +865,12 @@ export async function createFieldForcesPipelines(device) {
     const group1Layout = device.createBindGroupLayout({
         label: 'fieldForces_group1',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // higgsField (rw for encoder compat)
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // higgsGradX (rw for encoder compat)
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // higgsGradY (rw for encoder compat)
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // axionField (rw for encoder compat)
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // axionGradX (rw for encoder compat)
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // axionGradY (rw for encoder compat)
         ],
     });
 
@@ -917,17 +917,17 @@ export async function createFieldSelfGravPipelines(device) {
     const group0Layout = device.createBindGroupLayout({
         label: 'fieldSelfGrav_group0',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // field (rw for encoder compat)
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // fieldDot (rw for encoder compat)
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // gradX (rw for encoder compat)
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // gradY (rw for encoder compat)
             { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // sgInvR (rw for encoder compat)
             { binding: 11, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
         ],
     });
@@ -994,7 +994,7 @@ export async function createHeatmapPipelines(device) {
     const hmG0 = device.createBindGroupLayout({
         label: 'heatmap_g0',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleState
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleState (rw for encoder compat)
         ],
     });
     const hmG1 = device.createBindGroupLayout({
@@ -1075,9 +1075,9 @@ export async function createDisintegrationPipeline(device) {
     const group0Layout = device.createBindGroupLayout({
         label: 'disint_g0',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleState
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleAux
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // derived
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleState (rw for encoder compat)
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleAux (rw for encoder compat)
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // derived (rw for encoder compat)
         ],
     });
 
@@ -1114,15 +1114,15 @@ export async function createPairProductionPipeline(device) {
     const group0Layout = device.createBindGroupLayout({
         label: 'pairProd_g0',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // photonPool
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // phCount
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // photonPool (rw for encoder compat)
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // phCount (rw for encoder compat)
         ],
     });
 
     const group1Layout = device.createBindGroupLayout({
         label: 'pairProd_g1',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // particleState
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleState (rw for encoder compat)
         ],
     });
 

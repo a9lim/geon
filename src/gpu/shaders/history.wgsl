@@ -28,7 +28,7 @@ struct SimUniforms {
 };
 
 @group(0) @binding(0) var<uniform> u: SimUniforms;
-@group(0) @binding(1) var<storage, read> particles: array<ParticleState>;
+@group(0) @binding(1) var<storage, read_write> particles: array<ParticleState>;
 
 // History ring buffers
 @group(1) @binding(0) var<storage, read_write> histPosX: array<f32>;

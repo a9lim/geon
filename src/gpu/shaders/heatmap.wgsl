@@ -41,8 +41,8 @@ struct HeatmapUniforms {
     _pad3: f32,
 };
 
-// Group 0: particleState (ro)
-@group(0) @binding(0) var<storage, read> particles: array<ParticleState_HM>;
+// Group 0: particleState (read_write for encoder compat)
+@group(0) @binding(0) var<storage, read_write> particles: array<ParticleState_HM>;
 
 @group(1) @binding(0) var<storage, read_write> gravPotential: array<f32>;
 @group(1) @binding(1) var<storage, read_write> elecPotential: array<f32>;

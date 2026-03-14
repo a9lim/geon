@@ -82,10 +82,10 @@ const BOUND_LOOP: u32 = 2u;
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
-// Group 1: particle state (read-only)
-@group(1) @binding(0) var<storage, read> particles: array<ParticleState>;
-@group(1) @binding(1) var<storage, read> derived: array<ParticleDerived>;
-@group(1) @binding(2) var<storage, read> axYukMod: array<vec2<f32>>;  // packed: axMod, yukMod
+// Group 1: particle state (read_write for encoder compat)
+@group(1) @binding(0) var<storage, read_write> particles: array<ParticleState>;
+@group(1) @binding(1) var<storage, read_write> derived: array<ParticleDerived>;
+@group(1) @binding(2) var<storage, read_write> axYukMod: array<vec2<f32>>;  // packed: axMod, yukMod
 
 // Group 2: force outputs + VV kick
 @group(2) @binding(0) var<storage, read_write> allForces: array<AllForces>;

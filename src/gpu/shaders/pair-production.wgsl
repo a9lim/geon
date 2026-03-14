@@ -45,12 +45,12 @@ struct PairEvent {
     _pad: f32,
 };
 
-// Group 0: photonPool (ro) + phCount (ro)
-@group(0) @binding(0) var<storage, read> photonPool: array<Photon>;
-@group(0) @binding(1) var<storage, read> phCount: array<u32>;
+// Group 0: photonPool + phCount (read_write for encoder compat)
+@group(0) @binding(0) var<storage, read_write> photonPool: array<Photon>;
+@group(0) @binding(1) var<storage, read_write> phCount: array<u32>;
 
-// Group 1: particleState (ro)
-@group(1) @binding(0) var<storage, read> particles: array<ParticleState_PP>;
+// Group 1: particleState (read_write for encoder compat)
+@group(1) @binding(0) var<storage, read_write> particles: array<ParticleState_PP>;
 
 @group(2) @binding(0) var<storage, read_write> pairEvents: array<PairEvent>;
 @group(2) @binding(1) var<storage, read_write> pairCounter: atomic<u32>;

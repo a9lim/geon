@@ -84,13 +84,13 @@ fn getSW(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 14u]); }
 fn getSE(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 15u]); }
 fn getParticleIndex(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 16u]); }
 
-@group(0) @binding(0) var<storage, read> nodes: array<u32>;
+@group(0) @binding(0) var<storage, read_write> nodes: array<u32>;
 @group(0) @binding(1) var<uniform> uniforms: SimUniforms;
 
-// Group 1: packed particle structs (rw for resolve)
+// Group 1: packed particle structs (rw for resolve + encoder compat)
 @group(1) @binding(0) var<storage, read_write> particleState: array<ParticleState>;
 @group(1) @binding(1) var<storage, read_write> particleAux: array<ParticleAux>;
-@group(1) @binding(2) var<storage, read> ghostOriginalIdx: array<u32>;
+@group(1) @binding(2) var<storage, read_write> ghostOriginalIdx: array<u32>;
 
 // Group 2: collision pairs + counters + merge results
 @group(2) @binding(0) var<storage, read_write> collisionPairs: array<u32>;

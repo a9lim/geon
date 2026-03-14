@@ -64,10 +64,10 @@ struct DisintEvent {
     spawnVY: f32,
 };
 
-// Group 0: particleState (ro) + particleAux (ro) + derived (ro)
-@group(0) @binding(0) var<storage, read> particles: array<ParticleState_DI>;
-@group(0) @binding(1) var<storage, read> particleAux: array<ParticleAux_DI>;
-@group(0) @binding(2) var<storage, read> derived: array<DisintDerived>;
+// Group 0: particleState + particleAux + derived (read_write for encoder compat)
+@group(0) @binding(0) var<storage, read_write> particles: array<ParticleState_DI>;
+@group(0) @binding(1) var<storage, read_write> particleAux: array<ParticleAux_DI>;
+@group(0) @binding(2) var<storage, read_write> derived: array<DisintDerived>;
 
 @group(1) @binding(0) var<storage, read_write> events: array<DisintEvent>;
 @group(1) @binding(1) var<storage, read_write> eventCounter: atomic<u32>;
