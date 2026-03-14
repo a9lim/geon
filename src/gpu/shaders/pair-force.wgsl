@@ -2,7 +2,7 @@
 // Each workgroup loads TILE_SIZE source particles into shared memory,
 // then each thread accumulates forces from all sources onto its particle.
 //
-// Ports CPU pairForce() from forces.js. No signal delay (Phase 4).
+// Ports CPU pairForce() from forces.js. Includes signal delay aberration (Phase 4).
 // No Barnes-Hut (Phase 3). All force types gated by toggle bits.
 
 const TILE_SIZE: u32 = 64u;
@@ -55,6 +55,14 @@ var<workgroup> tile: array<TileParticle, TILE_SIZE>;
 @group(2) @binding(6) var<storage, read_write> bFieldGrads: array<vec4<f32>>; // dBzdx, dBzdy, dBgzdx, dBgzdy
 @group(2) @binding(7) var<storage, read_write> totalForceX: array<f32>;
 @group(2) @binding(8) var<storage, read_write> totalForceY: array<f32>;
+
+// Bind group 3: jerk accumulators for radiation (Phase 4)
+@group(3) @binding(0) var<storage, read_write> jerkX: array<f32>;
+@group(3) @binding(1) var<storage, read_write> jerkY: array<f32>;
+
+// Aberration constants
+const ABERRATION_CLAMP_MIN: f32 = 0.01;
+const ABERRATION_CLAMP_MAX: f32 = 100.0;
 
 @compute @workgroup_size(TILE_SIZE)
 fn main(
@@ -122,6 +130,9 @@ fn main(
     let yukMu = uniforms.yukawaMu;
     let yukCutoffSq = select(1e30, (6.0 / yukMu) * (6.0 / yukMu), yukawaOn && yukMu > EPSILON);
 
+    // Signal delay is active when relativity is on
+    let signalDelayed = relOn;
+
     // Per-thread accumulators
     var accGravX: f32 = 0.0; var accGravY: f32 = 0.0;
     var accCoulX: f32 = 0.0; var accCoulY: f32 = 0.0;
@@ -130,6 +141,8 @@ fn main(
     var acc1PNX: f32 = 0.0; var acc1PNY: f32 = 0.0;
     var accYukX: f32 = 0.0; var accYukY: f32 = 0.0;
     var accTotalX: f32 = 0.0; var accTotalY: f32 = 0.0;
+    // Jerk accumulators for radiation (analytical component)
+    var accJerkX: f32 = 0.0; var accJerkY: f32 = 0.0;
 
     // B-field accumulators
     var accBz: f32 = 0.0;
@@ -194,6 +207,22 @@ fn main(
                 let invR3 = invR * invRSq;
                 let invR5 = invR3 * invRSq;
 
+                // Liénard-Wiechert aberration: (1 - n̂·v_source)^{-3}
+                // n̂ = unit vector from source to observer = (-rx, -ry) / r
+                var aberr: f32 = 1.0;
+                if (signalDelayed) {
+                    let nDotV = -(rx * s.velX + ry * s.velY) * invR;
+                    let denom = max(1.0 - nDotV, ABERRATION_CLAMP_MIN);
+                    aberr = min(1.0 / (denom * denom * denom), ABERRATION_CLAMP_MAX);
+                }
+                let invR3a = select(invR3, invR3 * aberr, signalDelayed);
+                let invR5a = select(invR5, invR5 * aberr, signalDelayed);
+
+                // Relative velocity for jerk computation
+                let vrx = s.velX - pVelX;
+                let vry = s.velY - pVelY;
+                let rDotVr = rx * vrx + ry * vry;
+
                 // (v_s x r)_z for Biot-Savart
                 let crossSV = s.velX * ry - s.velY * rx;
 
@@ -203,7 +232,7 @@ fn main(
                 // ── Gravity ──
                 if (gravOn) {
                     let k = pMass * s.mass;
-                    let fDir = k * invR3;
+                    let fDir = k * invR3a;
                     accGravX += rx * fDir;
                     accGravY += ry * fDir;
                     accTotalX += rx * fDir;
@@ -225,11 +254,18 @@ fn main(
                 // ── Coulomb ──
                 if (coulOn) {
                     let k = -(pCharge * s.charge) * axModPair;
-                    let fDir = k * invR3;
+                    let fDir = k * invR3a;
                     accCoulX += rx * fDir;
                     accCoulY += ry * fDir;
                     accTotalX += rx * fDir;
                     accTotalY += ry * fDir;
+
+                    // Analytical jerk for Larmor radiation
+                    if (radOn) {
+                        let jRadial = -3.0 * rDotVr * k * invRSq * invR3a;
+                        accJerkX += vrx * fDir + rx * jRadial;
+                        accJerkY += vry * fDir + ry * jRadial;
+                    }
                 }
 
                 // ── 1PN EIH (gravity) ──
@@ -283,7 +319,7 @@ fn main(
 
                 // ── Magnetic dipole-dipole ──
                 if (magOn) {
-                    let fDir = 3.0 * (pMagMom * s.magMoment) * invR5 * axModPair;
+                    let fDir = 3.0 * (pMagMom * s.magMoment) * invR5a * axModPair;
                     accMagX += rx * fDir;
                     accMagY += ry * fDir;
                     accTotalX += rx * fDir;
@@ -305,7 +341,7 @@ fn main(
 
                 // ── Gravitomagnetic dipole-dipole ──
                 if (gmOn) {
-                    let fDir = 3.0 * (pAngMom * s.angMomentum) * invR5;
+                    let fDir = 3.0 * (pAngMom * s.angMomentum) * invR5a;
                     accGMX += rx * fDir;
                     accGMY += ry * fDir;
                     accTotalX += rx * fDir;
@@ -329,15 +365,28 @@ fn main(
                 }
 
                 // ── Yukawa ──
+                // F = -g²·m₁·m₂·e^{-μr}/r²·(1+μr), with aberration pre-multiplied
                 if (yukawaOn && rawRSq < yukCutoffSq) {
-                    let r = 1.0 / invR;
-                    let expMuR = exp(-yukMu * r);
+                    let r_dist = 1.0 / invR;
+                    let expMuR = exp(-yukMu * r_dist);
                     let yukModPair = sqrt(pYukMod * s.yukMod);
-                    let fDir = uniforms.yukawaCoupling * yukModPair * pMass * s.mass * expMuR * (invRSq + yukMu * invR) * invR;
+                    let coupling = uniforms.yukawaCoupling;
+                    let invR3a_factor = invR * invRSq * aberr;
+                    let fDir = coupling * yukModPair * pMass * s.mass * expMuR
+                               * (invRSq + yukMu * invR) * invR3a_factor;
                     accYukX += rx * fDir;
                     accYukY += ry * fDir;
                     accTotalX += rx * fDir;
                     accTotalY += ry * fDir;
+
+                    // Analytical jerk for pion emission radiation
+                    if (radOn) {
+                        let jRadial = -(3.0 * invRSq + 3.0 * yukMu * invR + yukMu * yukMu)
+                                      * rDotVr * coupling * yukModPair * pMass * s.mass
+                                      * expMuR * invRSq * invR3a_factor;
+                        accJerkX += vrx * fDir + rx * jRadial;
+                        accJerkY += vry * fDir + ry * jRadial;
+                    }
 
                     // Scalar Breit 1PN correction
                     if (onePNOn) {
@@ -346,8 +395,8 @@ fn main(
                         let nDotV1 = nx * pVelX + ny * pVelY;
                         let nDotV2 = nx * s.velX + ny * s.velY;
                         let v1DotV2 = pVelX * s.velX + pVelY * s.velY;
-                        let alpha = 1.0 + yukMu * r;
-                        let beta = 0.5 * uniforms.yukawaCoupling * yukModPair * pMass * s.mass * expMuR * invRSq;
+                        let alpha = 1.0 + yukMu * r_dist;
+                        let beta = 0.5 * coupling * yukModPair * pMass * s.mass * expMuR * invRSq;
                         let radial = -(alpha * v1DotV2 + (alpha * alpha + alpha + 1.0) * nDotV1 * nDotV2);
                         let fx = beta * (radial * nx + alpha * (nDotV2 * pVelX + nDotV1 * s.velX));
                         let fy = beta * (radial * ny + alpha * (nDotV2 * pVelY + nDotV1 * s.velY));
@@ -374,5 +423,8 @@ fn main(
         bFieldGrads[idx] = vec4(accDBzdx, accDBzdy, accDBgzdx, accDBgzdy);
         totalForceX[idx] = accTotalX;
         totalForceY[idx] = accTotalY;
+        // Analytical jerk for radiation reaction (Phase 4)
+        jerkX[idx] = accJerkX;
+        jerkY[idx] = accJerkY;
     }
 }
