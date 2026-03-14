@@ -87,10 +87,9 @@ const BOUND_LOOP: u32 = 2u;
 @group(1) @binding(1) var<storage, read_write> derived: array<ParticleDerived>;
 @group(1) @binding(2) var<storage, read_write> axYukMod: array<vec2<f32>>;  // packed: axMod, yukMod
 
-// Group 2: force outputs + VV kick
+// Group 2: force outputs (particleState accessed via group 1 to avoid aliasing)
 @group(2) @binding(0) var<storage, read_write> allForces: array<AllForces>;
-@group(2) @binding(1) var<storage, read> f1pnOld: array<f32>;
-@group(2) @binding(2) var<storage, read_write> particlesRW: array<ParticleState>; // rw for VV kick
+@group(2) @binding(1) var<storage, read_write> f1pnOld: array<f32>; // rw for encoder compat
 
 // Per-source 1PN accumulation (shared between tree and pairwise paths)
 fn accum1PN(
@@ -238,11 +237,11 @@ fn vvKick1PN(@builtin(global_invocation_id) gid: vec3u) {
     let af1pn = allForces[i].f2;
     let newF = vec2f(af1pn.x, af1pn.y);
     let oldF = vec2f(f1pnOld[i * 2u], f1pnOld[i * 2u + 1u]);
-    particlesRW[i].velWX += (newF.x - oldF.x) * halfDtOverM;
-    particlesRW[i].velWY += (newF.y - oldF.y) * halfDtOverM;
+    particles[i].velWX += (newF.x - oldF.x) * halfDtOverM;
+    particles[i].velWY += (newF.y - oldF.y) * halfDtOverM;
 
     // NaN guard
-    if (particlesRW[i].velWX != particlesRW[i].velWX || particlesRW[i].velWY != particlesRW[i].velWY) {
-        particlesRW[i].velWX = 0.0; particlesRW[i].velWY = 0.0;
+    if (particles[i].velWX != particles[i].velWX || particles[i].velWY != particles[i].velWY) {
+        particles[i].velWX = 0.0; particles[i].velWY = 0.0;
     }
 }
