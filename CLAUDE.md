@@ -17,22 +17,23 @@ Serve from `a9lim.github.io/` -- shared files load via absolute paths. ES6 modul
 ## File Map
 
 ```
-main.js                  490 lines  Simulation class, fixed-timestep loop, pair production, pion loop, dirty-flag render, window.sim
+main.js                  490 lines  Simulation class, fixed-timestep loop, backend selection (CPU/GPU),
+                                     pair production, pion loop, dirty-flag render, window.sim
 index.html               484 lines  UI: 4-tab sidebar, reference overlay, zoom controls, field sliders
 styles.css               271 lines  Project-specific CSS overrides, toggle/slider theme colors
 colors.js                 18 lines  Project color tokens (extends shared-tokens.js)
 src/
-  integrator.js         1563 lines  Physics: Boris substep loop, radiation, pion emission/absorption, field excitations,
-                                     tidal, GW quadrupole, expansion, Roche, external fields, Hertz bounce, scalar fields
-  forces.js              794 lines  pairForce(), computeAllForces(), calculateForce() (BH walk), compute1PN(), boson gravity,
-                                     PE accumulator (resetPEAccum/getPEAccum), inline torus minImage
+  integrator.js         1563 lines  CPU physics: Boris substep loop, radiation, pion emission/absorption,
+                                     field excitations, tidal, GW quadrupole, expansion, Roche, external fields,
+                                     Hertz bounce, scalar fields
+  forces.js              794 lines  CPU pairForce(), computeAllForces(), calculateForce() (BH walk), compute1PN(),
+                                     boson gravity, PE accumulator (resetPEAccum/getPEAccum), inline torus minImage
   reference.js           714 lines  REFERENCE object: physics reference content (KaTeX math)
   presets.js             689 lines  PRESETS (19 scenarios, 4 groups), loadPreset(), SLIDER_MAP, TOGGLE_MAP/TOGGLE_ORDER
   scalar-field.js        858 lines  ScalarField base: PQS grid, topology-aware deposition, Laplacian, C² gradients,
                                      field energy, excitations, particle-field gravity, self-gravity (8×8 coarse),
                                      fused interpolateWithGradient(), interior fast-path PQS, self-gravity early exit
-  renderer.js            729 lines  Canvas 2D: particles, trails, batched spin rings, ergosphere, batched force arrows,
-                                     photons (alpha-bucketed), pions (batched fill), fields, shadowBlur bucketing
+  renderer.js            729 lines  CPU Canvas 2D renderer (used as fallback when GPU unavailable)
   ui.js                  548 lines  setupUI(), declarative dependency graph, info tips, reference overlay, shortcuts,
                                      dirty flag, KaTeX render cache, lazy field init triggers
   heatmap.js             315 lines  64x64 potential field overlay, signal-delayed positions, force-toggle-aware
@@ -41,30 +42,85 @@ src/
   quadtree.js            348 lines  QuadTreePool: SoA flat typed arrays, pool-based, zero GC, depth guard,
                                      iterative insert, direct quadrant child selection, boson distribution
   signal-delay.js        260 lines  getDelayedState() (3-phase light-cone solver, creationTime/deathTime guards)
-  input.js               276 lines  InputHandler: mouse/touch, left/right-click symmetry (matter/antimatter), dirty flag,
-                                     rAF-throttled hover, swap-and-pop particle removal
+  input.js               276 lines  InputHandler: mouse/touch, left/right-click symmetry (matter/antimatter)
   effective-potential.js 244 lines  V_eff(r) sidebar canvas, auto-scaling, axMod/yukMod modulation, dirty-flag skip
   potential.js           211 lines  computePE(), treePE(), pairPE() (7 PE terms)
   save-load.js           208 lines  saveState(), loadState(), downloadState(), uploadState(), quickSave/Load()
   energy.js              191 lines  KE, spin KE, PE, field energy, momentum, angular momentum
-  pion.js                236 lines  Massive Yukawa force carrier: proper velocity, (1+v²) GR deflection, decay channels, object pool
+  pion.js                236 lines  Massive Yukawa force carrier: proper velocity, (1+v²) GR deflection, decay, pool
   config.js              157 lines  Named constants, mode enums (COL_*/BOUND_*/TORUS/KLEIN/RP²), helpers
   collisions.js          152 lines  handleCollisions(), resolveMerge(), annihilation, relativistic merge KE
   particle.js            135 lines  Particle: pos, vel, w, angw, baseMass, 11 force Vec2s, signal delay history
   topology.js            131 lines  minImage(), wrapPosition() for Torus/Klein/RP²
   phase-plot.js          137 lines  Phase space r-v_r plot (512-sample ring buffer)
-  stats-display.js       138 lines  Sidebar energy/momentum/drift readout (×100 display scale), textContent change detection
+  stats-display.js       138 lines  Sidebar energy/momentum/drift readout, textContent change detection
   vec2.js                 61 lines  Vec2 class: set, clone, add, sub, scale, mag, normalize, dist
   boson-utils.js          59 lines  treeDeflectBoson(): shared BH tree walk for photon/pion lensing
-  massless-boson.js       91 lines  MasslessBoson: pos, vel, energy, type ('em'/'grav'), BH tree lensing, object pool
+  massless-boson.js       91 lines  MasslessBoson: pos, vel, energy, type ('em'/'grav'), BH tree lensing, pool
   relativity.js           25 lines  angwToAngVel(), setVelocity()
+  gpu/
+    gpu-physics.js      2712 lines  GPUPhysics: WebGPU compute pipeline orchestrator, addParticle/serialize,
+                                     all dispatch methods, bind group creation, adaptive substepping, readback
+    gpu-pipelines.js    1223 lines  Pipeline + bind group layout creation for all compute/render shaders
+    gpu-buffers.js       557 lines  Buffer allocation: packed structs, quadtree, collision, field, history, staging
+    gpu-renderer.js      512 lines  WebGPU instanced rendering: particles, bosons, field overlays, heatmap
+    shaders/
+      common.wgsl        262 lines  Shared structs (SimUniforms, ParticleState, ParticleAux, ParticleDerived,
+                                     AllForces, RadiationState, Photon, Pion), toggle bits, constants,
+                                     pcgHash/pcgRand RNG, torusMinImage/fullMinImage topology helpers
+      field-common.wgsl  132 lines  Shared field constants (GRID=64), FieldUniforms, nbIndex(), PQS weights
+      --- Phase 2: Core physics (prepended with common.wgsl) ---
+      reset-forces.wgsl        Zero AllForces accumulator
+      cache-derived.wgsl       Compute ParticleDerived (magMoment, angMomentum, vel, radius)
+      pair-force.wgsl          O(N²) tiled pairwise force (gravity, Coulomb, dipoles, Yukawa, 1PN, jerk)
+      external-fields.wgsl     Uniform background gravity/electric/magnetic
+      boris-half-kick.wgsl     w += F/m · dt/2
+      boris-rotate.wgsl        Boris rotation in B+Bg+extBz plane
+      boris.wgsl               Drift: pos += vel·dt, derive coordinate velocity
+      spin-orbit.wgsl          Stern-Gerlach + Mathisson-Papapetrou + frame-drag
+      apply-torques.wgsl       Angular acceleration from torque accumulator
+      --- Phase 3: Spatial partitioning (standalone, own structs) ---
+      ghost-gen.wgsl           Periodic boundary ghost particles (Torus/Klein/RP²)
+      tree-build.wgsl          Barnes-Hut quadtree: bounds, init, insert, aggregates
+      forces-tree.wgsl         BH tree walk force computation (O(N log N))
+      collision.wgsl           Broadphase detection + merge/annihilation resolve
+      dead-gc.wgsl             Dead particle garbage collection (free stack)
+      boundary.wgsl            Despawn/bounce/wrap boundary conditions
+      --- Phase 4: Advanced physics (standalone, own structs) ---
+      radiation.wgsl           Larmor, Hawking, pion emission (3 entry points)
+      bosons.wgsl              Photon/pion drift, lensing, absorption, decay (5 entry points)
+      boson-tree.wgsl          Boson BH tree: insert, aggregate, particle↔boson gravity
+      history.wgsl             Signal delay history ring buffer recording
+      onePN.wgsl               1PN compute + velocity-Verlet correction kick
+      --- Phase 5: Scalar fields & extras (field-common.wgsl or standalone) ---
+      field-deposit.wgsl       PQS particle→grid deposition (scatter/gather)
+      field-evolve.wgsl        Störmer-Verlet KDK: Laplacian, half-kick, drift, gradients
+      field-forces.wgsl        Higgs mass modulation + axion axMod/yukMod + gradient forces
+      field-selfgrav.wgsl      Coarse-grid self-gravity potential (8×8 → 64×64 upsample)
+      field-excitation.wgsl    Gaussian wave packet deposition from merge events
+      heatmap.wgsl             Potential field computation (gravity/electric/Yukawa)
+      expansion.wgsl           Hubble flow + momentum drag
+      disintegration.wgsl      Tidal + Roche breakup detection
+      pair-production.wgsl     Photon → particle pair creation
+      --- Render shaders (standalone, vertex+fragment) ---
+      particle.wgsl            Instanced particle circles
+      boson-render.wgsl        Photon/pion point rendering
+      spin-render.wgsl         Angular velocity ring indicators
+      trail-render.wgsl        Position history trail lines
+      arrow-render.wgsl        Force vector arrows
+      update-colors.wgsl       Particle charge→color mapping
+      trails.wgsl              Trail history recording
+      hit-test.wgsl            Mouse→particle selection
+      field-render.wgsl        Scalar field 64×64 overlay
+      heatmap-render.wgsl      Potential heatmap overlay
 ```
 
 ## Key Imports
 
 ```
 main.js       <- Physics, Renderer, InputHandler, Particle, HiggsField, AxionField,
-                 Heatmap, PhasePlot, EffectivePotentialPlot, StatsDisplay, setupUI, config, MasslessBoson, Pion, save-load
+                 Heatmap, PhasePlot, EffectivePotentialPlot, StatsDisplay, setupUI, config,
+                 MasslessBoson, Pion, save-load, GPUPhysics, GPURenderer, selectBackend
 
 integrator.js <- QuadTreePool, config, MasslessBoson, Pion, angwToAngVel,
                  forces (resetForces/computeAllForces/compute1PN/computeBosonGravity),
@@ -79,6 +135,11 @@ axion-field.js  <- config, ScalarField
 boson-utils.js  <- config (BH_THETA, BOSON_SOFTENING_SQ)
 massless-boson.js <- Vec2, config, boson-utils
 pion.js         <- Vec2, config, boson-utils
+
+gpu-physics.js <- gpu-buffers (createParticleBuffers, writeUniforms, createFieldBuffers, ...),
+                  gpu-pipelines (createPhase2Pipelines, createPhase4Pipelines, ...)
+gpu-pipelines.js <- fetchShader (loads .wgsl files via fetch)
+gpu-renderer.js  <- gpu-pipelines (createBosonRenderPipelines, createFieldRenderPipeline, ...)
 ```
 
 ## Physics Engine
@@ -351,15 +412,98 @@ Topbar: Home | "No-Hair" | Pause/Step/Reset/Save/Load | Theme | Panel toggle.
 
 ## Renderer
 
-Canvas 2D. Dark mode: additive blending (`lighter`). WORLD_SCALE = 16. Camera starts at zoom = WORLD_SCALE. Viewport culling: particles, photons, pions skip draw when outside camera bounds (`_vpLeft/Right/Top/Bottom`). Field overlays throttled to every FIELD_RENDER_INTERVAL (2) frames. Rendering batched aggressively: shadowBlur buckets, alpha buckets (photons), spin rings by sign, ergospheres+antimatter markers, pion fills.
+Two backends: **CPU** (Canvas 2D in `renderer.js`) and **GPU** (WebGPU instanced in `gpu-renderer.js`). GPU overlays a separate `<canvas id="gpuCanvas">` with `alphaMode: 'premultiplied'`. Both share the same camera system (`shared-camera.js`).
 
-- **Particles**: r = ∛(mass) (BH: r₊), glow in dark (shadowBlur bucketed by tier). Neutral=slate. Charged: RGB lerp red(+)/blue(-), intensity=|q|/5.
+### CPU Renderer (Canvas 2D)
+
+Dark mode: additive blending (`lighter`). WORLD_SCALE = 16. Camera starts at zoom = WORLD_SCALE. Viewport culling: particles, photons, pions skip draw when outside camera bounds. Rendering batched: shadowBlur buckets, alpha buckets (photons), spin rings by sign, pion fills.
+
+### GPU Renderer (WebGPU)
+
+Instanced rendering via vertex shaders. Reads directly from GPU compute buffers (no readback). Separate render passes for particles, photons, pions, field overlays, heatmap. Light/dark theme controls blend mode (premultiplied alpha vs additive).
+
+### Visual Style (both backends)
+
+- **Particles**: r = ∛(mass) (BH: r₊), glow in dark. Neutral=slate. Charged: RGB lerp red(+)/blue(-), intensity=|q|/5.
 - **Trails**: circular Float32Array[256], wrap-detection for periodic boundaries
 - **Force vectors**: gravity=red, coulomb=blue, magnetic=cyan, GM=rose, 1PN=orange, spin-curv=purple, radiation=yellow, yukawa=green, external=brown, higgs=lime, axion=indigo
 - **Field overlays**: 64×64 offscreen, bilinear-upscaled. Higgs: purple(depleted)/lime(enhanced). Axion: indigo(+)/yellow(-).
 - **Photons**: yellow (EM) / red (grav), alpha fades over PHOTON_LIFETIME=256
 - **Pions**: green, glow in dark, constant alpha (decay is probabilistic)
 - **V_eff plot**: 200-sample sidebar canvas
+
+## GPU Acceleration (WebGPU)
+
+### Backend Selection
+
+`main.js` auto-detects WebGPU at startup via `selectBackend()`. Two backends: `BACKEND_CPU` (Canvas 2D) and `BACKEND_GPU` (WebGPU compute + render). GPU creates a separate `<canvas id="gpuCanvas">` overlaid on the CPU canvas. Falls back to CPU on device loss with auto-save recovery.
+
+### Architecture
+
+`GPUPhysics` in `gpu-physics.js` orchestrates all compute passes. `GPURenderer` in `gpu-renderer.js` handles instanced rendering. Pipelines and bind group layouts are created in `gpu-pipelines.js`. Buffers allocated in `gpu-buffers.js`.
+
+**Dispatch sequence per substep** (all in one command encoder per substep):
+
+1. Ghost generation (periodic boundary)
+2. Tree build (Barnes-Hut, if enabled)
+3. resetForces → cacheDerived → pairForce (or treeForce) → externalFields
+4. Boris integrator: halfKick → rotate → halfKick → spinOrbit → applyTorques
+5. Radiation reaction (Larmor, Hawking, pion emission)
+6. borisDrift → expansion
+7. 1PN velocity-Verlet correction
+8. Scalar field evolution (Higgs, Axion)
+9. Scalar field forces → collisions → field excitations → disintegration
+10. Boson update (photon/pion drift, absorption, decay) → pair production
+11. Boundary conditions
+
+Post-substep (once per frame, separate encoder): heatmap, boson gravity, dead GC, history recording.
+
+### Packed Struct Buffers
+
+WebGPU limits storage buffers to `maxStorageBuffersPerShaderStage` (typically 10). To fit all pipelines within this limit, per-particle data is packed into struct buffers instead of individual SoA arrays:
+
+| Struct | Size | Replaces | Fields |
+|--------|------|----------|--------|
+| `ParticleState` | 36B | posX/Y, velWX/Y, mass, charge, angW, baseMass, flags | 9 fields → 1 buffer |
+| `ParticleAux` | 20B | radius, particleId, deathTime, deathMass, deathAngVel | 5 fields → 1 buffer |
+| `ParticleDerived` | 32B | magMoment, angMomentum, invMass, radiusSq, velX/Y, angVel | 7+pad fields → 1 buffer |
+| `AllForces` | 160B | 11 force vec2s, 3 torques, B-fields, B-gradients, totalForce | 10 vec4s → 1 buffer |
+| `RadiationState` | 32B | jerkX/Y, radAccum, hawkAccum, yukawaRadAccum, radDisplayX/Y | 8 fields → 1 buffer |
+| `Photon` | 32B | phPosX/Y, phVelX/Y, phEnergy, phEmitterId, phAge, phFlags | 8 fields → 1 buffer |
+| `Pion` | 48B | piPosX/Y, piWX/Y, piMass, piCharge, piEnergy, piEmitterId, piAge, piFlags | 10+2pad fields → 1 buffer |
+
+Worst-case pipeline (radiation) uses 10 storage buffers (was 42 before packing).
+
+### Buffer Capacities
+
+- `particleState`, `particleAux`, `derived`, `axYukMod`: `soaCapacity = MAX_PARTICLES × 2` (room for ghosts)
+- `allForces`, `radiationState`, `color`, `f1pnOld`: `MAX_PARTICLES` (no ghost forces)
+- `photonPool`: `MAX_PHOTONS (512)`, `pionPool`: `MAX_PIONS (256)` — separate atomic counters (`phCount`, `piCount`)
+- Ghost buffers: `ghostState`, `ghostAux`, `ghostDerived` — same structs, `MAX_PARTICLES` capacity
+- History: `histPosX/Y/VelWX/VelWY/AngW/Time`: `MAX_PARTICLES × 256` ring buffers (lazy-allocated)
+
+### Shader Organization
+
+**Prepended shaders** (get `common.wgsl` concatenated before compilation): All Phase 2 shaders + `boundary.wgsl`. Use `SimUniforms`, `ParticleState`, etc. from common.wgsl.
+
+**Field shaders** (get `field-common.wgsl` prepended): `field-deposit.wgsl`, `field-evolve.wgsl`, `field-forces.wgsl`, `field-selfgrav.wgsl`, `field-excitation.wgsl`, `field-render.wgsl`, `heatmap-render.wgsl`.
+
+**Standalone shaders** (define own structs, NOT prepended): All Phase 3, Phase 4, `expansion.wgsl`, `heatmap.wgsl`, `disintegration.wgsl`, `pair-production.wgsl`, all render shaders. Must define `ParticleState`/`ParticleAux`/`Photon`/`Pion`/`SimUniforms` locally — keep in sync with `common.wgsl`.
+
+### WGSL Gotchas
+
+- **Operator precedence**: WGSL requires explicit parentheses when mixing `*` with `^` (XOR): `(a * b) ^ (c * d)`, not `a * b ^ c * d`.
+- **Shared entry points**: When a shader has multiple entry points using the same module (e.g., `field-evolve.wgsl` with `computeLaplacian` + `computeGridGradients`), ALL bindings must use the most permissive access mode (`read_write` even if some entry points only read).
+- **Buffer aliasing**: WebGPU disallows binding the same buffer twice in a dispatch. Radiation handles charge transfer by making `particleState` read-write in group 1 (not a separate binding).
+- **Staging buffer mapping**: Readback staging buffers (`maxAccelStaging`, `ghostCountStaging`, `mergeCountStaging`) must not be copied to while still mapped from a previous `mapAsync`. Guard copies with `_pending` flags.
+
+### GPU ↔ CPU Sync
+
+- `addParticle()` writes packed `ParticleState` (36B) + `ParticleAux` (20B) + `color` (4B) via `queue.writeBuffer()`
+- `setToggles(physics)` packs CPU toggle booleans into `toggles0`/`toggles1` u32 bitfields
+- `serialize()`/`deserialize()` read/write full particle state via staging buffers for save/load
+- CPU-side `particles[]` array maintained in parallel for sidebar UI, presets, stats
+- `device.lost` handler falls back to CPU mode, restores from periodic auto-save
 
 ## Key Patterns
 
