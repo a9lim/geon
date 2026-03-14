@@ -252,6 +252,19 @@ class Simulation {
                     this._gpuReady = true;
                     // Sync CPU toggle state to GPU uniforms
                     this._gpuPhysics.setToggles(this.physics);
+
+                    // Sync any CPU particles that were added before GPU was ready
+                    // (e.g., preset loaded while shaders were still compiling)
+                    if (this.particles.length > 0 && this._gpuPhysics.aliveCount === 0) {
+                        for (const p of this.particles) {
+                            this._gpuPhysics.addParticle({
+                                x: p.pos.x, y: p.pos.y,
+                                vx: p.w.x, vy: p.w.y,
+                                mass: p.mass, charge: p.charge,
+                            });
+                        }
+                    }
+
                     console.log('[physsim] GPU backend initialized');
 
                     // Register device.lost handler for error recovery
