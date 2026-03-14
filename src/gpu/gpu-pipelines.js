@@ -397,8 +397,7 @@ export async function createPhase4Pipelines(device) {
         label: 'onePN_g2',
         entries: [
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // allForces
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // f1pnOld
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleState (rw for VV kick)
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // f1pnOld (rw for encoder compat)
         ],
     });
     const onePNLayouts = [onePNG0, onePNG1, onePNG2];

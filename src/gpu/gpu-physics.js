@@ -557,7 +557,7 @@ export default class GPUPhysics {
         this._phase4BindGroups.onePNG1 = bg('onePN_g1', p4.compute1PN.bindGroupLayouts[1],
             [b.particleState, b.derived, b.axYukMod]);
         this._phase4BindGroups.onePNG2 = bg('onePN_g2', p4.compute1PN.bindGroupLayouts[2],
-            [b.allForces, b.f1pnOld, b.particleState]);
+            [b.allForces, b.f1pnOld]);
 
         // ── Radiation (lamrorRadiation, hawkingRadiation, pionEmission share bind groups) ──
         this._phase4BindGroups.radG0 = bg('radiation_g0', p4.lamrorRadiation.bindGroupLayouts[0],
