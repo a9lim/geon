@@ -113,6 +113,15 @@ export const HISTORY_SIZE = 256;
 export const HISTORY_MASK = HISTORY_SIZE - 1; // bitmask for modulo (power-of-2)
 export const HISTORY_STRIDE = 64;            // ~120 snapshots/second
 
+// ── GPU-Specific ──
+export const SELFGRAV_GRID = 8;               // CPU self-gravity coarse grid
+export const GPU_SCALAR_GRID = 64;            // GPU scalar field grid resolution (tunable to 128+)
+export const GPU_SELFGRAV_GRID = 8;           // GPU self-gravity coarse grid (tunable to 16+)
+export const GPU_NR_TOLERANCE = 1e-5;         // GPU Newton-Raphson tolerance (f32 precision limit)
+export const GPU_HEATMAP_GRID = 64;           // GPU heatmap overlay resolution (tunable to 128)
+export const GPU_MAX_PARTICLES = 4096;        // GPU buffer pre-allocation limit
+export const GPU_MAX_SPEED_RATIO = 0.9999;    // GPU speed cap (f32 needs tighter bound than CPU 0.99)
+
 // ── Cosmological Expansion ──
 export const DEFAULT_HUBBLE = 0.001;
 
