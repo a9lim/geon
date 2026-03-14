@@ -3,7 +3,7 @@
  *
  * Phase 1: particles. Phase 4: photon/pion boson rendering.
  */
-import { createBosonRenderPipelines } from './gpu-pipelines.js';
+import { createBosonRenderPipelines, createFieldRenderPipeline, createHeatmapRenderPipeline } from './gpu-pipelines.js';
 
 export default class GPURenderer {
     /**
@@ -48,6 +48,18 @@ export default class GPURenderer {
         this._pionPipeline = null;
         this._bosonBindGroups = null;
         this._bosonReady = false;
+
+        // Field overlay rendering (Phase 5)
+        this._fieldRenderPipeline = null;
+        this._fieldRenderBindGroups = {};
+        this._fieldRenderUniformBuffer = null;
+        this._fieldRenderReady = false;
+
+        // Heatmap overlay rendering (Phase 5)
+        this._heatmapRenderPipeline = null;
+        this._heatmapRenderBindGroup = null;
+        this._heatmapRenderUniformBuffer = null;
+        this._heatmapRenderReady = false;
     }
 
     /** Create render pipeline. Must be called after GPUPhysics.init(). */
@@ -215,13 +227,14 @@ export default class GPURenderer {
     }
 
     /** Render one frame. */
-    render(aliveCount) {
+    render(aliveCount, opts = {}) {
         if (!this._ready || aliveCount === 0) return;
 
         const textureView = this.context.getCurrentTexture().createView();
 
         const encoder = this.device.createCommandEncoder({ label: 'render' });
 
+        // Pass 1: Clear + particle rendering
         const pass = encoder.beginRenderPass({
             label: 'particle render',
             colorAttachments: [{
@@ -240,13 +253,44 @@ export default class GPURenderer {
         pass.draw(6, aliveCount);
         pass.end();
 
-        // Boson rendering pass (Phase 4) — same texture, load to preserve particles
+        // Pass 2: Field + heatmap overlays (load to preserve particles)
+        const hasOverlays = (this._fieldRenderReady && (opts.higgsField || opts.axionField)) ||
+            (this._heatmapRenderReady && opts.heatmapBuffers);
+        if (hasOverlays) {
+            const overlayPass = encoder.beginRenderPass({
+                label: 'overlay render',
+                colorAttachments: [{
+                    view: textureView,
+                    loadOp: 'load',
+                    storeOp: 'store',
+                }],
+            });
+
+            // Field overlays (rendered before heatmap)
+            if (this._fieldRenderReady) {
+                if (opts.higgsField) {
+                    this.drawFieldOverlay(overlayPass, 'higgs', opts.higgsField);
+                }
+                if (opts.axionField) {
+                    this.drawFieldOverlay(overlayPass, 'axion', opts.axionField);
+                }
+            }
+
+            // Heatmap overlay
+            if (this._heatmapRenderReady && opts.heatmapBuffers) {
+                this.drawHeatmapOverlay(overlayPass, opts.heatmapBuffers, opts.heatmapOpts || {});
+            }
+
+            overlayPass.end();
+        }
+
+        // Pass 3: Boson rendering (Phase 4) — same texture, load to preserve
         if (this._bosonReady) {
             const bosonPass = encoder.beginRenderPass({
                 label: 'boson render',
                 colorAttachments: [{
                     view: textureView,
-                    loadOp: 'load',  // preserve particle rendering
+                    loadOp: 'load',  // preserve particle + overlay rendering
                     storeOp: 'store',
                 }],
             });
@@ -271,6 +315,155 @@ export default class GPURenderer {
         }
 
         this.device.queue.submit([encoder.finish()]);
+    }
+
+    /** Initialize field overlay render pipeline. Call after GPUPhysics has field buffers. */
+    async initFieldOverlay() {
+        if (this._fieldRenderReady) return;
+
+        const { pipeline, bindGroupLayouts } =
+            await createFieldRenderPipeline(this.device, this.format, this.isLight);
+        this._fieldRenderPipeline = pipeline;
+        this._fieldRenderLayouts = bindGroupLayouts;
+
+        this._fieldRenderUniformBuffer = this.device.createBuffer({
+            label: 'fieldRenderUniforms',
+            size: 128, // FieldRenderUniforms struct (padded to 128)
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+
+        this._fieldRenderReady = true;
+    }
+
+    /** Initialize heatmap overlay render pipeline. */
+    async initHeatmapOverlay() {
+        if (this._heatmapRenderReady) return;
+
+        const { pipeline, bindGroupLayouts } =
+            await createHeatmapRenderPipeline(this.device, this.format, this.isLight);
+        this._heatmapRenderPipeline = pipeline;
+        this._heatmapRenderLayouts = bindGroupLayouts;
+
+        this._heatmapRenderUniformBuffer = this.device.createBuffer({
+            label: 'heatmapRenderUniforms',
+            size: 64, // HeatmapRenderUniforms struct
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+
+        this._heatmapRenderReady = true;
+    }
+
+    /**
+     * Ensure field render bind group exists for a given field.
+     * @param {'higgs'|'axion'} which
+     * @param {GPUBuffer} fieldBuffer - the field array buffer from GPUPhysics
+     */
+    _ensureFieldRenderBG(which, fieldBuffer) {
+        if (this._fieldRenderBindGroups[which]) return;
+        this._fieldRenderBindGroups[which] = this.device.createBindGroup({
+            label: `fieldRender_${which}`,
+            layout: this._fieldRenderLayouts[0],
+            entries: [
+                { binding: 0, resource: { buffer: fieldBuffer } },
+                { binding: 1, resource: { buffer: this._fieldRenderUniformBuffer } },
+            ],
+        });
+    }
+
+    /**
+     * Draw field overlay for one field type.
+     * @param {GPURenderPassEncoder} pass
+     * @param {'higgs'|'axion'} which
+     * @param {GPUBuffer} fieldBuffer
+     */
+    drawFieldOverlay(pass, which, fieldBuffer) {
+        if (!this._fieldRenderReady || !fieldBuffer) return;
+        this._ensureFieldRenderBG(which, fieldBuffer);
+
+        // Write FieldRenderUniforms
+        const data = new ArrayBuffer(128);
+        const f = new Float32Array(data);
+        const u = new Uint32Array(data);
+        f[0] = this.cameraX;
+        f[1] = this.cameraY;
+        f[2] = this.zoom;
+        f[3] = this.canvasWidth;
+        f[4] = this.canvasHeight;
+        f[5] = this._domainW || 1;
+        f[6] = this._domainH || 1;
+        u[7] = this.isLight ? 1 : 0;
+        u[8] = which === 'higgs' ? 0 : 1;
+        // Colors: Higgs depleted=purple, enhanced=lime; Axion positive=indigo, negative=yellow
+        if (which === 'higgs') {
+            // color0 (depleted/purple): #9C7EB0
+            f[12] = 0.612; f[13] = 0.494; f[14] = 0.690; f[15] = 1.0;
+            // color1 (enhanced/lime): #82A857
+            f[16] = 0.510; f[17] = 0.659; f[18] = 0.341; f[19] = 1.0;
+        } else {
+            // color0 (positive/indigo): #6C79AC
+            f[12] = 0.424; f[13] = 0.475; f[14] = 0.675; f[15] = 1.0;
+            // color1 (negative/yellow): #CCA84C
+            f[16] = 0.800; f[17] = 0.659; f[18] = 0.298; f[19] = 1.0;
+        }
+        this.device.queue.writeBuffer(this._fieldRenderUniformBuffer, 0, data);
+
+        pass.setPipeline(this._fieldRenderPipeline);
+        pass.setBindGroup(0, this._fieldRenderBindGroups[which]);
+        pass.draw(3); // fullscreen triangle
+    }
+
+    /**
+     * Draw heatmap overlay.
+     * @param {GPURenderPassEncoder} pass
+     * @param {Object} heatmapBuffers - from GPUPhysics.getHeatmapBuffers()
+     * @param {Object} opts - { viewLeft, viewTop, cellW, cellH, doGravity, doCoulomb, doYukawa }
+     */
+    drawHeatmapOverlay(pass, heatmapBuffers, opts) {
+        if (!this._heatmapRenderReady || !heatmapBuffers) return;
+
+        if (!this._heatmapRenderBindGroup) {
+            this._heatmapRenderBindGroup = this.device.createBindGroup({
+                label: 'heatmapRender_g0',
+                layout: this._heatmapRenderLayouts[0],
+                entries: [
+                    { binding: 0, resource: { buffer: heatmapBuffers.gravPotential } },
+                    { binding: 1, resource: { buffer: heatmapBuffers.elecPotential } },
+                    { binding: 2, resource: { buffer: heatmapBuffers.yukawaPotential } },
+                    { binding: 3, resource: { buffer: this._heatmapRenderUniformBuffer } },
+                ],
+            });
+        }
+
+        // Write HeatmapRenderUniforms
+        const data = new ArrayBuffer(64);
+        const f = new Float32Array(data);
+        const u = new Uint32Array(data);
+        f[0] = this.cameraX;
+        f[1] = this.cameraY;
+        f[2] = this.zoom;
+        f[3] = this.canvasWidth;
+        f[4] = this.canvasHeight;
+        f[5] = opts.viewLeft || 0;
+        f[6] = opts.viewTop || 0;
+        f[7] = opts.cellW || 1;
+        f[8] = opts.cellH || 1;
+        f[9] = 2.0;    // HEATMAP_SENSITIVITY
+        f[10] = 100.0 / 255.0; // HEATMAP_MAX_ALPHA
+        u[11] = this.isLight ? 1 : 0;
+        u[12] = opts.doGravity ? 1 : 0;
+        u[13] = opts.doCoulomb ? 1 : 0;
+        u[14] = opts.doYukawa ? 1 : 0;
+        this.device.queue.writeBuffer(this._heatmapRenderUniformBuffer, 0, data);
+
+        pass.setPipeline(this._heatmapRenderPipeline);
+        pass.setBindGroup(0, this._heatmapRenderBindGroup);
+        pass.draw(3); // fullscreen triangle
+    }
+
+    /** Set domain dimensions for field rendering */
+    setDomain(domainW, domainH) {
+        this._domainW = domainW;
+        this._domainH = domainH;
     }
 
     setTheme(isLight) {
