@@ -61,17 +61,27 @@ struct SimUniforms {
     yukawaMu: f32,
     higgsMass: f32,
     axionMass: f32,
-    extGravX: f32,
-    extGravY: f32,
-    extElecX: f32,
-    extElecY: f32,
-    extBz: f32,
     boundaryMode: u32,
     topologyMode: u32,
     collisionMode: u32,
+    maxParticles: u32,
     aliveCount: u32,
+    extGravity: f32,
+    extGravityAngle: f32,
+    extElectric: f32,
+    extElectricAngle: f32,
+    extBz: f32,
+    bounceFriction: f32,
+    extGx: f32,
+    extGy: f32,
+    extEx: f32,
+    extEy: f32,
+    axionCoupling: f32,
+    higgsCoupling: f32,
+    particleCount: u32,
     bhTheta: f32,
-    totalCount: u32,
+    _pad3: u32,
+    _pad4: u32,
 };
 
 // Packed structs (mirrors common.wgsl definitions for standalone shader)
@@ -132,6 +142,10 @@ struct ParticleDerived_FT {
 // For the tree walk, sources are either individual leaf particles
 // or aggregate node data (mass, charge, CoM, etc.).
 
+// Aberration constants
+const ABERRATION_CLAMP_MIN: f32 = 0.01;
+const ABERRATION_CLAMP_MAX: f32 = 100.0;
+
 // Inline the core force accumulation (matches pairForce in forces.js):
 fn accumulateForce(
     pIdx: u32,
@@ -139,7 +153,7 @@ fn accumulateForce(
     pMass: f32, pCharge: f32,
     pMagMoment: f32, pAngMomentum: f32,
     pAngVel: f32, pVelX: f32, pVelY: f32,
-    pAxMod: f32,
+    pAxMod: f32, pYukMod: f32,
     sx: f32, sy: f32,
     svx: f32, svy: f32,
     sMass: f32, sCharge: f32,
@@ -160,6 +174,17 @@ fn accumulateForce(
     let invR3 = invR * invRSq;
     let invR5 = invR3 * invRSq;
 
+    // Liénard-Wiechert aberration: (1 - n̂·v_source)^{-3}
+    let signalDelayed = (toggles & RELATIVITY_BIT) != 0u;
+    var aberr: f32 = 1.0;
+    if (signalDelayed) {
+        let nDotV = -(rx * svx + ry * svy) * invR;
+        let denom = max(1.0 - nDotV, ABERRATION_CLAMP_MIN);
+        aberr = min(1.0 / (denom * denom * denom), ABERRATION_CLAMP_MAX);
+    }
+    let invR3a = select(invR3, invR3 * aberr, signalDelayed);
+    let invR5a = select(invR5, invR5 * aberr, signalDelayed);
+
     let needAxMod = ((toggles & COULOMB_BIT) != 0u || (toggles & MAGNETIC_BIT) != 0u) && (toggles & AXION_BIT) != 0u;
     var axModPair: f32 = 1.0;
     if (needAxMod) {
@@ -171,9 +196,13 @@ fn accumulateForce(
     // Gravity: +m1*m2/r^2 (attractive)
     if ((toggles & GRAVITY_BIT) != 0u) {
         let k = pMass * sMass;
-        let fDir = k * invR3;
-        af.f0.x += rx * fDir;
-        af.f0.y += ry * fDir;
+        let fDir = k * invR3a;
+        let fx = rx * fDir;
+        let fy = ry * fDir;
+        af.f0.x += fx;
+        af.f0.y += fy;
+        af.totalForce.x += fx;
+        af.totalForce.y += fy;
 
         // Tidal locking torque
         let crossRV = rx * (svy - pVelY) - ry * (svx - pVelX);
@@ -191,9 +220,13 @@ fn accumulateForce(
     // Coulomb: -q1*q2/r^2 (like repels)
     if ((toggles & COULOMB_BIT) != 0u) {
         let k = -(pCharge * sCharge) * axModPair;
-        let fDir = k * invR3;
-        af.f0.z += rx * fDir;
-        af.f0.w += ry * fDir;
+        let fDir = k * invR3a;
+        let fx = rx * fDir;
+        let fy = ry * fDir;
+        af.f0.z += fx;
+        af.f0.w += fy;
+        af.totalForce.x += fx;
+        af.totalForce.y += fy;
     }
 
     // Cross product (vs x r)_z for Biot-Savart
@@ -203,28 +236,50 @@ fn accumulateForce(
     if ((toggles & MAGNETIC_BIT) != 0u) {
         let axMod = axModPair;
         // Dipole-dipole radial: F = +3*mu1*mu2/r^4
-        let fDir = 3.0 * (pMagMoment * sMagMoment) * invR5 * axMod;
-        af.f1.x += rx * fDir;
-        af.f1.y += ry * fDir;
+        let fDir = 3.0 * (pMagMoment * sMagMoment) * invR5a * axMod;
+        let fx = rx * fDir;
+        let fy = ry * fDir;
+        af.f1.x += fx;
+        af.f1.y += fy;
+        af.totalForce.x += fx;
+        af.totalForce.y += fy;
 
         // Bz from moving charge
         let BzMoving = sCharge * crossSV * invR3 * axMod;
         af.bFields.x += BzMoving;
-        // Bz from dipole
+        // dBz gradients from moving charge
+        af.bFieldGrads.x += 3.0 * BzMoving * rx * invRSq + sCharge * svy * invR3 * axMod;
+        af.bFieldGrads.y += 3.0 * BzMoving * ry * invRSq - sCharge * svx * invR3 * axMod;
+
+        // Bz from dipole: -mu/r^3
         af.bFields.x -= sMagMoment * invR3 * axMod;
+        // dBz gradients from dipole
+        af.bFieldGrads.x -= 3.0 * sMagMoment * rx * invR5 * axMod;
+        af.bFieldGrads.y -= 3.0 * sMagMoment * ry * invR5 * axMod;
     }
 
     // Gravitomagnetic: dipole + Bgz field
     if ((toggles & GRAVITOMAG_BIT) != 0u) {
-        let fDir = 3.0 * (pAngMomentum * sAngMomentum) * invR5;
-        af.f1.z += rx * fDir;
-        af.f1.w += ry * fDir;
+        let fDir = 3.0 * (pAngMomentum * sAngMomentum) * invR5a;
+        let fx = rx * fDir;
+        let fy = ry * fDir;
+        af.f1.z += fx;
+        af.f1.w += fy;
+        af.totalForce.x += fx;
+        af.totalForce.y += fy;
 
         // Bgz from moving mass
         let BgzMoving = -sMass * crossSV * invR3;
         af.bFields.y += BgzMoving;
-        // Bgz from spin
+        // dBgz gradients from moving mass
+        af.bFieldGrads.z += 3.0 * BgzMoving * rx * invRSq - sMass * svy * invR3;
+        af.bFieldGrads.w += 3.0 * BgzMoving * ry * invRSq + sMass * svx * invR3;
+
+        // Bgz from spin: -2L/r^3
         af.bFields.y -= 2.0 * sAngMomentum * invR3;
+        // dBgz gradients from spin
+        af.bFieldGrads.z -= 6.0 * sAngMomentum * rx * invR5;
+        af.bFieldGrads.w -= 6.0 * sAngMomentum * ry * invR5;
 
         // Frame-dragging torque
         let fdTorque = 2.0 * sAngMomentum * (sAngVel - pAngVel) * invR3;
@@ -238,11 +293,15 @@ fn accumulateForce(
         if (rawRSq < cutoffSq) {
             let r = 1.0 / invR;
             let expMuR = exp(-mu * r);
-            let yukModPair = sqrt(1.0 * sYukMod); // p.yukMod handled via caller
-            let ym = yukModPair;
-            let fDir = uniforms.yukawaCoupling * ym * pMass * sMass * expMuR * (invRSq + mu * invR) * invR;
-            af.f3.z += rx * fDir;
-            af.f3.w += ry * fDir;
+            let yukModPair = sqrt(pYukMod * sYukMod);
+            let yukInvRa = select(invR, invR * aberr, signalDelayed);
+            let fDir = uniforms.yukawaCoupling * yukModPair * pMass * sMass * expMuR * (invRSq + mu * invR) * yukInvRa;
+            let fx = rx * fDir;
+            let fy = ry * fDir;
+            af.f3.z += fx;
+            af.f3.w += fy;
+            af.totalForce.x += fx;
+            af.totalForce.y += fy;
         }
     }
 
@@ -269,6 +328,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let pBodyRadiusSq = pRadius * pRadius; // Approximation; BH mode uses different formula
     let pAngW = angW_in[pIdx];
     let pAxMod = axYukMod_in[pIdx].x;
+    let pYukMod = axYukMod_in[pIdx].y;
 
     // Derive velocity from proper velocity
     let wSq = velWX[pIdx] * velWX[pIdx] + velWY[pIdx] * velWY[pIdx];
@@ -325,7 +385,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             let sAYM = axYukMod_in[sIdx];
             accumulateForce(
                 pIdx, px, py, pMass, pCharge,
-                pMagMoment, pAngMomentum, pAngVel, pVelX, pVelY, pAxMod,
+                pMagMoment, pAngMomentum, pAngVel, pVelX, pVelY,
+                pAxMod, pYukMod,
                 posX[sIdx], posY[sIdx],
                 sDerived.velX, sDerived.velY,
                 mass_in[sIdx], charge_in[sIdx],
@@ -341,7 +402,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
             accumulateForce(
                 pIdx, px, py, pMass, pCharge,
-                pMagMoment, pAngMomentum, pAngVel, pVelX, pVelY, pAxMod,
+                pMagMoment, pAngMomentum, pAngVel, pVelX, pVelY,
+                pAxMod, pYukMod,
                 comX, comY,
                 avgVx, avgVy,
                 nodeMass, getTotalCharge(nodeIdx),
@@ -351,12 +413,16 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 pBodyRadiusSq,
             );
         } else if (!isLeaf) {
-            // Push children
+            // Push children (only valid ones; NONE = -1 would become garbage u32)
             if (stackTop + 4u <= MAX_STACK) {
-                stack[stackTop] = u32(getNW(nodeIdx)); stackTop += 1u;
-                stack[stackTop] = u32(getNE(nodeIdx)); stackTop += 1u;
-                stack[stackTop] = u32(getSW(nodeIdx)); stackTop += 1u;
-                stack[stackTop] = u32(getSE(nodeIdx)); stackTop += 1u;
+                let nw = getNW(nodeIdx);
+                let ne = getNE(nodeIdx);
+                let sw = getSW(nodeIdx);
+                let se = getSE(nodeIdx);
+                if (nw != NONE) { stack[stackTop] = u32(nw); stackTop += 1u; }
+                if (ne != NONE) { stack[stackTop] = u32(ne); stackTop += 1u; }
+                if (sw != NONE) { stack[stackTop] = u32(sw); stackTop += 1u; }
+                if (se != NONE) { stack[stackTop] = u32(se); stackTop += 1u; }
             }
         }
     }
@@ -370,7 +436,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         // For now, use current (frozen) position as approximation
         accumulateForce(
             pIdx, px, py, pMass, pCharge,
-            pMagMoment, pAngMomentum, pAngVel, pVelX, pVelY, pAxMod,
+            pMagMoment, pAngMomentum, pAngVel, pVelX, pVelY,
+            pAxMod, pYukMod,
             posX[ri], posY[ri], 0.0, 0.0, // vel = 0 for dead
             deathMass_in[ri], charge_in[ri],
             0.0, 0.0, 0.0, // no spin data from dead

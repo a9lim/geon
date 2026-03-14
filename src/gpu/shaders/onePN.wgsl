@@ -11,19 +11,27 @@
 
 const ALIVE_BIT: u32 = 1u;
 
+// Must match SimUniforms byte layout in common.wgsl / writeUniforms() exactly.
+// Fields we don't use are kept as padding to preserve alignment.
 struct Uniforms {
-    dt: f32,
-    halfDt: f32,
-    simTime: f32,
-    domainW: f32,
-    domainH: f32,
-    softeningSq: f32,
-    yukawaCoupling: f32,
-    yukawaMu: f32,
-    toggles0: u32,
-    aliveCount: u32,
-    boundaryMode: u32,
-    _pad0: u32,
+    dt: f32,                // [0] dt
+    _simTime: f32,          // [1] simTime (unused here)
+    domainW: f32,           // [2] domainW
+    domainH: f32,           // [3] domainH
+    _speedScale: f32,       // [4] speedScale (unused here)
+    _softening: f32,        // [5] softening (unused here)
+    softeningSq: f32,       // [6] softeningSq
+    toggles0: u32,          // [7] toggles0
+    _toggles1: u32,         // [8] toggles1 (unused here)
+    yukawaCoupling: f32,    // [9] yukawaCoupling
+    yukawaMu: f32,          // [10] yukawaMu
+    _higgsMass: f32,        // [11] higgsMass (unused here)
+    _axionMass: f32,        // [12] axionMass (unused here)
+    boundaryMode: u32,      // [13] boundaryMode
+    _topologyMode: u32,     // [14] topologyMode (unused here)
+    _collisionMode: u32,    // [15] collisionMode (unused here)
+    _maxParticles: u32,     // [16] maxParticles (unused here)
+    aliveCount: u32,        // [17] aliveCount
 };
 
 // Toggle bit constants
@@ -226,7 +234,7 @@ fn vvKick1PN(@builtin(global_invocation_id) gid: vec3u) {
     if (i >= u.aliveCount) { return; }
     if ((flags[i] & ALIVE_BIT) == 0u) { return; }
 
-    let halfDtOverM = u.halfDt * derived[i].invMass;
+    let halfDtOverM = u.dt * 0.5 * derived[i].invMass;
     let af1pn = allForces[i].f2;
     let newF = vec2f(af1pn.x, af1pn.y);
     let oldF = vec2f(f1pnOld[i * 2u], f1pnOld[i * 2u + 1u]);

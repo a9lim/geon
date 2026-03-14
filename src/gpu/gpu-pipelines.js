@@ -69,8 +69,8 @@ export async function createPhase2Pipelines(device) {
          'read-only-storage'],
         // Group 2: allForces (read-write) — 1 binding
         ['storage'],
-        // Group 3: jerk (read-write, packed vec2) — 1 binding
-        ['storage'],
+        // Group 3: jerk (rw) + maxAccel (rw) — 2 bindings
+        ['storage', 'storage'],
     ]);
 
     // --- externalFields ---

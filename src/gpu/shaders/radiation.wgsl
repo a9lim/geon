@@ -23,7 +23,7 @@ const RADIATION_BIT: u32  = 128u;
 const BLACK_HOLE_BIT: u32 = 256u;
 const YUKAWA_BIT: u32     = 2048u;
 
-// Packed structs (mirrors common.wgsl definitions for standalone shader)
+// Packed structs — byte layout MUST match common.wgsl exactly
 struct RadDerived {
     magMoment: f32,
     angMomentum: f32,
@@ -49,19 +49,43 @@ struct RadAllForces {
     _pad: vec2<f32>,
 };
 
+// Must match SimUniforms byte layout in common.wgsl / writeUniforms() exactly.
+// Fields we don't use are kept as padding to preserve alignment.
 struct Uniforms {
-    dt: f32,
-    simTime: f32,
-    domainW: f32,
-    domainH: f32,
-    softeningSq: f32,
-    yukawaCoupling: f32,
-    yukawaMu: f32,
-    toggles0: u32,
-    aliveCount: u32,
-    frameCount: u32,
-    _pad0: u32,
-    _pad1: u32,
+    dt: f32,                // [0] dt
+    simTime: f32,           // [1] simTime
+    domainW: f32,           // [2] domainW
+    domainH: f32,           // [3] domainH
+    _speedScale: f32,       // [4] speedScale (unused here)
+    _softening: f32,        // [5] softening (unused here)
+    _softeningSq: f32,      // [6] softeningSq (unused here)
+    toggles0: u32,          // [7] toggles0
+    _toggles1: u32,         // [8] toggles1 (unused here)
+    yukawaCoupling: f32,    // [9] yukawaCoupling
+    yukawaMu: f32,          // [10] yukawaMu
+    _higgsMass: f32,        // [11] higgsMass (unused here)
+    _axionMass: f32,        // [12] axionMass (unused here)
+    _boundaryMode: u32,     // [13] boundaryMode (unused here)
+    _topologyMode: u32,     // [14] topologyMode (unused here)
+    _collisionMode: u32,    // [15] collisionMode (unused here)
+    _maxParticles: u32,     // [16] maxParticles (unused here)
+    aliveCount: u32,        // [17] aliveCount
+    _extGravity: f32,       // [18]
+    _extGravityAngle: f32,  // [19]
+    _extElectric: f32,      // [20]
+    _extElectricAngle: f32, // [21]
+    _extBz: f32,            // [22]
+    _bounceFriction: f32,   // [23]
+    _extGx: f32,            // [24]
+    _extGy: f32,            // [25]
+    _extEx: f32,            // [26]
+    _extEy: f32,            // [27]
+    _axionCoupling: f32,    // [28]
+    _higgsCoupling: f32,    // [29]
+    _particleCount: u32,    // [30]
+    _bhTheta: f32,          // [31]
+    frameCount: u32,        // [32] _pad3 in common.wgsl, used as frameCount
+    _pad4: u32,             // [33]
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -302,7 +326,8 @@ fn pionEmission(@builtin(global_invocation_id) gid: vec3u) {
     let radiationOn = (u.toggles0 & RADIATION_BIT) != 0u;
     if (!yukawaOn || !radiationOn) { return; }
 
-    let fYukX = yukForceX[i]; let fYukY = yukForceY[i];
+    // Read Yukawa force from packed allForces.f3.zw (yukForceX/Y buffers are unused)
+    let fYukX = allForces_rad[i].f3.z; let fYukY = allForces_rad[i].f3.w;
     let fYukSq = fYukX * fYukX + fYukY * fYukY;
     if (fYukSq < EPSILON * EPSILON) { return; }
 
