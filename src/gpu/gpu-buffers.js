@@ -107,6 +107,39 @@ export function createParticleBuffers(device, maxParticles) {
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
 
+    // ── Quadtree buffers (Phase 3: GPU Barnes-Hut) ──
+    // Each QTNode is 20 u32 words = 80 bytes
+    const QT_NODE_SIZE = 80; // bytes (20 x u32)
+    const QT_MAX_NODES = maxParticles * 6;
+
+    // Node buffer: flat array of u32, accessed atomically for CAS insertion
+    const qtNodeBuffer = device.createBuffer({
+        label: 'qtNodes',
+        size: QT_NODE_SIZE * QT_MAX_NODES,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+    });
+
+    // Node counter (atomic u32) — next free slot index
+    const qtNodeCounter = device.createBuffer({
+        label: 'qtNodeCounter',
+        size: 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    // Bounds reduction output (minX, minY, maxX, maxY as 4 atomic i32s for fixed-point)
+    const qtBoundsBuffer = device.createBuffer({
+        label: 'qtBounds',
+        size: 16, // 4 x i32 (fixed-point for atomicMin/atomicMax)
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    // Visitor flags for bottom-up aggregate (one u32 per node)
+    const qtVisitorFlags = device.createBuffer({
+        label: 'qtVisitorFlags',
+        size: 4 * QT_MAX_NODES,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
     // Pool management: aliveCount + freeStack + freeTop
     // Packed into one buffer: [aliveCount: u32, freeTop: u32, freeStack: u32[maxParticles]]
     const poolMgmt = storageBuffer('poolMgmt', UINT_SIZE, maxParticles + 2);
@@ -163,6 +196,9 @@ export function createParticleBuffers(device, maxParticles) {
         ghostPosX, ghostPosY, ghostVelWX, ghostVelWY, ghostAngW,
         ghostMass, ghostCharge, ghostFlags,
         ghostRadius, ghostMagMoment, ghostAngMomentum, ghostParticleId,
+        // Quadtree (Phase 3)
+        qtNodeBuffer, qtNodeCounter, qtBoundsBuffer, qtVisitorFlags,
+        QT_MAX_NODES,
 
         /** Destroy all buffers */
         destroy() {

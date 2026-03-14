@@ -116,6 +116,94 @@ export async function createPhase2Pipelines(device) {
 }
 
 /**
+ * Create tree build compute pipelines (Phase 3: GPU Barnes-Hut).
+ * 4 entry points from tree-build.wgsl:
+ *   computeBounds (workgroup_size 256)
+ *   initRoot (workgroup_size 1)
+ *   insertParticles (workgroup_size 64)
+ *   computeAggregates (workgroup_size 64)
+ *
+ * All share the same bind group layouts:
+ *   Group 0: tree state (nodes, nodeCounter, bounds, visitorFlags) — read-write
+ *   Group 1: particle SoA (9 bindings) — read-only
+ *   Group 2: uniforms — uniform
+ */
+export async function createTreeBuildPipelines(device) {
+    const code = await fetchShader('tree-build.wgsl');
+    const module = device.createShaderModule({ label: 'treeBuild', code });
+
+    // Group 0: tree node buffer + counter + bounds + visitor flags
+    const group0Layout = device.createBindGroupLayout({
+        label: 'treeBuild_group0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        ],
+    });
+
+    // Group 1: particle SoA inputs (read-only)
+    const group1Layout = device.createBindGroupLayout({
+        label: 'treeBuild_group1',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        ],
+    });
+
+    // Group 2: uniforms
+    const group2Layout = device.createBindGroupLayout({
+        label: 'treeBuild_group2',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        ],
+    });
+
+    const bindGroupLayouts = [group0Layout, group1Layout, group2Layout];
+    const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts });
+
+    const computeBounds = device.createComputePipeline({
+        label: 'computeBounds',
+        layout: pipelineLayout,
+        compute: { module, entryPoint: 'computeBounds' },
+    });
+
+    const initRoot = device.createComputePipeline({
+        label: 'initRoot',
+        layout: pipelineLayout,
+        compute: { module, entryPoint: 'initRoot' },
+    });
+
+    const insertParticles = device.createComputePipeline({
+        label: 'insertParticles',
+        layout: pipelineLayout,
+        compute: { module, entryPoint: 'insertParticles' },
+    });
+
+    const computeAggregates = device.createComputePipeline({
+        label: 'computeAggregates',
+        layout: pipelineLayout,
+        compute: { module, entryPoint: 'computeAggregates' },
+    });
+
+    return {
+        computeBounds,
+        initRoot,
+        insertParticles,
+        computeAggregates,
+        bindGroupLayouts,
+    };
+}
+
+/**
  * Create ghost generation compute pipeline.
  * Standalone shader (not prepended with common.wgsl) — defines its own SimUniforms.
  * Bind groups:
