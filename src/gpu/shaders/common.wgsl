@@ -34,7 +34,7 @@ struct SimUniforms {
     axionCoupling: f32,
     higgsCoupling: f32,
     particleCount: u32,
-    _pad2: u32,
+    bhTheta: f32,
     _pad3: u32,
     _pad4: u32,
 };

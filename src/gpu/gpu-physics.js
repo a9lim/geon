@@ -16,7 +16,7 @@
  *  11. boundary
  */
 import { createParticleBuffers, createUniformBuffer, writeUniforms } from './gpu-buffers.js';
-import { createPhase2Pipelines } from './gpu-pipelines.js';
+import { createPhase2Pipelines, createGhostGenPipeline } from './gpu-pipelines.js';
 
 const MAX_PARTICLES = 4096;
 
@@ -48,6 +48,12 @@ export default class GPUPhysics {
 
         // Phase 2 pipelines + bind groups
         this._phase2 = null;
+
+        // Phase 3: Ghost generation
+        this._ghostGenPipeline = null;
+        this._ghostGenBindGroups = null;
+        this._ghostCount = 0;
+        this._ghostCountPending = false;
 
         // Toggle state
         this._toggles0 = 0;
@@ -158,6 +164,11 @@ export default class GPUPhysics {
         this._phase2 = await createPhase2Pipelines(this.device);
         this._createPhase2BindGroups();
 
+        // --- Phase 3: Ghost generation pipeline ---
+        const ghostGen = await createGhostGenPipeline(this.device);
+        this._ghostGenPipeline = ghostGen.pipeline;
+        this._createGhostGenBindGroups(ghostGen.bindGroupLayouts);
+
         this._ready = true;
     }
 
@@ -224,6 +235,115 @@ export default class GPUPhysics {
         // applyTorques
         this._bg_torques = bg('torques', p2.applyTorques.bindGroupLayouts[0],
             [this.uniformBuffer, b.angW, b.mass, b.radius, b.torques, b.flags, b.angVel]);
+    }
+
+    /**
+     * Create bind groups for ghost generation pipeline.
+     * Ghost output arrays are views into the same SoA buffers at offset = aliveCount.
+     * Since ghost writes use atomicAdd for slot allocation, the output buffers are the
+     * SAME buffers as input but the shader writes starting at the ghost slot offset.
+     */
+    _createGhostGenBindGroups(layouts) {
+        const b = this.buffers;
+        const bg = (label, layout, entries) =>
+            this.device.createBindGroup({
+                label,
+                layout,
+                entries: entries.map((buf, i) => ({ binding: i, resource: { buffer: buf } })),
+            });
+
+        // Group 0: read-only particle SoA inputs
+        const group0 = bg('ghostGen_g0', layouts[0],
+            [b.posX, b.posY, b.velWX, b.velWY, b.angW, b.mass, b.charge, b.flags]);
+
+        // Group 1: ghost output SoA (dedicated ghost buffers to avoid aliasing)
+        //   bindings 0-7: ghost output (read-write)
+        //   bindings 8-10: particle derived inputs (read-only)
+        //   bindings 11-13: ghost derived output (read-write)
+        //   binding 14: particle ID input (read-only)
+        //   binding 15: ghost particle ID output (read-write)
+        const group1 = bg('ghostGen_g1', layouts[1],
+            [b.ghostPosX, b.ghostPosY, b.ghostVelWX, b.ghostVelWY,
+             b.ghostAngW, b.ghostMass, b.ghostCharge, b.ghostFlags,
+             b.radius, b.magMoment, b.angMomentum,
+             b.ghostRadius, b.ghostMagMoment, b.ghostAngMomentum,
+             b.particleId, b.ghostParticleId]);
+
+        // Group 2: ghostCounter + uniforms + ghostOriginalIdx
+        const group2 = bg('ghostGen_g2', layouts[2],
+            [b.ghostCounter, this.uniformBuffer, b.ghostOriginalIdx]);
+
+        this._ghostGenBindGroups = [group0, group1, group2];
+    }
+
+    /**
+     * Dispatch ghost generation before tree build (Phase 3).
+     * Only runs when boundary is LOOP (periodic).
+     * Resets ghost counter, dispatches shader, then copies ghost data into main SoA arrays.
+     */
+    _dispatchGhostGen(encoder) {
+        if (this.boundaryMode !== BOUND_LOOP) {
+            this._ghostCount = 0;
+            return;
+        }
+
+        // Reset ghost counter to 0
+        const zero = new Uint32Array([0]);
+        this.device.queue.writeBuffer(this.buffers.ghostCounter, 0, zero);
+
+        const pass = encoder.beginComputePass({ label: 'ghostGen' });
+        pass.setPipeline(this._ghostGenPipeline);
+        pass.setBindGroup(0, this._ghostGenBindGroups[0]);
+        pass.setBindGroup(1, this._ghostGenBindGroups[1]);
+        pass.setBindGroup(2, this._ghostGenBindGroups[2]);
+        pass.dispatchWorkgroups(Math.ceil(this.aliveCount / 64));
+        pass.end();
+
+        // Copy ghost data from dedicated buffers into main SoA arrays at offset aliveCount.
+        // Uses previous frame's ghost count for copy size (1-frame latency, safe for tree build).
+        const ghostCount = this._ghostCount;
+        if (ghostCount > 0) {
+            const ghostBytes = ghostCount * 4;
+            const offset = this.aliveCount * 4;
+            const b = this.buffers;
+            encoder.copyBufferToBuffer(b.ghostPosX, 0, b.posX, offset, ghostBytes);
+            encoder.copyBufferToBuffer(b.ghostPosY, 0, b.posY, offset, ghostBytes);
+            encoder.copyBufferToBuffer(b.ghostVelWX, 0, b.velWX, offset, ghostBytes);
+            encoder.copyBufferToBuffer(b.ghostVelWY, 0, b.velWY, offset, ghostBytes);
+            encoder.copyBufferToBuffer(b.ghostAngW, 0, b.angW, offset, ghostBytes);
+            encoder.copyBufferToBuffer(b.ghostMass, 0, b.mass, offset, ghostBytes);
+            encoder.copyBufferToBuffer(b.ghostCharge, 0, b.charge, offset, ghostBytes);
+            encoder.copyBufferToBuffer(b.ghostFlags, 0, b.flags, offset, ghostBytes);
+            encoder.copyBufferToBuffer(b.ghostRadius, 0, b.radius, offset, ghostBytes);
+            encoder.copyBufferToBuffer(b.ghostMagMoment, 0, b.magMoment, offset, ghostBytes);
+            encoder.copyBufferToBuffer(b.ghostAngMomentum, 0, b.angMomentum, offset, ghostBytes);
+            encoder.copyBufferToBuffer(b.ghostParticleId, 0, b.particleId, offset, ghostBytes);
+        }
+    }
+
+    /**
+     * Non-blocking readback of ghost count for tree build sizing.
+     * Uses 1-frame latency like maxAccel readback.
+     */
+    async _readbackGhostCount() {
+        if (this._ghostCountPending) return;
+        if (this.boundaryMode !== BOUND_LOOP) {
+            this._ghostCount = 0;
+            return;
+        }
+        this._ghostCountPending = true;
+
+        const encoder = this.device.createCommandEncoder();
+        encoder.copyBufferToBuffer(this.buffers.ghostCounter, 0,
+            this.buffers.ghostCountStaging, 0, 4);
+        this.device.queue.submit([encoder.finish()]);
+
+        await this.buffers.ghostCountStaging.mapAsync(GPUMapMode.READ);
+        const data = new Uint32Array(this.buffers.ghostCountStaging.getMappedRange().slice(0));
+        this.buffers.ghostCountStaging.unmap();
+
+        this._ghostCount = data[0];
+        this._ghostCountPending = false;
     }
 
     /**
@@ -325,6 +445,9 @@ export default class GPUPhysics {
 
         // Readback maxAccel for next frame (non-blocking)
         this._readbackMaxAccel();
+
+        // Readback ghost count for next frame (non-blocking)
+        this._readbackGhostCount();
     }
 
     /**
@@ -361,12 +484,16 @@ export default class GPUPhysics {
             axionCoupling: this._axionCoupling,
             higgsCoupling: this._higgsCoupling,
             particleCount: this.aliveCount,
+            bhTheta: 0.5,
         });
 
         const workgroups = Math.ceil(this.aliveCount / 64);
         const p2 = this._phase2;
 
         const encoder = this.device.createCommandEncoder({ label: 'physics-phase2' });
+
+        // Pass 0: ghost generation (Phase 3 — before tree build)
+        this._dispatchGhostGen(encoder);
 
         // Pass 1: resetForces
         const pass1 = encoder.beginComputePass({ label: 'resetForces' });
@@ -482,8 +609,9 @@ export default class GPUPhysics {
     }
 }
 
-// Flag constants (must match common.wgsl)
+// Constants (must match common.wgsl)
 const FLAG_ALIVE = 1;
+const BOUND_LOOP = 2;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 async function fetchShader(filename) {

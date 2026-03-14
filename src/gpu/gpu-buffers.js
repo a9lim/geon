@@ -10,6 +10,9 @@ export function createParticleBuffers(device, maxParticles) {
     const FLOAT_SIZE = 4;
     const UINT_SIZE = 4;
 
+    // Total SoA capacity: MAX_PARTICLES * 2 to accommodate ghost entries appended after alive particles
+    const soaCapacity = maxParticles * 2;
+
     /**
      * Helper: create a storage buffer with COPY_SRC for readback.
      * @param {string} label
@@ -24,30 +27,30 @@ export function createParticleBuffers(device, maxParticles) {
         });
     }
 
-    // Core state (f32 per particle)
-    const posX = storageBuffer('posX', FLOAT_SIZE, maxParticles);
-    const posY = storageBuffer('posY', FLOAT_SIZE, maxParticles);
-    const velWX = storageBuffer('velWX', FLOAT_SIZE, maxParticles);
-    const velWY = storageBuffer('velWY', FLOAT_SIZE, maxParticles);
-    const angW = storageBuffer('angW', FLOAT_SIZE, maxParticles);
-    const mass = storageBuffer('mass', FLOAT_SIZE, maxParticles);
+    // Core state (f32 per particle) — sized for particles + ghosts
+    const posX = storageBuffer('posX', FLOAT_SIZE, soaCapacity);
+    const posY = storageBuffer('posY', FLOAT_SIZE, soaCapacity);
+    const velWX = storageBuffer('velWX', FLOAT_SIZE, soaCapacity);
+    const velWY = storageBuffer('velWY', FLOAT_SIZE, soaCapacity);
+    const angW = storageBuffer('angW', FLOAT_SIZE, soaCapacity);
+    const mass = storageBuffer('mass', FLOAT_SIZE, soaCapacity);
     const baseMass = storageBuffer('baseMass', FLOAT_SIZE, maxParticles);
-    const charge = storageBuffer('charge', FLOAT_SIZE, maxParticles);
+    const charge = storageBuffer('charge', FLOAT_SIZE, soaCapacity);
 
-    // Derived/cached
-    const radius = storageBuffer('radius', FLOAT_SIZE, maxParticles);
-    const gamma = storageBuffer('gamma', FLOAT_SIZE, maxParticles);
+    // Derived/cached — sized for particles + ghosts
+    const radius = storageBuffer('radius', FLOAT_SIZE, soaCapacity);
+    const gamma = storageBuffer('gamma', FLOAT_SIZE, soaCapacity);
 
-    // Derived/cached (Phase 2)
-    const magMoment = storageBuffer('magMoment', FLOAT_SIZE, maxParticles);
-    const angMomentum = storageBuffer('angMomentum', FLOAT_SIZE, maxParticles);
-    const axMod = storageBuffer('axMod', FLOAT_SIZE, maxParticles);
-    const yukMod = storageBuffer('yukMod', FLOAT_SIZE, maxParticles);
-    const velX = storageBuffer('velX', FLOAT_SIZE, maxParticles);  // coordinate velocity
-    const velY = storageBuffer('velY', FLOAT_SIZE, maxParticles);
-    const angVel = storageBuffer('angVel', FLOAT_SIZE, maxParticles);
-    const invMass = storageBuffer('invMass', FLOAT_SIZE, maxParticles);
-    const radiusSq = storageBuffer('radiusSq', FLOAT_SIZE, maxParticles);
+    // Derived/cached (Phase 2) — sized for particles + ghosts
+    const magMoment = storageBuffer('magMoment', FLOAT_SIZE, soaCapacity);
+    const angMomentum = storageBuffer('angMomentum', FLOAT_SIZE, soaCapacity);
+    const axMod = storageBuffer('axMod', FLOAT_SIZE, soaCapacity);
+    const yukMod = storageBuffer('yukMod', FLOAT_SIZE, soaCapacity);
+    const velX = storageBuffer('velX', FLOAT_SIZE, soaCapacity);  // coordinate velocity
+    const velY = storageBuffer('velY', FLOAT_SIZE, soaCapacity);
+    const angVel = storageBuffer('angVel', FLOAT_SIZE, soaCapacity);
+    const invMass = storageBuffer('invMass', FLOAT_SIZE, soaCapacity);
+    const radiusSq = storageBuffer('radiusSq', FLOAT_SIZE, soaCapacity);
 
     // Force accumulators (vec4 = 16 bytes each, packed pairs)
     const VEC4_SIZE = 16;
@@ -65,9 +68,44 @@ export function createParticleBuffers(device, maxParticles) {
     const totalForceX = storageBuffer('totalForceX', FLOAT_SIZE, maxParticles);
     const totalForceY = storageBuffer('totalForceY', FLOAT_SIZE, maxParticles);
 
-    // Particle metadata
-    const flags = storageBuffer('flags', UINT_SIZE, maxParticles);
+    // Particle metadata — flags sized for particles + ghosts
+    const flags = storageBuffer('flags', UINT_SIZE, soaCapacity);
     const color = storageBuffer('color', UINT_SIZE, maxParticles);
+
+    // Particle ID for ghost->original mapping
+    const particleId = storageBuffer('particleId', UINT_SIZE, soaCapacity);
+
+    // Ghost particle counter (single atomic u32)
+    const ghostCounter = device.createBuffer({
+        label: 'ghostCounter',
+        size: 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+    });
+
+    // Ghost output SoA buffers (separate from particle buffers to avoid aliasing)
+    // After dispatch, ghost data is copied into the main SoA arrays at offset aliveCount.
+    const ghostPosX = storageBuffer('ghostPosX', FLOAT_SIZE, maxParticles);
+    const ghostPosY = storageBuffer('ghostPosY', FLOAT_SIZE, maxParticles);
+    const ghostVelWX = storageBuffer('ghostVelWX', FLOAT_SIZE, maxParticles);
+    const ghostVelWY = storageBuffer('ghostVelWY', FLOAT_SIZE, maxParticles);
+    const ghostAngW = storageBuffer('ghostAngW', FLOAT_SIZE, maxParticles);
+    const ghostMass = storageBuffer('ghostMass', FLOAT_SIZE, maxParticles);
+    const ghostCharge = storageBuffer('ghostCharge', FLOAT_SIZE, maxParticles);
+    const ghostFlags = storageBuffer('ghostFlags', UINT_SIZE, maxParticles);
+    const ghostRadius = storageBuffer('ghostRadius', FLOAT_SIZE, maxParticles);
+    const ghostMagMoment = storageBuffer('ghostMagMoment', FLOAT_SIZE, maxParticles);
+    const ghostAngMomentum = storageBuffer('ghostAngMomentum', FLOAT_SIZE, maxParticles);
+    const ghostParticleId = storageBuffer('ghostParticleId', UINT_SIZE, maxParticles);
+
+    // Ghost original index mapping (which alive particle each ghost copies)
+    const ghostOriginalIdx = storageBuffer('ghostOriginalIdx', UINT_SIZE, maxParticles);
+
+    // Staging buffer for reading back ghost count
+    const ghostCountStaging = device.createBuffer({
+        label: 'ghostCountStaging',
+        size: 4,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
 
     // Pool management: aliveCount + freeStack + freeTop
     // Packed into one buffer: [aliveCount: u32, freeTop: u32, freeStack: u32[maxParticles]]
@@ -102,13 +140,14 @@ export function createParticleBuffers(device, maxParticles) {
 
     return {
         maxParticles,
+        soaCapacity,
         // Core state
         posX, posY, velWX, velWY, angW, mass, baseMass, charge,
         // Derived
         radius, gamma, magMoment, angMomentum, axMod, yukMod,
         velX, velY, angVel, invMass, radiusSq,
         // Metadata
-        flags, color,
+        flags, color, particleId,
         // Forces
         forces0, forces1, forces2, forces3, forces4, forces5,
         torques, bFields, bFieldGrads,
@@ -119,6 +158,11 @@ export function createParticleBuffers(device, maxParticles) {
         statsBuffer, statsStagingA, statsStagingB,
         // Adaptive substepping
         maxAccelBuffer, maxAccelStaging,
+        // Ghost generation
+        ghostCounter, ghostOriginalIdx, ghostCountStaging,
+        ghostPosX, ghostPosY, ghostVelWX, ghostVelWY, ghostAngW,
+        ghostMass, ghostCharge, ghostFlags,
+        ghostRadius, ghostMagMoment, ghostAngMomentum, ghostParticleId,
 
         /** Destroy all buffers */
         destroy() {
@@ -189,6 +233,7 @@ export function writeUniforms(device, buffer, params) {
     f[28] = params.axionCoupling || 0.05;
     f[29] = params.higgsCoupling || 1.0;
     u[30] = params.particleCount || 0;  // actual alive particle count for dispatch sizing
+    f[31] = params.bhTheta || 0.5;     // Barnes-Hut opening angle
 
     device.queue.writeBuffer(buffer, 0, data);
 }
