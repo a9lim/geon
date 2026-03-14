@@ -930,3 +930,84 @@ export async function createFieldDepositPipelines(device) {
 
     return { ...pipelines, bindGroupLayouts };
 }
+
+/**
+ * Create field evolution pipelines (Phase 5: Störmer-Verlet KDK).
+ * Entry points from field-evolve.wgsl (prepended with field-common.wgsl):
+ *   computeLaplacian, higgsHalfKick, axionHalfKick, fieldDrift,
+ *   nanFixupHiggs, nanFixupAxion, computeGridGradients
+ *
+ * Two pipeline layouts:
+ *   evolveLayout: bindings 8-9 (fieldGradX/Y) are read-only (for half-kick self-gravity cross-terms)
+ *   gradLayout:   bindings 8-9 (fieldGradX/Y) are read_write (for computeGridGradients output)
+ */
+export async function createFieldEvolvePipelines(device) {
+    const fieldCommonWGSL = await fetchShader('field-common.wgsl');
+    const evolveWGSL = await fetchShader('field-evolve.wgsl');
+    const code = fieldCommonWGSL + '\n' + evolveWGSL;
+    const module = device.createShaderModule({ label: 'fieldEvolve', code });
+
+    // Evolve layout: bindings 8-9 are read-only
+    const evolveGroup0Layout = device.createBindGroupLayout({
+        label: 'fieldEvolve_group0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // field
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // fieldDot
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // laplacian
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // source
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // thermal
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // sgPhiFull
+            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // sgGradX
+            { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // sgGradY
+            { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // fieldGradX (stale)
+            { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // fieldGradY (stale)
+            { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },          // FieldUniforms
+        ],
+    });
+    const evolveBindGroupLayouts = [evolveGroup0Layout];
+    const evolvePipelineLayout = device.createPipelineLayout({ bindGroupLayouts: evolveBindGroupLayouts });
+
+    // Gradient layout: bindings 8-9 are read_write (output)
+    const gradGroup0Layout = device.createBindGroupLayout({
+        label: 'fieldGrad_group0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // field
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // fieldDot
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // laplacian
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // source
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // thermal
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // sgPhiFull
+            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // sgGradX
+            { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // sgGradY
+            { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // fieldGradX (output)
+            { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // fieldGradY (output)
+            { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },          // FieldUniforms
+        ],
+    });
+    const gradBindGroupLayouts = [gradGroup0Layout];
+    const gradPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: gradBindGroupLayouts });
+
+    // Evolve entry points (use evolveLayout)
+    const evolveEntries = ['computeLaplacian', 'higgsHalfKick', 'axionHalfKick', 'fieldDrift', 'nanFixupHiggs', 'nanFixupAxion'];
+    const pipelines = {};
+    for (const entry of evolveEntries) {
+        pipelines[entry] = device.createComputePipeline({
+            label: entry,
+            layout: evolvePipelineLayout,
+            compute: { module, entryPoint: entry },
+        });
+    }
+
+    // Gradient entry point (uses gradLayout — bindings 8-9 are read_write)
+    pipelines.computeGridGradients = device.createComputePipeline({
+        label: 'computeGridGradients',
+        layout: gradPipelineLayout,
+        compute: { module, entryPoint: 'computeGridGradients' },
+    });
+
+    return {
+        ...pipelines,
+        evolveBindGroupLayouts,
+        gradBindGroupLayouts,
+    };
+}
