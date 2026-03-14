@@ -103,16 +103,28 @@ export function setupUI(sim) {
         });
     };
 
+    const _syncModesToGPU = () => {
+        if (sim._gpuPhysics) {
+            sim._gpuPhysics.boundaryMode = sim.boundaryMode;
+            sim._gpuPhysics.topologyMode = sim.topology;
+            sim._gpuPhysics._collisionMode = sim.collisionMode;
+        }
+    };
     bindToggleGroup('collision-toggles', 'collision', (v) => {
         sim.collisionMode = colFromString(v);
         updateFrictionVisibility();
+        _syncModesToGPU();
     });
     bindToggleGroup('boundary-toggles', 'boundary', (v) => {
         sim.boundaryMode = boundFromString(v);
         document.getElementById('topology-group').style.display = v === 'loop' ? '' : 'none';
         updateFrictionVisibility();
+        _syncModesToGPU();
     });
-    bindToggleGroup('topology-toggles', 'topology', (v) => { sim.topology = topoFromString(v); });
+    bindToggleGroup('topology-toggles', 'topology', (v) => {
+        sim.topology = topoFromString(v);
+        _syncModesToGPU();
+    });
 
     // ─── Grid resolution (GPU backend only) ───
     const gridResGroup = document.getElementById('grid-res-group');
@@ -233,6 +245,8 @@ export function setupUI(sim) {
             const gpuToggles = Object.create(sim.physics);
             gpuToggles.heatmapEnabled = sim.heatmap && sim.heatmap.enabled;
             sim._gpuPhysics.setToggles(gpuToggles);
+            // Sync boundary/collision/topology (live on sim, not sim.physics)
+            _syncModesToGPU();
         }
     };
 

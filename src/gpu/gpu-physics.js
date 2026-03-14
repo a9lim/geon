@@ -1112,7 +1112,7 @@ export default class GPUPhysics {
      * Add a particle to the GPU buffers.
      * Phase 1: writes directly via queue.writeBuffer (no free stack yet).
      */
-    addParticle({ x, y, vx = 0, vy = 0, mass: m = 1, charge: q = 0 }) {
+    addParticle({ x, y, vx = 0, vy = 0, mass: m = 1, charge: q = 0, angw = 0, antimatter = false }) {
         const idx = this.aliveCount;
         if (idx >= MAX_PARTICLES) return -1;
 
@@ -1126,9 +1126,11 @@ export default class GPUPhysics {
         stateF32[3] = vy;         // velWY
         stateF32[4] = m;          // mass
         stateF32[5] = q;          // charge
-        stateF32[6] = 0;          // angW
+        stateF32[6] = angw;       // angW
         stateF32[7] = m;          // baseMass
-        stateU32[8] = FLAG_ALIVE; // flags
+        let flags = FLAG_ALIVE;
+        if (antimatter) flags |= FLAG_ANTIMATTER;
+        stateU32[8] = flags;
         this.device.queue.writeBuffer(this.buffers.particleState, idx * PARTICLE_STATE_SIZE, stateData);
 
         // Write packed ParticleAux struct (20 bytes = 5 × f32/u32)
