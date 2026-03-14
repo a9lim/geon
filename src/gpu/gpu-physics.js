@@ -2046,7 +2046,7 @@ export default class GPUPhysics {
         f[0] = 0.5;     // minEnergy
         f[1] = 8.0;     // proximity
         f[2] = 0.005;   // probability
-        u[3] = 64;      // minAge
+        f[3] = 64.0;    // minAge (time units, matches CPU PAIR_PROD_MIN_AGE)
         u[4] = 32;      // maxParticles (PAIR_PROD_MAX_PARTICLES)
         u[5] = this.aliveCount;
         u[6] = MAX_PHOTONS;
@@ -2430,12 +2430,14 @@ export default class GPUPhysics {
             pass5.end();
         }
 
-        // Pass 5b: externalFields
-        const pass5b = encoder.beginComputePass({ label: 'externalFields' });
-        pass5b.setPipeline(p2.externalFields.pipeline);
-        pass5b.setBindGroup(0, this._bg_extFields);
-        pass5b.dispatchWorkgroups(workgroups);
-        pass5b.end();
+        // Pass 5b: externalFields (skip when all external fields are zero)
+        if (this._extGravity !== 0 || this._extElectric !== 0 || this._extBz !== 0) {
+            const pass5b = encoder.beginComputePass({ label: 'externalFields' });
+            pass5b.setPipeline(p2.externalFields.pipeline);
+            pass5b.setBindGroup(0, this._bg_extFields);
+            pass5b.dispatchWorkgroups(workgroups);
+            pass5b.end();
+        }
 
         // Pass 5c: scalar field forces (Higgs gradient + mass mod, Axion gradient + axMod/yukMod)
         // Must run BEFORE Boris so gradient forces are included in totalForce for half-kicks.
@@ -2508,12 +2510,20 @@ export default class GPUPhysics {
         this._dispatch1PNVV(encoder);
 
         // Pass 15: scalar field evolution (Higgs, Axion)
+        // When both fields are enabled, must submit between them to avoid currentFieldType
+        // uniform race: queue.writeBuffer executes before submit, so the second writeBuffer
+        // would overwrite the first before any dispatches run.
         if (this._fieldDeposit) {
             this._writeFieldUniforms(dtSub);
             if (this._higgsEnabled) {
                 // Set currentFieldType=0 (Higgs) for Laplacian/gradient vacuum value
                 this.device.queue.writeBuffer(this._fieldUniformBuffer, 20 * 4, new Uint32Array([0]));
                 this._dispatchFieldEvolve(encoder, 'higgs', dtSub);
+                if (this._axionEnabled) {
+                    // Must submit Higgs dispatches before changing currentFieldType to Axion
+                    this.device.queue.submit([encoder.finish()]);
+                    encoder = this.device.createCommandEncoder({ label: 'physics-substep-axion' });
+                }
             }
             if (this._axionEnabled) {
                 // Set currentFieldType=1 (Axion) for Laplacian/gradient vacuum value

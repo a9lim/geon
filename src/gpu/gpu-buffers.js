@@ -8,7 +8,7 @@
  *   ParticleState  (36 bytes) — posX,posY,velWX,velWY,mass,charge,angW,baseMass,flags
  *   ParticleAux    (20 bytes) — radius,particleId,deathTime,deathMass,deathAngVel
  *   RadiationState (32 bytes) — jerk,radAccum,hawkAccum,yukawaRadAccum,radDisplay,pad
- *   Photon         (32 bytes) — pos,vel,energy,emitterId,age,flags
+ *   Photon         (32 bytes) — pos,vel,energy,emitterId,lifetime,flags
  *   Pion           (48 bytes) — pos,w,mass,charge,energy,emitterId,age,flags,pad
  */
 
@@ -540,11 +540,15 @@ export function createUniformBuffer(device) {
  * @param {GPUBuffer} buffer
  * @param {Object} params - Simulation parameters
  */
+// Pre-allocated uniform data buffer (avoids GC pressure from per-substep allocation)
+const _uniformData = new ArrayBuffer(256);
+const _uniformF32 = new Float32Array(_uniformData);
+const _uniformU32 = new Uint32Array(_uniformData);
+
 export function writeUniforms(device, buffer, params) {
-    // Pack into Float32Array matching WGSL struct layout
-    const data = new ArrayBuffer(256);
-    const f = new Float32Array(data);
-    const u = new Uint32Array(data);
+    // Pack into pre-allocated Float32Array matching WGSL struct layout
+    const f = _uniformF32;
+    const u = _uniformU32;
 
     f[0] = params.dt || 0;
     f[1] = params.simTime || 0;
@@ -583,5 +587,5 @@ export function writeUniforms(device, buffer, params) {
     // _pad3 at index 32, _pad4 at index 33 in common.wgsl — reuse for Phase 4
     u[32] = params.frameCount || 0;    // frame counter for RNG seed
 
-    device.queue.writeBuffer(buffer, 0, data);
+    device.queue.writeBuffer(buffer, 0, _uniformData);
 }

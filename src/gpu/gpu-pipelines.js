@@ -659,13 +659,14 @@ export async function createBosonRenderPipelines(device, format, isLight) {
     const bindGroupLayouts = [g0, g1, g2];
     const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts });
 
+    // Boson fragment shader outputs premultiplied alpha: use 'one' for srcFactor
     const blendState = isLight
         ? {
-            color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+            color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
             alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         }
         : {
-            color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'add' },
+            color: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
             alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
         };
 

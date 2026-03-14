@@ -65,7 +65,7 @@ struct Uniforms {
     _higgsMass: f32,        // [11] higgsMass (unused here)
     _axionMass: f32,        // [12] axionMass (unused here)
     boundaryMode: u32,      // [13] boundaryMode
-    _topologyMode: u32,     // [14] topologyMode (unused here)
+    topologyMode: u32,      // [14] topologyMode
     _collisionMode: u32,    // [15] collisionMode (unused here)
     _maxParticles: u32,     // [16] maxParticles (unused here)
     aliveCount: u32,        // [17] aliveCount
@@ -79,6 +79,8 @@ const RELATIVITY_BIT: u32    = 32u;
 
 const EPSILON: f32 = 1e-9;
 const BOUND_LOOP: u32 = 2u;
+const TOPO_TORUS: u32 = 0u;
+const TOPO_KLEIN: u32 = 1u;
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
@@ -96,7 +98,7 @@ fn accum1PN(
     px: f32, py: f32, pvx: f32, pvy: f32, pMass: f32, pCharge: f32,
     sx: f32, sy: f32, svx: f32, svy: f32, sMass: f32, sCharge: f32,
     sYukMod: f32, softeningSq: f32,
-    periodic: bool, domW: f32, domH: f32,
+    periodic: bool, domW: f32, domH: f32, topo: u32,
     gmOn: bool, magOn: bool, yukOn: bool, yukawaMu: f32,
     yukawaCoupling: f32, pYukMod: f32,
 ) -> vec2f {
@@ -105,8 +107,53 @@ fn accum1PN(
     if (periodic) {
         let halfW = domW * 0.5;
         let halfH = domH * 0.5;
-        if (rx > halfW) { rx -= domW; } else if (rx < -halfW) { rx += domW; }
-        if (ry > halfH) { ry -= domH; } else if (ry < -halfH) { ry += domH; }
+        if (topo == TOPO_TORUS) {
+            if (rx > halfW) { rx -= domW; } else if (rx < -halfW) { rx += domW; }
+            if (ry > halfH) { ry -= domH; } else if (ry < -halfH) { ry += domH; }
+        } else if (topo == TOPO_KLEIN) {
+            // Torus wrap for direct
+            var dx0 = rx;
+            if (dx0 > halfW) { dx0 -= domW; } else if (dx0 < -halfW) { dx0 += domW; }
+            var dy0 = ry;
+            if (dy0 > halfH) { dy0 -= domH; } else if (dy0 < -halfH) { dy0 += domH; }
+            var bestSq = dx0 * dx0 + dy0 * dy0;
+            rx = dx0; ry = dy0;
+            // Klein glide: (W-sx, sy+H) and (W-sx, sy-H)
+            let gx = domW - sx;
+            var dx1 = gx - px;
+            if (dx1 > halfW) { dx1 -= domW; } else if (dx1 < -halfW) { dx1 += domW; }
+            var dy1 = (sy + domH) - py;
+            if (dy1 > domH) { dy1 -= 2.0 * domH; } else if (dy1 < -domH) { dy1 += 2.0 * domH; }
+            if (dx1 * dx1 + dy1 * dy1 < bestSq) { rx = dx1; ry = dy1; bestSq = dx1 * dx1 + dy1 * dy1; }
+            var dy1b = (sy - domH) - py;
+            if (dy1b > domH) { dy1b -= 2.0 * domH; } else if (dy1b < -domH) { dy1b += 2.0 * domH; }
+            if (dx1 * dx1 + dy1b * dy1b < bestSq) { rx = dx1; ry = dy1b; }
+        } else {
+            // RP²: both axes glide reflections
+            var dx0 = rx;
+            if (dx0 > halfW) { dx0 -= domW; } else if (dx0 < -halfW) { dx0 += domW; }
+            var dy0 = ry;
+            if (dy0 > halfH) { dy0 -= domH; } else if (dy0 < -halfH) { dy0 += domH; }
+            var bestSq = dx0 * dx0 + dy0 * dy0;
+            rx = dx0; ry = dy0;
+            let gx = domW - sx;
+            var dxG = gx - px;
+            if (dxG > halfW) { dxG -= domW; } else if (dxG < -halfW) { dxG += domW; }
+            var dyG = (sy + domH) - py;
+            if (dyG > domH) { dyG -= 2.0 * domH; } else if (dyG < -domH) { dyG += 2.0 * domH; }
+            if (dxG * dxG + dyG * dyG < bestSq) { rx = dxG; ry = dyG; bestSq = dxG * dxG + dyG * dyG; }
+            let gy = domH - sy;
+            var dxH = (sx + domW) - px;
+            if (dxH > domW) { dxH -= 2.0 * domW; } else if (dxH < -domW) { dxH += 2.0 * domW; }
+            var dyH = gy - py;
+            if (dyH > halfH) { dyH -= domH; } else if (dyH < -halfH) { dyH += domH; }
+            if (dxH * dxH + dyH * dyH < bestSq) { rx = dxH; ry = dyH; bestSq = dxH * dxH + dyH * dyH; }
+            var dxC = (domW - sx + domW) - px;
+            if (dxC > domW) { dxC -= 2.0 * domW; } else if (dxC < -domW) { dxC += 2.0 * domW; }
+            var dyC = (domH - sy + domH) - py;
+            if (dyC > domH) { dyC -= 2.0 * domH; } else if (dyC < -domH) { dyC += 2.0 * domH; }
+            if (dxC * dxC + dyC * dyC < bestSq) { rx = dxC; ry = dyC; }
+        }
     }
     let rSq = rx * rx + ry * ry + softeningSq;
     let invRSq = 1.0 / rSq;
@@ -214,7 +261,7 @@ fn compute1PN(@builtin(global_invocation_id) gid: vec3u) {
         let f = accum1PN(px, py, pvx, pvy, pMass, pCharge,
                          particles[j].posX, particles[j].posY, svx, svy,
                          particles[j].mass, particles[j].charge, axYukMod[j].y,
-                         u.softeningSq, periodic, u.domainW, u.domainH,
+                         u.softeningSq, periodic, u.domainW, u.domainH, u.topologyMode,
                          gmOn, magOn, yukOn, u.yukawaMu,
                          u.yukawaCoupling, axYukMod[i].y);
         f1pnX += f.x;

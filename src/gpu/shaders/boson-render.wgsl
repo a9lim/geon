@@ -17,7 +17,7 @@ struct Photon {
     posX: f32, posY: f32,
     velX: f32, velY: f32,
     energy: f32,
-    emitterId: u32, age: u32, flags: u32,
+    emitterId: u32, lifetime: f32, flags: u32,
 };
 
 // Packed pion struct (matches common.wgsl Pion)
@@ -73,9 +73,7 @@ fn vertexPhoton(
 
     let px = ph.posX;
     let py = ph.posY;
-    let age = f32(ph.age);
-    let maxAge = 256.0 * 128.0; // PHOTON_LIFETIME * PHYSICS_DT_INV
-    let rawAlpha = max(0.0, 1.0 - age / maxAge);
+    let rawAlpha = max(0.0, 1.0 - ph.lifetime / 256.0); // PHOTON_LIFETIME = 256 time units
     // Alpha scale: 0.6 for light, 0.8 for dark (matches CPU renderer bucket alpha)
     let alphaScale = select(0.6, 0.8, camera.isDarkMode > 0.5);
     let alpha = rawAlpha * alphaScale;
@@ -140,5 +138,7 @@ fn fragmentBoson(@location(0) color: vec4f, @location(1) uv: vec2f) -> @location
     let dist = length(uv - 0.5) * 2.0;
     if (dist > 1.0) { discard; }
     let falloff = 1.0 - dist * dist;
-    return vec4f(color.rgb, color.a * falloff);
+    let finalAlpha = color.a * falloff;
+    // Premultiplied alpha output (matches particle.wgsl and canvas alphaMode: 'premultiplied')
+    return vec4f(color.rgb * finalAlpha, finalAlpha);
 }

@@ -6,7 +6,8 @@
 const MAX_PHOTONS: u32 = 1024u;
 const MAX_PIONS: u32 = 256u;
 const BOSON_SOFTENING_SQ: f32 = 4.0;
-const BOSON_MIN_AGE: u32 = 4u;
+const BOSON_MIN_AGE_TIME: f32 = 0.03125; // 4 substeps * PHYSICS_DT(1/128) = 0.03125 time units
+const BOSON_MIN_AGE: u32 = 4u; // pion substep counter guard
 const PHOTON_LIFETIME: f32 = 256.0;
 const EPSILON: f32 = 1e-9;
 
@@ -55,7 +56,7 @@ struct Photon {
     posX: f32, posY: f32,
     velX: f32, velY: f32,
     energy: f32,
-    emitterId: u32, age: u32, flags: u32,
+    emitterId: u32, lifetime: f32, flags: u32,
 };
 
 struct Pion {
@@ -159,9 +160,9 @@ fn updatePhotons(@builtin(global_invocation_id) gid: vec3u) {
     ph.posX += phVX * dt;
     ph.posY += phVY * dt;
 
-    // Age + lifetime despawn
-    ph.age += 1u;
-    if (f32(ph.age) * u.dt > PHOTON_LIFETIME) {
+    // Accumulate lifetime + despawn check
+    ph.lifetime += dt;
+    if (ph.lifetime > PHOTON_LIFETIME) {
         ph.flags &= ~1u; // mark dead
     }
     photons[i] = ph;
@@ -214,7 +215,7 @@ fn absorbPhotons(@builtin(global_invocation_id) gid: vec3u) {
     let count = atomicLoad(&phCount);
     if (i >= count) { return; }
     if ((photons[i].flags & 1u) == 0u) { return; }
-    if (photons[i].age < BOSON_MIN_AGE) { return; }
+    if (photons[i].lifetime < BOSON_MIN_AGE_TIME) { return; }
 
     let phX = photons[i].posX; let phY = photons[i].posY;
     let aliveN = u.aliveCount;
@@ -338,7 +339,7 @@ fn decayPions(@builtin(global_invocation_id) gid: vec3u) {
                 ph.velX = cosA; ph.velY = sinA;
                 ph.energy = pMag;
                 ph.emitterId = pions[i].emitterId; // inherit emitterId
-                ph.age = 0u; ph.flags = 1u; // alive, type=em
+                ph.lifetime = 0.0; ph.flags = 1u; // alive, type=em
                 photons[phIdx] = ph;
             } else {
                 atomicSub(&phCount, 1u); // rollback
@@ -361,7 +362,7 @@ fn decayPions(@builtin(global_invocation_id) gid: vec3u) {
                 ph.velX = cosA; ph.velY = sinA;
                 ph.energy = pions[i].energy;
                 ph.emitterId = pions[i].emitterId;
-                ph.age = 0u; ph.flags = 1u;
+                ph.lifetime = 0.0; ph.flags = 1u;
                 photons[phIdx] = ph;
             } else { atomicSub(&phCount, 1u); }
         } else {
@@ -415,7 +416,7 @@ fn decayPions(@builtin(global_invocation_id) gid: vec3u) {
                     ph.velX = phCos; ph.velY = phSin;
                     ph.energy = phMag;
                     ph.emitterId = pions[i].emitterId;
-                    ph.age = 0u; ph.flags = 1u;
+                    ph.lifetime = 0.0; ph.flags = 1u;
                     photons[phIdx] = ph;
                 } else { atomicSub(&phCount, 1u); }
             }
@@ -449,7 +450,7 @@ fn decayPions(@builtin(global_invocation_id) gid: vec3u) {
                     var aux: ParticleAux;
                     aux.radius = pow(mE, 1.0 / 3.0);
                     aux.particleId = 0xFFFFFFFFu; // sentinel: no emitter identity
-                    aux.deathTime = bitcast<f32>(0x7F800000u); // +Infinity
+                    aux.deathTime = 1e30; // large sentinel (WGSL disallows Inf)
                     aux.deathMass = 0.0;
                     aux.deathAngVel = 0.0;
                     particleAux[pIdx] = aux;

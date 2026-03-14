@@ -310,7 +310,7 @@ export default class GPURenderer {
                     { binding: 0, resource: { buffer: this.cameraBuffer } },
                     { binding: 1, resource: { buffer: b.particleState } },
                     { binding: 2, resource: { buffer: b.particleAux } },
-                    { binding: 3, resource: { buffer: b.color } },
+                    { binding: 3, resource: { buffer: b.derived } },
                 ],
             });
             this._spinReady = true;

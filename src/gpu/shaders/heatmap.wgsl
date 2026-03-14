@@ -1,6 +1,6 @@
 // ─── Potential Field Heatmap ───
 // 64x64 grid potential from particles. Gravity, Coulomb, Yukawa contributions.
-// Signal-delay-aware when relativity enabled.
+// Note: signal delay NOT supported on GPU heatmap — uses current positions.
 // Direct O(N*GRID^2) pairwise — tree acceleration deferred to future optimization.
 
 // Packed particle state struct (matches common.wgsl ParticleState)

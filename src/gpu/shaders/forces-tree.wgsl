@@ -625,8 +625,11 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     }
 
-    // After tree walk, iterate retired particles (pairwise, matching CPU behavior)
-    for (var ri = 0u; ri < uniforms.aliveCount; ri++) {
+    // After tree walk, iterate retired particles (pairwise, matching CPU behavior).
+    // Only relevant when relativity is on (dead particles exert forces via signal delay).
+    // Skip entirely otherwise — the O(N) scan per thread dominates BH O(N log N) cost.
+    let hasSignalDelay = (uniforms.toggles0 & RELATIVITY_BIT) != 0u;
+    for (var ri = 0u; ri < select(0u, uniforms.aliveCount, hasSignalDelay); ri++) {
         let rPs = particleState[ri];
         if ((rPs.flags & FLAG_RETIRED) == 0u) { continue; }
         if ((rPs.flags & FLAG_ALIVE) != 0u) { continue; }

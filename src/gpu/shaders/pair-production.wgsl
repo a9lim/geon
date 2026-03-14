@@ -7,7 +7,7 @@ struct Photon {
     posX: f32, posY: f32,
     velX: f32, velY: f32,
     energy: f32,
-    emitterId: u32, age: u32, flags: u32,
+    emitterId: u32, lifetime: f32, flags: u32,
 };
 
 // Packed particle state struct (matches common.wgsl ParticleState)
@@ -23,7 +23,7 @@ struct PairProdUniforms {
     minEnergy: f32,       // 0.5
     proximity: f32,       // 8.0
     probability: f32,     // 0.005
-    minAge: u32,          // 64
+    minAge: f32,          // 64.0 (time units, matches CPU PAIR_PROD_MIN_AGE)
     maxParticles: u32,    // 32
     currentParticleCount: u32,
     photonCount: u32,
@@ -78,7 +78,7 @@ fn checkPairProduction(@builtin(global_invocation_id) gid: vec3<u32>) {
     let ph = photonPool[phIdx];
     if ((ph.flags & 1u) == 0u) { return; }
     if (ph.energy < pu.minEnergy) { return; }
-    if (ph.age < pu.minAge) { return; }
+    if (ph.lifetime < pu.minAge) { return; }
     if (pu.currentParticleCount >= pu.maxParticles) { return; }
 
     // Check probability
