@@ -38,7 +38,7 @@
  */
 import { createParticleBuffers, createUniformBuffer, writeUniforms, createFieldBuffers, createPQSScratchBuffer, createPQSIndexBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createPairProductionBuffers, createTrailBuffers, FIELD_GRID_RES, COARSE_RES, COARSE_SQ, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
 import { createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldSelfGravPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createPairProductionPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline } from './gpu-pipelines.js';
-import { buildWGSLConstants } from './gpu-constants.js';
+import { buildWGSLConstants, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT, GRAVITOMAG_BIT, ONE_PN_BIT, RELATIVITY_BIT, SPIN_ORBIT_BIT, RADIATION_BIT, BLACK_HOLE_BIT, DISINTEGRATION_BIT, EXPANSION_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BARNES_HUT_BIT, BOSON_GRAV_BIT, FIELD_GRAV_BIT_T1 } from './gpu-constants.js';
 import {
     HISTORY_STRIDE, MAX_PHOTONS, MAX_PIONS,
     GPU_MAX_PARTICLES,
@@ -864,7 +864,7 @@ export default class GPUPhysics {
         if (this.aliveCount < 2) return;
         // Requires gravity or coulomb (same guard as CPU)
         const t0 = this._toggles0;
-        if (!(t0 & 1) && !(t0 & 2)) return; // neither gravity nor coulomb
+        if (!(t0 & GRAVITY_BIT) && !(t0 & COULOMB_BIT)) return; // neither gravity nor coulomb
 
         const workgroups = Math.ceil(this.aliveCount / 64);
         const bgs = this._phase4BindGroups;
@@ -1392,26 +1392,26 @@ export default class GPUPhysics {
      */
     setToggles(physics) {
         let t0 = 0;
-        if (physics.gravityEnabled) t0 |= 1;
-        if (physics.coulombEnabled) t0 |= 2;
-        if (physics.magneticEnabled) t0 |= 4;
-        if (physics.gravitomagEnabled) t0 |= 8;
-        if (physics.onePNEnabled) t0 |= 16;
-        if (physics.relativityEnabled) t0 |= 32;
-        if (physics.spinOrbitEnabled) t0 |= 64;
-        if (physics.radiationEnabled) t0 |= 128;
-        if (physics.blackHoleEnabled) t0 |= 256;
-        if (physics.disintegrationEnabled) t0 |= 512;
-        if (physics.expansionEnabled) t0 |= 1024;
-        if (physics.yukawaEnabled) t0 |= 2048;
-        if (physics.higgsEnabled) t0 |= 4096;
-        if (physics.axionEnabled) t0 |= 8192;
-        if (physics.barnesHutEnabled) t0 |= 16384;
-        if (physics.bosonGravEnabled) t0 |= 32768;
+        if (physics.gravityEnabled) t0 |= GRAVITY_BIT;
+        if (physics.coulombEnabled) t0 |= COULOMB_BIT;
+        if (physics.magneticEnabled) t0 |= MAGNETIC_BIT;
+        if (physics.gravitomagEnabled) t0 |= GRAVITOMAG_BIT;
+        if (physics.onePNEnabled) t0 |= ONE_PN_BIT;
+        if (physics.relativityEnabled) t0 |= RELATIVITY_BIT;
+        if (physics.spinOrbitEnabled) t0 |= SPIN_ORBIT_BIT;
+        if (physics.radiationEnabled) t0 |= RADIATION_BIT;
+        if (physics.blackHoleEnabled) t0 |= BLACK_HOLE_BIT;
+        if (physics.disintegrationEnabled) t0 |= DISINTEGRATION_BIT;
+        if (physics.expansionEnabled) t0 |= EXPANSION_BIT;
+        if (physics.yukawaEnabled) t0 |= YUKAWA_BIT;
+        if (physics.higgsEnabled) t0 |= HIGGS_BIT;
+        if (physics.axionEnabled) t0 |= AXION_BIT;
+        if (physics.barnesHutEnabled) t0 |= BARNES_HUT_BIT;
+        if (physics.bosonGravEnabled) t0 |= BOSON_GRAV_BIT;
         this._toggles0 = t0;
 
         let t1 = 0;
-        if (physics.fieldGravEnabled) t1 |= 1;
+        if (physics.fieldGravEnabled) t1 |= FIELD_GRAV_BIT_T1;
         this._toggles1 = t1;
 
         this._blackHoleEnabled = physics.blackHoleEnabled;
@@ -1591,8 +1591,8 @@ export default class GPUPhysics {
         // Toggle bits
         u[11] = this._higgsEnabled ? 1 : 0;     // higgsEnabled
         u[12] = this._axionEnabled ? 1 : 0;     // axionEnabled
-        u[13] = (this._toggles0 & 2) ? 1 : 0;   // coulombEnabled
-        u[14] = (this._toggles0 & 2048) ? 1 : 0; // yukawaEnabled
+        u[13] = (this._toggles0 & COULOMB_BIT) ? 1 : 0;   // coulombEnabled
+        u[14] = (this._toggles0 & YUKAWA_BIT) ? 1 : 0; // yukawaEnabled
         u[15] = this._fieldGravEnabled ? 1 : 0;  // gravityEnabled (field self-gravity)
         u[16] = this._relativityEnabled ? 1 : 0;  // relativityEnabled
         u[17] = this._blackHoleEnabled ? 1 : 0;   // blackHoleEnabled
@@ -1626,8 +1626,8 @@ export default class GPUPhysics {
         f[10] = this._axionCoupling;
         u[11] = this._higgsEnabled ? 1 : 0;
         u[12] = this._axionEnabled ? 1 : 0;
-        u[13] = (this._toggles0 & 2) ? 1 : 0;
-        u[14] = (this._toggles0 & 2048) ? 1 : 0;
+        u[13] = (this._toggles0 & COULOMB_BIT) ? 1 : 0;
+        u[14] = (this._toggles0 & YUKAWA_BIT) ? 1 : 0;
         u[15] = this._fieldGravEnabled ? 1 : 0;
         u[16] = this._relativityEnabled ? 1 : 0;
         u[17] = this._blackHoleEnabled ? 1 : 0;
@@ -2443,9 +2443,9 @@ export default class GPUPhysics {
         _heatmapUniformF32[7] = this.simTime;
         _heatmapUniformF32[8] = this.domainW;
         _heatmapUniformF32[9] = this.domainH;
-        _heatmapUniformU32[10] = (this._toggles0 & 1) ? 1 : 0; // doGravity
-        _heatmapUniformU32[11] = (this._toggles0 & 2) ? 1 : 0; // doCoulomb
-        _heatmapUniformU32[12] = (this._toggles0 & 2048) ? 1 : 0; // doYukawa
+        _heatmapUniformU32[10] = (this._toggles0 & GRAVITY_BIT) ? 1 : 0; // doGravity
+        _heatmapUniformU32[11] = (this._toggles0 & COULOMB_BIT) ? 1 : 0; // doCoulomb
+        _heatmapUniformU32[12] = (this._toggles0 & YUKAWA_BIT) ? 1 : 0; // doYukawa
         _heatmapUniformU32[13] = (this._relativityEnabled && this.buffers.historyAllocated) ? 1 : 0; // useDelay
         _heatmapUniformU32[14] = this.boundaryMode === BOUND_LOOP ? 1 : 0;
         _heatmapUniformU32[15] = this.topologyMode;
@@ -2551,7 +2551,7 @@ export default class GPUPhysics {
 
         // Blur each active channel
         const channels = ['gravPotential', 'elecPotential', 'yukawaPotential'];
-        const channelToggles = [this._toggles0 & 1, this._toggles0 & 2, this._toggles0 & 2048];
+        const channelToggles = [this._toggles0 & GRAVITY_BIT, this._toggles0 & COULOMB_BIT, this._toggles0 & YUKAWA_BIT];
         const hmBuf = this._heatmapBuffers;
 
         for (let c = 0; c < 3; c++) {
@@ -3062,22 +3062,22 @@ export default class GPUPhysics {
         // Map internal toggle bits back to boolean flags
         const t0 = this._toggles0;
         const t1 = this._toggles1;
-        state.toggles.gravityEnabled = !!(t0 & 1);
-        state.toggles.coulombEnabled = !!(t0 & 2);
-        state.toggles.magneticEnabled = !!(t0 & 4);
-        state.toggles.gravitomagEnabled = !!(t0 & 8);
-        state.toggles.onePNEnabled = !!(t0 & 16);
-        state.toggles.relativityEnabled = !!(t0 & 32);
-        state.toggles.spinOrbitEnabled = !!(t0 & 64);
-        state.toggles.radiationEnabled = !!(t0 & 128);
-        state.toggles.blackHoleEnabled = !!(t0 & 256);
-        state.toggles.disintegrationEnabled = !!(t0 & 512);
-        state.toggles.expansionEnabled = !!(t0 & 1024);
-        state.toggles.yukawaEnabled = !!(t0 & 2048);
-        state.toggles.higgsEnabled = !!(t0 & 4096);
-        state.toggles.axionEnabled = !!(t0 & 8192);
-        state.toggles.barnesHutEnabled = !!(t0 & 16384);
-        state.toggles.bosonGravEnabled = !!(t0 & 32768);
+        state.toggles.gravityEnabled = !!(t0 & GRAVITY_BIT);
+        state.toggles.coulombEnabled = !!(t0 & COULOMB_BIT);
+        state.toggles.magneticEnabled = !!(t0 & MAGNETIC_BIT);
+        state.toggles.gravitomagEnabled = !!(t0 & GRAVITOMAG_BIT);
+        state.toggles.onePNEnabled = !!(t0 & ONE_PN_BIT);
+        state.toggles.relativityEnabled = !!(t0 & RELATIVITY_BIT);
+        state.toggles.spinOrbitEnabled = !!(t0 & SPIN_ORBIT_BIT);
+        state.toggles.radiationEnabled = !!(t0 & RADIATION_BIT);
+        state.toggles.blackHoleEnabled = !!(t0 & BLACK_HOLE_BIT);
+        state.toggles.disintegrationEnabled = !!(t0 & DISINTEGRATION_BIT);
+        state.toggles.expansionEnabled = !!(t0 & EXPANSION_BIT);
+        state.toggles.yukawaEnabled = !!(t0 & YUKAWA_BIT);
+        state.toggles.higgsEnabled = !!(t0 & HIGGS_BIT);
+        state.toggles.axionEnabled = !!(t0 & AXION_BIT);
+        state.toggles.barnesHutEnabled = !!(t0 & BARNES_HUT_BIT);
+        state.toggles.bosonGravEnabled = !!(t0 & BOSON_GRAV_BIT);
         state.toggles.fieldGravEnabled = !!(t1 & 1);
 
         state.yukawaMu = this._yukawaMu;

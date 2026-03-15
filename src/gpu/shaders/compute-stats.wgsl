@@ -9,9 +9,9 @@
 //   Pass 5: Particle-field interaction energy (O(N×16)) via PQS interpolation
 //   Pass 6: Selected particle data copy
 //
-// Constants from wgslConstants: INERTIA_K, SOFTENING_SQ, BH_SOFTENING_SQ, YUKAWA_COUPLING,
+// Constants from wgslConstants: INERTIA_K, SOFTENING_SQ, BH_SOFTENING_SQ, YUKAWA_COUPLING_DEFAULT,
 //   FLAG_ALIVE, FLAG_ANTIMATTER, ONE_PN_BIT, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT,
-//   GRAVITOMAG_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BLACK_HOLE_BIT, AXION_COUPLING (0.05)
+//   GRAVITOMAG_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BLACK_HOLE_BIT, AXION_COUPLING
 
 struct StatsUniforms {
     aliveCount: u32,
@@ -87,8 +87,6 @@ struct AxYukMod {
 // [16] higgsPfiE     [17] axionPfiE    [18] fieldMomX    [19] fieldMomY
 // Selected particle [32-85]:
 //   [32] posX .. [85] axion force (same layout as before, shifted from 16→32)
-
-const AXION_COUPLING: f32 = 0.05;
 
 fn toggle(bit: u32) -> bool { return (params.toggles0 & bit) != 0u; }
 
@@ -261,11 +259,11 @@ fn main() {
             if (yukOn) {
                 let mur = yukMu * r;
                 if (mur < 6.0) {
-                    let yukPE = -YUKAWA_COUPLING * yukModPair * pi.mass * pj.mass * exp(-mur) * invR;
+                    let yukPE = -YUKAWA_COUPLING_DEFAULT * yukModPair * pi.mass * pj.mass * exp(-mur) * invR;
                     pe += yukPE;
                     // Scalar Breit (Yukawa 1PN)
                     if (onePNOn) {
-                        pe += 0.5 * YUKAWA_COUPLING * yukModPair * pi.mass * pj.mass * exp(-mur) * invR
+                        pe += 0.5 * YUKAWA_COUPLING_DEFAULT * yukModPair * pi.mass * pj.mass * exp(-mur) * invR
                             * (viDotVj + viDotR * vjDotR * (1.0 + mur));
                     }
                 }

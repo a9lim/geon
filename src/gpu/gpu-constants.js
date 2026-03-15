@@ -10,7 +10,7 @@
 import {
     SOFTENING, SOFTENING_SQ, BH_SOFTENING, BH_SOFTENING_SQ,
     INERTIA_K, MAG_MOMENT_K, TIDAL_STRENGTH,
-    YUKAWA_COUPLING, EPSILON,
+    YUKAWA_COUPLING, AXION_COUPLING, EPSILON,
     PI, TWO_PI,
     BOSON_SOFTENING_SQ, BOSON_MIN_AGE, PHYSICS_DT,
     LL_FORCE_CLAMP, MIN_MASS, BH_NAKED_FLOOR, ELECTRON_MASS, QUADRUPOLE_POWER_CLAMP,
@@ -126,6 +126,7 @@ const INERTIA_K: f32 = ${wf(INERTIA_K)};
 const MAG_MOMENT_K: f32 = ${wf(MAG_MOMENT_K)};
 const TIDAL_STRENGTH: f32 = ${wf(TIDAL_STRENGTH)};
 const YUKAWA_COUPLING_DEFAULT: f32 = ${wf(YUKAWA_COUPLING)};
+const AXION_COUPLING: f32 = ${wf(AXION_COUPLING)};
 const EPSILON: f32 = ${wf(EPSILON)};
 const EPSILON_SQ: f32 = ${wf(EPSILON * EPSILON)};
 const PI: f32 = 3.14159265358979;
@@ -261,3 +262,27 @@ const COLOR_SPIN_CCW: vec3f = ${wv3(spinCCW)};
 `;
     return _cached;
 }
+
+// ── JS-side toggle bit constants (must match WGSL block above) ──
+
+// toggles0
+export const GRAVITY_BIT     = 1;
+export const COULOMB_BIT     = 2;
+export const MAGNETIC_BIT    = 4;
+export const GRAVITOMAG_BIT  = 8;
+export const ONE_PN_BIT      = 16;
+export const RELATIVITY_BIT  = 32;
+export const SPIN_ORBIT_BIT  = 64;
+export const RADIATION_BIT   = 128;
+export const BLACK_HOLE_BIT  = 256;
+export const DISINTEGRATION_BIT = 512;
+export const EXPANSION_BIT   = 1024;
+export const YUKAWA_BIT      = 2048;
+export const HIGGS_BIT       = 4096;
+export const AXION_BIT       = 8192;
+export const BARNES_HUT_BIT  = 16384;
+export const BOSON_GRAV_BIT  = 32768;
+
+// toggles1
+export const FIELD_GRAV_BIT_T1 = 1;
+export const HERTZ_BOUNCE_BIT_T1 = 2;
