@@ -257,13 +257,11 @@ export default class InputHandler {
     }
 
     findParticleAt(worldPos) {
+        // GPU backend: dispatch GPU tree hit test (async — result next frame)
         if (this.sim.backend === 'gpu' && this.sim._gpuReady) {
-            // Dispatch GPU hit test (async — result arrives next frame)
             this.sim._gpuPhysics.hitTest(worldPos.x, worldPos.y);
-            // Return CPU fallback for immediate response (synced positions)
-            return this._cpuFallbackHitTest(worldPos);
         }
-        // CPU backend: existing O(N) scan
+        // Scan CPU particle array (synced from GPU every 8 frames)
         let best = null;
         let bestDist = Infinity;
         for (const p of this.sim.particles) {
@@ -277,38 +275,19 @@ export default class InputHandler {
     }
 
     /**
-     * Poll for GPU hit test result. Call once per frame.
-     * When a GPU hit result arrives, updates selectedParticle if it differs
-     * from what CPU fallback found.
+     * Poll for GPU hit test result. Call once per frame in GPU mode.
+     * When a GPU hit result arrives, updates selectedParticle to the
+     * exact GPU-side match (corrects for sync lag in CPU positions).
      */
     pollGPUHitResult() {
         if (!this.sim._gpuReady || this.sim.backend !== 'gpu') return;
         const gpuIdx = this.sim._gpuPhysics.readHitResult();
         if (gpuIdx < 0) return;
-        // Find the CPU particle matching this GPU index
         const match = this.sim.particles.find(p => p._gpuIdx === gpuIdx);
         if (match && this.sim.selectedParticle !== match) {
             this.sim.selectedParticle = match;
             this.sim._dirty = true;
         }
-    }
-
-    /**
-     * CPU-side fallback for immediate hit testing when GPU path active.
-     * Uses CPU particle array which is periodically synced from GPU readback
-     * (every 8 GPU frames via _syncParticlesFromGPU).
-     */
-    _cpuFallbackHitTest(worldPos) {
-        let best = null;
-        let bestDist = Infinity;
-        for (const p of this.sim.particles) {
-            const d = p.pos.dist(worldPos);
-            if (d < p.radius && d < bestDist) {
-                bestDist = d;
-                best = p;
-            }
-        }
-        return best;
     }
 
     spawnParticle(endPos, antimatter = false) {

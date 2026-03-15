@@ -1054,11 +1054,11 @@ export default class GPUPhysics {
 
     /**
      * Dispatch collision detection and resolution (Phase 3).
+     * Always uses tree-accelerated broadphase (tree built every substep).
      *
-     * COL_PASS (0):        skip entirely.
-     * COL_MERGE (1) + BH:  tree-based detect → resolveCollisions (merge/annihilation).
-     * COL_MERGE (1) no BH: pairwise detect   → resolveCollisions (merge/annihilation).
-     * COL_BOUNCE (2):      pairwise detect   → resolveBouncePairwise (Hertz impulse).
+     * COL_PASS (0):   skip entirely.
+     * COL_MERGE (1):  tree detect → resolveCollisions (merge/annihilation).
+     * COL_BOUNCE (2): tree detect → resolveBouncePairwise (Hertz impulse).
      */
     _dispatchCollisions(encoder) {
         if (this._collisionMode === 0) return; // COL_PASS — nothing to do
@@ -1067,33 +1067,20 @@ export default class GPUPhysics {
         const b = this.buffers;
         const isMerge  = this._collisionMode === COL_MERGE;
         const isBounce = this._collisionMode === COL_BOUNCE;
-        const useTree  = isMerge && this._barnesHutEnabled;
 
         // Reset pair counter (and merge counter for merge mode)
         encoder.clearBuffer(b.collisionPairCounter, 0, 4);
         if (isMerge) encoder.clearBuffer(b.mergeResultCounter, 0, 4);
 
-        // ── Detection phase ──
+        // ── Detection phase (always tree-accelerated) ──
         const detectWG = Math.ceil(this.aliveCount / 64);
-        if (useTree) {
-            // Tree-accelerated broadphase (existing path)
-            const passDetect = encoder.beginComputePass({ label: 'detectCollisions' });
-            passDetect.setPipeline(this._collisionPipelines.detectCollisions);
-            passDetect.setBindGroup(0, this._collisionBG0);
-            passDetect.setBindGroup(1, this._collisionBG1);
-            passDetect.setBindGroup(2, this._collisionBG2);
-            passDetect.dispatchWorkgroups(detectWG);
-            passDetect.end();
-        } else {
-            // O(N²) tiled pairwise broadphase (no tree needed)
-            const passDetect = encoder.beginComputePass({ label: 'detectCollisionsPairwise' });
-            passDetect.setPipeline(this._collisionPipelines.detectCollisionsPairwise);
-            passDetect.setBindGroup(0, this._collisionBG0);
-            passDetect.setBindGroup(1, this._collisionBG1);
-            passDetect.setBindGroup(2, this._collisionBG2);
-            passDetect.dispatchWorkgroups(detectWG);
-            passDetect.end();
-        }
+        const passDetect = encoder.beginComputePass({ label: 'detectCollisions' });
+        passDetect.setPipeline(this._collisionPipelines.detectCollisions);
+        passDetect.setBindGroup(0, this._collisionBG0);
+        passDetect.setBindGroup(1, this._collisionBG1);
+        passDetect.setBindGroup(2, this._collisionBG2);
+        passDetect.dispatchWorkgroups(detectWG);
+        passDetect.end();
 
         // ── Resolution phase ──
         // Conservatively dispatch enough workgroups to cover worst-case pair count.
@@ -1177,7 +1164,8 @@ export default class GPUPhysics {
     }
 
     /**
-     * Dispatch tree build sequence when Barnes-Hut is enabled.
+     * Dispatch tree build sequence (always runs — used by collisions, hit test,
+     * and optionally by BH tree-walk force computation).
      * Runs after ghost generation, before force computation.
      *
      * Sequence:
@@ -1190,7 +1178,6 @@ export default class GPUPhysics {
      *   7. computeAggregates: ceil(totalCount / 64) workgroups
      */
     _dispatchTreeBuild(encoder) {
-        if (!this._barnesHutEnabled) return;
 
         const totalCount = this.aliveCount + this._ghostCount;
         if (totalCount === 0) return;

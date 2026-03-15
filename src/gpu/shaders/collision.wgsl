@@ -187,7 +187,6 @@ fn nodeIntersects(nodeIdx: u32, rx: f32, ry: f32, rw: f32, rh: f32) -> bool {
 fn detectCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
     let pIdx = gid.x;
     if (pIdx >= uniforms.aliveCount) { return; }
-    if (uniforms.collisionMode != COL_MERGE) { return; }
 
     let ps = particleState[pIdx];
     if ((ps.flags & FLAG_ALIVE) == 0u) { return; }

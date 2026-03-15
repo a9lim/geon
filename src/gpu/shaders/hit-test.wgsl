@@ -1,8 +1,8 @@
 // hit-test.wgsl — GPU quadtree point query for particle selection
 //
-// Dispatched as (1, 1, 1) — single thread. Walks the quadtree built by
-// tree-build.wgsl to find the particle closest to the click point within
-// its radius. Writes the particle index (or -1) to hitResult.
+// Dispatched as (1, 1, 1) — single thread. Walks the quadtree to find the
+// particle closest to the click point within its radius.
+// Writes the particle index (or -1) to hitResult.
 //
 // Standalone shader — common.wgsl not prepended.
 // Constants (FLAG_ALIVE, etc.) provided by generated wgslConstants block.
@@ -57,76 +57,52 @@ const NONE: i32 = -1;
 fn main() {
     let cx = hit.clickX;
     let cy = hit.clickY;
-    let count = hit.aliveCount;
 
     var bestIdx: i32 = -1;
     var bestDistSq: f32 = 1e30;
 
-    // When tree is available (root node exists), use tree walk
-    // The tree root is always node 0; if NW child == NONE and particleIndex == NONE,
-    // the tree is empty or not built — fall back to linear scan.
-    let rootNW = getNW(0u);
-    let rootPI = getParticleIndex(0u);
-    let treeAvailable = rootNW != NONE || rootPI != NONE;
+    // Stack-based tree walk — check all particles within their radius
+    var stack: array<u32, 48>;
+    var top: i32 = 0;
+    stack[0] = 0u;
 
-    if (treeAvailable) {
-        // Stack-based tree walk — check all particles within their radius
-        var stack: array<u32, 48>;
-        var top: i32 = 0;
-        stack[0] = 0u;
+    loop {
+        if (top < 0) { break; }
+        let nodeIdx = stack[top];
+        top -= 1;
 
-        loop {
-            if (top < 0) { break; }
-            let nodeIdx = stack[top];
-            top -= 1;
-
-            // Expand search box by max particle radius (conservative: ∛(max_mass))
-            let expand = 4.0;
-            if (cx < getMinX(nodeIdx) - expand || cx > getMaxX(nodeIdx) + expand ||
-                cy < getMinY(nodeIdx) - expand || cy > getMaxY(nodeIdx) + expand) {
-                continue;
-            }
-
-            let isLeaf = getNW(nodeIdx) == NONE;
-            let pi = getParticleIndex(nodeIdx);
-
-            if (isLeaf && pi >= 0) {
-                let pIdx = u32(pi);
-                let p = particles[pIdx];
-                if ((p.flags & FLAG_ALIVE) != 0u) {
-                    let dx = cx - p.posX;
-                    let dy = cy - p.posY;
-                    let distSq = dx * dx + dy * dy;
-                    let r = particleAux[pIdx].radius;
-                    if (distSq < r * r && distSq < bestDistSq) {
-                        bestDistSq = distSq;
-                        bestIdx = pi;
-                    }
-                }
-            } else if (!isLeaf) {
-                let nw = getNW(nodeIdx);
-                let ne = getNE(nodeIdx);
-                let sw = getSW(nodeIdx);
-                let se = getSE(nodeIdx);
-                if (nw != NONE && top < 46) { top += 1; stack[top] = u32(nw); }
-                if (ne != NONE && top < 46) { top += 1; stack[top] = u32(ne); }
-                if (sw != NONE && top < 46) { top += 1; stack[top] = u32(sw); }
-                if (se != NONE && top < 46) { top += 1; stack[top] = u32(se); }
-            }
+        // Expand search box by max particle radius (conservative: ∛(max_mass))
+        let expand = 4.0;
+        if (cx < getMinX(nodeIdx) - expand || cx > getMaxX(nodeIdx) + expand ||
+            cy < getMinY(nodeIdx) - expand || cy > getMaxY(nodeIdx) + expand) {
+            continue;
         }
-    } else {
-        // Linear scan fallback (no tree built this frame)
-        for (var i = 0u; i < count; i++) {
-            let p = particles[i];
-            if ((p.flags & FLAG_ALIVE) == 0u) { continue; }
-            let dx = cx - p.posX;
-            let dy = cy - p.posY;
-            let distSq = dx * dx + dy * dy;
-            let r = particleAux[i].radius;
-            if (distSq < r * r && distSq < bestDistSq) {
-                bestDistSq = distSq;
-                bestIdx = i32(i);
+
+        let isLeaf = getNW(nodeIdx) == NONE;
+        let pi = getParticleIndex(nodeIdx);
+
+        if (isLeaf && pi >= 0) {
+            let pIdx = u32(pi);
+            let p = particles[pIdx];
+            if ((p.flags & FLAG_ALIVE) != 0u) {
+                let dx = cx - p.posX;
+                let dy = cy - p.posY;
+                let distSq = dx * dx + dy * dy;
+                let r = particleAux[pIdx].radius;
+                if (distSq < r * r && distSq < bestDistSq) {
+                    bestDistSq = distSq;
+                    bestIdx = pi;
+                }
             }
+        } else if (!isLeaf) {
+            let nw = getNW(nodeIdx);
+            let ne = getNE(nodeIdx);
+            let sw = getSW(nodeIdx);
+            let se = getSE(nodeIdx);
+            if (nw != NONE && top < 46) { top += 1; stack[top] = u32(nw); }
+            if (ne != NONE && top < 46) { top += 1; stack[top] = u32(ne); }
+            if (sw != NONE && top < 46) { top += 1; stack[top] = u32(sw); }
+            if (se != NONE && top < 46) { top += 1; stack[top] = u32(se); }
         }
     }
 
