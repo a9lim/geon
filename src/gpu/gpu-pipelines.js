@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 23;
+const SHADER_VERSION = 24;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 async function fetchShader(filename, prepend = '') {
@@ -64,14 +64,14 @@ export async function createPhase2Pipelines(device, wgslConstants = '') {
 
     // --- pairForce (4 bind groups) ---
     // Group 0: uniforms
-    // Group 1: particleState (rw) + derived (rw) + axYukMod (rw) = 3 storage
-    // Group 2: allForces (rw) = 1 storage
-    // Group 3: radiationState (rw) + maxAccel (rw) = 2 storage
-    // Total: 6 storage buffers per stage
+    // Group 1: particleState (rw) + derived (rw) + axYukMod (rw) + particleAux (rw) = 4 storage
+    // Group 2: allForces (rw) + maxAccel (rw) = 2 storage
+    // Group 3: histData (rw) + histMeta (rw) = 2 storage
+    // Total: 8 storage buffers per stage
     const pairForce = await makePipeline('pairForce', 'pair-force.wgsl', [
         ['uniform'],
-        ['storage', 'storage', 'storage'],
-        ['storage'],
+        ['storage', 'storage', 'storage', 'storage'],
+        ['storage', 'storage'],
         ['storage', 'storage'],
     ]);
 
@@ -213,10 +213,11 @@ export async function createTreeBuildPipelines(device, wgslConstants = '') {
 /**
  * Create tree force (Barnes-Hut walk) compute pipeline.
  * Bind groups:
- *   Group 0: nodes (ro) + uniforms = 2
- *   Group 1: particleState (ro) + particleAux (ro) + derived (ro) + axYukMod (ro) + ghostOriginalIdx (ro) = 5
- *   Group 2: allForces (rw) + radiationState (rw) + maxAccel (rw) = 3
- *   Total: 8 storage buffers per stage
+ *   Group 0: nodes (ro) + uniforms = 1 storage + 1 uniform
+ *   Group 1: particleState (ro) + particleAux (ro) + derived (ro) + axYukMod (ro) + ghostOriginalIdx (ro) = 5 storage
+ *   Group 2: allForces (rw) + maxAccel (rw) = 2 storage
+ *   Group 3: histData (rw) + histMeta (rw) = 2 storage
+ *   Total: 10 storage buffers + 1 uniform
  */
 export async function createTreeForcePipeline(device, wgslConstants = '') {
     const code = await fetchShader('forces-tree.wgsl', wgslConstants);
@@ -242,17 +243,25 @@ export async function createTreeForcePipeline(device, wgslConstants = '') {
         ],
     });
 
-    // Group 2: force accumulators
+    // Group 2: force accumulators + maxAccel (radiationState removed — jerk now in AllForces)
     const group2Layout = device.createBindGroupLayout({
         label: 'treeForce_group2',
         entries: [
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // allForces
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // radiationState
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // maxAccel
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // maxAccel
         ],
     });
 
-    const bindGroupLayouts = [group0Layout, group1Layout, group2Layout];
+    // Group 3: signal delay history (interleaved)
+    const group3Layout = device.createBindGroupLayout({
+        label: 'treeForce_group3',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histData
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histMeta
+        ],
+    });
+
+    const bindGroupLayouts = [group0Layout, group1Layout, group2Layout, group3Layout];
     const pipeline = device.createComputePipeline({
         label: 'treeForce',
         layout: device.createPipelineLayout({ bindGroupLayouts }),
@@ -380,16 +389,12 @@ export async function createPhase4Pipelines(device, wgslConstants = '') {
             { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleState (rw for encoder compat)
         ],
     });
+    // Group 1: histData (rw) + histMeta (rw) = 2 storage (was 7 separate buffers)
     const historyG1 = device.createBindGroupLayout({
         label: 'history_g1',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histData
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histMeta
         ],
     });
     const historyLayouts = [historyG0, historyG1];
@@ -1121,7 +1126,7 @@ export async function createFieldExcitationPipeline(device, wgslConstants = '') 
  *   heatmapLayout:
  *     Group 0: particleState (ro) = 1 (was 5 separate buffers)
  *     Group 1: potential grids (3 rw) + HeatmapUniforms = 4
- *     Group 2: signal delay history (histPosX, histPosY, histTime, histMeta) = 4
+ *     Group 2: signal delay history (histData, histMeta) = 2
  *   blurLayout: unchanged
  */
 export async function createHeatmapPipelines(device, wgslConstants = '') {
@@ -1143,14 +1148,12 @@ export async function createHeatmapPipelines(device, wgslConstants = '') {
             { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
         ],
     });
-    // Group 2: signal delay history buffers (histPosX, histPosY, histTime, histMeta)
+    // Group 2: signal delay history buffers (histData + histMeta, interleaved format)
     const hmG2 = device.createBindGroupLayout({
         label: 'heatmap_g2_history',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histPosX
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histPosY
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histTime
-            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histMeta
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histData
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histMeta
         ],
     });
     const heatmapLayouts = [hmG0, hmG1, hmG2];

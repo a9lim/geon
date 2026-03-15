@@ -50,11 +50,9 @@ struct HeatmapUniforms {
 @group(1) @binding(2) var<storage, read_write> yukawaPotential: array<f32>;
 @group(1) @binding(3) var<uniform> hu: HeatmapUniforms;
 
-// Group 2: signal delay history ring buffers (only used when useDelay != 0)
-@group(2) @binding(0) var<storage, read_write> histPosX: array<f32>;
-@group(2) @binding(1) var<storage, read_write> histPosY: array<f32>;
-@group(2) @binding(2) var<storage, read_write> histTime: array<f32>;
-@group(2) @binding(3) var<storage, read_write> histMeta: array<u32>;
+// Group 2: signal delay history (interleaved format, only used when useDelay != 0)
+@group(2) @binding(0) var<storage, read_write> histData: array<f32>;
+@group(2) @binding(1) var<storage, read_write> histMeta: array<u32>;
 
 // Constants provided by generated wgslConstants block.
 
@@ -120,11 +118,17 @@ fn hmMinImage(ox: f32, oy: f32, sx: f32, sy: f32) -> vec2<f32> {
 }
 
 // ─── Signal delay: retarded position via Newton-Raphson light-cone solver ───
-// Returns (posX, posY, valid) — simplified from history.wgsl (we only need position)
+// Uses interleaved histData buffer (stride HIST_STRIDE=6: posX, posY, velX, velY, angW, time)
+// and histMeta (stride HIST_META_STRIDE=4: writeIdx, count, creationTimeBits, _pad)
 struct RetardedPos {
     x: f32, y: f32,
     valid: bool,
 };
+
+// Helper: compute base index into interleaved histData
+fn hmHistBase(srcIdx: u32, sampleIdx: u32) -> u32 {
+    return srcIdx * HISTORY_LEN * HIST_STRIDE + sampleIdx * HIST_STRIDE;
+}
 
 fn getRetardedPosition(
     srcIdx: u32,
@@ -134,23 +138,24 @@ fn getRetardedPosition(
     var result: RetardedPos;
     result.valid = false;
 
-    let metaBase = srcIdx * 2u;
+    let metaBase = srcIdx * HIST_META_STRIDE;
     let writeIdx = histMeta[metaBase];
     let count = histMeta[metaBase + 1u];
     if (count < 2u) { return result; }
 
     let start = (writeIdx - count + HISTORY_LEN) & HISTORY_MASK;
     let newest = (writeIdx - 1u + HISTORY_LEN) & HISTORY_MASK;
-    let base = srcIdx * HISTORY_LEN;
 
-    let tOldest = histTime[base + start];
-    let tNewest = histTime[base + newest];
+    let oldestBase = hmHistBase(srcIdx, start);
+    let newestBase = hmHistBase(srcIdx, newest);
+    let tOldest = histData[oldestBase + 5u];
+    let tNewest = histData[newestBase + 5u];
     let timeSpan = simTime - tOldest;
     if (timeSpan < NR_TOLERANCE) { return result; }
 
     // Current distance to newest sample
-    let nxPos = histPosX[base + newest];
-    let nyPos = histPosY[base + newest];
+    let nxPos = histData[newestBase + 0u];
+    let nyPos = histData[newestBase + 1u];
     var cdx: f32; var cdy: f32;
     if (hu.periodic != 0u) {
         let d = hmMinImage(obsX, obsY, nxPos, nyPos);
@@ -177,14 +182,14 @@ fn getRetardedPosition(
         // Walk to correct segment
         for (var w = 0; w < 256; w++) {
             if (segK >= i32(count) - 2) { break; }
-            let nextIdx = base + ((start + u32(segK + 1)) & HISTORY_MASK);
-            if (histTime[nextIdx] > t) { break; }
+            let nextBase = hmHistBase(srcIdx, (start + u32(segK + 1)) & HISTORY_MASK);
+            if (histData[nextBase + 5u] > t) { break; }
             segK++;
         }
         for (var w = 0; w < 256; w++) {
             if (segK <= 0) { break; }
-            let curIdx = base + ((start + u32(segK)) & HISTORY_MASK);
-            if (histTime[curIdx] <= t) { break; }
+            let curBase = hmHistBase(srcIdx, (start + u32(segK)) & HISTORY_MASK);
+            if (histData[curBase + 5u] <= t) { break; }
             segK--;
         }
 
@@ -193,23 +198,23 @@ fn getRetardedPosition(
             if (segK == prevSegK) { break; }
             prevSegK = segK;
 
-            let loIdx = base + ((start + u32(segK)) & HISTORY_MASK);
-            let hiIdx = base + (((start + u32(segK)) + 1u) & HISTORY_MASK);
-            let tLo = histTime[loIdx];
-            let segDt = histTime[hiIdx] - tLo;
+            let loBase = hmHistBase(srcIdx, (start + u32(segK)) & HISTORY_MASK);
+            let hiBase = hmHistBase(srcIdx, ((start + u32(segK)) + 1u) & HISTORY_MASK);
+            let tLo = histData[loBase + 5u];
+            let segDt = histData[hiBase + 5u] - tLo;
             if (segDt < NR_TOLERANCE) {
                 if (segK < i32(count) - 2) { segK++; prevSegK = -1; continue; }
                 break;
             }
 
-            let xLo = histPosX[loIdx]; let yLo = histPosY[loIdx];
+            let xLo = histData[loBase]; let yLo = histData[loBase + 1u];
             var vxEff: f32; var vyEff: f32;
             if (hu.periodic != 0u) {
-                let d = hmMinImage(xLo, yLo, histPosX[hiIdx], histPosY[hiIdx]);
+                let d = hmMinImage(xLo, yLo, histData[hiBase], histData[hiBase + 1u]);
                 vxEff = d.x / segDt; vyEff = d.y / segDt;
             } else {
-                vxEff = (histPosX[hiIdx] - xLo) / segDt;
-                vyEff = (histPosY[hiIdx] - yLo) / segDt;
+                vxEff = (histData[hiBase] - xLo) / segDt;
+                vyEff = (histData[hiBase + 1u] - yLo) / segDt;
             }
 
             let s = t - tLo;
@@ -238,14 +243,14 @@ fn getRetardedPosition(
             // Re-locate segment
             for (var w2 = 0; w2 < 64; w2++) {
                 if (segK >= i32(count) - 2) { break; }
-                let ni = base + ((start + u32(segK + 1)) & HISTORY_MASK);
-                if (histTime[ni] > t) { break; }
+                let ni = hmHistBase(srcIdx, (start + u32(segK + 1)) & HISTORY_MASK);
+                if (histData[ni + 5u] > t) { break; }
                 segK++;
             }
             for (var w2 = 0; w2 < 64; w2++) {
                 if (segK <= 0) { break; }
-                let ci = base + ((start + u32(segK)) & HISTORY_MASK);
-                if (histTime[ci] <= t) { break; }
+                let ci = hmHistBase(srcIdx, (start + u32(segK)) & HISTORY_MASK);
+                if (histData[ci + 5u] <= t) { break; }
                 segK--;
             }
         }
@@ -257,14 +262,14 @@ fn getRetardedPosition(
                 let k = center + offset * dir;
                 if (k < 0 || k > i32(count) - 2) { continue; }
 
-                let loIdx2 = base + ((start + u32(k)) & HISTORY_MASK);
-                let hiIdx2 = base + (((start + u32(k)) + 1u) & HISTORY_MASK);
-                let tLo2 = histTime[loIdx2];
-                let segDt2 = histTime[hiIdx2] - tLo2;
+                let loBase2 = hmHistBase(srcIdx, (start + u32(k)) & HISTORY_MASK);
+                let hiBase2 = hmHistBase(srcIdx, ((start + u32(k)) + 1u) & HISTORY_MASK);
+                let tLo2 = histData[loBase2 + 5u];
+                let segDt2 = histData[hiBase2 + 5u] - tLo2;
                 if (segDt2 < NR_TOLERANCE) { continue; }
 
-                let xLo2 = histPosX[loIdx2]; let yLo2 = histPosY[loIdx2];
-                let xHi2 = histPosX[hiIdx2]; let yHi2 = histPosY[hiIdx2];
+                let xLo2 = histData[loBase2]; let yLo2 = histData[loBase2 + 1u];
+                let xHi2 = histData[hiBase2]; let yHi2 = histData[hiBase2 + 1u];
 
                 var dx2: f32; var dy2: f32;
                 var vx2: f32; var vy2: f32;
@@ -283,7 +288,6 @@ fn getRetardedPosition(
                 let dDotV = dx2 * vx2 + dy2 * vy2;
                 let T = simTime - tLo2;
 
-                // (v^2 - 1)s^2 + 2(d.v + T)s + (r^2 - T^2) = 0
                 let a = vSq2 - 1.0;
                 let h = dDotV + T;
                 let c = rSq2 - T * T;
@@ -319,8 +323,8 @@ fn getRetardedPosition(
 
     // ─── Phase 3: Extrapolation from oldest sample ───
     {
-        let xStart = histPosX[base + start];
-        let yStart = histPosY[base + start];
+        let xStart = histData[oldestBase];
+        let yStart = histData[oldestBase + 1u];
         var dxE: f32; var dyE: f32;
         if (hu.periodic != 0u) {
             let d = hmMinImage(obsX, obsY, xStart, yStart);
@@ -329,19 +333,9 @@ fn getRetardedPosition(
             dxE = xStart - obsX; dyE = yStart - obsY;
         }
 
-        // Use average velocity from oldest two samples for extrapolation direction
-        let next = (start + 1u) & HISTORY_MASK;
-        let dt_ext = histTime[base + next] - tOldest;
-        var vxE: f32 = 0.0; var vyE: f32 = 0.0;
-        if (dt_ext > NR_TOLERANCE) {
-            if (hu.periodic != 0u) {
-                let dv = hmMinImage(xStart, yStart, histPosX[base + next], histPosY[base + next]);
-                vxE = dv.x / dt_ext; vyE = dv.y / dt_ext;
-            } else {
-                vxE = (histPosX[base + next] - xStart) / dt_ext;
-                vyE = (histPosY[base + next] - yStart) / dt_ext;
-            }
-        }
+        // Use velocity from oldest sample (stored in interleaved data at offset 2,3)
+        let vxE = histData[oldestBase + 2u];
+        let vyE = histData[oldestBase + 3u];
 
         let rSqE = dxE * dxE + dyE * dyE;
         let vSqE = vxE * vxE + vyE * vyE;
@@ -370,6 +364,11 @@ fn getRetardedPosition(
             else { return result; }
         }
         if (s_solE > 0.0) { s_solE = 0.0; }
+
+        // Reject extrapolation past particle creation
+        let creationTimeBits = histMeta[srcIdx * HIST_META_STRIDE + 2u];
+        let creationTime = bitcast<f32>(creationTimeBits);
+        if (tOldest + s_solE < creationTime) { return result; }
 
         result.x = xStart + vxE * s_solE;
         result.y = yStart + vyE * s_solE;

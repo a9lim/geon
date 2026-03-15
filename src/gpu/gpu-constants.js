@@ -175,6 +175,8 @@ const HISTORY_LEN: u32 = ${HISTORY_SIZE}u;
 const HISTORY_MASK: u32 = ${HISTORY_MASK}u;
 const NR_MAX_ITER: u32 = ${NR_MAX_ITER}u;
 const NR_TOLERANCE: f32 = ${wf(GPU_NR_TOLERANCE)};
+const HIST_STRIDE: u32 = 6u;       // interleaved: posX, posY, velX, velY, angW, time
+const HIST_META_STRIDE: u32 = 4u;  // writeIdx, count, creationTimeBits, _pad
 const TRAIL_LEN: u32 = ${MAX_TRAIL_LENGTH}u;
 
 // Boundary mode enums
@@ -288,3 +290,7 @@ export const BOSON_GRAV_BIT  = 32768;
 // toggles1
 export const FIELD_GRAV_BIT_T1 = 1;
 export const HERTZ_BOUNCE_BIT_T1 = 2;
+
+// History buffer layout
+export const HIST_STRIDE = 6;
+export const HIST_META_STRIDE = 4;

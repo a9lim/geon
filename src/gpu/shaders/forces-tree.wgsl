@@ -132,30 +132,7 @@ struct AllForces {
     bFields: vec4<f32>,
     bFieldGrads: vec4<f32>,
     totalForce: vec2<f32>,
-    _pad: vec2<f32>,
-};
-
-struct RadiationState {
-    jerkX: f32, jerkY: f32,
-    radAccum: f32, hawkAccum: f32, yukawaRadAccum: f32,
-    radDisplayX: f32, radDisplayY: f32,
-    qResFx0: f32,
-    qResFy0: f32,
-    qResFx1: f32,
-    qResFy1: f32,
-    qResCount: f32,
-    quadAccum: f32,
-    emQuadAccum: f32,
-    d3IContrib: f32,
-    d3QContrib: f32,
-    otherFx0: f32,
-    otherFy0: f32,
-    otherFx1: f32,
-    otherFy1: f32,
-    otherCount: f32,
-    _pad0: f32,
-    _pad1: f32,
-    _pad2: f32,
+    jerk: vec2<f32>,
 };
 
 struct SimUniforms {
@@ -205,10 +182,14 @@ struct SimUniforms {
 @group(1) @binding(3) var<storage, read_write> axYukMod_in: array<vec2<f32>>; // packed: axMod, yukMod
 @group(1) @binding(4) var<storage, read_write> ghostOriginalIdx: array<u32>;
 
-// Group 2: force accumulators
+// Group 2: force accumulators + maxAccel — 2 bindings (radiationState removed, jerk now in AllForces)
 @group(2) @binding(0) var<storage, read_write> allForces: array<AllForces>;
-@group(2) @binding(1) var<storage, read_write> radiationState: array<RadiationState>;
-@group(2) @binding(2) var<storage, read_write> maxAccel: array<atomic<u32>>;
+@group(2) @binding(1) var<storage, read_write> maxAccel: array<atomic<u32>>;
+
+// Group 3: signal delay history (interleaved) — 2 bindings
+// Bindings declared for pipeline layout; used by signal delay lookups (Task 9)
+@group(3) @binding(0) var<storage, read_write> histData: array<f32>;
+@group(3) @binding(1) var<storage, read_write> histMeta: array<u32>;
 
 // Shared pairForce function (from pair-force.wgsl, imported or inlined)
 // This function accumulates E-like forces and B-field contributions
@@ -649,14 +630,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (localAF.totalForce.x != localAF.totalForce.x) { localAF.totalForce = vec2(0.0, localAF.totalForce.y); }
     if (localAF.totalForce.y != localAF.totalForce.y) { localAF.totalForce = vec2(localAF.totalForce.x, 0.0); }
 
+    // Write accumulated jerk to AllForces (NaN guard)
+    localAF.jerk = vec2(
+        select(localJerk.x, 0.0, localJerk.x != localJerk.x),
+        select(localJerk.y, 0.0, localJerk.y != localJerk.y)
+    );
+
     // Write accumulated forces back to global memory ONCE
     allForces[pIdx] = localAF;
-
-    // Write accumulated jerk for radiation reaction (NaN guard)
-    var rs = radiationState[pIdx];
-    rs.jerkX = select(localJerk.x, 0.0, localJerk.x != localJerk.x);
-    rs.jerkY = select(localJerk.y, 0.0, localJerk.y != localJerk.y);
-    radiationState[pIdx] = rs;
 
     // Adaptive substepping: atomicMax of |F/m| as fixed-point u32
     let totalFSq = localAF.totalForce.x * localAF.totalForce.x + localAF.totalForce.y * localAF.totalForce.y;

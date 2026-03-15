@@ -38,7 +38,7 @@
  */
 import { createParticleBuffers, createUniformBuffer, writeUniforms, createFieldBuffers, createPQSScratchBuffer, createPQSIndexBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createPairProductionBuffers, createTrailBuffers, FIELD_GRID_RES, COARSE_RES, COARSE_SQ, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
 import { createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldSelfGravPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createPairProductionPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline } from './gpu-pipelines.js';
-import { buildWGSLConstants, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT, GRAVITOMAG_BIT, ONE_PN_BIT, RELATIVITY_BIT, SPIN_ORBIT_BIT, RADIATION_BIT, BLACK_HOLE_BIT, DISINTEGRATION_BIT, EXPANSION_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BARNES_HUT_BIT, BOSON_GRAV_BIT, FIELD_GRAV_BIT_T1 } from './gpu-constants.js';
+import { buildWGSLConstants, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT, GRAVITOMAG_BIT, ONE_PN_BIT, RELATIVITY_BIT, SPIN_ORBIT_BIT, RADIATION_BIT, BLACK_HOLE_BIT, DISINTEGRATION_BIT, EXPANSION_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BARNES_HUT_BIT, BOSON_GRAV_BIT, FIELD_GRAV_BIT_T1, HIST_META_STRIDE } from './gpu-constants.js';
 import {
     HISTORY_STRIDE, MAX_PHOTONS, MAX_PIONS,
     GPU_MAX_PARTICLES,
@@ -84,6 +84,9 @@ const _addParticleAuxU32 = new Uint32Array(_addParticleAuxData);
 const _addParticleColorData = new Uint32Array(1);
 const _addParticleModData = new Float32Array(2);
 const _addParticleRadData = new Float32Array(24);    // RADIATION_STATE_SIZE / 4 (was 16, now 24 with Larmor backward-diff fields)
+const _addParticleMetaBuf = new ArrayBuffer(16);       // 4 u32 for histMeta (stride 4)
+const _addParticleMetaU32 = new Uint32Array(_addParticleMetaBuf);
+const _addParticleMetaF32 = new Float32Array(_addParticleMetaBuf);
 const _zeroU32 = new Uint32Array([0]);                // reusable zero for counter resets
 const _retiredFlagU32 = new Uint32Array([2]);         // FLAG_RETIRED for removeParticle
 
@@ -459,14 +462,16 @@ export default class GPUPhysics {
             [this.uniformBuffer, b.particleState, b.derived, b.particleAux, b.axYukMod]);
 
         // pairForce: 4 bind groups (packed structs)
+        // Group 3 (history) requires lazy creation — use dummy buffers until history allocated
         this._bg_pairForce0 = bg('pairForce_g0', p2.pairForce.bindGroupLayouts[0],
             [this.uniformBuffer]);
         this._bg_pairForce1 = bg('pairForce_g1', p2.pairForce.bindGroupLayouts[1],
-            [b.particleState, b.derived, b.axYukMod]);
+            [b.particleState, b.derived, b.axYukMod, b.particleAux]);
         this._bg_pairForce2 = bg('pairForce_g2', p2.pairForce.bindGroupLayouts[2],
-            [b.allForces]);
-        this._bg_pairForce3 = bg('pairForce_g3', p2.pairForce.bindGroupLayouts[3],
-            [b.radiationState, b.maxAccelBuffer]);
+            [b.allForces, b.maxAccelBuffer]);
+        // Group 3: history buffers — created lazily in _ensurePairForceHistoryBG()
+        this._bg_pairForce3 = null;
+        this._pairForceDummyHistBuf = null;
 
         // externalFields (packed particleState + allForces)
         this._bg_extFields = bg('extFields', p2.externalFields.bindGroupLayouts[0],
@@ -644,16 +649,125 @@ export default class GPUPhysics {
             ],
         });
 
-        // Group 2: allForces + radiationState + maxAccel
+        // Group 2: allForces + maxAccel (radiationState removed — jerk now in AllForces)
         this._treeForceGroup2 = this.device.createBindGroup({
             label: 'treeForce_g2',
             layout: layouts[2],
             entries: [
                 { binding: 0, resource: { buffer: b.allForces } },
-                { binding: 1, resource: { buffer: b.radiationState } },
-                { binding: 2, resource: { buffer: b.maxAccelBuffer } },
+                { binding: 1, resource: { buffer: b.maxAccelBuffer } },
             ],
         });
+
+        // Group 3: history buffers — created lazily in _ensureTreeForceHistoryBG()
+        this._treeForceGroup3 = null;
+        this._treeForceLayouts = layouts;
+    }
+
+    /**
+     * Ensure pair-force history bind group exists (lazy allocation).
+     * Uses dummy buffers when history not yet allocated.
+     */
+    _ensurePairForceHistoryBG() {
+        if (this._bg_pairForce3) return;
+        const b = this.buffers;
+        const p2 = this._phase2;
+        if (b.historyAllocated) {
+            this._bg_pairForce3 = this.device.createBindGroup({
+                label: 'pairForce_g3_history',
+                layout: p2.pairForce.bindGroupLayouts[3],
+                entries: [
+                    { binding: 0, resource: { buffer: b.histData } },
+                    { binding: 1, resource: { buffer: b.histMeta } },
+                ],
+            });
+        } else {
+            if (!this._pairForceDummyHistBuf) {
+                this._pairForceDummyHistBuf = this.device.createBuffer({
+                    label: 'pairForce-dummy-hist',
+                    size: 4,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+                });
+            }
+            this._bg_pairForce3 = this.device.createBindGroup({
+                label: 'pairForce_g3_dummy',
+                layout: p2.pairForce.bindGroupLayouts[3],
+                entries: [
+                    { binding: 0, resource: { buffer: this._pairForceDummyHistBuf } },
+                    { binding: 1, resource: { buffer: this._pairForceDummyHistBuf } },
+                ],
+            });
+            this._bg_pairForce3_isDummy = true;
+        }
+    }
+
+    /**
+     * Ensure tree-force history bind group exists (lazy allocation).
+     * Uses dummy buffers when history not yet allocated.
+     */
+    _ensureTreeForceHistoryBG() {
+        if (this._treeForceGroup3) return;
+        const b = this.buffers;
+        const layouts = this._treeForceLayouts;
+        if (b.historyAllocated) {
+            this._treeForceGroup3 = this.device.createBindGroup({
+                label: 'treeForce_g3_history',
+                layout: layouts[3],
+                entries: [
+                    { binding: 0, resource: { buffer: b.histData } },
+                    { binding: 1, resource: { buffer: b.histMeta } },
+                ],
+            });
+        } else {
+            if (!this._pairForceDummyHistBuf) {
+                this._pairForceDummyHistBuf = this.device.createBuffer({
+                    label: 'force-dummy-hist',
+                    size: 4,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+                });
+            }
+            this._treeForceGroup3 = this.device.createBindGroup({
+                label: 'treeForce_g3_dummy',
+                layout: layouts[3],
+                entries: [
+                    { binding: 0, resource: { buffer: this._pairForceDummyHistBuf } },
+                    { binding: 1, resource: { buffer: this._pairForceDummyHistBuf } },
+                ],
+            });
+            this._treeForceGroup3_isDummy = true;
+        }
+    }
+
+    /**
+     * Upgrade dummy history bind groups to real ones when history buffers become available.
+     * Called from _ensureHistoryBindGroups.
+     */
+    _upgradeForceHistoryBGs() {
+        const b = this.buffers;
+        if (!b.historyAllocated) return;
+        if (this._bg_pairForce3_isDummy) {
+            const p2 = this._phase2;
+            this._bg_pairForce3 = this.device.createBindGroup({
+                label: 'pairForce_g3_history',
+                layout: p2.pairForce.bindGroupLayouts[3],
+                entries: [
+                    { binding: 0, resource: { buffer: b.histData } },
+                    { binding: 1, resource: { buffer: b.histMeta } },
+                ],
+            });
+            this._bg_pairForce3_isDummy = false;
+        }
+        if (this._treeForceGroup3_isDummy && this._treeForceLayouts) {
+            this._treeForceGroup3 = this.device.createBindGroup({
+                label: 'treeForce_g3_history',
+                layout: this._treeForceLayouts[3],
+                entries: [
+                    { binding: 0, resource: { buffer: b.histData } },
+                    { binding: 1, resource: { buffer: b.histMeta } },
+                ],
+            });
+            this._treeForceGroup3_isDummy = false;
+        }
     }
 
     /**
@@ -810,7 +924,10 @@ export default class GPUPhysics {
         this._phase4BindGroups.historyG0 = bg('history_g0', p4.recordHistory.bindGroupLayouts[0],
             [this.uniformBuffer, b.particleState]);
         this._phase4BindGroups.historyG1 = bg('history_g1', p4.recordHistory.bindGroupLayouts[1],
-            [b.histPosX, b.histPosY, b.histVelWX, b.histVelWY, b.histAngW, b.histTime, b.histMeta]);
+            [b.histData, b.histMeta]);
+
+        // Upgrade dummy force history bind groups to real ones now that history is allocated
+        this._upgradeForceHistoryBGs();
     }
 
     /**
@@ -1376,6 +1493,19 @@ export default class GPUPhysics {
         // Initialize radiationState to zero (jerk, accumulators, display force)
         _addParticleRadData.fill(0);
         this.device.queue.writeBuffer(this.buffers.radiationState, idx * RADIATION_STATE_SIZE, _addParticleRadData);
+
+        // Initialize history metadata (4 u32: writeIdx, count, creationTimeBits, _pad)
+        if (this.buffers.historyAllocated) {
+            _addParticleMetaU32[0] = 0;  // writeIdx
+            _addParticleMetaU32[1] = 0;  // count
+            _addParticleMetaF32[2] = this.simTime; // creationTime as f32 bits
+            _addParticleMetaU32[3] = 0;  // _pad
+            this.device.queue.writeBuffer(
+                this.buffers.histMeta,
+                idx * HIST_META_STRIDE * 4, // 4 u32 per particle
+                _addParticleMetaBuf
+            );
+        }
         return idx;
     }
 
@@ -2497,10 +2627,8 @@ export default class GPUPhysics {
                 label: 'heatmap_g2_history',
                 layout: hm.heatmapLayouts[2],
                 entries: [
-                    { binding: 0, resource: { buffer: b.histPosX } },
-                    { binding: 1, resource: { buffer: b.histPosY } },
-                    { binding: 2, resource: { buffer: b.histTime } },
-                    { binding: 3, resource: { buffer: b.histMeta } },
+                    { binding: 0, resource: { buffer: b.histData } },
+                    { binding: 1, resource: { buffer: b.histMeta } },
                 ],
             });
         }
@@ -2522,8 +2650,6 @@ export default class GPUPhysics {
                 entries: [
                     { binding: 0, resource: { buffer: this._heatmapDummyHistBuf } },
                     { binding: 1, resource: { buffer: this._heatmapDummyHistBuf } },
-                    { binding: 2, resource: { buffer: this._heatmapDummyHistBuf } },
-                    { binding: 3, resource: { buffer: this._heatmapDummyHistBuf } },
                 ],
             });
             this._heatmapBGs._g2IsDummy = true;
@@ -2537,10 +2663,8 @@ export default class GPUPhysics {
                 label: 'heatmap_g2_history',
                 layout: hm.heatmapLayouts[2],
                 entries: [
-                    { binding: 0, resource: { buffer: b.histPosX } },
-                    { binding: 1, resource: { buffer: b.histPosY } },
-                    { binding: 2, resource: { buffer: b.histTime } },
-                    { binding: 3, resource: { buffer: b.histMeta } },
+                    { binding: 0, resource: { buffer: b.histData } },
+                    { binding: 1, resource: { buffer: b.histMeta } },
                 ],
             });
             this._heatmapBGs._g2IsDummy = false;
@@ -2787,15 +2911,18 @@ export default class GPUPhysics {
         // Pass 5: force computation — BH tree walk or O(N^2) pairwise
         if (this._barnesHutEnabled) {
             // Tree walk force computation (O(N log N))
+            this._ensureTreeForceHistoryBG();
             const passTree = encoder.beginComputePass({ label: 'treeForce' });
             passTree.setPipeline(this._treeForcePipeline);
             passTree.setBindGroup(0, this._treeForceGroup0);
             passTree.setBindGroup(1, this._treeForceGroup1);
             passTree.setBindGroup(2, this._treeForceGroup2);
+            passTree.setBindGroup(3, this._treeForceGroup3);
             passTree.dispatchWorkgroups(workgroups);
             passTree.end();
         } else {
             // Pairwise force computation (O(N^2) tiled)
+            this._ensurePairForceHistoryBG();
             const pass5 = encoder.beginComputePass({ label: 'pairForce' });
             pass5.setPipeline(p2.pairForce.pipeline);
             pass5.setBindGroup(0, this._bg_pairForce0);
@@ -3143,6 +3270,19 @@ export default class GPUPhysics {
 
             _addParticleRadData.fill(0);
             this.device.queue.writeBuffer(this.buffers.radiationState, idx * RADIATION_STATE_SIZE, _addParticleRadData);
+
+            // Initialize history metadata for deserialized particles (creationTime = -Infinity)
+            if (this.buffers.historyAllocated) {
+                _addParticleMetaU32[0] = 0;  // writeIdx
+                _addParticleMetaU32[1] = 0;  // count
+                _addParticleMetaF32[2] = -Infinity; // creationTime — always existing
+                _addParticleMetaU32[3] = 0;  // _pad
+                this.device.queue.writeBuffer(
+                    this.buffers.histMeta,
+                    idx * HIST_META_STRIDE * 4,
+                    _addParticleMetaBuf
+                );
+            }
 
             this.aliveCount++;
         }

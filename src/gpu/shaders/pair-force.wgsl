@@ -5,7 +5,7 @@
 // Ports CPU pairForce() from forces.js. Includes signal delay aberration (Phase 4).
 // No Barnes-Hut (Phase 3). All force types gated by toggle bits.
 //
-// Uses packed ParticleState + ParticleDerived + RadiationState structs.
+// Uses packed ParticleState + ParticleDerived + ParticleAux structs. Jerk written to AllForces.
 
 const TILE_SIZE: u32 = 64u;
 
@@ -30,17 +30,20 @@ var<workgroup> tile: array<TileParticle, TILE_SIZE>;
 // Bind group 0: uniforms
 @group(0) @binding(0) var<uniform> uniforms: SimUniforms;
 
-// Bind group 1: particle state (read_write for encoder compat) — 3 bindings
+// Bind group 1: particle state (read_write for encoder compat) — 4 bindings
 @group(1) @binding(0) var<storage, read_write> particles: array<ParticleState>;
 @group(1) @binding(1) var<storage, read_write> derived: array<ParticleDerived>;
 @group(1) @binding(2) var<storage, read_write> axYukMod: array<vec2<f32>>;  // packed: axMod, yukMod
+@group(1) @binding(3) var<storage, read_write> particleAux: array<ParticleAux>;
 
-// Bind group 2: force accumulators (read_write) — 1 binding
+// Bind group 2: force accumulators + maxAccel — 2 bindings
 @group(2) @binding(0) var<storage, read_write> allForces: array<AllForces>;
+@group(2) @binding(1) var<storage, read_write> maxAccel: array<atomic<u32>>;
 
-// Bind group 3: radiation state + maxAccel for adaptive substepping
-@group(3) @binding(0) var<storage, read_write> radState: array<RadiationState>;
-@group(3) @binding(1) var<storage, read_write> maxAccel: array<atomic<u32>>;
+// Bind group 3: signal delay history (interleaved) — 2 bindings
+// Bindings declared for pipeline layout; used by signal delay lookups (Task 8)
+@group(3) @binding(0) var<storage, read_write> histData: array<f32>;
+@group(3) @binding(1) var<storage, read_write> histMeta: array<u32>;
 
 // Aberration constants
 const ABERRATION_CLAMP_MIN: f32 = 0.01;
@@ -428,19 +431,17 @@ fn main(
         af.bFields = vec4(accBz, accBgz, 0.0, 0.0);  // extBz added by external fields pass
         af.bFieldGrads = vec4(accDBzdx, accDBzdy, accDBgzdx, accDBgzdy);
         af.totalForce = vec2(accTotalX, accTotalY);
-        af._pad = vec2(0.0, 0.0);
+        // Write jerk to AllForces (NaN guard — jerk can diverge from ill-conditioned pairs)
+        af.jerk = vec2(
+            select(accJerkX, 0.0, accJerkX != accJerkX),
+            select(accJerkY, 0.0, accJerkY != accJerkY)
+        );
 
         // NaN guard on total force — must happen BEFORE writing to global memory
         if (accTotalX != accTotalX) { af.totalForce = vec2(0.0, af.totalForce.y); }
         if (accTotalY != accTotalY) { af.totalForce = vec2(af.totalForce.x, 0.0); }
 
         allForces[idx] = af;
-
-        // Write jerk to RadiationState (NaN guard — jerk can diverge from ill-conditioned pairs)
-        var rs = radState[idx];
-        rs.jerkX = select(accJerkX, 0.0, accJerkX != accJerkX);
-        rs.jerkY = select(accJerkY, 0.0, accJerkY != accJerkY);
-        radState[idx] = rs;
 
         // Adaptive substepping: atomicMax of |F/m|^2 as fixed-point u32
         // dtSafe = sqrt(softening / a_max), so we track max acceleration magnitude

@@ -61,7 +61,7 @@ struct AllForces {
     bFields: vec4<f32>,
     bFieldGrads: vec4<f32>,
     totalForce: vec2<f32>,
-    _pad: vec2<f32>,
+    jerk: vec2<f32>,
 };
 
 struct RadiationState {
@@ -183,8 +183,8 @@ fn larmorRadiation(@builtin(global_invocation_id) gid: vec3u) {
     let tau = 2.0 / 3.0 * qSq * mInv;
 
     // Term 1: jerk = analytical (grav+Coulomb+Yukawa from force pass) + backward-diff residual
-    var jerkXVal = radState[i].jerkX;
-    var jerkYVal = radState[i].jerkY;
+    var jerkXVal = allForces[i].jerk.x;
+    var jerkYVal = allForces[i].jerk.y;
 
     // Backward-difference residual jerk for non-analytical forces (magnetic, GM, 1PN, field, etc.)
     // CPU equivalent: integrator.js _otherFx0/1, _otherDt0/1
