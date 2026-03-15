@@ -80,7 +80,7 @@ const _addParticleAuxF32 = new Float32Array(_addParticleAuxData);
 const _addParticleAuxU32 = new Uint32Array(_addParticleAuxData);
 const _addParticleColorData = new Uint32Array(1);
 const _addParticleModData = new Float32Array(2);
-const _addParticleRadData = new Float32Array(8);     // RADIATION_STATE_SIZE / 4
+const _addParticleRadData = new Float32Array(16);    // RADIATION_STATE_SIZE / 4
 const _zeroU32 = new Uint32Array([0]);                // reusable zero for counter resets
 const _retiredFlagU32 = new Uint32Array([2]);         // FLAG_RETIRED for removeParticle
 
@@ -657,6 +657,16 @@ export default class GPUPhysics {
         this._phase4BindGroups.radG3 = bg('radiation_g3', p4.larmorRadiation.bindGroupLayouts[3],
             [b.pionPool, b.piCount]);
 
+        // ── Quadrupole radiation (quadrupoleCoM, quadrupoleContrib, quadrupoleApply share bind groups) ──
+        this._phase4BindGroups.quadG0 = bg('quadrupole_g0', p4.quadrupoleCoM.bindGroupLayouts[0],
+            [this.uniformBuffer]);
+        this._phase4BindGroups.quadG1 = bg('quadrupole_g1', p4.quadrupoleCoM.bindGroupLayouts[1],
+            [b.particleState, b.particleAux, b.derived, b.allForces, b.radiationState]);
+        this._phase4BindGroups.quadG2 = bg('quadrupole_g2', p4.quadrupoleCoM.bindGroupLayouts[2],
+            [b.photonPool, b.phCount]);
+        this._phase4BindGroups.quadG3 = bg('quadrupole_g3', p4.quadrupoleCoM.bindGroupLayouts[3],
+            [b.quadReductionBuf]);
+
         // ── Bosons (updatePhotons, updatePions, absorbPhotons, absorbPions, decayPions) ──
         this._phase4BindGroups.bosG0 = bg('bosons_g0', p4.updatePhotons.bindGroupLayouts[0],
             [this.uniformBuffer, b.poolMgmt]);
@@ -746,6 +756,51 @@ export default class GPUPhysics {
             passPion.dispatchWorkgroups(workgroups);
             passPion.end();
         }
+    }
+
+    /**
+     * Dispatch quadrupole radiation passes (once per frame, after all substeps).
+     * Requires Radiation + (Gravity or Coulomb) + at least 2 particles.
+     * Three dispatches: CoM reduction → d³ contribution reduction → apply + emit.
+     */
+    _dispatchQuadrupole(encoder) {
+        if (!this._radiationEnabled) return;
+        if (this.aliveCount < 2) return;
+        // Requires gravity or coulomb (same guard as CPU)
+        const t0 = this._toggles0;
+        if (!(t0 & 1) && !(t0 & 2)) return; // neither gravity nor coulomb
+
+        const workgroups = Math.ceil(this.aliveCount / 64);
+        const bgs = this._phase4BindGroups;
+        const p4 = this._phase4;
+
+        function setBindGroups(pass) {
+            pass.setBindGroup(0, bgs.quadG0);
+            pass.setBindGroup(1, bgs.quadG1);
+            pass.setBindGroup(2, bgs.quadG2);
+            pass.setBindGroup(3, bgs.quadG3);
+        }
+
+        // Pass 1: Reduce CoM + totalKE
+        const p1 = encoder.beginComputePass({ label: 'quadrupoleCoM' });
+        p1.setPipeline(p4.quadrupoleCoM.pipeline);
+        setBindGroups(p1);
+        p1.dispatchWorkgroups(workgroups);
+        p1.end();
+
+        // Pass 2: Compute d³I/d³Q contributions + reduce
+        const p2 = encoder.beginComputePass({ label: 'quadrupoleContrib' });
+        p2.setPipeline(p4.quadrupoleContrib.pipeline);
+        setBindGroups(p2);
+        p2.dispatchWorkgroups(workgroups);
+        p2.end();
+
+        // Pass 3: Apply drag + accumulate + emit photons/gravitons
+        const p3 = encoder.beginComputePass({ label: 'quadrupoleApply' });
+        p3.setPipeline(p4.quadrupoleApply.pipeline);
+        setBindGroups(p3);
+        p3.dispatchWorkgroups(workgroups);
+        p3.end();
     }
 
     /**
@@ -2456,6 +2511,10 @@ export default class GPUPhysics {
                 this._histStride = 0;
                 this._dispatchRecordHistory(encoder);
             }
+
+            // Quadrupole radiation (once per frame, after history recording — matches CPU order)
+            // Uses PHYSICS_DT constant in shader (not u.dt which holds dtSub from last substep)
+            this._dispatchQuadrupole(encoder);
 
             // Update particle colors from charge/mass/antimatter state
             if (this._updateColorsPipeline && this.aliveCount > 0) {

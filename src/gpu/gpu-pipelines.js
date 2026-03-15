@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 17;
+const SHADER_VERSION = 18;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 async function fetchShader(filename, prepend = '') {
@@ -515,6 +515,70 @@ export async function createPhase4Pipelines(device, wgslConstants = '') {
         bindGroupLayouts: radLayouts,
     };
 
+    // ── Quadrupole radiation (quadrupole.wgsl) ──
+    // Group 0: uniforms
+    // Group 1: particleState (rw) + particleAux (rw) + derived (rw) + allForces (rw) + radiationState (rw) = 5
+    // Group 2: photonPool (rw) + phCount (rw) = 2
+    // Group 3: quadReductionBuf (rw) = 1
+    // Total: 8 storage buffers per stage
+    const quadCode = await fetchShader('quadrupole.wgsl', wgslConstants);
+    const quadModule = device.createShaderModule({ label: 'quadrupole', code: quadCode });
+
+    const quadG0 = device.createBindGroupLayout({
+        label: 'quadrupole_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        ],
+    });
+    const quadG1 = device.createBindGroupLayout({
+        label: 'quadrupole_g1',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleState (rw)
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleAux (rw)
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // derived (rw)
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // allForces (rw)
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // radiationState (rw)
+        ],
+    });
+    const quadG2 = device.createBindGroupLayout({
+        label: 'quadrupole_g2',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // photonPool
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // phCount
+        ],
+    });
+    const quadG3 = device.createBindGroupLayout({
+        label: 'quadrupole_g3',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // quadReductionBuf
+        ],
+    });
+
+    const quadLayouts = [quadG0, quadG1, quadG2, quadG3];
+    const quadPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: quadLayouts });
+
+    const quadrupoleCoM = {
+        pipeline: device.createComputePipeline({
+            label: 'quadrupoleCoM', layout: quadPipelineLayout,
+            compute: { module: quadModule, entryPoint: 'quadrupoleCoM' },
+        }),
+        bindGroupLayouts: quadLayouts,
+    };
+    const quadrupoleContrib = {
+        pipeline: device.createComputePipeline({
+            label: 'quadrupoleContrib', layout: quadPipelineLayout,
+            compute: { module: quadModule, entryPoint: 'quadrupoleContrib' },
+        }),
+        bindGroupLayouts: quadLayouts,
+    };
+    const quadrupoleApply = {
+        pipeline: device.createComputePipeline({
+            label: 'quadrupoleApply', layout: quadPipelineLayout,
+            compute: { module: quadModule, entryPoint: 'quadrupoleApply' },
+        }),
+        bindGroupLayouts: quadLayouts,
+    };
+
     // ── Bosons (bosons.wgsl) ──
     // Group 0: uniforms + poolMgmt = 2
     // Group 1: particleState (rw) + particleAux (ro) = 2
@@ -628,6 +692,7 @@ export async function createPhase4Pipelines(device, wgslConstants = '') {
         recordHistory,
         compute1PN, vvKick1PN,
         larmorRadiation, hawkingRadiation, pionEmission,
+        quadrupoleCoM, quadrupoleContrib, quadrupoleApply,
         ...bosonPipelines,
         ...bosonTreePipelines,
     };
