@@ -94,9 +94,9 @@ export async function createPhase2Pipelines(device, wgslConstants = '') {
     ]);
 
     // --- borisDrift ---
-    // uniforms + particleState (rw) + derived (rw) = 2 storage
+    // uniforms + particleState (rw) + derived (rw) + allForces (rw) = 3 storage
     const borisDrift = await makePipeline('borisDrift', 'boris.wgsl', [
-        ['uniform', 'storage', 'storage'],
+        ['uniform', 'storage', 'storage', 'storage'],
     ]);
 
     // --- spinOrbit ---

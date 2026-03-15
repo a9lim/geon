@@ -256,6 +256,7 @@ export function setupUI(sim) {
             const gpuToggles = Object.create(sim.physics);
             gpuToggles.heatmapEnabled = sim.heatmap && sim.heatmap.enabled;
             sim._gpuPhysics.setToggles(gpuToggles);
+            _syncModesToGPU();
         }
     };
 

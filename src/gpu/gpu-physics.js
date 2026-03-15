@@ -384,9 +384,9 @@ export default class GPUPhysics {
         this._bg_borisFused = bg('borisFused', p2.borisFused.bindGroupLayouts[0],
             [this.uniformBuffer, b.particleState, b.allForces]);
 
-        // borisDrift (writes vel to derived, reads/writes particleState)
+        // borisDrift (writes vel to derived, reads/writes particleState + allForces for display force reconstruction)
         this._bg_drift = bg('drift', p2.borisDrift.bindGroupLayouts[0],
-            [this.uniformBuffer, b.particleState, b.derived]);
+            [this.uniformBuffer, b.particleState, b.derived, b.allForces]);
 
         // spinOrbit (packed particleState, derived, allForces)
         this._bg_spinOrbit = bg('spinOrbit', p2.spinOrbit.bindGroupLayouts[0],

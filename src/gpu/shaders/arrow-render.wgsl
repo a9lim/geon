@@ -82,9 +82,9 @@ struct ParticleDerived_AR {
 @group(0) @binding(5) var<storage, read> derived: array<ParticleDerived_AR>;
 
 // Constants (FLAG_ALIVE, VELOCITY_VECTOR_SCALE) provided by generated wgslConstants block.
-// Shader-specific constants:
-const SHAFT_HALF_W: f32 = 0.06;
-const HEAD_HALF_W: f32 = 0.15;
+// Shaft/head sizes in world units — scale naturally with camera zoom.
+const SHAFT_HALF_W: f32 = 0.15;
+const HEAD_HALF_W: f32 = 0.35;
 const HEAD_LEN: f32 = 0.5;
 
 fn getForceVector(idx: u32, forceType: u32) -> vec2f {
@@ -146,8 +146,8 @@ fn vs_main(
     let scaledLen = mag * arrowParams.arrowScale;
     let r = particleAux[instIdx].radius;
 
-    // Arrow starts at particle edge, extends outward
-    let base = vec2f(p.posX, p.posY) + dir * r;
+    // Arrow starts at particle center
+    let base = vec2f(p.posX, p.posY);
     let tip = base + dir * scaledLen;
     let headBase = tip - dir * HEAD_LEN;
 
