@@ -15,7 +15,6 @@ import { minImage, wrapPosition } from './topology.js';
 
 // Reused by disintegration to avoid per-call allocation
 const _disintMiOut = { x: 0, y: 0 };
-const _repelMiOut = { x: 0, y: 0 };
 
 // Per-particle quadrupole contribution arrays (Fix A7)
 let _d3IContrib = new Float64Array(256);
@@ -390,29 +389,15 @@ export default class Physics {
     _applyRepulsion(particles, pool, root) {
         const friction = this.bounceFriction;
         const n = particles.length;
-        const useTree = root >= 0;
         for (let i = 0; i < n; i++) {
             const p1 = particles[i];
-            if (useTree) {
-                const searchR = p1.radius * 2;
-                const candidates = pool.queryReuse(root, p1.pos.x, p1.pos.y, searchR, searchR);
-                for (let ci = 0; ci < candidates.length; ci++) {
-                    const p2raw = candidates[ci];
-                    const p2 = p2raw.isGhost ? p2raw.original : p2raw;
-                    if (p1 === p2 || p1.id >= p2.id) continue;
-                    this._repelPair(p1, p2raw.pos.x, p2raw.pos.y, p2, friction);
-                }
-            } else {
-                for (let j = i + 1; j < n; j++) {
-                    const p2 = particles[j];
-                    let p2x = p2.pos.x, p2y = p2.pos.y;
-                    if (this.periodic) {
-                        minImage(p1.pos.x, p1.pos.y, p2x, p2y, this._topologyConst, this.domainW, this.domainH, this.domainW * 0.5, this.domainH * 0.5, _repelMiOut);
-                        p2x = p1.pos.x + _repelMiOut.x;
-                        p2y = p1.pos.y + _repelMiOut.y;
-                    }
-                    this._repelPair(p1, p2x, p2y, p2, friction);
-                }
+            const searchR = p1.radius * 2;
+            const candidates = pool.queryReuse(root, p1.pos.x, p1.pos.y, searchR, searchR);
+            for (let ci = 0; ci < candidates.length; ci++) {
+                const p2raw = candidates[ci];
+                const p2 = p2raw.isGhost ? p2raw.original : p2raw;
+                if (p1 === p2 || p1.id >= p2.id) continue;
+                this._repelPair(p1, p2raw.pos.x, p2raw.pos.y, p2, friction);
             }
         }
     }
@@ -486,9 +471,7 @@ export default class Physics {
             }
             resetForces(particles);
             this._syncAxionField(particles, width, height, boundaryMode);
-            const initRoot = this.barnesHutEnabled
-                ? this._buildTree(particles)
-                : -1;
+            const initRoot = this._buildTree(particles);
             computeAllForces(particles, toggles, this.pool, initRoot, this.barnesHutEnabled, relOn, this.simTime, this.periodic, this.domainW, this.domainH, this._topologyConst, this.sim && this.sim.deadParticles);
             this._applyExternalFields(particles);
             if (this.higgsEnabled && this.sim && this.sim.higgsField) {
