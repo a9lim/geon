@@ -53,14 +53,17 @@ export default class InputHandler {
         const rect = this.canvasRect;
         const sx = cx - rect.left;
         const sy = cy - rect.top;
-        return this.sim.camera.screenToWorld(sx, sy, this._posOut);
+        const w = this.sim.camera.screenToWorld(sx, sy);
+        this._posOut.set(w.x, w.y);
+        return this._posOut;
     }
 
     _getPosNew(cx, cy) {
         const rect = this.canvasRect;
         const sx = cx - rect.left;
         const sy = cy - rect.top;
-        return this.sim.camera.screenToWorld(sx, sy, new Vec2(0, 0));
+        const w = this.sim.camera.screenToWorld(sx, sy);
+        return new Vec2(w.x, w.y);
     }
 
     updateRect() { this.canvasRect = this.canvas.getBoundingClientRect(); }
