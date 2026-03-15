@@ -417,11 +417,134 @@ class Simulation {
                 angw: p.angw,
                 antimatter: p.antimatter,
             });
+            // Evict any stale CPU particle that had the same GPU slot (from a prior merge/death)
+            if (p._gpuIdx >= 0) {
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    if (this.particles[i]._gpuIdx === p._gpuIdx) {
+                        if (this.selectedParticle === this.particles[i]) this.selectedParticle = null;
+                        this.particles[i] = this.particles[this.particles.length - 1];
+                        this.particles.pop();
+                        break;
+                    }
+                }
+            }
         }
 
         this.particles.push(p);
         if (!options.skipBaseline) this.stats.resetBaseline();
         this._dirty = true;
+    }
+
+    /**
+     * Sync CPU particles array from GPU readback data.
+     * Called each frame in GPU mode. Consumes periodic readback (every 8 GPU frames)
+     * to prune dead particles, update surviving particle state, and create CPU
+     * particles for GPU-only particles (merge survivors).
+     */
+    _syncParticlesFromGPU() {
+        const syncData = this._gpuPhysics.consumeParticleSync();
+        if (!syncData) return;
+
+        const { f32, u32, count } = syncData;
+        const STRIDE = 9; // ParticleState: 9 × f32/u32 (36 bytes)
+        const FLAG_ALIVE = 1;
+        const FLAG_ANTIMATTER = 4;
+
+        // Build a map of gpuIdx → CPU particle for fast lookup.
+        // If multiple CPU particles share the same _gpuIdx (aliasing from GPU merge),
+        // keep only the latest — mark earlier duplicates for removal.
+        const cpuByGpuIdx = new Map();
+        const staleAliases = new Set();
+        for (let i = 0; i < this.particles.length; i++) {
+            const p = this.particles[i];
+            if (p._gpuIdx != null) {
+                const existing = cpuByGpuIdx.get(p._gpuIdx);
+                if (existing) staleAliases.add(existing);
+                cpuByGpuIdx.set(p._gpuIdx, p);
+            }
+        }
+
+        // Track which GPU indices are alive in readback
+        const aliveGpuIndices = new Set();
+
+        for (let idx = 0; idx < count; idx++) {
+            const base = idx * STRIDE;
+            const flags = u32[base + 8];
+            if (!(flags & FLAG_ALIVE)) continue;
+
+            aliveGpuIndices.add(idx);
+            const cpuP = cpuByGpuIdx.get(idx);
+
+            const posX = f32[base + 0];
+            const posY = f32[base + 1];
+            const wx = f32[base + 2];
+            const wy = f32[base + 3];
+            const mass = f32[base + 4];
+            const charge = f32[base + 5];
+            const angw = f32[base + 6];
+            const baseMass = f32[base + 7];
+            const antimatter = !!(flags & FLAG_ANTIMATTER);
+
+            if (cpuP) {
+                // Update existing CPU particle with current GPU state
+                cpuP.pos.x = posX;
+                cpuP.pos.y = posY;
+                cpuP.w.x = wx;
+                cpuP.w.y = wy;
+                cpuP.mass = mass;
+                cpuP.charge = charge;
+                cpuP.angw = angw;
+                cpuP.baseMass = baseMass;
+                cpuP.antimatter = antimatter;
+                cpuP.radius = Math.cbrt(mass);
+                // Derive coordinate velocity from proper velocity
+                const wSq = wx * wx + wy * wy;
+                const gamma = Math.sqrt(1 + wSq);
+                cpuP.vel.x = wx / gamma;
+                cpuP.vel.y = wy / gamma;
+                cpuP.angVel = this.physics.relativityEnabled
+                    ? angwToAngVel(angw, cpuP.radius)
+                    : angw;
+                cpuP.updateColor();
+            } else {
+                // GPU-only particle (e.g. merge survivor) — create CPU counterpart
+                const p = new Particle(posX, posY);
+                p.mass = mass;
+                p.baseMass = baseMass;
+                p.charge = charge;
+                p.antimatter = antimatter;
+                p.angw = angw;
+                p.radius = Math.cbrt(mass);
+                p._gpuIdx = idx;
+                p.creationTime = this.physics.simTime;
+                // Set proper velocity directly (avoid setVelocity clamp)
+                p.w.set(wx, wy);
+                const wSqN = wx * wx + wy * wy;
+                const gammaN = Math.sqrt(1 + wSqN);
+                p.vel.set(wx / gammaN, wy / gammaN);
+                p.angVel = this.physics.relativityEnabled
+                    ? angwToAngVel(angw, p.radius)
+                    : angw;
+                p.updateColor();
+                this.particles.push(p);
+            }
+        }
+
+        // Remove CPU particles whose GPU slot is no longer alive, or that are stale aliases
+        let writeIdx = 0;
+        for (let i = 0; i < this.particles.length; i++) {
+            const p = this.particles[i];
+            if (staleAliases.has(p)) {
+                // Duplicate _gpuIdx from GPU merge — remove the stale copy
+                if (this.selectedParticle === p) this.selectedParticle = null;
+            } else if (p._gpuIdx == null || aliveGpuIndices.has(p._gpuIdx)) {
+                this.particles[writeIdx++] = p;
+            } else {
+                // GPU slot is dead — remove from CPU
+                if (this.selectedParticle === p) this.selectedParticle = null;
+            }
+        }
+        this.particles.length = writeIdx;
     }
 
     /** Backend-agnostic reset: clears all simulation state. */
@@ -500,6 +623,9 @@ class Simulation {
                     this._gpuPhysics.update(PHYSICS_DT * substeps);
                     this.accumulator -= substeps * PHYSICS_DT;
                 }
+
+                // Sync CPU particles array from GPU readback (prune dead, update positions)
+                this._syncParticlesFromGPU();
 
                 // Periodic auto-save for GPU error recovery (non-blocking)
                 if (++_autoSaveCounter >= AUTO_SAVE_INTERVAL) {

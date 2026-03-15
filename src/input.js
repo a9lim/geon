@@ -277,8 +277,8 @@ export default class InputHandler {
 
     /**
      * CPU-side fallback for immediate hit testing when GPU path active.
-     * Uses the particle state array (which is periodically synced from GPU
-     * readback for selected-particle display).
+     * Uses CPU particle array which is periodically synced from GPU readback
+     * (every 8 GPU frames via _syncParticlesFromGPU).
      */
     _cpuFallbackHitTest(worldPos) {
         // Use CPU-side particle array (always maintained alongside GPU)
