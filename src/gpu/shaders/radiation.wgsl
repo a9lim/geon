@@ -68,7 +68,15 @@ struct RadiationState {
     jerkX: f32, jerkY: f32,
     radAccum: f32, hawkAccum: f32, yukawaRadAccum: f32,
     radDisplayX: f32, radDisplayY: f32,
-    _pad: f32,
+    qResFx0: f32,
+    qResFy0: f32,
+    qResFx1: f32,
+    qResFy1: f32,
+    qResCount: f32,
+    quadAccum: f32,
+    emQuadAccum: f32,
+    d3IContrib: f32,
+    d3QContrib: f32,
 };
 
 struct Photon {

@@ -99,6 +99,7 @@ src/
       boundary.wgsl            Despawn/bounce/wrap boundary conditions
       --- Phase 4: Advanced physics (standalone, own structs) ---
       radiation.wgsl           Larmor, Hawking, pion emission (3 entry points)
+      quadrupole.wgsl          Quadrupole radiation: CoM reduce, d³I/d³Q reduce, apply+emit (3 entries)
       bosons.wgsl              Photon/pion drift, lensing, absorption, decay (5 entry points)
       boson-tree.wgsl          Boson BH tree: insert, aggregate, particle↔boson gravity
       history.wgsl             Signal delay history ring buffer recording
@@ -478,7 +479,7 @@ Instanced rendering via vertex shaders. Reads directly from GPU compute buffers 
 12. Boson update (photon/pion drift, absorption, decay) → pair production
 13. Boundary conditions
 
-Post-substep (once per frame, separate encoder): heatmap, boson gravity, dead GC, history recording, updateColors, trail recording.
+Post-substep (once per frame, separate encoder): heatmap, boson gravity, dead GC, history recording, quadrupole radiation (3 passes: CoM → d³ contrib → apply+emit), updateColors, trail recording.
 
 ### Packed Struct Buffers
 
@@ -490,7 +491,7 @@ WebGPU limits storage buffers to `maxStorageBuffersPerShaderStage` (typically 10
 | `ParticleAux` | 20B | radius, particleId, deathTime, deathMass, deathAngVel | 5 fields → 1 buffer |
 | `ParticleDerived` | 32B | magMoment, angMomentum, invMass, radiusSq, velX/Y, angVel | 7+pad fields → 1 buffer |
 | `AllForces` | 160B | 11 force vec2s, 3 torques, B-fields, B-gradients, totalForce | 10 vec4s → 1 buffer |
-| `RadiationState` | 32B | jerkX/Y, radAccum, hawkAccum, yukawaRadAccum, radDisplayX/Y | 8 fields → 1 buffer |
+| `RadiationState` | 64B | jerkX/Y, radAccum, hawkAccum, yukawaRadAccum, radDisplayX/Y, qRes history, quadAccum, emQuadAccum, d3I/QContrib scratch | 16 fields → 1 buffer |
 | `Photon` | 32B | phPosX/Y, phVelX/Y, phEnergy, phEmitterId, phLifetime, phFlags | 8 fields → 1 buffer |
 | `Pion` | 48B | piPosX/Y, piWX/Y, piMass, piCharge, piEnergy, piEmitterId, piAge, piFlags | 10+2pad fields → 1 buffer |
 

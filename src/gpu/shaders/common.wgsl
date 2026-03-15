@@ -102,12 +102,20 @@ struct ParticleAux {
 };
 
 // Radiation accumulator state per particle.
-// 32 bytes = 8 × f32. Replaces 8 individual SoA buffers → 1.
+// 64 bytes = 16 × f32. Packed quadrupole history + accumulators.
 struct RadiationState {
     jerkX: f32, jerkY: f32,
     radAccum: f32, hawkAccum: f32, yukawaRadAccum: f32,
     radDisplayX: f32, radDisplayY: f32,
-    _pad: f32,
+    qResFx0: f32,           // residual force history t-2 (was _pad)
+    qResFy0: f32,
+    qResFx1: f32,           // residual force history t-1
+    qResFy1: f32,
+    qResCount: f32,          // warmup counter (0/1/2, stored as f32)
+    quadAccum: f32,          // GW quadrupole energy accumulator
+    emQuadAccum: f32,        // EM quadrupole energy accumulator
+    d3IContrib: f32,         // scratch: per-particle GW contribution norm
+    d3QContrib: f32,         // scratch: per-particle EM contribution norm
 };
 
 // Packed photon pool entry.
