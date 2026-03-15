@@ -6,6 +6,7 @@
 @group(0) @binding(0) var<uniform> uniforms: SimUniforms;
 @group(0) @binding(1) var<storage, read_write> particles: array<ParticleState>;
 @group(0) @binding(2) var<storage, read_write> derived: array<ParticleDerived>;
+@group(0) @binding(3) var<storage, read_write> allForces: array<AllForces>;
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -36,4 +37,28 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     particles[idx].posX = newPosX;
     particles[idx].posY = newPosY;
+
+    // Reconstruct velocity-dependent display forces (B-like forces handled by Boris rotation).
+    // These are not real forces — they're the equivalent Lorentz-like force for display only.
+    // Matches CPU integrator.js post-substep reconstruction.
+    var af = allForces[idx];
+    let q = particles[idx].charge;
+    let m = particles[idx].mass;
+    let Bz = af.bFields.x;
+    let Bgz = af.bFields.y;
+
+    // Magnetic Lorentz: F_display = q * v × B  (into f1.xy)
+    let hasMag = hasToggle0(MAGNETIC_BIT) || uniforms.extBz != 0.0;
+    if (hasMag) {
+        af.f1.x += q * vy * Bz;
+        af.f1.y -= q * vx * Bz;
+    }
+
+    // Gravitomagnetic Lorentz analog: F_display = 4m * v × Bgz  (into f1.zw)
+    if (hasToggle0(GRAVITOMAG_BIT)) {
+        af.f1.z += 4.0 * m * vy * Bgz;
+        af.f1.w -= 4.0 * m * vx * Bgz;
+    }
+
+    allForces[idx] = af;
 }

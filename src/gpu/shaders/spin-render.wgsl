@@ -90,9 +90,9 @@ fn vs_main(
     let arcFrac = clamp(abs(angVel) * r, 0.0, 1.0);
     let totalAngle = arcFrac * TWO_PI;
 
-    // Always start from top (-PI/2). Positive angVel = CW (y-down), sweep clockwise (negative direction).
+    // Always start from top (-PI/2). Positive angVel = CW (y-down) = increasing angle direction.
     let startAngle = -HALF_PI;
-    let dir = -sign(angVel);   // negate: CW on y-down canvas means decreasing angle
+    let dir = sign(angVel);    // positive angVel = CW on y-down canvas = increasing angle
     let t = f32(vertIdx) / f32(ARC_SEGMENTS - 1u);
     let angle = startAngle + dir * t * totalAngle;
 

@@ -594,27 +594,21 @@ export default class GPURenderer {
             }
         }
 
-        // Pass 4: Force/velocity arrows — isolated encoder
+        // Pass 4: Force/velocity arrows — one submit per arrow type.
+        // Each arrow type needs its own writeBuffer + submit to ensure the uniform
+        // data is correct for that draw call (writeBuffer inside a single render pass
+        // would cause all draws to use the last-written uniform).
         const wantsArrows = this._arrowReady && aliveCount > 0 &&
             (this.showForce || this.showForceComponents || this.showVelocity);
         if (wantsArrows) {
             try {
-                const arrowEncoder = this.device.createCommandEncoder({ label: 'arrow-render' });
-                const arrowPass = arrowEncoder.beginRenderPass({
-                    label: 'arrow render',
-                    colorAttachments: [{
-                        view: textureView,
-                        loadOp: 'load',
-                        storeOp: 'store',
-                    }],
-                });
-
                 const enabledForces = opts.enabledForces || {};
-                const arrowScale = 256.0 / (this.zoom || 16);
-                const minMag = 0.001;
+                const zoom = this.zoom || 16;
+                const invZoom = 1 / zoom;
+                const arrowScale = 256.0;
+                const minMag = 0.1 * invZoom;
 
                 if (this.showForceComponents) {
-                    // Per-component force arrows (11 types)
                     const forceTypes = [];
                     if (enabledForces.gravity) forceTypes.push(0);
                     if (enabledForces.coulomb) forceTypes.push(1);
@@ -627,23 +621,19 @@ export default class GPURenderer {
                     if (enabledForces.external) forceTypes.push(8);
                     if (enabledForces.higgs) forceTypes.push(9);
                     if (enabledForces.axion) forceTypes.push(10);
-                    if (forceTypes.length > 0) {
-                        this._drawArrows(arrowPass, aliveCount, forceTypes, arrowScale, minMag);
+                    for (const ft of forceTypes) {
+                        const color = GPURenderer.FORCE_COLORS[ft] || [1, 1, 1];
+                        this._submitArrowDraw(textureView, aliveCount, ft, color, arrowScale, minMag, invZoom);
                     }
                 } else if (this.showForce) {
-                    // Total force arrow (accent color)
                     const accentColor = this.isLight ? _accentLight : _accentDark;
-                    this._drawArrowsCustomColor(arrowPass, aliveCount, 11, accentColor, arrowScale, minMag);
+                    this._submitArrowDraw(textureView, aliveCount, 11, accentColor, arrowScale, minMag, invZoom);
                 }
 
                 if (this.showVelocity) {
-                    // Velocity arrows (text color)
                     const textColor = this.isLight ? _textLight : _textDark;
-                    this._drawArrowsCustomColor(arrowPass, aliveCount, 12, textColor, 1.0, minMag);
+                    this._submitArrowDraw(textureView, aliveCount, 12, textColor, 1.0, minMag, invZoom);
                 }
-
-                arrowPass.end();
-                this.device.queue.submit([arrowEncoder.finish()]);
             } catch (e) {
                 console.warn('[physsim] Arrow render failed, disabling:', e.message);
                 this._arrowReady = false;
@@ -674,44 +664,12 @@ export default class GPURenderer {
     })();
 
     /**
-     * Render force arrows for one or more force types.
-     * @param {GPURenderPassEncoder} pass - active render pass
-     * @param {number} aliveCount - number of alive particles
-     * @param {number[]} forceTypes - array of force type indices (0-10) to draw
-     * @param {number} arrowScale - scale factor for arrow length
-     * @param {number} minMag - minimum force magnitude to draw
+     * Submit a single arrow draw with its own encoder + render pass.
+     * Each arrow type needs a separate submit so that the uniform writeBuffer
+     * takes effect before the draw executes on the GPU.
      */
-    _drawArrows(pass, aliveCount, forceTypes, arrowScale = 256.0, minMag = 0.001) {
+    _submitArrowDraw(textureView, aliveCount, forceType, color, arrowScale, minMag, invZoom = 0.0625) {
         if (!this._arrowReady || aliveCount <= 0) return;
-
-        pass.setPipeline(this._arrowPipeline);
-        pass.setBindGroup(0, this._arrowBindGroup);
-
-        for (const ft of forceTypes) {
-            const color = GPURenderer.FORCE_COLORS[ft] || [1, 1, 1];
-
-            _arrowU32[0] = ft;
-            _arrowF32[1] = color[0];
-            _arrowF32[2] = color[1];
-            _arrowF32[3] = color[2];
-            _arrowF32[4] = arrowScale;
-            _arrowF32[5] = minMag;
-            _arrowF32[6] = 0;
-            _arrowF32[7] = 0;
-
-            this.device.queue.writeBuffer(this._arrowUniformBuffer, 0, _arrowData);
-            // 9 vertices per arrow (3 triangles), aliveCount instances
-            pass.draw(9, aliveCount);
-        }
-    }
-
-    /**
-     * Render a single arrow type with a custom color (for total force / velocity vectors).
-     */
-    _drawArrowsCustomColor(pass, aliveCount, forceType, color, arrowScale, minMag) {
-        if (!this._arrowReady || aliveCount <= 0) return;
-        pass.setPipeline(this._arrowPipeline);
-        pass.setBindGroup(0, this._arrowBindGroup);
 
         _arrowU32[0] = forceType;
         _arrowF32[1] = color[0];
@@ -719,10 +677,24 @@ export default class GPURenderer {
         _arrowF32[3] = color[2];
         _arrowF32[4] = arrowScale;
         _arrowF32[5] = minMag;
-        _arrowF32[6] = 0;
+        _arrowF32[6] = invZoom;
         _arrowF32[7] = 0;
         this.device.queue.writeBuffer(this._arrowUniformBuffer, 0, _arrowData);
+
+        const enc = this.device.createCommandEncoder({ label: `arrow-${forceType}` });
+        const pass = enc.beginRenderPass({
+            label: `arrow ${forceType}`,
+            colorAttachments: [{
+                view: textureView,
+                loadOp: 'load',
+                storeOp: 'store',
+            }],
+        });
+        pass.setPipeline(this._arrowPipeline);
+        pass.setBindGroup(0, this._arrowBindGroup);
         pass.draw(9, aliveCount);
+        pass.end();
+        this.device.queue.submit([enc.finish()]);
     }
 
     /** Initialize field overlay render pipeline. Call after GPUPhysics has field buffers. */
