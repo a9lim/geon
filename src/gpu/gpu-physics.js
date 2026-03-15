@@ -157,6 +157,11 @@ export default class GPUPhysics {
         // Toggle state
         this._toggles0 = 0;
         this._toggles1 = 0;
+        this._gravityEnabled = false;
+        this._coulombEnabled = false;
+        this._magneticEnabled = false;
+        this._gravitomagEnabled = false;
+        this._spinOrbitEnabled = false;
         this._blackHoleEnabled = false;
         this._yukawaCoupling = 14;
         this._yukawaMu = 0.15;
@@ -1414,6 +1419,11 @@ export default class GPUPhysics {
         if (physics.fieldGravEnabled) t1 |= FIELD_GRAV_BIT_T1;
         this._toggles1 = t1;
 
+        this._gravityEnabled = physics.gravityEnabled;
+        this._coulombEnabled = physics.coulombEnabled;
+        this._magneticEnabled = physics.magneticEnabled;
+        this._gravitomagEnabled = physics.gravitomagEnabled;
+        this._spinOrbitEnabled = physics.spinOrbitEnabled;
         this._blackHoleEnabled = physics.blackHoleEnabled;
         this._barnesHutEnabled = physics.barnesHutEnabled;
         this._relativityEnabled = physics.relativityEnabled;
@@ -1591,8 +1601,8 @@ export default class GPUPhysics {
         // Toggle bits
         u[11] = this._higgsEnabled ? 1 : 0;     // higgsEnabled
         u[12] = this._axionEnabled ? 1 : 0;     // axionEnabled
-        u[13] = (this._toggles0 & COULOMB_BIT) ? 1 : 0;   // coulombEnabled
-        u[14] = (this._toggles0 & YUKAWA_BIT) ? 1 : 0; // yukawaEnabled
+        u[13] = this._coulombEnabled ? 1 : 0;   // coulombEnabled
+        u[14] = this._yukawaEnabled ? 1 : 0; // yukawaEnabled
         u[15] = this._fieldGravEnabled ? 1 : 0;  // gravityEnabled (field self-gravity)
         u[16] = this._relativityEnabled ? 1 : 0;  // relativityEnabled
         u[17] = this._blackHoleEnabled ? 1 : 0;   // blackHoleEnabled
@@ -1626,8 +1636,8 @@ export default class GPUPhysics {
         f[10] = this._axionCoupling;
         u[11] = this._higgsEnabled ? 1 : 0;
         u[12] = this._axionEnabled ? 1 : 0;
-        u[13] = (this._toggles0 & COULOMB_BIT) ? 1 : 0;
-        u[14] = (this._toggles0 & YUKAWA_BIT) ? 1 : 0;
+        u[13] = this._coulombEnabled ? 1 : 0;
+        u[14] = this._yukawaEnabled ? 1 : 0;
         u[15] = this._fieldGravEnabled ? 1 : 0;
         u[16] = this._relativityEnabled ? 1 : 0;
         u[17] = this._blackHoleEnabled ? 1 : 0;
@@ -2443,9 +2453,9 @@ export default class GPUPhysics {
         _heatmapUniformF32[7] = this.simTime;
         _heatmapUniformF32[8] = this.domainW;
         _heatmapUniformF32[9] = this.domainH;
-        _heatmapUniformU32[10] = (this._toggles0 & GRAVITY_BIT) ? 1 : 0; // doGravity
-        _heatmapUniformU32[11] = (this._toggles0 & COULOMB_BIT) ? 1 : 0; // doCoulomb
-        _heatmapUniformU32[12] = (this._toggles0 & YUKAWA_BIT) ? 1 : 0; // doYukawa
+        _heatmapUniformU32[10] = this._gravityEnabled ? 1 : 0; // doGravity
+        _heatmapUniformU32[11] = this._coulombEnabled ? 1 : 0; // doCoulomb
+        _heatmapUniformU32[12] = this._yukawaEnabled ? 1 : 0; // doYukawa
         _heatmapUniformU32[13] = (this._relativityEnabled && this.buffers.historyAllocated) ? 1 : 0; // useDelay
         _heatmapUniformU32[14] = this.boundaryMode === BOUND_LOOP ? 1 : 0;
         _heatmapUniformU32[15] = this.topologyMode;
@@ -2551,7 +2561,7 @@ export default class GPUPhysics {
 
         // Blur each active channel
         const channels = ['gravPotential', 'elecPotential', 'yukawaPotential'];
-        const channelToggles = [this._toggles0 & GRAVITY_BIT, this._toggles0 & COULOMB_BIT, this._toggles0 & YUKAWA_BIT];
+        const channelToggles = [this._gravityEnabled, this._coulombEnabled, this._yukawaEnabled];
         const hmBuf = this._heatmapBuffers;
 
         for (let c = 0; c < 3; c++) {
