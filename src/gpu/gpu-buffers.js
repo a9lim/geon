@@ -309,13 +309,6 @@ export function createParticleBuffers(device, maxParticles) {
         // Boson tree (Phase 4)
         bosonTreeNodes, bosonTreeCounter, MAX_BOSON_NODES,
 
-        // Particle sync staging buffer (for periodic CPU←GPU readback)
-        particleSyncStaging: device.createBuffer({
-            label: 'particleSyncStaging',
-            size: PARTICLE_STATE_SIZE * maxParticles,
-            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-        }),
-
         // Signal delay history (lazy-allocated)
         historyAllocated: false,
         histPosX: null,
