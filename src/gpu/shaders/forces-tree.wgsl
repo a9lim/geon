@@ -217,6 +217,7 @@ fn accumulateForce(
     sAxMod: f32, sYukMod: f32,
     pBodyRadiusSq: f32,
     jerkOut: ptr<function, vec2<f32>>,
+    useAberration: bool,
 ) {
     let toggles = uniforms.toggles0;
     let softeningSq = uniforms.softeningSq;
@@ -237,15 +238,14 @@ fn accumulateForce(
     let invR5 = invR3 * invRSq;
 
     // Lienard-Wiechert aberration: (1 - n_hat dot v_source)^{-3}
-    let signalDelayed = (toggles & RELATIVITY_BIT) != 0u;
     var aberr: f32 = 1.0;
-    if (signalDelayed) {
+    if (useAberration) {
         let nDotV = -(rx * svx + ry * svy) * invR;
         let denom = max(1.0 - nDotV, ABERRATION_CLAMP_MIN);
         aberr = min(1.0 / (denom * denom * denom), ABERRATION_CLAMP_MAX);
     }
-    let invR3a = select(invR3, invR3 * aberr, signalDelayed);
-    let invR5a = select(invR5, invR5 * aberr, signalDelayed);
+    let invR3a = select(invR3, invR3 * aberr, useAberration);
+    let invR5a = select(invR5, invR5 * aberr, useAberration);
 
     let needAxMod = ((toggles & COULOMB_BIT) != 0u || (toggles & MAGNETIC_BIT) != 0u) && (toggles & AXION_BIT) != 0u;
     var axModPair: f32 = 1.0;
@@ -375,7 +375,7 @@ fn accumulateForce(
             let muR = mu * r;
             let expMuR = select(0.0, exp(-muR), muR < 80.0);
             let yukModPair = sqrt(max(pYukMod * sYukMod, 0.0));
-            let yukInvRa = select(invR, invR * aberr, signalDelayed);
+            let yukInvRa = select(invR, invR * aberr, useAberration);
             let fDir = uniforms.yukawaCoupling * yukModPair * pMass * sMass * expMuR * (invRSq + mu * invR) * yukInvRa;
             let fx = rx * fDir;
             let fy = ry * fDir;
@@ -508,6 +508,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Load AllForces struct ONCE from global memory (already zeroed by resetForces pass)
     var localAF = allForces[pIdx];
 
+    let isPeriodic = uniforms.boundaryMode == BOUND_LOOP;
+    let hasSignalDelay = (uniforms.toggles0 & RELATIVITY_BIT) != 0u;
+
     // Stack-based iterative tree walk
     var stack: array<u32, 48>;
     var stackTop: u32 = 0u;
@@ -524,9 +527,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
         let comX = getComX(nodeIdx);
         let comY = getComY(nodeIdx);
-        let periodic = uniforms.boundaryMode == BOUND_LOOP;
         var comDisp = vec2<f32>(comX - px, comY - py);
-        if (periodic) {
+        if (isPeriodic) {
             comDisp = fullMinImage(px, py, comX, comY, uniforms.domainW, uniforms.domainH, uniforms.topologyMode);
         }
         let dx = comDisp.x;
@@ -554,21 +556,88 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             if (sIdx == pIdx) { continue; }
             if ((sPs.flags & FLAG_ALIVE) == 0u) { continue; } // skip dead/retired particles
 
-            let sDerived = derived_in[sIdx];
             let sAYM = axYukMod_in[sIdx];
-            accumulateForce(
-                &localAF, px, py, pMass, pCharge,
-                pMagMoment, pAngMomentum, pAngVel, pVelX, pVelY,
-                pAxMod, pYukMod,
-                sPs.posX, sPs.posY,
-                sDerived.velX, sDerived.velY,
-                sPs.mass, sPs.charge,
-                sDerived.angVel,
-                sDerived.magMoment, sDerived.angMomentum,
-                sAYM.x, sAYM.y,
-                pBodyRadiusSq,
-                &localJerk,
-            );
+
+            // Signal delay: use retarded positions/velocities for leaf particles
+            if (hasSignalDelay && !isGhost) {
+                // Non-ghost leaf: signal delay from own history
+                let delayed = getDelayedStateGPU(
+                    sIdx, px, py, uniforms.simTime,
+                    isPeriodic, uniforms.domainW, uniforms.domainH,
+                    uniforms.topologyMode, false
+                );
+                if (!delayed.valid) { continue; }
+                // Recompute dipoles from retarded angw
+                let bodyRadSq = pow(sPs.mass, 2.0 / 3.0);
+                let retAngwSq = delayed.angw * delayed.angw;
+                let sAngVelRet = delayed.angw / sqrt(1.0 + retAngwSq * bodyRadSq);
+                let sMagMomRet = MAG_MOMENT_K * sPs.charge * sAngVelRet * bodyRadSq;
+                let sAngMomRet = INERTIA_K * sPs.mass * sAngVelRet * bodyRadSq;
+                accumulateForce(
+                    &localAF, px, py, pMass, pCharge,
+                    pMagMoment, pAngMomentum, pAngVel, pVelX, pVelY,
+                    pAxMod, pYukMod,
+                    delayed.x, delayed.y,
+                    delayed.vx, delayed.vy,
+                    sPs.mass, sPs.charge,
+                    sAngVelRet, sMagMomRet, sAngMomRet,
+                    sAYM.x, sAYM.y,
+                    pBodyRadiusSq,
+                    &localJerk,
+                    true, // useAberration
+                );
+            } else if (hasSignalDelay && isGhost) {
+                // Ghost leaf: signal delay from original particle's history + periodic shift
+                let origPs = particleState[origIdx];
+                let delayed = getDelayedStateGPU(
+                    origIdx, px, py, uniforms.simTime,
+                    isPeriodic, uniforms.domainW, uniforms.domainH,
+                    uniforms.topologyMode, false
+                );
+                if (!delayed.valid) { continue; }
+                // Periodic shift: ghostPos - originalCurrentPos
+                let shiftX = sPs.posX - origPs.posX;
+                let shiftY = sPs.posY - origPs.posY;
+                // Retarded ghost position
+                let gsx = delayed.x + shiftX;
+                let gsy = delayed.y + shiftY;
+                // Recompute dipoles from retarded angw
+                let bodyRadSq = pow(sPs.mass, 2.0 / 3.0);
+                let retAngwSq = delayed.angw * delayed.angw;
+                let sAngVelRet = delayed.angw / sqrt(1.0 + retAngwSq * bodyRadSq);
+                let sMagMomRet = MAG_MOMENT_K * sPs.charge * sAngVelRet * bodyRadSq;
+                let sAngMomRet = INERTIA_K * sPs.mass * sAngVelRet * bodyRadSq;
+                accumulateForce(
+                    &localAF, px, py, pMass, pCharge,
+                    pMagMoment, pAngMomentum, pAngVel, pVelX, pVelY,
+                    pAxMod, pYukMod,
+                    gsx, gsy,
+                    delayed.vx, delayed.vy,
+                    sPs.mass, sPs.charge,
+                    sAngVelRet, sMagMomRet, sAngMomRet,
+                    sAYM.x, sAYM.y,
+                    pBodyRadiusSq,
+                    &localJerk,
+                    true, // useAberration
+                );
+            } else {
+                // No signal delay: use current positions
+                let sDerived = derived_in[sIdx];
+                accumulateForce(
+                    &localAF, px, py, pMass, pCharge,
+                    pMagMoment, pAngMomentum, pAngVel, pVelX, pVelY,
+                    pAxMod, pYukMod,
+                    sPs.posX, sPs.posY,
+                    sDerived.velX, sDerived.velY,
+                    sPs.mass, sPs.charge,
+                    sDerived.angVel,
+                    sDerived.magMoment, sDerived.angMomentum,
+                    sAYM.x, sAYM.y,
+                    pBodyRadiusSq,
+                    &localJerk,
+                    false, // no aberration
+                );
+            }
         } else if (!isLeaf && (size * size < thetaSq * dSq)) {
             // Distant node: use aggregate multipole data
             let avgVx = getTotalMomX(nodeIdx) / nodeMass;
@@ -586,6 +655,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 1.0, 1.0, // axMod/yukMod = 1 for aggregate
                 pBodyRadiusSq,
                 &localJerk,
+                hasSignalDelay, // aberration on aggregates when signal delay active
             );
         } else if (!isLeaf) {
             // Push children (only valid ones; NONE = -1 would become garbage u32)
@@ -605,24 +675,42 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // After tree walk, iterate retired particles (pairwise, matching CPU behavior).
     // Only relevant when relativity is on (dead particles exert forces via signal delay).
     // Skip entirely otherwise — the O(N) scan per thread dominates BH O(N log N) cost.
-    let hasSignalDelay = (uniforms.toggles0 & RELATIVITY_BIT) != 0u;
-    for (var ri = 0u; ri < select(0u, uniforms.aliveCount, hasSignalDelay); ri++) {
+    // Uses particleCount (not aliveCount) because retired slots can be beyond aliveCount.
+    for (var ri = 0u; ri < select(0u, uniforms.particleCount, hasSignalDelay); ri++) {
         let rPs = particleState[ri];
         if ((rPs.flags & FLAG_RETIRED) == 0u) { continue; }
         if ((rPs.flags & FLAG_ALIVE) != 0u) { continue; }
+
+        let delayed = getDelayedStateGPU(
+            ri, px, py, uniforms.simTime,
+            isPeriodic, uniforms.domainW, uniforms.domainH,
+            uniforms.topologyMode, true // isDead
+        );
+        if (!delayed.valid) { continue; }
+
         let rAux = particleAux[ri];
-        // Phase 4 will add signal delay lookup here
-        // For now, use current (frozen) position as approximation
+        let deadMass = rAux.deathMass;
+        let deadCharge = rPs.charge;
+        // Recompute dipoles from retarded angw using deathMass
+        let bodyRadSq = pow(deadMass, 2.0 / 3.0);
+        let retAngwSq = delayed.angw * delayed.angw;
+        let sAngVelRet = delayed.angw / sqrt(1.0 + retAngwSq * bodyRadSq);
+        let sMagMomRet = MAG_MOMENT_K * deadCharge * sAngVelRet * bodyRadSq;
+        let sAngMomRet = INERTIA_K * deadMass * sAngVelRet * bodyRadSq;
+        let deadAxYuk = axYukMod_in[ri];
         accumulateForce(
             &localAF, px, py, pMass, pCharge,
             pMagMoment, pAngMomentum, pAngVel, pVelX, pVelY,
             pAxMod, pYukMod,
-            rPs.posX, rPs.posY, 0.0, 0.0, // vel = 0 for dead
-            rAux.deathMass, rPs.charge,
-            0.0, 0.0, 0.0, // no spin data from dead
-            1.0, 1.0,
+            delayed.x, delayed.y,
+            delayed.vx, delayed.vy,
+            deadMass, deadCharge,
+            sAngVelRet, sMagMomRet, sAngMomRet,
+            select(deadAxYuk.x, 1.0, deadAxYuk.x == 0.0),
+            select(deadAxYuk.y, 1.0, deadAxYuk.y == 0.0),
             pBodyRadiusSq,
             &localJerk,
+            true, // useAberration
         );
     }
 
