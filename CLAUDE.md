@@ -17,120 +17,63 @@ Serve from `a9lim.github.io/` -- shared files load via absolute paths. ES6 modul
 ## File Map
 
 ```
-main.js                  801 lines  Simulation class, fixed-timestep loop, backend selection (CPU/GPU),
-                                     pair production, pion loop, dirty-flag render, window.sim
-index.html               494 lines  UI: 4-tab sidebar, reference overlay, zoom controls, field sliders
-styles.css               295 lines  Project-specific CSS overrides, toggle/slider theme colors
-colors.js                 18 lines  Project color tokens (extends shared-tokens.js)
+main.js                   838 lines  Simulation class, fixed-timestep loop, backend selection (CPU/GPU),
+                                      pair production, pion loop, dirty-flag render, window.sim
+index.html                498 lines  UI: 4-tab sidebar, reference overlay, zoom controls, field sliders
+styles.css                295 lines  Project-specific CSS overrides, toggle/slider theme colors
+colors.js                  18 lines  Project color tokens (extends shared-tokens.js)
 src/
-  integrator.js         1565 lines  CPU physics: Boris substep loop, radiation, pion emission/absorption,
-                                     field excitations, tidal, GW quadrupole, expansion, Roche, external fields,
-                                     Hertz bounce, scalar fields
-  forces.js              794 lines  CPU pairForce(), computeAllForces(), calculateForce() (BH walk), compute1PN(),
-                                     boson gravity, PE accumulator (resetPEAccum/getPEAccum), inline torus minImage
-  reference.js           714 lines  REFERENCE object: physics reference content (KaTeX math)
-  presets.js             680 lines  PRESETS (19 scenarios, 4 groups), loadPreset(), SLIDER_MAP, TOGGLE_MAP/TOGGLE_ORDER
-  scalar-field.js        858 lines  ScalarField base: PQS grid, topology-aware deposition, Laplacian, C² gradients,
-                                     field energy, excitations, particle-field gravity, self-gravity (8×8 coarse),
-                                     fused interpolateWithGradient(), interior fast-path PQS, self-gravity early exit
-  renderer.js            729 lines  CPU Canvas 2D renderer (used as fallback when GPU unavailable)
-  ui.js                  609 lines  setupUI(), declarative dependency graph, info tips, reference overlay, shortcuts,
-                                     dirty flag, KaTeX render cache, lazy field init triggers
-  heatmap.js             315 lines  64x64 potential field overlay, signal-delayed positions, force-toggle-aware
-  higgs-field.js         309 lines  HiggsField: Mexican hat potential, mass modulation, thermal phase transitions
-  axion-field.js         299 lines  AxionField: quadratic potential, aF² EM coupling, PQ pseudoscalar coupling
-  quadtree.js            348 lines  QuadTreePool: SoA flat typed arrays, pool-based, zero GC, depth guard,
-                                     iterative insert, direct quadrant child selection, boson distribution
-  input.js               320 lines  InputHandler: mouse/touch, left/right-click symmetry (matter/antimatter),
-                                     GPU deferred hit test (pollGPUHitResult), tree-accelerated CPU hit test
-  signal-delay.js        260 lines  getDelayedState() (3-phase light-cone solver, creationTime/deathTime guards)
-  effective-potential.js 244 lines  V_eff(r) sidebar canvas, auto-scaling, axMod/yukMod modulation, dirty-flag skip
-  pion.js                236 lines  Massive Yukawa force carrier: proper velocity, (1+v²) GR deflection, decay, pool
-  save-load.js           229 lines  saveState(), loadState(), downloadState(), uploadState(), quickSave/Load()
-  potential.js           211 lines  computePE(), treePE(), pairPE() (7 PE terms)
-  energy.js              191 lines  KE, spin KE, PE, field energy, momentum, angular momentum
-  config.js              166 lines  Named constants, mode enums (COL_*/BOUND_*/TORUS/KLEIN/RP²), helpers
-  collisions.js          159 lines  handleCollisions(), resolveMerge(), annihilation, relativistic merge KE
-  stats-display.js       138 lines  Sidebar energy/momentum/drift readout, textContent change detection
-  phase-plot.js          137 lines  Phase space r-v_r plot (512-sample ring buffer)
-  particle.js            135 lines  Particle: pos, vel, w, angw, baseMass, 11 force Vec2s, signal delay history
-  topology.js            131 lines  minImage(), wrapPosition() for Torus/Klein/RP²
-  massless-boson.js       91 lines  MasslessBoson: pos, vel, energy, type ('em'/'grav'), BH tree lensing, pool
-  vec2.js                 61 lines  Vec2 class: set, clone, add, sub, scale, mag, normalize, dist
-  boson-utils.js          59 lines  treeDeflectBoson(): shared BH tree walk for photon/pion lensing
-  backend-interface.js    57 lines  PhysicsBackend/RenderBackend typedefs, BACKEND_CPU/BACKEND_GPU constants
-  cpu-physics.js          25 lines  CPUPhysics: thin adapter wrapping Physics (integrator.js) to PhysicsBackend
-  relativity.js           25 lines  angwToAngVel(), setVelocity()
-  canvas-renderer.js      20 lines  CanvasRenderer: thin adapter wrapping Renderer to RenderBackend
+  integrator.js          1584 lines  CPU physics: Boris substep loop, radiation, pion emission/absorption,
+                                      field excitations, tidal, GW quadrupole, expansion, Roche, external fields,
+                                      Hertz bounce, scalar fields
+  scalar-field.js         858 lines  ScalarField base: PQS grid, topology-aware deposition, Laplacian, C²
+                                      gradients, field energy, excitations, particle-field gravity, self-gravity
+  forces.js               803 lines  CPU pairForce(), computeAllForces(), calculateForce() (BH walk), compute1PN(),
+                                      boson gravity, PE accumulator (resetPEAccum/getPEAccum), inline torus minImage
+  ui.js                   716 lines  setupUI(), declarative dependency graph, info tips, reference overlay,
+                                      shortcuts, dirty flag, KaTeX render cache, lazy field init triggers
+  reference.js            714 lines  REFERENCE object: physics reference content (KaTeX math)
+  renderer.js             707 lines  CPU Canvas 2D renderer (used as fallback when GPU unavailable)
+  presets.js              680 lines  PRESETS (19 scenarios, 4 groups), loadPreset(), SLIDER_MAP, TOGGLE_MAP/TOGGLE_ORDER
+  input.js                393 lines  InputHandler: mouse/touch, left/right-click symmetry (matter/antimatter),
+                                      GPU deferred hit test (pollGPUHitResult), tree-accelerated CPU hit test
+  quadtree.js             348 lines  QuadTreePool: SoA flat typed arrays, pool-based, zero GC, depth guard,
+                                      iterative insert, direct quadrant child selection, boson distribution
+  heatmap.js              315 lines  64x64 potential field overlay, signal-delayed positions, force-toggle-aware
+  higgs-field.js          309 lines  HiggsField: Mexican hat potential, mass modulation, thermal phase transitions
+  axion-field.js          299 lines  AxionField: quadratic potential, aF² EM coupling, PQ pseudoscalar coupling
+  signal-delay.js         260 lines  getDelayedState() (3-phase light-cone solver, creationTime/deathTime guards)
+  save-load.js            259 lines  saveState(), loadState(), downloadState(), uploadState(), quickSave/Load()
+  stats-display.js        250 lines  Sidebar energy/momentum/drift readout, textContent change detection
+  effective-potential.js  244 lines  V_eff(r) sidebar canvas, auto-scaling, axMod/yukMod modulation, dirty-flag skip
+  pion.js                 236 lines  Massive Yukawa force carrier: proper velocity, (1+v²) GR deflection, decay, pool
+  potential.js            211 lines  computePE(), treePE(), pairPE() (7 PE terms)
+  energy.js               191 lines  KE, spin KE, PE, field energy, momentum, angular momentum
+  config.js               166 lines  Named constants, mode enums (COL_*/BOUND_*/TORUS/KLEIN/RP²), helpers
+  collisions.js           158 lines  handleCollisions(), resolveMerge(), annihilation, relativistic merge KE
+  particle.js             142 lines  Particle: pos, vel, w, angw, baseMass, 11 force Vec2s, signal delay history
+  phase-plot.js           137 lines  Phase space r-v_r plot (512-sample ring buffer)
+  topology.js             131 lines  minImage(), wrapPosition() for Torus/Klein/RP²
+  massless-boson.js        91 lines  MasslessBoson: pos, vel, energy, type ('em'/'grav'), BH tree lensing, pool
+  vec2.js                  61 lines  Vec2 class: set, clone, add, sub, scale, mag, normalize, dist
+  boson-utils.js           59 lines  treeDeflectBoson(): shared BH tree walk for photon/pion lensing
+  backend-interface.js     57 lines  PhysicsBackend/RenderBackend typedefs, BACKEND_CPU/BACKEND_GPU constants
+  cpu-physics.js           25 lines  CPUPhysics: thin adapter wrapping Physics (integrator.js) to PhysicsBackend
+  relativity.js            25 lines  angwToAngVel(), setVelocity()
+  canvas-renderer.js       20 lines  CanvasRenderer: thin adapter wrapping Renderer to RenderBackend
   gpu/
-    gpu-physics.js      3074 lines  GPUPhysics: WebGPU compute pipeline orchestrator, addParticle/serialize,
-                                     all dispatch methods, bind group creation, adaptive substepping, readback,
-                                     per-field uniform buffers (Higgs/Axion), pre-allocated write buffers
-    gpu-pipelines.js    1448 lines  Pipeline + bind group layout creation for all compute/render shaders
-    gpu-renderer.js      977 lines  WebGPU instanced rendering: particles, bosons, field overlays, heatmap,
-                                     trails, force arrows, spin rings (dual light/dark pipeline variants)
-    gpu-buffers.js       591 lines  Buffer allocation: packed structs, quadtree, collision, field, history,
-                                     trail buffers, staging
-    gpu-constants.js     257 lines  buildWGSLConstants(): generates WGSL const block from config.js +
-                                     _PALETTE colors, single source of truth for JS/WGSL constants
-    shaders/
-      common.wgsl        209 lines  Shared structs (SimUniforms, ParticleState, ParticleAux, ParticleDerived,
-                                     AllForces, RadiationState, Photon, Pion), toggle bits, constants,
-                                     pcgHash/pcgRand RNG, torusMinImage/fullMinImage topology helpers
-      field-common.wgsl  111 lines  Shared field constants (GRID=64), FieldUniforms, nbIndex(), PQS weights
-      --- Phase 2: Core physics (prepended with common.wgsl) ---
-      reset-forces.wgsl        Zero AllForces accumulator
-      cache-derived.wgsl       Compute ParticleDerived (magMoment, angMomentum, vel, radius/BH horizon)
-      pair-force.wgsl          O(N²) tiled pairwise force (gravity, Coulomb, dipoles, Yukawa, 1PN, jerk)
-      external-fields.wgsl     Uniform background gravity/electric/magnetic
-      save-f1pn.wgsl           Save 1PN forces to f1pnOld buffer before Boris (for velocity-Verlet)
-      boris-fused.wgsl         Fused halfKick + rotation + halfKick (single dispatch, 3→1 passes)
-      boris-half-kick.wgsl     w += F/m · dt/2 (legacy, kept as fallback)
-      boris-rotate.wgsl        Boris rotation in B+Bg+extBz plane (legacy, kept as fallback)
-      drift.wgsl               Drift: pos += vel·dt (Phase 1 legacy, unused)
-      boris.wgsl               Combined drift + derive coordinate velocity
-      spin-orbit.wgsl          Stern-Gerlach + Mathisson-Papapetrou + frame-drag
-      apply-torques.wgsl       Angular acceleration from torque accumulator
-      --- Phase 3: Spatial partitioning (standalone, own structs) ---
-      ghost-gen.wgsl           Periodic boundary ghost particles (Torus/Klein/RP²)
-      tree-build.wgsl          Barnes-Hut quadtree: bounds, init, insert, aggregates
-      forces-tree.wgsl         BH tree walk force computation (O(N log N))
-      collision.wgsl           Broadphase detection + merge/annihilation resolve
-      dead-gc.wgsl             Dead particle garbage collection (free stack)
-      boundary.wgsl            Despawn/bounce/wrap boundary conditions
-      --- Phase 4: Advanced physics (standalone, own structs) ---
-      radiation.wgsl           Larmor, Hawking, pion emission (3 entry points)
-      quadrupole.wgsl          Quadrupole radiation: CoM reduce, d³I/d³Q reduce, apply+emit (3 entries)
-      bosons.wgsl              Photon/pion drift, lensing, absorption, decay (5 entry points)
-      boson-tree.wgsl          Boson BH tree: insert, aggregate, particle↔boson gravity
-      signal-delay-common.wgsl Shared NR light-cone solver, getDelayedStateGPU(), interleaved history access
-      history.wgsl             Signal delay history ring buffer recording (recordHistory only)
-      onePN.wgsl               1PN compute + velocity-Verlet correction kick
-      --- Phase 5: Scalar fields & extras (field-common.wgsl or standalone) ---
-      field-deposit.wgsl       PQS particle→grid deposition (scatter/gather)
-      field-evolve.wgsl        Störmer-Verlet KDK: Laplacian, half-kick, drift, gradients
-      field-forces.wgsl        Higgs mass modulation + axion axMod/yukMod + gradient forces
-      field-selfgrav.wgsl      Coarse-grid self-gravity potential (8×8 → 64×64 upsample)
-      field-excitation.wgsl    Gaussian wave packet deposition from merge events
-      field-particle-grav.wgsl O(N×GRID²) gravitational force from field energy density
-      heatmap.wgsl             Potential field computation (gravity/electric/Yukawa)
-      expansion.wgsl           Hubble flow + momentum drag
-      disintegration.wgsl      Tidal + Roche breakup detection
-      pair-production.wgsl     Photon → particle pair creation
-      --- Render shaders (standalone, vertex+fragment) ---
-      particle.wgsl            Instanced particle circles
-      boson-render.wgsl        Photon/pion point rendering
-      spin-render.wgsl         Angular velocity ring indicators
-      torque-render.wgsl       Torque arc indicators (4 types + total)
-      trail-render.wgsl        Position history trail lines
-      arrow-render.wgsl        Force vector arrows
-      update-colors.wgsl       Particle charge→color mapping (BH light-mode base)
-      ring-render.wgsl         Dashed ring overlays (ergosphere + antimatter)
-      trails.wgsl              Trail history recording
-      hit-test.wgsl            Mouse→particle selection + data readback
-      compute-stats.wgsl       Aggregate stats reduction + selected particle readback
-      field-render.wgsl        Scalar field 64×64 overlay
-      heatmap-render.wgsl      Potential heatmap overlay
+    gpu-physics.js       3653 lines  GPUPhysics: WebGPU compute pipeline orchestrator, addParticle/serialize,
+                                      all dispatch methods, bind group creation, adaptive substepping, readback,
+                                      per-field uniform buffers (Higgs/Axion), pre-allocated write buffers
+    gpu-pipelines.js     1804 lines  Pipeline + bind group layout creation for all compute/render shaders
+    gpu-renderer.js      1214 lines  WebGPU instanced rendering: particles, bosons, field overlays, heatmap,
+                                      trails, force arrows, spin rings, torque arcs, dashed rings
+                                      (dual light/dark pipeline variants)
+    gpu-buffers.js        578 lines  Buffer allocation: packed structs, quadtree, collision, field, history,
+                                      trail buffers, staging
+    gpu-constants.js      296 lines  buildWGSLConstants(): generates WGSL const block from config.js +
+                                      _PALETTE colors, single source of truth for JS/WGSL constants
+    shaders/               50 files  WGSL compute + render shaders (10781 lines total)
 ```
 
 ## Key Imports
@@ -180,8 +123,8 @@ When relativity is off: `vel = w`, `angVel = angw` (identity).
 
 Key derived quantities (INERTIA_K = 0.4, MAG_MOMENT_K = 0.2):
 - Moment of inertia: `I = 0.4mr²`
-- Magnetic moment: `μ = 0.2qωr²` — cached as `p.magMoment`
-- Angular momentum: `L = Iω` — cached as `p.angMomentum`
+- Magnetic moment: `μ = 0.2qωr²` -- cached as `p.magMoment`
+- Angular momentum: `L = Iω` -- cached as `p.angMomentum`
 - Particle radius: `r = ∛(mass)`; BH mode: `kerrNewmanRadius()` in config.js
 
 `magMoment`/`angMomentum` cached per particle at start of `computeAllForces()`. Used by `pairForce()`, `pairPE()`, BH leaf walks, spin-orbit, display. Ghost particles carry these cached fields.
@@ -244,17 +187,17 @@ Always active when Gravity on (no toggle). `τ = -0.3 · coupling² · r_body⁵
 
 ### Yukawa Potential
 
-Independent toggle. `F = -g²m₁m₂e^{-μr}/r² · (1+μr)`. Parameters: `yukawaCoupling` (14), `yukawaMu` (0.15, slider 0.05–0.25). Includes analytical jerk for radiation. Emits pions as massive force carriers.
+Independent toggle. `F = -g²m₁m₂e^{-μr}/r² · (1+μr)`. Parameters: `yukawaCoupling` (14), `yukawaMu` (0.15, slider 0.05-0.25). Includes analytical jerk for radiation. Emits pions as massive force carriers.
 
 **Scalar Breit correction** (requires 1PN): O(v²/c²) from massive scalar boson exchange. `δH = g²m₁m₂e^{-μr}/(2r) · [v₁·v₂ + (r̂·v₁)(r̂·v₂)(1+μr)]`. Into `force1PN`, velocity-Verlet corrected.
 
 ### External Background Fields
 
-No toggle — controlled by slider values (default 0). Gravity (`F = mg`), Electric (`F = qE`), Magnetic (uniform Bz via Boris rotation). Direction angle sliders auto-show when strength > 0.
+No toggle -- controlled by slider values (default 0). Gravity (`F = mg`), Electric (`F = qE`), Magnetic (uniform Bz via Boris rotation). Direction angle sliders auto-show when strength > 0.
 
 ### Bounce (Hertz Contact)
 
-`F = K · δ^{1.5}` (K=1). Tangential friction transfers torque. Quadtree-accelerated when BH on, O(n²) fallback when off — do not early-return when `root < 0`.
+`F = K · δ^{1.5}` (K=1). Tangential friction transfers torque. Quadtree-accelerated when BH on, O(n²) fallback when off -- do not early-return when `root < 0`.
 
 ## Scalar Fields
 
@@ -264,71 +207,54 @@ PQS (cubic B-spline, order 3) grid on 64×64. 4×4 stencil per particle. C² int
 
 Key methods: `_nb()` (topology-aware neighbor, absolute coords), `_depositPQS()` (interior fast path + border fallback), `_computeLaplacian()` (interior fast path + border path), `_computeGridGradients()`, `interpolate()`, `gradient()`, `interpolateWithGradient()` (fused, single stencil walk), `_fieldEnergy()`, `depositExcitation()`, `_computeEnergyDensity()`, `applyGravForces()`, `gravPE()`, `computeSelfGravity()`.
 
-**Particle-field gravity** (requires Gravity → Field Gravity toggle): Field energy density gravitates particles via direct O(N×GRID²) summation. Each cell is a point mass `ρ·dA`. Only excitations gravitate (ρ=0 at vacuum). Subclasses override `_addPotentialEnergy()` for V(φ). Call `applyGravForces()` AFTER field `update()` (needs current `_gradX`/`_gradY`). Default off.
+**Particle-field gravity** (requires Gravity -> Field Gravity toggle): Field energy density gravitates particles via direct O(N×GRID²) summation. Each cell is a point mass `ρ·dA`. Subclasses override `_addPotentialEnergy()` for V(φ). Default off.
 
-**Field self-gravity** (requires Gravity → Field Gravity toggle): Weak-field GR correction to Klein-Gordon: `φ̈ = (1+4Φ)∇²φ + 2∇Φ·∇φ - (1+2Φ)V'(φ)`. Φ from field energy density via coarse 8×8 grid O(SG⁴≈4K), bilinear-upsampled to 64×64. Φ computed once per `update()`. `∇Φ·∇φ` cross-term uses stale `_gradX/_gradY` (error O(dt²Φ)).
+**Field self-gravity** (requires Gravity -> Field Gravity toggle): Weak-field GR correction to Klein-Gordon. Φ from field energy density via coarse 8×8 grid, bilinear-upsampled to 64×64.
 
 Field arrays: `field`/`fieldDot` (not `phi`/`phiDot`). Field clamp: SCALAR_FIELD_MAX = 2.
 
 ### Higgs Field
 
-Independent toggle. Mexican hat `V(φ) = -½μ²φ² + ¼λφ⁴`. VEV=1; `λ = μ² = m_H²/2`. Slider: m_H 0.25–0.75 (default 0.50).
-
-- **Mass generation**: `m_eff = baseMass · max(|φ(x)|, 0.05)`. Floor caps gradient-force acceleration at 20×.
-- **Mass rate clamp**: `HIGGS_MASS_MAX_DELTA = 4` — mass change per substep clamped to `±4·dt`. Prevents resonant oscillation where field source → φ overshoot → mass spike → velocity jitter.
-- **Gradient force**: `F = +g · baseMass · sign(φ) · ∇φ` (g = HIGGS_COUPLING = 1). Into `forceHiggs`.
-- **Field equation**: `φ̈ = ∇²φ + μ²_eff·φ - μ²φ³ + source/cellArea - 2m_H·φ̇`. Störmer-Verlet KDK.
-- **Phase transitions**: `μ²_eff = μ² - KE_local`. High local KE → symmetric phase (φ→0).
-- **Boundary**: Despawn→Dirichlet (φ=1), Bounce→Neumann, Loop→periodic.
-- **Energy**: `_fieldEnergy()` with Mexican hat potential, shifted so V(1)=0.
-- **baseMass sync**: All mass-modifying operations proportionally scale baseMass. Toggle-off restores mass to baseMass.
+Independent toggle. Mexican hat `V(φ) = -½μ²φ² + ¼λφ⁴`. VEV=1; `λ = μ² = m_H²/2`. Slider: m_H 0.25-0.75 (default 0.50). Mass generation: `m_eff = baseMass · max(|φ(x)|, 0.05)`. Rate clamp: `HIGGS_MASS_MAX_DELTA = 4`. Gradient force into `forceHiggs`. Phase transitions: `μ²_eff = μ² - KE_local`.
 
 ### Axion Field
 
-Independent toggle; requires Coulomb or Yukawa. Quadratic `V(a) = ½m_a²a²`, vacuum at a=0. Slider: m_a 0.01–0.10 (default 0.05).
+Independent toggle; requires Coulomb or Yukawa. Quadratic `V(a) = ½m_a²a²`, vacuum at a=0. Slider: m_a 0.01-0.10 (default 0.05).
 
-**Scalar EM coupling (aF², when Coulomb on)**: Same for matter/antimatter.
-- Source: `g·q²` (g = AXION_COUPLING = 0.05). EM modulation: `α_eff = α(1+g·a)`. Per-particle `p.axMod`, clamped ≥ 0. Pairwise: geometric mean `√(axMod_i · axMod_j)`.
+**Scalar EM coupling (aF², when Coulomb on)**: Same for matter/antimatter. `α_eff = α(1+g·a)`. Per-particle `p.axMod`, geometric mean pairwise.
 
-**PQ coupling (when Yukawa on)**: Flips sign for antimatter.
-- Source: `±g·m`. Yukawa modulation: `g²_eff = g²·yukMod`. `yukMod = 1+g·a` (matter), `1-g·a` (antimatter), clamped ≥ 0. At vacuum (a=0): yukMod=1 → CP conserved.
-
-Both channels: gradient force `F = coupling · ∇a` into `forceAxion`. Damping: ζ=g/2, Q=1/g, g·Q=1.
+**PQ coupling (when Yukawa on)**: Flips sign for antimatter. `yukMod = 1+g·a` (matter) / `1-g·a` (antimatter). At vacuum: CP conserved.
 
 ## Pions (Massive Force Carriers)
 
-Pion class in `pion.js`. Mass = `yukawaMu`. Proper velocity `w`: `vel = w/√(1+w²)`. GR deflection: `(1+v²)` factor. Cached `vSq`/`gravMass` via `_syncVel()` (refreshed after every `w` mutation).
+Mass = `yukawaMu`. Proper velocity `w`: `vel = w/√(1+w²)`. GR deflection: `(1+v²)` factor.
 
-**Emission**: Scalar Larmor `P = g²F_yuk²/3`. Accumulated in `p._yukawaRadAccum`. Species: π⁰ (50%), π⁺/π⁻ (25% each). MAX_PIONS = 256. Radiation reaction rescales emitter `w` exactly.
+**Emission**: Scalar Larmor `P = g²F_yuk²/3`. Species: π⁰ (50%), π⁺/π⁻ (25% each). MAX_PIONS = 256.
 
-**Decay**: π⁰→2γ (half-life 32), π⁺→e⁺+γ (half-life 128), π⁻→e⁻+γ (half-life 128). Two-body kinematics in rest frame, Lorentz-boosted. Decay products inherit `emitterId`. Uses `sim._MasslessBosonClass` to avoid circular import.
+**Decay**: π⁰→2γ (half-life 32), π⁺→e⁺+γ (half-life 128), π⁻→e⁻+γ (half-life 128). Two-body kinematics in rest frame, Lorentz-boosted.
 
-**Absorption**: Quadtree overlap query. Transfers momentum + charge. Self-absorption permanently blocked by `emitterId`.
+**Absorption**: Quadtree overlap query. Self-absorption permanently blocked by `emitterId`.
 
-**Boson gravity** (requires Gravity + Barnes-Hut → Boson Gravity toggle): Particle→boson BH tree lensing, boson→particle O(N×log(N_bosons)) via BH tree walk, boson↔boson O(N_bosons×log(N_bosons)) mutual gravity with correct GR deflection factors (2 for photons, 1+v² for pions). All use `BOSON_SOFTENING_SQ = 4`. Default off.
-
-## Field Excitations
-
-Merge KE deposits Gaussian wave packets into active scalar fields via `depositExcitation()` (writes to `fieldDot`, propagated by Klein-Gordon). Amplitude: `0.5·√(keLost)`. σ = 2 grid cells. Split between Higgs/Axion by coupling-weighted ratio when both active.
+**Boson gravity** (requires Gravity + Barnes-Hut -> Boson Gravity toggle): Particle→boson and boson→boson via BH tree walks.
 
 ## Advanced Physics
 
 ### 1PN Corrections
 
 Requires Relativity. Four O(v²/c²) sectors into `force1PN`:
-- **EIH** (GM + 1PN): perihelion precession. Requires `gravitomagEnabled`.
-- **Darwin EM** (Magnetic + 1PN): EM remainder. Requires `magneticEnabled`.
-- **Bazanski** (GM + Magnetic + 1PN): mixed 1/r³. Requires both.
-- **Scalar Breit** (Yukawa + 1PN): massive scalar exchange. Requires `yukawaEnabled`.
+- **EIH** (GM + 1PN): perihelion precession.
+- **Darwin EM** (Magnetic + 1PN): EM remainder.
+- **Bazanski** (GM + Magnetic + 1PN): mixed 1/r³.
+- **Scalar Breit** (Yukawa + 1PN): massive scalar exchange.
 
-NOT Newton's 3rd law. Velocity-Verlet: stores `_f1pnOld` → drift → rebuild tree → recompute → kick. `compute1PN()` zeroes `force1PN` before accumulating — do not mix with `pairForce()` 1PN output.
+NOT Newton's 3rd law. Velocity-Verlet corrected. `compute1PN()` zeroes `force1PN` before accumulating.
 
 ### Radiation
 
 Requires Gravity, Coulomb, or Yukawa. Single toggle, four mechanisms:
-- **Larmor dipole** (Coulomb): Landau-Lifshitz. Analytical jerk + numerical backward difference. Clamped ≤ 0.5|F_ext|. Power-dissipation terms require relativity.
-- **EM quadrupole** (Coulomb): `P = (1/180)|d³Q_ij/dt³|²`. Emits photons (type: 'em').
-- **GW quadrupole** (Gravity): `P = (1/5)|d³I^TF_ij/dt³|²`. Emits gravitons (type: 'grav', red).
+- **Larmor dipole** (Coulomb): Landau-Lifshitz. Analytical jerk + numerical backward difference.
+- **EM quadrupole** (Coulomb): `P = (1/180)|d³Q_ij/dt³|²`. Emits photons.
+- **GW quadrupole** (Gravity): `P = (1/5)|d³I^TF_ij/dt³|²`. Emits gravitons (red).
 - **Pion emission** (Yukawa): `P = g²F_yuk²/3`. Emits pions.
 
 Self-absorption permanently blocked by `emitterId` for both photons and pions.
@@ -336,75 +262,53 @@ Self-absorption permanently blocked by `emitterId` for both photons and pions.
 ### Black Hole Mode
 
 Requires Gravity + Relativity. Locks collision to Merge.
-- **No hair**: Antimatter erased. `addParticle()` blocks antimatter. Pair production disabled. Charged pion decay products forced to matter.
-- **Kerr-Newman**: `r₊ = M + √(M² - a² - Q²)`, `a = INERTIA_K·r²·|ω|`, naked singularity floor.
-- **Hawking** (requires Radiation): `T = κ/(2π)`, `P = σT⁴A`. Uses `∛(mass)²` (not stale `radiusSq`). Extremal BHs stop. Full evaporation when mass ≤ MIN_MASS: emits accumulated + remaining mass as final photon burst, retires particle for signal delay fade-out. GPU shader handles evaporation in-place (clears ALIVE, sets RETIRED with deathTime/deathMass/deathAngVel).
-- BH_SOFTENING_SQ = 16. Ergosphere at `r_ergo = M + √(M² - a²)` (visual only).
+- **No hair**: Antimatter erased. Pair production disabled.
+- **Kerr-Newman**: `r₊ = M + √(M² - a² - Q²)`, naked singularity floor.
+- **Hawking** (requires Radiation): `T = κ/(2π)`, `P = σT⁴A`. Full evaporation emits final photon burst.
 
 ### Signal Delay
 
-Auto-activates with Relativity. Per-particle circular history buffers (Float64Array[256], recorded every HISTORY_STRIDE=64 `update()` calls):
+Auto-activates with Relativity. Per-particle circular history buffers (Float64Array[256], recorded every HISTORY_STRIDE=64 calls):
 1. Newton-Raphson segment search (≤8 iterations)
 2. Exact quadratic solve on converged segment
 3. Constant-velocity extrapolation for early history (skipped for dead particles)
 
-**Causality**: `creationTime` rejects extrapolation past creation. Dead particles (`_retireParticle()` → `sim.deadParticles[]`) continue exerting forces via signal delay, using `_deathMass`/`_deathAngVel`. Garbage-collected when `simTime - deathTime > 2·domain_diagonal`.
+**Causality**: `creationTime` rejects extrapolation past creation. Dead particles continue exerting forces via signal delay until `simTime - deathTime > 2·domain_diagonal`.
 
-**Liénard-Wiechert aberration**: `(1 - n̂·v_source)^{-3}`, clamped [0.01, 100]. Applied to gravity, Coulomb, Yukawa, dipole. Not 1PN (already O(v²)). Retarded angw interpolated from `histAngW`.
+**Liénard-Wiechert aberration**: `(1 - n̂·v_source)^{-3}`, clamped [0.01, 100]. Applied to gravity, Coulomb, Yukawa, dipole. Not 1PN (already O(v²)).
 
-Dead particles: always pairwise (even when BH on), excluded from `compute1PN()`. All reset paths clear `deadParticles`. `_retireParticle()` must be called BEFORE array removal.
+### Additional Physics
 
-**GPU signal delay**: Full CPU parity. Force shaders (`pair-force.wgsl`, `forces-tree.wgsl`, `onePN.wgsl`) use `getDelayedStateGPU()` from `signal-delay-common.wgsl` to look up retarded positions/velocities from interleaved history ring buffers. Dead/retired particles exert forces via signal delay fade-out (RETIRED flag + deathTime/deathMass/deathAngVel). Aberration factor `(1 - n̂·v)^{-3}` applied to all force paths. History buffers bound as group 3 (histData + histMeta).
-
-### Spin-Orbit Coupling
-
-Requires Magnetic + GM + Spin-Orbit toggle. Stern-Gerlach `F = +μ·∇(Bz)`, Mathisson-Papapetrou `F = -L·∇(Bgz)` (GEM flip). Into `forceSpinCurv`.
-
-### Disintegration & Roche
-
-Requires Gravity. Locks collision to Merge. Tidal + centrifugal + Coulomb stress vs self-gravity → SPAWN_COUNT (4) fragments. Roche: Eggleton (1983) formula, continuous L1 mass transfer.
-
-### Cosmological Expansion
-
-`pos += H(pos - center)dt`, `w *= (1-Hdt)`. Default H = 0.001. Locks boundary to despawn.
-
-### Antimatter & Pair Production
-
-Right-click spawns antimatter (negated charge/spin). Same-type click selects, opposite-type deletes. Annihilation emits photons via `emitPhotonBurst()`. Pair production: photons with energy ≥ 0.5 near massive body (dist < 8, prob 0.005/substep, min age 64, max 32 particles). BH mode disables all antimatter.
+- **Spin-Orbit**: Stern-Gerlach `F = +μ·∇(Bz)`, Mathisson-Papapetrou `F = -L·∇(Bgz)`.
+- **Disintegration & Roche**: Tidal + centrifugal + Coulomb stress. Eggleton (1983) Roche lobe.
+- **Expansion**: `pos += H(pos - center)dt`, `w *= (1-Hdt)`. Default H = 0.001.
+- **Antimatter & Pair Production**: Right-click spawns. Annihilation emits photons. Pair production from energetic photons near massive bodies.
 
 ## Sign Conventions (IMPORTANT)
 
 All GEM interactions are **attractive** (gravity has one sign of "charge"):
 - GM dipole: `+3L₁L₂/r⁴` (positive = attractive)
 - GM Boris parameter: `+2Bgz` (co-moving masses attract)
-- Bgz field: `-m_s(v_s × r̂)_z/r²` (negative sign in code: `p.Bgz -= ...`)
+- Bgz field: `-m_s(v_s × r̂)_z/r²` (negative sign in code)
 - Frame-drag torque: positive drives co-rotation
 
-Do NOT flip these signs.
-
-**Angular velocity convention (y-down canvas)**: 2D cross product `rx·vy - ry·vx` gives positive for clockwise on screen. All angular quantities follow this. Renderer negates direction for canvas `arc()`.
+**Angular velocity convention (y-down canvas)**: 2D cross product `rx·vy - ry·vx` gives positive for clockwise on screen.
 
 ## Energy, PE & Collisions
 
-**PE** (primary: `forces.js` accumulator; fallback: `potential.js`): PE accumulated inline during `pairForce()` via module-level `_peAccum` (reset by `resetPEAccum()`, read by `getPEAccum()`). 9 terms: gravitational, Coulomb (axMod), magnetic dipole (axMod), GM dipole, 1PN EIH, Darwin EM, Bazanski, Yukawa, Scalar Breit. Dead-particle pairs excluded (`_accumulatePE = false`). `potential.js` (`treePE()`/`pairPE()`) kept as fallback for preset-load recomputation.
+**PE**: Accumulated inline during `pairForce()` via `_peAccum`. 9 terms. `potential.js` kept as fallback for preset-load recomputation.
 
-**Energy** (`energy.js`): Relativistic KE = `wSq/(γ+1)·mass`. `pfiEnergy` = particle-field interaction from Higgs + Axion, added to PE. Conservation exact with gravity + Coulomb, pairwise only.
+**Energy**: Relativistic KE = `wSq/(γ+1)·mass`. `pfiEnergy` = particle-field interaction from Higgs + Axion.
 
-**Collisions**: Pass / bounce (Hertz) / merge. Always tree-accelerated broadphase via `pool.queryReuse()` (both CPU and GPU). CPU: `handleCollisions()` returns `{ annihilations, merges, removed, spawns }`. GPU: `detectCollisions` shader walks tree, `resolveCollisions`/`resolveBouncePairwise` shader resolves. Merge kills both parents and returns spawn data; integrator creates a new particle via `addParticle()` with fresh ID, creation time, and empty signal delay history. Both parents are retired via `_retireParticle()` for signal delay fade-out. Integrator emits photons from annihilations, deposits field excitations. Bounce (Hertz contact) uses `_applyRepulsion()` with tree range query (no O(N²) fallback).
+**Collisions**: Pass / bounce (Hertz) / merge. Always tree-accelerated broadphase. Merge kills both parents, creates new particle, retires parents for signal delay fade-out.
 
 ## Topology
 
-Boundary "loop": Torus (TORUS=0), Klein bottle (KLEIN=1, y-wrap mirrors x), RP² (RP2=2, both glide reflections). `minImage()` zero-alloc via `out` parameter.
+Boundary "loop": Torus (TORUS=0), Klein bottle (KLEIN=1), RP² (RP2=2). `minImage()` zero-alloc via `out` parameter.
 
 ## Quadtree
 
-`QuadTreePool`: SoA typed arrays, 512-node pool (grows via `_grow()`). BH_THETA = 0.5, QUADTREE_CAPACITY = 4. Depth guard max 48. Aggregates: totalMass, totalCharge, totalMagneticMoment, totalAngularMomentum, totalMomentumX/Y, comX/comY.
-
-**Always built**: Tree is built every substep on both CPU and GPU regardless of Barnes-Hut toggle. Used by collisions (merge broadphase + bounce Hertz contact), hit testing, and optionally by BH tree-walk force computation. BH toggle only controls whether force computation uses O(N log N) tree walk vs O(N²) pairwise — it does NOT gate tree construction.
-
-**CPU hit testing**: `_cpuFindParticleAt()` in `input.js` uses `pool.queryReuse(root, x, y, searchR, searchR)` for tree-accelerated point query. Returns `null` if tree not yet built.
-
-**GPU hit testing**: `hit-test.wgsl` single-thread compute shader walks the quadtree + reads `ParticleDerived` for live state. Dispatched on click/hover via `hitTest()`, result read back async (48-byte staging, 1-frame latency). `readHitResult()` returns `null` (pending), `{ index: -1 }` (no hit), or `{ index, mass, charge, radius, velX, velY, angVel, posX, posY }`. Click actions deferred until result arrives via `pollGPUHitResult()` in main loop. Hover tooltip displays GPU-fresh data.
+`QuadTreePool`: SoA typed arrays, 512-node pool (grows). BH_THETA = 0.5, QUADTREE_CAPACITY = 4. Depth guard max 48. **Always built** every substep regardless of BH toggle -- used by collisions, hit testing, and optionally BH force computation.
 
 ## Toggle Dependencies
 
@@ -415,14 +319,10 @@ Forces:                        Physics:
     -> Field Gravity               -> Black Hole      [+Gravity, locks collision to Merge]
   Coulomb                        Spin-Orbit           [requires Magnetic or GM]
     -> Magnetic                  Radiation             [requires Gravity, Coulomb, or Yukawa]
-  Gravity + Barnes-Hut             Larmor + EM quad   [when Coulomb on]
-    -> Boson Gravity               GW quad            [when Gravity on]
-    (tree always built; BH only    Pion emission      [when Yukawa on]
-     controls force computation)
+  Gravity + Barnes-Hut
+    -> Boson Gravity
   Yukawa               [independent]
   Axion                [requires Coulomb or Yukawa]
-    aF² channel (when Coulomb on)
-    PQ channel  (when Yukawa on)
   Higgs                [independent]
 Disintegration                   [requires Gravity, locks collision to Merge]
 Barnes-Hut                       [independent]
@@ -431,158 +331,85 @@ Expansion                        [independent, in Engine tab]
 
 Declarative `DEPS` array in `ui.js`, topological evaluation via `updateAllDeps()`.
 
-Defaults on: gravity, coulomb, magnetic, gravitomag, 1PN, relativity, spin-orbit, radiation. Defaults off: Boson Gravity, Field Gravity, Yukawa, Axion, Higgs, Disintegration, Expansion, Barnes-Hut, Black Hole.
+Defaults on: gravity, coulomb, magnetic, gravitomag, 1PN, relativity, spin-orbit, radiation.
+Defaults off: Boson Gravity, Field Gravity, Yukawa, Axion, Higgs, Disintegration, Expansion, Barnes-Hut, Black Hole.
 
 ## UI
 
 4-tab sidebar: Settings (mass/charge/spin, spawn mode, force/physics toggles), Engine (GPU toggle, BH, collisions, boundary/topology, external fields, visuals, speed), Stats (energy/momentum/drift/mass), Particle (selected details, force breakdown, phase plot, effective potential).
 
-Topbar: Home | "No-Hair" | Pause/Step/Reset/Save/Load | Theme | Panel toggle.
-
-19 presets in 4 groups: Gravity (6), Electromagnetism (3), Exotic (8), Cosmological (2). First 9 via keyboard `1`–`9`. Speed: 1–64, default 32.
+19 presets in 4 groups: Gravity (6), Electromagnetism (3), Exotic (8), Cosmological (2). First 9 via keyboard `1`-`9`. Speed: 1-64, default 32.
 
 ## Backend Architecture
 
-Two interchangeable backends selected at startup via `selectBackend()`. Backends conform to `PhysicsBackend`/`RenderBackend` interfaces defined in `backend-interface.js`.
+Two interchangeable backends via `selectBackend()`:
 
-- **CPU**: `CPUPhysics` (wraps `Physics` from integrator.js) + `CanvasRenderer` (wraps `Renderer`). Thin adapters — all logic stays in integrator.js and renderer.js.
-- **GPU**: `GPUPhysics` (compute pipelines) + `GPURenderer` (instanced rendering). GPU renders to a separate `<canvas id="gpuCanvas">` with `alphaMode: 'premultiplied'`, positioned behind the CPU canvas (`z-index: -1`). The CPU canvas (`z-index: 0`) sits on top — transparent when GPU is active, used for 2D overlays like the drag indicator via `drawDragOverlay()`.
+- **CPU**: `CPUPhysics` + `CanvasRenderer`. Thin adapters over integrator.js and renderer.js.
+- **GPU**: `GPUPhysics` + `GPURenderer`. GPU renders to `<canvas id="gpuCanvas">` (z-index: -1). CPU canvas (z-index: 0) on top for 2D overlays.
 
-Falls back to CPU on WebGPU unavailability or device loss (with auto-save recovery). Force CPU via `?cpu=1` URL parameter. Runtime GPU/CPU toggle in Engine tab (`#gpu-toggle`): disabled when WebGPU unavailable, auto-enabled and checked on successful GPU init, disabled on device loss. Toggling off reads back GPU particle state via `serialize()` and rebuilds the CPU `sim.particles` array (bosons cleared, stats baseline reset). Toggling on resyncs all particles to GPU via `reset()` + `addParticle()`. In GPU mode, sidebar stats/plots/energy are skipped (CPU particles array is stale).
+Falls back to CPU on WebGPU unavailability or device loss. Force CPU via `?cpu=1`. Runtime toggle in Engine tab.
 
-## Renderer
+### GPU Packed Struct Buffers
 
-### CPU Renderer (Canvas 2D)
-
-Dark mode: additive blending (`lighter`). WORLD_SCALE = 16. Camera starts at zoom = WORLD_SCALE. Viewport culling: particles, photons, pions skip draw when outside camera bounds. No particle glow in either mode. Rendering batched: alpha buckets (photons), spin rings by sign, pion fills.
-
-### GPU Renderer (WebGPU)
-
-Instanced rendering via vertex shaders. Reads directly from GPU compute buffers (no readback). Separate render passes for particles, photons, pions, field overlays, heatmap, trails, force arrows, spin rings, dashed rings (ergosphere + antimatter). All render pipelines have dual light/dark variants (premultiplied alpha vs additive blend).
-
-### Visual Style (both backends)
-
-- **Particles**: r = ∛(mass) (BH: r₊), no glow. Neutral=slate (BH mode: theme text color — light `#1A1612`, dark `#E8DED4`). Charged: RGB lerp base→red(+)/blue(-), intensity=|q|/5.
-- **Trails**: circular Float32Array[256], wrap-detection for periodic boundaries
-- **Force vectors**: gravity=red, coulomb=blue, magnetic=cyan, GM=rose, 1PN=orange, spin-curv=purple, radiation=yellow, yukawa=green, external=brown, higgs=lime, axion=indigo
-- **Field overlays**: 64×64 offscreen, bilinear-upscaled. Higgs: purple(depleted)/lime(enhanced). Axion: indigo(+)/yellow(-).
-- **Photons**: yellow (EM) / red (grav), alpha fades over PHOTON_LIFETIME=256
-- **Pions**: green, constant alpha (decay is probabilistic)
-- **V_eff plot**: 200-sample sidebar canvas
-
-## GPU Acceleration (WebGPU)
-
-### Architecture
-
-`GPUPhysics` in `gpu-physics.js` orchestrates all compute passes. `GPURenderer` in `gpu-renderer.js` handles instanced rendering. Pipelines and bind group layouts are created in `gpu-pipelines.js`. Buffers allocated in `gpu-buffers.js`. Constants generated at compile time by `gpu-constants.js`.
-
-**`gpu-constants.js`**: Single source of truth for JS→WGSL constant sharing. `buildWGSLConstants()` generates a WGSL `const` declaration block from `config.js` exports and `_PALETTE` hex→RGB conversions. Prepended to all shaders at pipeline creation. Includes physics constants (YUKAWA_COUPLING, AXION_COUPLING, INERTIA_K, etc.), grid sizes, toggle bit definitions (FLAG_*, *_BIT), boundary/collision mode enums, and palette colors as `vec3f`. Also exports JS-side toggle bit constants (`GRAVITY_BIT`, `COULOMB_BIT`, etc.) matching the WGSL block — used by `gpu-physics.js` for `setToggles()` packing and `serialize()` toggle decode.
-
-**Dispatch sequence per substep** (all in one command encoder per substep):
-
-1. Ghost generation (periodic boundary)
-2. Tree build (always — used by collisions, hit test, and optionally BH force computation)
-3. resetForces → cacheDerived → pairForce (or treeForce if BH enabled, both with signal delay history in group 3) → externalFields
-4. Scalar field forces (Higgs gradient + mass mod, Axion gradient + axMod/yukMod) — BEFORE Boris
-4b. Particle-field gravity (O(N×GRID²), if fieldGravEnabled) — uses energyDensity from prior self-grav
-5. saveF1pn (save 1PN forces for velocity-Verlet correction)
-6. Boris integrator: **fused** halfKick+rotate+halfKick (single dispatch) → spinOrbit → applyTorques
-7. Radiation reaction (Larmor, Hawking, pion emission)
-8. borisDrift → expansion
-9. 1PN velocity-Verlet correction (recompute + correction kick using saved f1pnOld, signal delay history in group 3)
-10. Scalar field evolution (deposit → [self-grav] → KDK → gradients)
-11. Collisions → field excitations → disintegration
-12. Boson update (photon/pion drift, absorption, decay) → pair production
-13. Boundary conditions
-
-Post-substep (once per frame, separate encoder): heatmap, boson gravity, dead GC, history recording, quadrupole radiation (3 passes: CoM → d³ contrib → apply+emit), updateColors, trail recording, hit test dispatch (when pending), stats compute dispatch (when requested at STATS_THROTTLE_MASK rate).
-
-### Packed Struct Buffers
-
-WebGPU limits storage buffers to `maxStorageBuffersPerShaderStage` (typically 10). To fit all pipelines within this limit, per-particle data is packed into struct buffers instead of individual SoA arrays:
-
-| Struct | Size | Replaces | Fields |
-|--------|------|----------|--------|
-| `ParticleState` | 36B | posX/Y, velWX/Y, mass, charge, angW, baseMass, flags | 9 fields → 1 buffer |
-| `ParticleAux` | 20B | radius, particleId, deathTime, deathMass, deathAngVel | 5 fields → 1 buffer |
-| `ParticleDerived` | 32B | magMoment, angMomentum, invMass, radiusSq, velX/Y, angVel | 7+pad fields → 1 buffer |
-| `AllForces` | 160B | 11 force vec2s, 3 torques, B-fields, B-gradients, totalForce, jerk (analytical, for Larmor) | 10 vec4s → 1 buffer |
-| `RadiationState` | 96B | jerkX/Y, radAccum, hawkAccum, yukawaRadAccum, radDisplayX/Y, qRes history, quadAccum, emQuadAccum, d3I/QContrib scratch, Larmor backward-diff history (otherFx0/Fy0/Fx1/Fy1/otherCount) | 24 fields → 1 buffer |
-| `Photon` | 32B | phPosX/Y, phVelX/Y, phEnergy, phEmitterId, phLifetime, phFlags | 8 fields → 1 buffer |
-| `Pion` | 48B | piPosX/Y, piWX/Y, piMass, piCharge, piEnergy, piEmitterId, piAge, piFlags | 10+2pad fields → 1 buffer |
-
-Worst-case pipeline (radiation) uses 10 storage buffers (was 42 before packing).
-
-### Buffer Capacities
-
-- `particleState`, `particleAux`, `derived`, `axYukMod`: `soaCapacity = MAX_PARTICLES × 2` (room for ghosts)
-- `allForces`, `radiationState`, `color`, `f1pnOld`: `MAX_PARTICLES` (no ghost forces)
-- `photonPool`: `MAX_PHOTONS (1024)`, `pionPool`: `MAX_PIONS (256)` — separate atomic counters (`phCount`, `piCount`)
-- Ghost buffers: `ghostState`, `ghostAux`, `ghostDerived` — same structs, `MAX_PARTICLES` capacity
-- History: `histData` (interleaved f32, stride 6: posX/posY/velX/velY/angW/time, `MAX_PARTICLES × 256 × 6`) + `histMeta` (4 u32 per particle: writeIdx/count/creationTimeBits/_pad) — lazy-allocated
-- Trail buffers: `trailX/Y`, `trailWriteIdx`, `trailCount` — lazy-allocated via `setTrailsEnabled()`
+| Struct | Size | Fields |
+|--------|------|--------|
+| `ParticleState` | 36B | posX/Y, velWX/Y, mass, charge, angW, baseMass, flags |
+| `ParticleAux` | 20B | radius, particleId, deathTime, deathMass, deathAngVel |
+| `ParticleDerived` | 32B | magMoment, angMomentum, invMass, radiusSq, velX/Y, angVel |
+| `AllForces` | 160B | 11 force vec2s, 3 torques, B-fields, B-gradients, totalForce, jerk |
+| `RadiationState` | 96B | jerk, radAccum, hawkAccum, yukawaRadAccum, quadrupole, Larmor history |
+| `Photon` | 32B | pos, vel, energy, emitterId, lifetime, flags |
+| `Pion` | 48B | pos, w, mass, charge, energy, emitterId, age, flags |
 
 ### Shader Organization
 
-**Prepended shaders** (get `common.wgsl` concatenated before compilation): All Phase 2 shaders + `boundary.wgsl`. Use `SimUniforms`, `ParticleState`, etc. from common.wgsl. Force shaders (`pair-force.wgsl`, `forces-tree.wgsl`, `onePN.wgsl`) also get `signal-delay-common.wgsl` prepended for `getDelayedStateGPU()`.
-
-**Field shaders** (get `field-common.wgsl` prepended): `field-deposit.wgsl`, `field-evolve.wgsl`, `field-forces.wgsl`, `field-selfgrav.wgsl`, `field-excitation.wgsl`, `field-render.wgsl`, `heatmap-render.wgsl`.
-
-**Standalone shaders** (define own structs, NOT prepended): All Phase 3, Phase 4, `expansion.wgsl`, `heatmap.wgsl`, `disintegration.wgsl`, `pair-production.wgsl`, `field-particle-grav.wgsl`, all render shaders. Must define `ParticleState`/`ParticleAux`/`Photon`/`Pion`/`SimUniforms` locally — keep in sync with `common.wgsl`.
-
-**All shaders** receive the `buildWGSLConstants()` block (from `gpu-constants.js`) prepended at compile time — provides physics constants, toggle bit definitions, and palette colors without hardcoding.
-
-### Numerical Stability (GPU)
-
-All GPU compute shaders enforce defensive numerical guards to prevent NaN/Inf propagation:
-
-**Division-by-zero prevention**: All `1/mass`, `1/r`, `1/gamma` paths use `select(0, 1/x, x > EPSILON)` or `max(x, EPSILON)` guards. Hawking radiation allows full evaporation (mass → 0, particle retired). Higgs mass modulation clamps `newMass >= MIN_MASS`.
-
-**NaN barriers**: `totalForce` and `jerk` accumulators are NaN-checked **before** writing to global memory (not after). Fused Boris integrator has a single consolidated NaN guard covering all three stages (halfKick+rotate+halfKick). Drift position updates have post-operation NaN guards. Adaptive substepping readback guards against NaN/Inf from corrupted GPU data (`val === val && val < 1e20`). `deathTime` sentinel uses `FLT_MAX` (3.4028235e38) instead of `Infinity` to avoid implementation-defined f32 infinity behavior.
-
-**sqrt/exp overflow guards**: `sqrt(max(x, 0))` on all quadratic discriminants and axMod/yukMod geometric means. `exp(-μr)` guarded with `select(0, exp(-μr), μr < 80)` to prevent overflow from corrupted distances. All Lorentz boost gammas use `1/sqrt(max(1-v², EPSILON))`.
-
-**Field evolution**: NaN fixup passes check **both** `field` and `fieldDot` arrays, and also catch Inf values (|x| > 1e6). Cell sizes are clamped to `max(domainW/GRID, EPSILON)`.
-
-**Collision race conditions**: Merge resolve uses `mass <= EPSILON` guards (not `== 0`) to catch partially-consumed particles from concurrent threads. `totalMass` divisor guarded before momentum computation.
-
-**Render shaders**: All fragment outputs use premultiplied alpha (`color.rgb * alpha`) matching the pipeline's `alphaMode: 'premultiplied'` configuration. All render pipelines (particles, bosons, spin rings, trails, force arrows, field overlays, heatmap) use `srcFactor: 'one'` (not `'src-alpha'`) for premultiplied-correct blending.
-
-### WGSL Gotchas
-
-- **Operator precedence**: WGSL requires explicit parentheses when mixing `*` with `^` (XOR): `(a * b) ^ (c * d)`, not `a * b ^ c * d`.
-- **Shared entry points**: When a shader has multiple entry points using the same module (e.g., `field-evolve.wgsl` with `computeLaplacian` + `computeGridGradients`), ALL bindings must use the most permissive access mode (`read_write` even if some entry points only read).
-- **Buffer aliasing**: WebGPU disallows binding the same buffer twice in a dispatch. Radiation handles charge transfer by making `particleState` read-write in group 1 (not a separate binding).
-- **Staging buffer mapping**: Readback staging buffers (`maxAccelStaging`, `ghostCountStaging`, `mergeCountStaging`) must not be copied to while still mapped from a previous `mapAsync`. Guard copies with `_pending` flags.
-- **Uniform struct layout**: JS `writeUniforms`/`_writeFieldUniforms` field order must exactly match WGSL struct member order. WGSL structs use natural alignment (f32=4, u32=4, vec4=16). Off-by-one index errors silently corrupt all downstream fields.
-- **Buffer initialization**: `addParticle()` must initialize ALL per-particle buffers. `axYukMod` defaults to (1.0, 1.0) not (0, 0) — zero would multiply all Yukawa/axion-modulated forces to zero. `radiationState` must be zeroed explicitly.
+**Prepended**: Phase 2 shaders + `boundary.wgsl` get `common.wgsl`. Force shaders also get `signal-delay-common.wgsl`.
+**Field shaders**: Get `field-common.wgsl`.
+**Standalone**: Phase 3, Phase 4, render shaders define own structs -- keep in sync with `common.wgsl`.
+**All shaders**: Receive `buildWGSLConstants()` block at compile time.
 
 ### GPU ↔ CPU Sync
 
-- `addParticle()` writes packed `ParticleState` (36B) + `ParticleAux` (20B) + `color` (4B) + `axYukMod` (8B, initialized to 1.0/1.0) + `radiationState` (32B, zeroed) via `queue.writeBuffer()`
-- `setToggles(physics)` packs CPU toggle booleans into `toggles0`/`toggles1` u32 bitfields (using named constants from `gpu-constants.js`) and caches all individual `_xxxEnabled` booleans. Called from `ui.js` `updateAllDeps()` on every toggle change AND from `_syncSlidersToGPU()` on every slider change. Heatmap state passed via `Object.create(sim.physics)` with `heatmapEnabled` added.
-- `_writeFieldUniforms(dt)` writes `FieldUniforms` struct to shared field uniform buffer (used by field forces pass). Must match `field-common.wgsl` `FieldUniforms` struct layout exactly. `_writePerFieldUniforms(dt, fieldType)` writes to per-field dedicated uniform buffers (`_higgsUniformBuffer`/`_axionUniformBuffer`) with `currentFieldType` baked in — eliminates encoder split when both Higgs and Axion are active.
-- Slider changes (yukawaMu, axionMass, higgsMass, external fields, bounceFriction, hubbleParam) sync to GPU via `_syncSlidersToGPU()` → `setToggles()` on every slider `input` event. Values are cached in `_yukawaMu`, `_higgsMass`, etc. and written to uniforms each substep.
-- `serialize()`/`deserialize()` read/write full particle state via staging buffers for save/load and GPU→CPU toggle. `deserialize()` initializes `axYukMod` to (1,1), zeroes `radiationState`, and restores slider parameters (`higgsMass`, `axionMass`, `yukawaMu`, `hubbleParam`). `serialize()` also used by GPU toggle-off in `ui.js` to rebuild CPU `particles[]` array from GPU readback.
-- **GPU hit test** (`hitTest()`/`readHitResult()`): Dispatches single-thread `hit-test.wgsl` compute shader that walks the quadtree (always built every substep). Reads `ParticleDerived` (binding 5) for live velocity/angVel. Async readback via 48-byte staging buffer, 1-frame latency. `readHitResult()` returns `null` (not ready), `{ index: -1 }` (no hit), or `{ index, mass, charge, radius, velX, velY, angVel, posX, posY }` with GPU-fresh data. Input handler defers click actions (select/delete/spawn) in GPU mode until result arrives via `pollGPUHitResult()`. Hover tooltip uses readback data directly (not stale CPU-side values). `_deleteByGpuIdx()` handles deleting GPU-only particles without CPU counterpart.
-- **GPU stats readback** (`requestStats()`/`readStats()`): Dispatches single-thread `compute-stats.wgsl` at `STATS_THROTTLE_MASK` rate (every 8th frame). Computes aggregate KE (linear + spin, relativistic), O(N²) PE (all 9 pair terms: gravity, Coulomb w/ axMod, magnetic/GM dipole, 1PN EIH/Darwin/Bazanski, Yukawa w/ yukMod, Scalar Breit), Darwin field energy/momentum, scalar field energy (64×64 grid reduction for Higgs/Axion), scalar field momentum, particle-field interaction energy (PQS interpolation). Also copies selected particle's full state + all 11 force vectors. Two bind groups: group 0 (particles + derived + forces + axYukMod + stats buffer), group 1 (higgs/axion field + fieldDot, dummy buffers when inactive). 512-byte output via double-buffered staging. `readStats()` returns `{ linearKE, spinKE, px, py, pe, fieldEnergy, fieldPx, fieldPy, higgsFieldEnergy, axionFieldEnergy, pfiEnergy, scalarFieldMomX/Y, orbitalAngMom, spinAngMom, selected: {...} }`. `updateEnergyGPU()`/`updateSelectedGPU()` on StatsDisplay format readback for sidebar. Hover tooltip refreshes every 8th frame via `refreshTooltip()`.
-- **Save/load GPU path**: `saveState()` uses `serialize()` (async GPU readback). `loadState()` uses `deserialize()` (uploads to GPU), clears CPU-side state, restores toggles/modes to CPU physics for UI sync, then syncs GPU toggles/modes. Does NOT call `sim.reset()` after deserialize (would wipe loaded particles).
-- CPU-side `particles[]` array maintained for presets and CPU mode. Not synced from GPU during GPU mode — positions stale. GPU renders directly from buffers; sidebar stats computed by `compute-stats.wgsl` readback.
-- `device.lost` handler falls back to CPU mode, restores from periodic auto-save
+- `addParticle()` writes packed structs via `queue.writeBuffer()`
+- `setToggles()` packs booleans into `toggles0`/`toggles1` u32 bitfields, caches individual `_xxxEnabled` booleans
+- `serialize()`/`deserialize()` for save/load and GPU→CPU toggle
+- GPU hit test: `hitTest()`/`readHitResult()` with 1-frame latency via staging buffer
+- GPU stats: `requestStats()`/`readStats()` at STATS_THROTTLE_MASK rate, 512-byte double-buffered staging
+- `device.lost` handler falls back to CPU with auto-save recovery
 
-### GPU Renderer
+### WGSL Gotchas
 
-`GPURenderer` in `gpu-renderer.js` handles all visual output in GPU mode. All render pipelines have dual light/dark variants — light uses premultiplied alpha-over blend, dark uses additive blend (matching Canvas 2D `lighter`). All fragment shaders output premultiplied alpha (`color.rgb * alpha`). Render passes (each in isolated command encoder for error containment):
+- WGSL requires explicit parentheses when mixing `*` with `^` (XOR)
+- Multiple entry points sharing a module need `read_write` access mode on shared bindings
+- WebGPU disallows binding the same buffer twice in a dispatch
+- Staging buffers must not be copied to while mapped from previous `mapAsync`
+- JS uniform write order must exactly match WGSL struct member order
+- `addParticle()` must initialize ALL per-particle buffers. `axYukMod` defaults to (1.0, 1.0) not (0, 0)
 
-1. **Particles**: Instanced quad rendering from `particleState` + `color` buffers. Sharp circle edge (`select` step at dist=1), no glow. Color computed by `updateColors` compute pass (post-substep).
-2. **Trails**: Triangle-strip ribbon per particle from ring buffer (`trailX`/`trailY`), width = `0.5 * radius` (matching CPU). Each trail point becomes 2 vertices offset perpendicular to the trail tangent. Trail recording via `trails.wgsl` compute (post-substep). Lazy buffer allocation via `setTrailsEnabled()`. Binds `particleAux` (binding 8) for radius.
-3. **Field overlays**: Fullscreen triangle, bilinear-upscaled 64×64 grid. Per-field uniform buffers (higgs/axion) to avoid writeBuffer race. Lazy pipeline init via `initFieldOverlay()`.
-4. **Heatmap overlay**: Fullscreen triangle, gravity/electric/Yukawa potential channels. Lazy pipeline init via `initHeatmapOverlay()`.
-5. **Bosons**: Instanced quad rendering for photons (yellow/red) and pions (green). Sharp circle edge with exponential dark-mode glow halo (`BOSON_GLOW_INTENSITY=0.5`, `BOSON_GLOW_DECAY=4.0`). Separate photon and pion pipelines.
-6. **Spin rings**: Two pipelines per theme: triangle-strip arc ribbon (64 vertices, width 0.2 world units matching CPU `lineWidth`) + triangle-list arrowheads (3 vertices). Same bind group for both. CW/CCW colors from `_PALETTE.spinPos`/`_PALETTE.spinNeg`.
-7. **Force arrows**: Instanced arrow geometry (9 vertices: shaft quad + head triangle), 11 force types with distinct colors. Shaft half-width 0.125, head half-width 0.25, head length 0.5 (matching CPU). Fully opaque (alpha 1.0). Threshold on scaled length (`0.5 * invZoom`), graceful degradation (shaft-only for short arrows, arrowhead collapses). One submit per force type with separate uniform writeBuffer.
-8. **Torque arcs**: Two pipelines per theme: triangle-strip arc ribbon (32 segments, width 0.25 matching CPU `lineWidth`) + triangle-list arrowheads (3 vertices). 4 component types (spinOrbit/frameDrag/tidal/contact at offsets 2.5/2.0/1.5/1.0) + total torque (offset 3.0). Reads torques from `AllForces.torques` vec4. Colors match CPU: purple/rose/red/brown. One submit per torque type.
-9. **Dashed rings**: Triangle-strip full-circle ribbon (64 segments, 130 vertices to close strip) with fragment-shader dashing. Dash period snapped to circumference for seamless tiling. Two dispatches per frame (ergosphere + antimatter), each with own uniform writeBuffer + submit. Ergosphere: text-color alpha (0.3 light / 0.4 dark), dash [0.3, 0.3], half-width 0.075, only when BH mode + spin separates ergosphere from horizon. Antimatter: gray (#888 light / #ccc dark), dash [0.5, 0.3], half-width 0.125, only for antimatter-flagged particles. `RingParams` uniform selects type + color per dispatch.
+### Numerical Stability (GPU)
+
+- Division-by-zero: `select(0, 1/x, x > EPSILON)` or `max(x, EPSILON)`
+- NaN barriers before writing to global memory (not after)
+- `sqrt(max(x, 0))` on all discriminants; `exp(-μr)` guarded with `select(0, ..., μr < 80)`
+- `deathTime` sentinel uses `FLT_MAX` (3.4028235e38) not `Infinity`
+- Collision merge: `mass <= EPSILON` guards (not `== 0`) for race conditions
+- Render: premultiplied alpha (`color.rgb * alpha`) with `srcFactor: 'one'`
+
+## Renderer
+
+### Visual Style (both backends)
+
+- **Particles**: r = ∛(mass) (BH: r₊), no glow. Neutral=slate (BH light: text color). Charged: RGB lerp base→red(+)/blue(-).
+- **Trails**: circular Float32Array[256], wrap-detection for periodic boundaries
+- **Force vectors**: gravity=red, coulomb=blue, magnetic=cyan, GM=rose, 1PN=orange, spin-curv=purple, radiation=yellow, yukawa=green, external=brown, higgs=lime, axion=indigo
+- **Field overlays**: 64×64, bilinear-upscaled. Higgs: purple/lime. Axion: indigo/yellow.
+- **Photons**: yellow (EM) / red (grav), alpha fades over PHOTON_LIFETIME=256
+- **Pions**: green, constant alpha
+- **V_eff plot**: 200-sample sidebar canvas
+
+### GPU Renderer Passes
+
+Particles, trails, field overlays, heatmap, bosons (photons + pions), spin rings, force arrows, torque arcs, dashed rings (ergosphere + antimatter). All with dual light/dark pipeline variants.
 
 ## Key Patterns
 
@@ -592,36 +419,16 @@ All GPU compute shaders enforce defensive numerical guards to prevent NaN/Inf pr
 - Particle constructor declares all properties upfront (V8 hidden class stability)
 - World coordinates: `sim.domainW/H` (viewport / WORLD_SCALE), not pixels
 - Theme: `data-theme` on `<html>` (not body)
-- `.mode-toggles` sets `display: grid` overriding `hidden` — use `style.display`
+- `.mode-toggles` sets `display: grid` overriding `hidden` -- use `style.display`
 - External field trig cached once per frame via `_cacheExternalFields()`
-- `signal-delay-common.wgsl` prepend pattern: like `common.wgsl`, prepended to force shaders that need signal delay lookup (pair-force, forces-tree, onePN). Contains `getDelayedStateGPU()` NR solver and interleaved history access helpers.
-- `forceRadiation` cleared for all particles before substep loop (stale prevention)
+- `forceRadiation` cleared for all particles before substep loop
 - History recording counts `update()` calls, not substeps
-- `sim.clearBosons()` releases photons/pions to pools and truncates arrays — use on preset load, clear, save-load
-- PE accumulated inline in `pairForce()` via `_peAccum`; `potential.js` is fallback only (preset loads)
-- **Object pooling**: `MasslessBoson.acquire()`/`.release()` and `Pion.acquire()`/`.release()` recycle dead instances. Module-level pool arrays, `_reset()` mutates existing Vec2s (no allocation). Pool caps (64 each) prevent unbounded growth. All creation sites use `.acquire()`, all removal sites call `.release()` before swap-and-pop.
-- **Dirty flag**: `sim._dirty` skips entire render/stats path when paused with no interaction. Set by: physics update, camera, input, UI toggles, presets, theme, resize. `markDirty()` public method for external callers.
-- **Batched force arrows**: Renderer accumulates arrows into pre-allocated `Float32Array` buffers, one `stroke()`+`fill()` per color. O(forces) canvas calls instead of O(particles×forces).
-- **Batched spin rings**: Grouped by angular velocity sign, two passes (pos/neg) with one `stroke()`+`fill()` each. 4 canvas calls total instead of 9×N.
-- **Photon alpha buckets**: 4 alpha bands (bright/med/dim/faint) → 4 `stroke()` calls instead of per-photon style changes.
-- **Inline torus minImage**: `pairForce()`, `_accum1PN()`, `calculateForce()`, `_compute1PNTreeWalk()` inline the torus fast path to eliminate cross-module function call overhead in O(N²) loops. Klein/RP² still dispatch to `minImage()`.
-- **Yukawa cutoff**: `exp(-μr) < 0.002` ⟹ skip `Math.exp` when `μr > 6` in `pairForce()`.
-- **Aberration pre-multiply**: Signal-delay aberration factor `(1 - n̂·v)^{-3}` pre-multiplied into `invR3a`/`invR5a` once per pair, reused across gravity/Coulomb/dipole/Yukawa terms.
-- **Jerk guard**: Analytical jerk for Larmor radiation gated behind `radiationEnabled` flag — skips computation when radiation off.
-- **Precomputed per-frame flags**: `_needAxMod`, conditional photon renorm flag computed once in `computeAllForces()` before pair loop.
-- **Quadtree iterative insert**: Stack-based iterative insert replaces recursion. Direct quadrant child selection via `_childFor()` eliminates linear scan.
-- **Pre-allocated GPU uniforms**: Module-level `ArrayBuffer`/`Float32Array`/`Uint32Array` for disintegration, pair production, heatmap, color, camera, trail, arrow, field overlay, and heatmap overlay uniform writes — eliminates ALL per-frame heap allocations in both `GPUPhysics` dispatch methods and `GPURenderer` render methods. `deserialize()` and `reset()` also reuse pre-allocated buffers.
-- **Fused Boris integrator**: `boris-fused.wgsl` combines halfKick1 + borisRotate + halfKick2 into a single compute dispatch. Eliminates 2 barrier syncs + 4 redundant global memory loads/stores per particle per substep. Single consolidated NaN guard.
-- **Field deposit sentinel**: Scatter passes write `-9999` sentinel to `scratchIndices` for dead/skipped particles; gather pass checks the 4-byte sentinel instead of loading the full 36-byte `ParticleState` struct — eliminates N×GRID² unnecessary global memory reads.
-- **Hoisted tidal ri5**: `pair-force.wgsl` precomputes `ri5 = mass^(5/3)` once per observer using `sqrt(bodyRadiusSq)` before the O(N²) tile loop, replacing a per-source-particle `pow()` transcendental.
-- **Lazy field init**: Higgs/Axion fields are `null` until first toggle-on (`ensureHiggsField()`/`ensureAxionField()` in main.js). Avoids 64×64 grid allocation + per-frame update when fields unused.
-- **KaTeX render cache**: `ui.js` caches rendered KaTeX HTML by expression string, avoiding re-render on repeated info-tip opens.
-- **KaTeX CSS preload**: Non-render-blocking `<link rel="preload" as="style">` pattern with `onload` swap.
-- **V_eff dirty flag**: Hashes `(selId, refId, r_rounded, toggleKey)` to skip 200-sample curve recomputation when inputs unchanged.
-- **Interior fast-path PQS**: `interpolate()`, `gradient()`, `interpolateWithGradient()` skip `_nb()` dispatch when stencil fully inside grid bounds. `_depositPQS()` and `_computeLaplacian()` also have interior fast paths.
-- **Self-gravity early exit**: Skip O(SG⁴) coarse potential when field energy density below epsilon. `applyGravForces()` also exits early when field at vacuum (`hasEnergy` flag).
-- **rAF-throttled hover**: `InputHandler` throttles mousemove tooltip updates to animation frame rate.
-- **visibilitychange halt**: `main.js` pauses physics accumulator when tab hidden, preventing time spiral on refocus.
-- **Accumulator cap**: ACCUMULATOR_CAP = 2 frames max per drain (prevents spiral of death).
-- **textContent change detection**: `StatsDisplay` only writes DOM when value actually changed.
-- Display throttles: STATS_THROTTLE_MASK=7 (energy, 8th frame), SIDEBAR_THROTTLE_MASK=1 (phase/effpot/selected, 2nd frame), FIELD_RENDER_INTERVAL=2, HEATMAP_INTERVAL=4
+- PE accumulated inline in `pairForce()` via `_peAccum`; `potential.js` is fallback only
+- Object pooling: `MasslessBoson.acquire()`/`.release()` and `Pion.acquire()`/`.release()` with pool caps (64)
+- Dirty flag: `sim._dirty` skips entire render/stats when paused with no interaction
+- Batched rendering: force arrows, spin rings, photon alpha buckets -- O(forces) canvas calls not O(particles×forces)
+- Inline torus minImage in pairForce/1PN loops; Klein/RP² dispatch to `minImage()`
+- Yukawa cutoff: skip `Math.exp` when `μr > 6`
+- Lazy field init: Higgs/Axion fields `null` until first toggle-on
+- KaTeX CSS preload + render cache
+- rAF-throttled hover, visibilitychange halt, accumulator cap = 2 frames
