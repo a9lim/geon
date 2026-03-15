@@ -1164,13 +1164,17 @@ export async function createFieldExcitationPipeline(device, wgslConstants = '') 
  *   blurLayout: unchanged
  */
 export async function createHeatmapPipelines(device, wgslConstants = '') {
-    const code = await fetchShader('heatmap.wgsl', wgslConstants);
+    const signalDelayWGSL = await fetchShader('signal-delay-common.wgsl');
+    const heatmapWGSL = await fetchShader('heatmap.wgsl');
+    // Prepend: constants → signal-delay-common → heatmap
+    const code = wgslConstants + '\n' + signalDelayWGSL + '\n' + heatmapWGSL;
     const module = device.createShaderModule({ label: 'heatmap', code });
 
     const hmG0 = device.createBindGroupLayout({
         label: 'heatmap_g0',
         entries: [
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleState (rw for encoder compat)
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleAux
         ],
     });
     const hmG1 = device.createBindGroupLayout({

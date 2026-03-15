@@ -1,7 +1,8 @@
 // ─── Potential Field Heatmap ───
 // 64x64 grid potential from particles. Gravity, Coulomb, Yukawa contributions.
 // Signal delay supported: when relativity enabled, uses retarded positions via
-// Newton-Raphson light-cone solver (same algorithm as history.wgsl).
+// shared getDelayedStateGPU() from signal-delay-common.wgsl.
+// Dead/retired particles contribute via signal delay history (deathMass for gravity/Yukawa).
 // Direct O(N*GRID^2) pairwise — tree acceleration deferred to future optimization.
 
 // Packed particle state struct (matches common.wgsl ParticleState)
@@ -11,6 +12,14 @@ struct ParticleState_HM {
     mass: f32, charge: f32, angW: f32,
     baseMass: f32,
     flags: u32,
+};
+
+struct ParticleAux_HM {
+    radius: f32,
+    particleId: u32,
+    deathTime: f32,
+    deathMass: f32,
+    deathAngVel: f32,
 };
 
 struct HeatmapUniforms {
@@ -42,8 +51,9 @@ struct HeatmapUniforms {
     _pad3: f32,
 };
 
-// Group 0: particleState (read_write for encoder compat)
+// Group 0: particleState + particleAux (read_write for encoder compat)
 @group(0) @binding(0) var<storage, read_write> particles: array<ParticleState_HM>;
+@group(0) @binding(1) var<storage, read_write> particleAux: array<ParticleAux_HM>;
 
 @group(1) @binding(0) var<storage, read_write> gravPotential: array<f32>;
 @group(1) @binding(1) var<storage, read_write> elecPotential: array<f32>;
@@ -117,266 +127,6 @@ fn hmMinImage(ox: f32, oy: f32, sx: f32, sy: f32) -> vec2<f32> {
     return vec2(bestDx, bestDy);
 }
 
-// ─── Signal delay: retarded position via Newton-Raphson light-cone solver ───
-// Uses interleaved histData buffer (stride HIST_STRIDE=6: posX, posY, velX, velY, angW, time)
-// and histMeta (stride HIST_META_STRIDE=4: writeIdx, count, creationTimeBits, _pad)
-struct RetardedPos {
-    x: f32, y: f32,
-    valid: bool,
-};
-
-// Helper: compute base index into interleaved histData
-fn hmHistBase(srcIdx: u32, sampleIdx: u32) -> u32 {
-    return srcIdx * HISTORY_LEN * HIST_STRIDE + sampleIdx * HIST_STRIDE;
-}
-
-fn getRetardedPosition(
-    srcIdx: u32,
-    obsX: f32, obsY: f32,
-    simTime: f32,
-) -> RetardedPos {
-    var result: RetardedPos;
-    result.valid = false;
-
-    let metaBase = srcIdx * HIST_META_STRIDE;
-    let writeIdx = histMeta[metaBase];
-    let count = histMeta[metaBase + 1u];
-    if (count < 2u) { return result; }
-
-    let start = (writeIdx - count + HISTORY_LEN) & HISTORY_MASK;
-    let newest = (writeIdx - 1u + HISTORY_LEN) & HISTORY_MASK;
-
-    let oldestBase = hmHistBase(srcIdx, start);
-    let newestBase = hmHistBase(srcIdx, newest);
-    let tOldest = histData[oldestBase + 5u];
-    let tNewest = histData[newestBase + 5u];
-    let timeSpan = simTime - tOldest;
-    if (timeSpan < NR_TOLERANCE) { return result; }
-
-    // Current distance to newest sample
-    let nxPos = histData[newestBase + 0u];
-    let nyPos = histData[newestBase + 1u];
-    var cdx: f32; var cdy: f32;
-    if (hu.periodic != 0u) {
-        let d = hmMinImage(obsX, obsY, nxPos, nyPos);
-        cdx = d.x; cdy = d.y;
-    } else {
-        cdx = nxPos - obsX; cdy = nyPos - obsY;
-    }
-    let distSq = cdx * cdx + cdy * cdy;
-
-    // ─── Phase 1: Newton-Raphson segment search ───
-    if (distSq <= 4.0 * timeSpan * timeSpan) {
-        var t = simTime - sqrt(distSq);
-        t = clamp(t, tOldest, tNewest);
-
-        let histSpan = tNewest - tOldest;
-        var segK: i32;
-        if (histSpan > NR_TOLERANCE) {
-            segK = i32(floor((t - tOldest) / histSpan * f32(count - 1u)));
-        } else {
-            segK = 0;
-        }
-        segK = clamp(segK, 0, i32(count) - 2);
-
-        // Walk to correct segment
-        for (var w = 0; w < 256; w++) {
-            if (segK >= i32(count) - 2) { break; }
-            let nextBase = hmHistBase(srcIdx, (start + u32(segK + 1)) & HISTORY_MASK);
-            if (histData[nextBase + 5u] > t) { break; }
-            segK++;
-        }
-        for (var w = 0; w < 256; w++) {
-            if (segK <= 0) { break; }
-            let curBase = hmHistBase(srcIdx, (start + u32(segK)) & HISTORY_MASK);
-            if (histData[curBase + 5u] <= t) { break; }
-            segK--;
-        }
-
-        var prevSegK: i32 = -1;
-        for (var iter = 0u; iter < NR_MAX_ITER; iter++) {
-            if (segK == prevSegK) { break; }
-            prevSegK = segK;
-
-            let loBase = hmHistBase(srcIdx, (start + u32(segK)) & HISTORY_MASK);
-            let hiBase = hmHistBase(srcIdx, ((start + u32(segK)) + 1u) & HISTORY_MASK);
-            let tLo = histData[loBase + 5u];
-            let segDt = histData[hiBase + 5u] - tLo;
-            if (segDt < NR_TOLERANCE) {
-                if (segK < i32(count) - 2) { segK++; prevSegK = -1; continue; }
-                break;
-            }
-
-            let xLo = histData[loBase]; let yLo = histData[loBase + 1u];
-            var vxEff: f32; var vyEff: f32;
-            if (hu.periodic != 0u) {
-                let d = hmMinImage(xLo, yLo, histData[hiBase], histData[hiBase + 1u]);
-                vxEff = d.x / segDt; vyEff = d.y / segDt;
-            } else {
-                vxEff = (histData[hiBase] - xLo) / segDt;
-                vyEff = (histData[hiBase + 1u] - yLo) / segDt;
-            }
-
-            let s = t - tLo;
-            let sx_interp = xLo + vxEff * s;
-            let sy_interp = yLo + vyEff * s;
-
-            var dx: f32; var dy: f32;
-            if (hu.periodic != 0u) {
-                let d = hmMinImage(obsX, obsY, sx_interp, sy_interp);
-                dx = d.x; dy = d.y;
-            } else {
-                dx = sx_interp - obsX; dy = sy_interp - obsY;
-            }
-
-            let dSq = dx * dx + dy * dy;
-            if (dSq < NR_TOLERANCE * NR_TOLERANCE) { break; }
-            let dist = sqrt(dSq);
-
-            let g = dist - (simTime - t);
-            let gp = (dx * vxEff + dy * vyEff) / dist + 1.0;
-            if (abs(gp) < NR_TOLERANCE) { break; }
-
-            t -= g / gp;
-            t = clamp(t, tOldest, tNewest);
-
-            // Re-locate segment
-            for (var w2 = 0; w2 < 64; w2++) {
-                if (segK >= i32(count) - 2) { break; }
-                let ni = hmHistBase(srcIdx, (start + u32(segK + 1)) & HISTORY_MASK);
-                if (histData[ni + 5u] > t) { break; }
-                segK++;
-            }
-            for (var w2 = 0; w2 < 64; w2++) {
-                if (segK <= 0) { break; }
-                let ci = hmHistBase(srcIdx, (start + u32(segK)) & HISTORY_MASK);
-                if (histData[ci + 5u] <= t) { break; }
-                segK--;
-            }
-        }
-
-        // ─── Phase 2: Exact quadratic on converged segment (+/- 1 neighbor) ───
-        let center = segK;
-        for (var offset = 0; offset <= 1; offset++) {
-            for (var dir = select(-1, 1, offset == 0); dir <= 1; dir += 2) {
-                let k = center + offset * dir;
-                if (k < 0 || k > i32(count) - 2) { continue; }
-
-                let loBase2 = hmHistBase(srcIdx, (start + u32(k)) & HISTORY_MASK);
-                let hiBase2 = hmHistBase(srcIdx, ((start + u32(k)) + 1u) & HISTORY_MASK);
-                let tLo2 = histData[loBase2 + 5u];
-                let segDt2 = histData[hiBase2 + 5u] - tLo2;
-                if (segDt2 < NR_TOLERANCE) { continue; }
-
-                let xLo2 = histData[loBase2]; let yLo2 = histData[loBase2 + 1u];
-                let xHi2 = histData[hiBase2]; let yHi2 = histData[hiBase2 + 1u];
-
-                var dx2: f32; var dy2: f32;
-                var vx2: f32; var vy2: f32;
-                if (hu.periodic != 0u) {
-                    let d0 = hmMinImage(obsX, obsY, xLo2, yLo2);
-                    dx2 = d0.x; dy2 = d0.y;
-                    let d1 = hmMinImage(xLo2, yLo2, xHi2, yHi2);
-                    vx2 = d1.x / segDt2; vy2 = d1.y / segDt2;
-                } else {
-                    dx2 = xLo2 - obsX; dy2 = yLo2 - obsY;
-                    vx2 = (xHi2 - xLo2) / segDt2; vy2 = (yHi2 - yLo2) / segDt2;
-                }
-
-                let rSq2 = dx2 * dx2 + dy2 * dy2;
-                let vSq2 = vx2 * vx2 + vy2 * vy2;
-                let dDotV = dx2 * vx2 + dy2 * vy2;
-                let T = simTime - tLo2;
-
-                let a = vSq2 - 1.0;
-                let h = dDotV + T;
-                let c = rSq2 - T * T;
-                let disc = h * h - a * c;
-                if (disc < 0.0) { continue; }
-
-                let sqrtDisc = sqrt(max(disc, 0.0));
-                var s_sol: f32;
-                if (abs(a) < NR_TOLERANCE) {
-                    if (abs(h) < NR_TOLERANCE) { continue; }
-                    s_sol = -c / (2.0 * h);
-                } else {
-                    let s1 = (-h + sqrtDisc) / a;
-                    let s2 = (-h - sqrtDisc) / a;
-                    let ok1 = s1 >= -EPSILON && s1 <= segDt2 + EPSILON;
-                    let ok2 = s2 >= -EPSILON && s2 <= segDt2 + EPSILON;
-                    if (ok1 && ok2) { s_sol = max(s1, s2); }
-                    else if (ok1) { s_sol = s1; }
-                    else if (ok2) { s_sol = s2; }
-                    else { continue; }
-                }
-
-                s_sol = clamp(s_sol, 0.0, segDt2);
-                let frac = s_sol / segDt2;
-
-                result.x = xLo2 + frac * (xHi2 - xLo2);
-                result.y = yLo2 + frac * (yHi2 - yLo2);
-                result.valid = true;
-                return result;
-            }
-        }
-    }
-
-    // ─── Phase 3: Extrapolation from oldest sample ───
-    {
-        let xStart = histData[oldestBase];
-        let yStart = histData[oldestBase + 1u];
-        var dxE: f32; var dyE: f32;
-        if (hu.periodic != 0u) {
-            let d = hmMinImage(obsX, obsY, xStart, yStart);
-            dxE = d.x; dyE = d.y;
-        } else {
-            dxE = xStart - obsX; dyE = yStart - obsY;
-        }
-
-        // Use velocity from oldest sample (stored in interleaved data at offset 2,3)
-        let vxE = histData[oldestBase + 2u];
-        let vyE = histData[oldestBase + 3u];
-
-        let rSqE = dxE * dxE + dyE * dyE;
-        let vSqE = vxE * vxE + vyE * vyE;
-        let dDotVE = dxE * vxE + dyE * vyE;
-        let T_E = timeSpan;
-
-        let aE = vSqE - 1.0;
-        let hE = dDotVE + T_E;
-        let cE = rSqE - T_E * T_E;
-        let discE = hE * hE - aE * cE;
-        if (discE < 0.0) { return result; }
-
-        let sqrtDiscE = sqrt(discE);
-        var s_solE: f32;
-        if (abs(aE) < NR_TOLERANCE) {
-            if (abs(hE) < NR_TOLERANCE) { return result; }
-            s_solE = -cE / (2.0 * hE);
-        } else {
-            let s1E = (-hE + sqrtDiscE) / aE;
-            let s2E = (-hE - sqrtDiscE) / aE;
-            let ok1E = s1E <= EPSILON;
-            let ok2E = s2E <= EPSILON;
-            if (ok1E && ok2E) { s_solE = max(s1E, s2E); }
-            else if (ok1E) { s_solE = s1E; }
-            else if (ok2E) { s_solE = s2E; }
-            else { return result; }
-        }
-        if (s_solE > 0.0) { s_solE = 0.0; }
-
-        // Reject extrapolation past particle creation
-        let creationTimeBits = histMeta[srcIdx * HIST_META_STRIDE + 2u];
-        let creationTime = bitcast<f32>(creationTimeBits);
-        if (tOldest + s_solE < creationTime) { return result; }
-
-        result.x = xStart + vxE * s_solE;
-        result.y = yStart + vyE * s_solE;
-        result.valid = true;
-        return result;
-    }
-}
-
 // Yukawa cutoff: exp(-mu*r) < 0.002 when mu*r > 6
 fn yukawaCutoffSq(mu: f32) -> f32 {
     let cutoff = 6.0 / mu;
@@ -402,17 +152,20 @@ fn computeHeatmap(@builtin(global_invocation_id) gid: vec3<u32>) {
     let useDelay = hu.useDelay != 0u;
     let yCutSq = select(1e30, yukawaCutoffSq(hu.yukawaMu), doY);
 
+    // Alive particles
     for (var i = 0u; i < hu.particleCount; i++) {
         let p = particles[i];
         let flag = p.flags;
-        if ((flag & 1u) == 0u) { continue; }
+        if ((flag & FLAG_ALIVE) == 0u) { continue; }
 
         var srcX = p.posX;
         var srcY = p.posY;
 
         // Signal delay: solve for retarded position
         if (useDelay) {
-            let ret = getRetardedPosition(i, wx, wy, hu.simTime);
+            let ret = getDelayedStateGPU(i, wx, wy, hu.simTime,
+                hu.periodic != 0u, hu.domainW, hu.domainH,
+                hu.topologyMode, false);
             if (ret.valid) {
                 srcX = ret.x;
                 srcY = ret.y;
@@ -436,6 +189,38 @@ fn computeHeatmap(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (doY && rSq < yCutSq) {
             let r = 1.0 / invR;
             yPhi -= hu.yukawaCoupling * p.mass * exp(-hu.yukawaMu * r) * invR;
+        }
+    }
+
+    // Dead/retired particles: signal delay fade-out
+    if (useDelay) {
+        for (var di = 0u; di < hu.particleCount; di++) {
+            let dp = particles[di];
+            if ((dp.flags & FLAG_RETIRED) == 0u) { continue; }
+            if ((dp.flags & FLAG_ALIVE) != 0u) { continue; }
+
+            let ret = getDelayedStateGPU(di, wx, wy, hu.simTime,
+                hu.periodic != 0u, hu.domainW, hu.domainH,
+                hu.topologyMode, true);
+            if (!ret.valid) { continue; }
+
+            let dAux = particleAux[di];
+            var dx: f32; var dy: f32;
+            if (hu.periodic != 0u) {
+                let d = hmMinImage(wx, wy, ret.x, ret.y);
+                dx = d.x; dy = d.y;
+            } else {
+                dx = ret.x - wx; dy = ret.y - wy;
+            }
+            let rSq = dx * dx + dy * dy + hu.softeningSq;
+            let invR = 1.0 / sqrt(rSq);
+
+            if (doG) { gPhi -= dAux.deathMass * invR; }
+            if (doC) { ePhi += dp.charge * invR; }
+            if (doY && rSq < yCutSq) {
+                let r = 1.0 / invR;
+                yPhi -= hu.yukawaCoupling * dAux.deathMass * exp(-hu.yukawaMu * r) * invR;
+            }
         }
     }
 

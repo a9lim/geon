@@ -1,9 +1,11 @@
 // Boundary wrap/bounce/despawn shader.
 // Supports all three topologies: Torus, Klein bottle, RP² (real projective plane).
 // Klein/RP² glide reflections flip velocities and angular velocity on axis crossing.
+// Despawn writes death metadata (deathTime, deathMass, deathAngVel) for signal delay fade-out.
 
 @group(0) @binding(0) var<uniform> uniforms: SimUniforms;
 @group(0) @binding(1) var<storage, read_write> particleState: array<ParticleState>;
+@group(0) @binding(2) var<storage, read_write> particleAux: array<ParticleAux>;
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -103,6 +105,16 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         // Despawn: mark particles outside domain + margin as dead
         let margin: f32 = DESPAWN_MARGIN;
         if (x < -margin || x >= w + margin || y < -margin || y >= h + margin) {
+            // Write death metadata for signal delay fade-out
+            var aux = particleAux[idx];
+            aux.deathTime = uniforms.simTime;
+            aux.deathMass = ps.mass;
+            let r = aux.radius;
+            let sr = ps.angW * r;
+            let relOn = (uniforms.toggles0 & RELATIVITY_BIT) != 0u;
+            aux.deathAngVel = select(ps.angW, ps.angW / sqrt(1.0 + sr * sr), relOn);
+            particleAux[idx] = aux;
+
             // Mark dead + retired so dead GC can reclaim the slot
             ps.flags = (ps.flags & ~FLAG_ALIVE) | FLAG_RETIRED;
         }

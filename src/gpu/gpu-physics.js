@@ -300,6 +300,7 @@ export default class GPUPhysics {
             entries: [
                 { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
                 { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+                { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleAux
             ],
         });
 
@@ -315,6 +316,7 @@ export default class GPUPhysics {
             entries: [
                 { binding: 0, resource: { buffer: this.uniformBuffer } },
                 { binding: 1, resource: { buffer: this.buffers.particleState } },
+                { binding: 2, resource: { buffer: this.buffers.particleAux } },
             ],
         });
 
@@ -2634,6 +2636,7 @@ export default class GPUPhysics {
                     layout: hm.heatmapLayouts[0],
                     entries: [
                         { binding: 0, resource: { buffer: b.particleState } },
+                        { binding: 1, resource: { buffer: b.particleAux } },
                     ],
                 }),
                 g1: this.device.createBindGroup({
