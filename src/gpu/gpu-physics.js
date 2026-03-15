@@ -242,6 +242,11 @@ export default class GPUPhysics {
         this._cpuFreeSlots = [];
         this._freeTopPending = false;
 
+        // Periodic CPU←GPU particle sync
+        this._particleSyncPending = false;
+        this._particleSyncData = null;  // latest readback: { f32, u32 } views over raw ArrayBuffer
+        this._particleSyncFrame = 0;
+
         // Adaptive substepping state
         this._maxAccel = 0;
         this._maxAccelPending = false;
@@ -2632,6 +2637,13 @@ export default class GPUPhysics {
 
         // Readback free stack for slot reuse (non-blocking)
         this._readbackFreeStack();
+
+        // Periodic particle sync readback for CPU←GPU consistency (every 8 frames)
+        this._particleSyncFrame++;
+        if (this._particleSyncFrame >= 8) {
+            this._particleSyncFrame = 0;
+            this._readbackParticleSync();
+        }
     }
 
     /**
@@ -2901,6 +2913,51 @@ export default class GPUPhysics {
         this._freeTopPending = false;
     }
 
+    /**
+     * Periodic readback of all particle states for CPU←GPU sync.
+     * Non-blocking, 1-frame latency. Called every SYNC_INTERVAL frames.
+     * Updates _particleSyncData which main.js uses to rebuild sim.particles.
+     */
+    async _readbackParticleSync() {
+        if (this._particleSyncPending) return;
+        if (this.aliveCount === 0) return;
+        this._particleSyncPending = true;
+
+        const b = this.buffers;
+        const readBytes = this.aliveCount * PARTICLE_STATE_SIZE;
+
+        try {
+            const enc = this.device.createCommandEncoder({ label: 'particleSync' });
+            enc.copyBufferToBuffer(b.particleState, 0, b.particleSyncStaging, 0, readBytes);
+            this.device.queue.submit([enc.finish()]);
+
+            await b.particleSyncStaging.mapAsync(GPUMapMode.READ);
+            const raw = new ArrayBuffer(readBytes);
+            new Uint8Array(raw).set(new Uint8Array(b.particleSyncStaging.getMappedRange(0, readBytes)));
+            b.particleSyncStaging.unmap();
+
+            this._particleSyncData = {
+                f32: new Float32Array(raw),
+                u32: new Uint32Array(raw),
+                count: this.aliveCount,
+            };
+        } catch (e) {
+            // Device lost — don't block future readbacks
+        }
+        this._particleSyncPending = false;
+    }
+
+    /**
+     * Consume the latest particle sync readback data.
+     * Returns null if no new data since last consumption.
+     * @returns {{ f32: Float32Array, u32: Uint32Array, count: number } | null}
+     */
+    consumeParticleSync() {
+        const data = this._particleSyncData;
+        this._particleSyncData = null;
+        return data;
+    }
+
     /** Store camera state for heatmap viewport calculation */
     setCamera(camera) {
         this._lastCamera = camera;
@@ -3078,6 +3135,8 @@ export default class GPUPhysics {
         this._heatmapFrame = 0;
         this._pendingMergeEvents = [];
         this._cpuFreeSlots = [];
+        this._particleSyncData = null;
+        this._particleSyncFrame = 0;
         // Reset GPU free stack (reuse pre-allocated zero buffer)
         if (this.buffers.freeTop) {
             this.device.queue.writeBuffer(this.buffers.freeTop, 0, _zeroU32);
