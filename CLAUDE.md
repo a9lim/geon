@@ -62,13 +62,13 @@ src/
   relativity.js           25 lines  angwToAngVel(), setVelocity()
   canvas-renderer.js      20 lines  CanvasRenderer: thin adapter wrapping Renderer to RenderBackend
   gpu/
-    gpu-physics.js      3070 lines  GPUPhysics: WebGPU compute pipeline orchestrator, addParticle/serialize,
+    gpu-physics.js      3074 lines  GPUPhysics: WebGPU compute pipeline orchestrator, addParticle/serialize,
                                      all dispatch methods, bind group creation, adaptive substepping, readback,
                                      per-field uniform buffers (Higgs/Axion), pre-allocated write buffers
     gpu-pipelines.js    1448 lines  Pipeline + bind group layout creation for all compute/render shaders
     gpu-renderer.js      977 lines  WebGPU instanced rendering: particles, bosons, field overlays, heatmap,
                                      trails, force arrows, spin rings (dual light/dark pipeline variants)
-    gpu-buffers.js       592 lines  Buffer allocation: packed structs, quadtree, collision, field, history,
+    gpu-buffers.js       591 lines  Buffer allocation: packed structs, quadtree, collision, field, history,
                                      trail buffers, staging
     gpu-constants.js     257 lines  buildWGSLConstants(): generates WGSL const block from config.js +
                                      _PALETTE colors, single source of truth for JS/WGSL constants
@@ -514,6 +514,22 @@ Worst-case pipeline (radiation) uses 10 storage buffers (was 42 before packing).
 
 **All shaders** receive the `buildWGSLConstants()` block (from `gpu-constants.js`) prepended at compile time — provides physics constants, toggle bit definitions, and palette colors without hardcoding.
 
+### Numerical Stability (GPU)
+
+All GPU compute shaders enforce defensive numerical guards to prevent NaN/Inf propagation:
+
+**Division-by-zero prevention**: All `1/mass`, `1/r`, `1/gamma` paths use `select(0, 1/x, x > EPSILON)` or `max(x, EPSILON)` guards. Hawking radiation clamps evaporation to never reduce mass below `MIN_MASS`. Higgs mass modulation clamps `newMass >= MIN_MASS`.
+
+**NaN barriers**: `totalForce` and `jerk` accumulators are NaN-checked **before** writing to global memory (not after). Boris rotation, drift position, and angular velocity updates all have post-operation NaN guards. Adaptive substepping guards against NaN/Inf in acceleration readback.
+
+**sqrt/exp overflow guards**: `sqrt(max(x, 0))` on all quadratic discriminants and axMod/yukMod geometric means. `exp(-μr)` guarded with `select(0, exp(-μr), μr < 80)` to prevent overflow from corrupted distances. All Lorentz boost gammas use `1/sqrt(max(1-v², EPSILON))`.
+
+**Field evolution**: NaN fixup passes check **both** `field` and `fieldDot` arrays, and also catch Inf values (|x| > 1e6). Cell sizes are clamped to `max(domainW/GRID, EPSILON)`.
+
+**Collision race conditions**: Merge resolve uses `mass <= EPSILON` guards (not `== 0`) to catch partially-consumed particles from concurrent threads. `totalMass` divisor guarded before momentum computation.
+
+**Render shaders**: All fragment outputs use premultiplied alpha (`color.rgb * alpha`) matching the pipeline's `alphaMode: 'premultiplied'` configuration.
+
 ### WGSL Gotchas
 
 - **Operator precedence**: WGSL requires explicit parentheses when mixing `*` with `^` (XOR): `(a * b) ^ (c * d)`, not `a * b ^ c * d`.
@@ -535,7 +551,7 @@ Worst-case pipeline (radiation) uses 10 storage buffers (was 42 before packing).
 
 ### GPU Renderer
 
-`GPURenderer` in `gpu-renderer.js` handles all visual output in GPU mode. All render pipelines have dual light/dark variants — light uses premultiplied alpha-over blend, dark uses additive blend (matching Canvas 2D `lighter`). Render passes (each in isolated command encoder for error containment):
+`GPURenderer` in `gpu-renderer.js` handles all visual output in GPU mode. All render pipelines have dual light/dark variants — light uses premultiplied alpha-over blend, dark uses additive blend (matching Canvas 2D `lighter`). All fragment shaders output premultiplied alpha (`color.rgb * alpha`). Render passes (each in isolated command encoder for error containment):
 
 1. **Particles**: Instanced quad rendering from `particleState` + `color` buffers. Color computed by `updateColors` compute pass (post-substep).
 2. **Trails**: Line-strip per particle from ring buffer (`trailX`/`trailY`). Trail recording via `trails.wgsl` compute (post-substep). Lazy buffer allocation via `setTrailsEnabled()`.
@@ -571,6 +587,7 @@ Worst-case pipeline (radiation) uses 10 storage buffers (was 42 before packing).
 - **Jerk guard**: Analytical jerk for Larmor radiation gated behind `radiationEnabled` flag — skips computation when radiation off.
 - **Precomputed per-frame flags**: `_needAxMod`, conditional photon renorm flag computed once in `computeAllForces()` before pair loop.
 - **Quadtree iterative insert**: Stack-based iterative insert replaces recursion. Direct quadrant child selection via `_childFor()` eliminates linear scan.
+- **Pre-allocated GPU uniforms**: Module-level `ArrayBuffer`/`Float32Array`/`Uint32Array` for disintegration, pair production, heatmap, and color uniform writes — eliminates per-frame heap allocations in dispatch methods.
 - **Lazy field init**: Higgs/Axion fields are `null` until first toggle-on (`ensureHiggsField()`/`ensureAxionField()` in main.js). Avoids 64×64 grid allocation + per-frame update when fields unused.
 - **KaTeX render cache**: `ui.js` caches rendered KaTeX HTML by expression string, avoiding re-render on repeated info-tip opens.
 - **KaTeX CSS preload**: Non-render-blocking `<link rel="preload" as="style">` pattern with `onload` swap.
