@@ -21,6 +21,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     af.bFields = zero4;
     af.bFieldGrads = zero4;
     af.totalForce = vec2(0.0, 0.0);
-    af._pad = vec2(0.0, 0.0);
+    af.jerk = vec2(0.0, 0.0);
     allForces[idx] = af;
 }

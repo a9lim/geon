@@ -263,10 +263,8 @@ fn compute1PN(@builtin(global_invocation_id) gid: vec3u) {
             );
             if (!delayed.valid) { continue; }
             sx = delayed.x; sy = delayed.y;
-            // Retarded velocity: convert proper velocity (w) to coordinate velocity
-            let swx = delayed.vx; let swy = delayed.vy;
-            let sg = sqrt(1.0 + swx * swx + swy * swy);
-            svx = swx / sg; svy = swy / sg;
+            // Signal delay history stores coordinate velocity directly
+            svx = delayed.vx; svy = delayed.vy;
         } else {
             // No signal delay: use current positions/velocities (post-drift)
             sx = particles[j].posX; sy = particles[j].posY;
