@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 25;
+const SHADER_VERSION = 26;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 async function fetchShader(filename, prepend = '') {
@@ -239,7 +239,10 @@ export async function createTreeBuildPipelines(device, wgslConstants = '') {
  *   Total: 10 storage buffers + 1 uniform
  */
 export async function createTreeForcePipeline(device, wgslConstants = '') {
-    const code = await fetchShader('forces-tree.wgsl', wgslConstants);
+    const signalDelayWGSL = await fetchShader('signal-delay-common.wgsl');
+    const treeForceWGSL = await fetchShader('forces-tree.wgsl');
+    // Prepend: constants → signal-delay-common → forces-tree
+    const code = wgslConstants + '\n' + signalDelayWGSL + '\n' + treeForceWGSL;
     const module = device.createShaderModule({ label: 'treeForce', code });
 
     const group0Layout = device.createBindGroupLayout({
