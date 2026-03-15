@@ -41,7 +41,8 @@ src/
   axion-field.js         299 lines  AxionField: quadratic potential, aF² EM coupling, PQ pseudoscalar coupling
   quadtree.js            348 lines  QuadTreePool: SoA flat typed arrays, pool-based, zero GC, depth guard,
                                      iterative insert, direct quadrant child selection, boson distribution
-  input.js               307 lines  InputHandler: mouse/touch, left/right-click symmetry (matter/antimatter)
+  input.js               320 lines  InputHandler: mouse/touch, left/right-click symmetry (matter/antimatter),
+                                     GPU deferred hit test (pollGPUHitResult), tree-accelerated CPU hit test
   signal-delay.js        260 lines  getDelayedState() (3-phase light-cone solver, creationTime/deathTime guards)
   effective-potential.js 244 lines  V_eff(r) sidebar canvas, auto-scaling, axMod/yukMod modulation, dirty-flag skip
   pion.js                236 lines  Massive Yukawa force carrier: proper velocity, (1+v²) GR deflection, decay, pool
@@ -384,15 +385,21 @@ Do NOT flip these signs.
 
 **Energy** (`energy.js`): Relativistic KE = `wSq/(γ+1)·mass`. `pfiEnergy` = particle-field interaction from Higgs + Axion, added to PE. Conservation exact with gravity + Coulomb, pairwise only.
 
-**Collisions**: Pass / bounce (Hertz) / merge. `handleCollisions()` returns `{ annihilations, merges, removed, spawns }`. Merge kills both parents and returns spawn data; integrator creates a new particle via `addParticle()` with fresh ID, creation time, and empty signal delay history. Both parents are retired via `_retireParticle()` for signal delay fade-out. Integrator emits photons from annihilations, deposits field excitations.
+**Collisions**: Pass / bounce (Hertz) / merge. Always tree-accelerated broadphase via `pool.queryReuse()` (both CPU and GPU). CPU: `handleCollisions()` returns `{ annihilations, merges, removed, spawns }`. GPU: `detectCollisions` shader walks tree, `resolveCollisions`/`resolveBouncePairwise` shader resolves. Merge kills both parents and returns spawn data; integrator creates a new particle via `addParticle()` with fresh ID, creation time, and empty signal delay history. Both parents are retired via `_retireParticle()` for signal delay fade-out. Integrator emits photons from annihilations, deposits field excitations. Bounce (Hertz contact) uses `_applyRepulsion()` with tree range query (no O(N²) fallback).
 
 ## Topology
 
 Boundary "loop": Torus (TORUS=0), Klein bottle (KLEIN=1, y-wrap mirrors x), RP² (RP2=2, both glide reflections). `minImage()` zero-alloc via `out` parameter.
 
-## Barnes-Hut
+## Quadtree
 
 `QuadTreePool`: SoA typed arrays, 512-node pool (grows via `_grow()`). BH_THETA = 0.5, QUADTREE_CAPACITY = 4. Depth guard max 48. Aggregates: totalMass, totalCharge, totalMagneticMoment, totalAngularMomentum, totalMomentumX/Y, comX/comY.
+
+**Always built**: Tree is built every substep on both CPU and GPU regardless of Barnes-Hut toggle. Used by collisions (merge broadphase + bounce Hertz contact), hit testing, and optionally by BH tree-walk force computation. BH toggle only controls whether force computation uses O(N log N) tree walk vs O(N²) pairwise — it does NOT gate tree construction.
+
+**CPU hit testing**: `_cpuFindParticleAt()` in `input.js` uses `pool.queryReuse(root, x, y, searchR, searchR)` for tree-accelerated point query. Returns `null` if tree not yet built.
+
+**GPU hit testing**: `hit-test.wgsl` single-thread compute shader walks the quadtree. Dispatched on click/hover via `hitTest()`, result read back async (1-frame latency). `readHitResult()` returns `null` (pending), `-1` (no hit), or GPU buffer index. Click actions deferred until result arrives via `pollGPUHitResult()` in main loop.
 
 ## Toggle Dependencies
 
@@ -405,7 +412,8 @@ Forces:                        Physics:
     -> Magnetic                  Radiation             [requires Gravity, Coulomb, or Yukawa]
   Gravity + Barnes-Hut             Larmor + EM quad   [when Coulomb on]
     -> Boson Gravity               GW quad            [when Gravity on]
-    (+ tidal locking, always)      Pion emission      [when Yukawa on]
+    (tree always built; BH only    Pion emission      [when Yukawa on]
+     controls force computation)
   Yukawa               [independent]
   Axion                [requires Coulomb or Yukawa]
     aF² channel (when Coulomb on)
@@ -435,7 +443,7 @@ Two interchangeable backends selected at startup via `selectBackend()`. Backends
 - **CPU**: `CPUPhysics` (wraps `Physics` from integrator.js) + `CanvasRenderer` (wraps `Renderer`). Thin adapters — all logic stays in integrator.js and renderer.js.
 - **GPU**: `GPUPhysics` (compute pipelines) + `GPURenderer` (instanced rendering). GPU renders to a separate `<canvas id="gpuCanvas">` with `alphaMode: 'premultiplied'`, positioned behind the CPU canvas (`z-index: -1`). The CPU canvas (`z-index: 0`) sits on top — transparent when GPU is active, used for 2D overlays like the drag indicator via `drawDragOverlay()`.
 
-Falls back to CPU on WebGPU unavailability or device loss (with auto-save recovery). Force CPU via `?cpu=1` URL parameter. Runtime GPU/CPU toggle in Engine tab (`#gpu-toggle`): disabled when WebGPU unavailable, auto-enabled and checked on successful GPU init, disabled on device loss. Toggling off reads back GPU particle state via `serialize()` and rebuilds the CPU `sim.particles` array (bosons are cleared, stats baseline reset). Toggling on resyncs all particles to GPU via `reset()` + `addParticle()`.
+Falls back to CPU on WebGPU unavailability or device loss (with auto-save recovery). Force CPU via `?cpu=1` URL parameter. Runtime GPU/CPU toggle in Engine tab (`#gpu-toggle`): disabled when WebGPU unavailable, auto-enabled and checked on successful GPU init, disabled on device loss. Toggling off reads back GPU particle state via `serialize()` and rebuilds the CPU `sim.particles` array (bosons cleared, stats baseline reset). Toggling on resyncs all particles to GPU via `reset()` + `addParticle()`. In GPU mode, sidebar stats/plots/energy are skipped (CPU particles array is stale).
 
 ## Renderer
 
@@ -468,8 +476,8 @@ Instanced rendering via vertex shaders. Reads directly from GPU compute buffers 
 **Dispatch sequence per substep** (all in one command encoder per substep):
 
 1. Ghost generation (periodic boundary)
-2. Tree build (Barnes-Hut, if enabled)
-3. resetForces → cacheDerived → pairForce (or treeForce) → externalFields
+2. Tree build (always — used by collisions, hit test, and optionally BH force computation)
+3. resetForces → cacheDerived → pairForce (or treeForce if BH enabled) → externalFields
 4. Scalar field forces (Higgs gradient + mass mod, Axion gradient + axMod/yukMod) — BEFORE Boris
 4b. Particle-field gravity (O(N×GRID²), if fieldGravEnabled) — uses energyDensity from prior self-grav
 5. saveF1pn (save 1PN forces for velocity-Verlet correction)
@@ -482,7 +490,7 @@ Instanced rendering via vertex shaders. Reads directly from GPU compute buffers 
 12. Boson update (photon/pion drift, absorption, decay) → pair production
 13. Boundary conditions
 
-Post-substep (once per frame, separate encoder): heatmap, boson gravity, dead GC, history recording, quadrupole radiation (3 passes: CoM → d³ contrib → apply+emit), updateColors, trail recording.
+Post-substep (once per frame, separate encoder): heatmap, boson gravity, dead GC, history recording, quadrupole radiation (3 passes: CoM → d³ contrib → apply+emit), updateColors, trail recording, hit test dispatch (when pending).
 
 ### Packed Struct Buffers
 
@@ -551,8 +559,9 @@ All GPU compute shaders enforce defensive numerical guards to prevent NaN/Inf pr
 - `_writeFieldUniforms(dt)` writes `FieldUniforms` struct to shared field uniform buffer (used by field forces pass). Must match `field-common.wgsl` `FieldUniforms` struct layout exactly. `_writePerFieldUniforms(dt, fieldType)` writes to per-field dedicated uniform buffers (`_higgsUniformBuffer`/`_axionUniformBuffer`) with `currentFieldType` baked in — eliminates encoder split when both Higgs and Axion are active.
 - Slider changes (yukawaMu, axionMass, higgsMass, external fields, bounceFriction, hubbleParam) sync to GPU via `_syncSlidersToGPU()` → `setToggles()` on every slider `input` event. Values are cached in `_yukawaMu`, `_higgsMass`, etc. and written to uniforms each substep.
 - `serialize()`/`deserialize()` read/write full particle state via staging buffers for save/load and GPU→CPU toggle. `deserialize()` initializes `axYukMod` to (1,1), zeroes `radiationState`, and restores slider parameters (`higgsMass`, `axionMass`, `yukawaMu`, `hubbleParam`). `serialize()` also used by GPU toggle-off in `ui.js` to rebuild CPU `particles[]` array from GPU readback.
-- **GPU hit test** (`hitTest()`/`readHitResult()`): Dispatches single-thread `hit-test.wgsl` compute shader that walks the quadtree (always built every substep). Async readback via staging buffer, 1-frame latency. `readHitResult()` returns `null` (not ready), `-1` (no hit), or GPU buffer index. Input handler defers click actions in GPU mode until result arrives via `pollGPUHitResult()`.
-- CPU-side `particles[]` array maintained for presets, save/load, sidebar UI. Not synced from GPU — positions may be stale in GPU mode. Hit testing uses GPU tree, not CPU scan.
+- **GPU hit test** (`hitTest()`/`readHitResult()`): Dispatches single-thread `hit-test.wgsl` compute shader that walks the quadtree (always built every substep). Async readback via staging buffer, 1-frame latency. `readHitResult()` returns `null` (not ready), `-1` (no hit), or GPU buffer index. Input handler defers click actions (select/delete/spawn) in GPU mode until result arrives via `pollGPUHitResult()`. `_deleteByGpuIdx()` handles deleting GPU-only particles without CPU counterpart.
+- **Save/load GPU path**: `saveState()` uses `serialize()` (async GPU readback). `loadState()` uses `deserialize()` (uploads to GPU), clears CPU-side state, restores toggles/modes to CPU physics for UI sync, then syncs GPU toggles/modes. Does NOT call `sim.reset()` after deserialize (would wipe loaded particles).
+- CPU-side `particles[]` array maintained for presets and CPU mode. Not synced from GPU during GPU mode — positions stale. Sidebar stats/plots/energy skipped in GPU mode (read stale data). GPU renders directly from buffers.
 - `device.lost` handler falls back to CPU mode, restores from periodic auto-save
 
 ### GPU Renderer
