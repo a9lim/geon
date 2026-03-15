@@ -31,58 +31,48 @@ export default class InputHandler {
         this._hoverPending = false;
         this._hoverE = null;
 
-        this.setupListeners();
+        // Deferred click for GPU mode (1-frame async hit test)
+        this._pendingClick = null; // { pos: Vec2, rightButton: bool }
+
+        canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
+        canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
+        canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+        canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
+        canvas.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
+        canvas.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: false });
     }
 
-    updateRect() {
-        this.canvasRect = this.canvas.getBoundingClientRect();
-    }
-
-    /** Convert screen (client) coords to world coords via shared camera */
-    getPos(clientX, clientY) {
-        const sx = clientX - this.canvasRect.left;
-        const sy = clientY - this.canvasRect.top;
-        const w = this.sim.camera.screenToWorld(sx, sy);
-        return this._posOut.set(w.x, w.y);
-    }
-
-    /** getPos that returns a new Vec2 (for values that must persist, e.g. dragStart) */
-    _getPosNew(clientX, clientY) {
-        const sx = clientX - this.canvasRect.left;
-        const sy = clientY - this.canvasRect.top;
-        const w = this.sim.camera.screenToWorld(sx, sy);
-        return new Vec2(w.x, w.y);
-    }
-
-    setupListeners() {
-        this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
-        this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
-        this.canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
-        this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-        this.canvas.addEventListener('mouseleave', () => {
-            this.hoveredParticle = null;
-            this.tooltip.hidden = true;
-        });
-
-        this.sim.camera.bindWheel(this.canvas);
-
-        this.canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
-        this.canvas.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
-        this.canvas.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: false });
-    }
-
-    _pinchDist(t1, t2) {
-        const dx = t1.clientX - t2.clientX;
-        const dy = t1.clientY - t2.clientY;
+    _pinchDist(t0, t1) {
+        const dx = t0.clientX - t1.clientX;
+        const dy = t0.clientY - t1.clientY;
         return Math.sqrt(dx * dx + dy * dy);
     }
+
+    getPos(cx, cy) {
+        const rect = this.canvasRect;
+        const sx = cx - rect.left;
+        const sy = cy - rect.top;
+        return this.sim.camera.screenToWorld(sx, sy, this._posOut);
+    }
+
+    _getPosNew(cx, cy) {
+        const rect = this.canvasRect;
+        const sx = cx - rect.left;
+        const sy = cy - rect.top;
+        return this.sim.camera.screenToWorld(sx, sy, new Vec2(0, 0));
+    }
+
+    refreshCanvasRect() { this.canvasRect = this.canvas.getBoundingClientRect(); }
+
+    // ─── Touch events ───
 
     onTouchStart(e) {
         e.preventDefault();
 
         if (e.touches.length === 2) {
-            this._pinching = true;
             this.isDragging = false;
+            this._pinching = true;
             const t0 = e.touches[0], t1 = e.touches[1];
             this._lastPinchDist = this._pinchDist(t0, t1);
             this._lastPinchCenterX = (t0.clientX + t1.clientX) / 2;
@@ -154,6 +144,8 @@ export default class InputHandler {
         }
     }
 
+    // ─── Particle deletion ───
+
     _deleteParticle(p) {
         this.sim.physics._retireParticle(p);
         // GPU path: mark particle dead on GPU side
@@ -172,21 +164,42 @@ export default class InputHandler {
         _haptics.trigger('light');
     }
 
+    _deleteByGpuIdx(gpuIdx) {
+        this.sim._gpuPhysics.removeParticle(gpuIdx);
+        // Remove CPU counterpart if it exists
+        const arr = this.sim.particles;
+        for (let i = arr.length - 1; i >= 0; i--) {
+            if (arr[i]._gpuIdx === gpuIdx) {
+                this.sim.physics._retireParticle(arr[i]);
+                if (this.sim.selectedParticle === arr[i]) this.sim.selectedParticle = null;
+                arr[i] = arr[arr.length - 1];
+                arr.pop();
+                break;
+            }
+        }
+        this.sim._dirty = true;
+        _haptics.trigger('light');
+    }
+
+    // ─── Mouse events ───
+
     onMouseDown(e) {
         const isRight = e.button === 2;
         if (e.button !== 0 && !isRight) return;
 
         const pos = this._getPosNew(e.clientX, e.clientY);
-        const hit = this.findParticleAt(pos);
-        const bhOn = this.sim.physics.blackHoleEnabled;
 
-        // Right-click on particle: select antimatter, delete matter
-        // BH mode: right-click always deletes (no antimatter distinction)
-        if (isRight && hit) {
-            if (bhOn) this._deleteParticle(hit);
-            else if (hit.antimatter) { this.sim.selectedParticle = hit; this.sim._dirty = true; }
-            else this._deleteParticle(hit);
-            return;
+        // In GPU mode, right-click on particle handled via deferred hit test (onMouseUp)
+        // In CPU mode, handle immediately
+        if (isRight && this.sim.backend !== 'gpu') {
+            const hit = this._cpuFindParticleAt(pos);
+            const bhOn = this.sim.physics.blackHoleEnabled;
+            if (hit) {
+                if (bhOn) this._deleteParticle(hit);
+                else if (hit.antimatter) { this.sim.selectedParticle = hit; this.sim._dirty = true; }
+                else this._deleteParticle(hit);
+                return;
+            }
         }
 
         this.isDragging = true;
@@ -211,16 +224,24 @@ export default class InputHandler {
             requestAnimationFrame(() => {
                 this._hoverPending = false;
                 const ev = this._hoverE;
-                const hit = this.findParticleAt(this.currentPos);
-                this.hoveredParticle = hit;
-                if (hit) {
-                    const speed = Math.sqrt(hit.vel.x * hit.vel.x + hit.vel.y * hit.vel.y);
-                    const spin = (hit.angVel * hit.radius).toFixed(3);
-                    this.tooltip.textContent = `m=${hit.mass.toFixed(2)}  q=${hit.charge.toFixed(2)}  s=${spin}c  v=${speed.toFixed(3)}c`;
-                    this.tooltip.style.transform = `translate(${ev.clientX + 14}px,${ev.clientY - 10}px)`;
-                    this.tooltip.hidden = false;
-                } else {
+                // GPU mode: dispatch hit test for hover, result handled in pollGPUHitResult
+                if (this.sim.backend === 'gpu' && this.sim._gpuReady) {
+                    this.sim._gpuPhysics.hitTest(this.currentPos.x, this.currentPos.y);
+                    // Tooltip updated when poll returns result — hide stale tooltip
+                    this.hoveredParticle = null;
                     this.tooltip.hidden = true;
+                } else {
+                    const hit = this._cpuFindParticleAt(this.currentPos);
+                    this.hoveredParticle = hit;
+                    if (hit) {
+                        const speed = Math.sqrt(hit.vel.x * hit.vel.x + hit.vel.y * hit.vel.y);
+                        const spin = (hit.angVel * hit.radius).toFixed(3);
+                        this.tooltip.textContent = `m=${hit.mass.toFixed(2)}  q=${hit.charge.toFixed(2)}  s=${spin}c  v=${speed.toFixed(3)}c`;
+                        this.tooltip.style.transform = `translate(${ev.clientX + 14}px,${ev.clientY - 10}px)`;
+                        this.tooltip.hidden = false;
+                    } else {
+                        this.tooltip.hidden = true;
+                    }
                 }
             });
         } else {
@@ -235,33 +256,43 @@ export default class InputHandler {
 
         const endPos = this._getPosNew(e.clientX, e.clientY);
 
-        // Short click on a particle: select same type, delete opposite type
-        // BH mode: left-click selects, right-click deletes (no antimatter)
+        // Short click: select, delete, or spawn
         if (this.dragStart.dist(endPos) < DRAG_THRESHOLD) {
-            const hit = this.findParticleAt(endPos);
+            if (this.sim.backend === 'gpu' && this.sim._gpuReady) {
+                // GPU mode: defer action until GPU hit test result arrives
+                this.sim._gpuPhysics.hitTest(endPos.x, endPos.y);
+                this._pendingClick = { pos: endPos, rightButton: this._rightButton };
+                return;
+            }
+            // CPU mode: immediate
+            const hit = this._cpuFindParticleAt(endPos);
             if (hit) {
-                const bhOn = this.sim.physics.blackHoleEnabled;
-                if (bhOn) {
-                    if (this._rightButton) this._deleteParticle(hit);
-                    else this.sim.selectedParticle = hit;
-                } else {
-                    if (hit.antimatter === this._rightButton) this.sim.selectedParticle = hit;
-                    else this._deleteParticle(hit);
-                }
+                this._resolveClickHit(hit, this._rightButton);
                 return;
             }
         }
 
-        // BH mode: never spawn antimatter
+        // Long drag or no hit: spawn
         this.spawnParticle(endPos, this._rightButton && !this.sim.physics.blackHoleEnabled);
     }
 
-    findParticleAt(worldPos) {
-        // GPU backend: dispatch GPU tree hit test (async — result next frame)
-        if (this.sim.backend === 'gpu' && this.sim._gpuReady) {
-            this.sim._gpuPhysics.hitTest(worldPos.x, worldPos.y);
+    /** Resolve a click that hit a particle (select or delete based on type). */
+    _resolveClickHit(p, rightButton) {
+        const bhOn = this.sim.physics.blackHoleEnabled;
+        if (bhOn) {
+            if (rightButton) this._deleteParticle(p);
+            else this.sim.selectedParticle = p;
+        } else {
+            if (p.antimatter === rightButton) this.sim.selectedParticle = p;
+            else this._deleteParticle(p);
         }
-        // Scan CPU particle array (synced from GPU every 8 frames)
+        this.sim._dirty = true;
+    }
+
+    // ─── Hit testing ───
+
+    /** CPU-mode O(N) particle scan. */
+    _cpuFindParticleAt(worldPos) {
         let best = null;
         let bestDist = Infinity;
         for (const p of this.sim.particles) {
@@ -276,17 +307,43 @@ export default class InputHandler {
 
     /**
      * Poll for GPU hit test result. Call once per frame in GPU mode.
-     * When a GPU hit result arrives, updates selectedParticle to the
-     * exact GPU-side match (corrects for sync lag in CPU positions).
+     * Completes deferred click actions and updates hover state.
      */
     pollGPUHitResult() {
         if (!this.sim._gpuReady || this.sim.backend !== 'gpu') return;
-        const gpuIdx = this.sim._gpuPhysics.readHitResult();
-        if (gpuIdx < 0) return;
-        const match = this.sim.particles.find(p => p._gpuIdx === gpuIdx);
-        if (match && this.sim.selectedParticle !== match) {
-            this.sim.selectedParticle = match;
-            this.sim._dirty = true;
+        const result = this.sim._gpuPhysics.readHitResult();
+        if (result === null) return; // not ready yet
+
+        const pending = this._pendingClick;
+        this._pendingClick = null;
+
+        if (result >= 0) {
+            // GPU found a particle at this index
+            const match = this.sim.particles.find(p => p._gpuIdx === result);
+            if (pending && match) {
+                // Complete deferred click
+                this._resolveClickHit(match, pending.rightButton);
+            } else if (pending && !match) {
+                // GPU found particle but no CPU counterpart — delete directly by GPU index
+                if (pending.rightButton) {
+                    this._deleteByGpuIdx(result);
+                } else {
+                    // Can't select without CPU particle — ignore
+                }
+            } else {
+                // No pending click — this was a hover hit test, update selection
+                const hovered = this.sim.particles.find(p => p._gpuIdx === result);
+                if (hovered) this.hoveredParticle = hovered;
+            }
+        } else {
+            // GPU returned -1: no particle at click position
+            if (pending) {
+                // Complete deferred click as spawn
+                this.spawnParticle(pending.pos, pending.rightButton && !this.sim.physics.blackHoleEnabled);
+            } else {
+                this.hoveredParticle = null;
+                this.tooltip.hidden = true;
+            }
         }
     }
 
