@@ -23,7 +23,7 @@ struct AllForces_FG {
     bFields: vec4<f32>,
     bFieldGrads: vec4<f32>,
     totalForce: vec2<f32>,
-    _pad: vec2<f32>,
+    jerk: vec2<f32>,
 };
 
 struct FGUniforms {

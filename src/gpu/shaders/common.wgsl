@@ -63,7 +63,7 @@ struct AllForces {
     bFields: vec4<f32>,     // Bz, Bgz, extBz, pad
     bFieldGrads: vec4<f32>, // dBzdx, dBzdy, dBgzdx, dBgzdy
     totalForce: vec2<f32>,
-    _pad: vec2<f32>,
+    jerk: vec2<f32>,  // analytical jerk for Larmor radiation (was _pad)
 };
 
 // Derived per-particle state computed by cache-derived (32 bytes per particle).

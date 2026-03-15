@@ -312,54 +312,31 @@ export function createParticleBuffers(device, maxParticles) {
 
         // Signal delay history (lazy-allocated)
         historyAllocated: false,
-        histPosX: null,
-        histPosY: null,
-        histVelWX: null,
-        histVelWY: null,
-        histAngW: null,
-        histTime: null,
-        histMeta: null,
+        histData: null,    // interleaved [posX, posY, velX, velY, angW, time] per sample (stride 6)
+        histMeta: null,    // [writeIdx, count, creationTimeBits, _pad] per particle (stride 4)
 
         /**
          * Lazily allocate signal delay history buffers.
          * Called when relativity is first enabled.
-         * Total: 6 f32 arrays × 256 × maxParticles × 4 bytes = ~24 MB at 4096 particles
+         * histData: interleaved f32, stride 6 per sample, HISTORY_LEN samples per particle
+         * histMeta: 4 u32 per particle (writeIdx, count, creationTimeBits, _pad)
          */
         allocateHistoryBuffers(dev) {
             if (this.historyAllocated) return;
-            const size = maxParticles * HISTORY_LEN * 4; // f32 bytes
-
-            this.histPosX = dev.createBuffer({
-                size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-                label: 'histPosX'
-            });
-            this.histPosY = dev.createBuffer({
-                size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-                label: 'histPosY'
-            });
-            this.histVelWX = dev.createBuffer({
-                size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-                label: 'histVelWX'
-            });
-            this.histVelWY = dev.createBuffer({
-                size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-                label: 'histVelWY'
-            });
-            this.histAngW = dev.createBuffer({
-                size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-                label: 'histAngW'
-            });
-            this.histTime = dev.createBuffer({
-                size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-                label: 'histTime'
-            });
-            // Per-particle: write index (u32) and count (u32), packed as u32[maxParticles * 2]
-            this.histMeta = dev.createBuffer({
-                size: maxParticles * 2 * 4,
+            const HIST_STRIDE = 6; // posX, posY, velX, velY, angW, time
+            const dataSize = maxParticles * HISTORY_LEN * HIST_STRIDE * 4; // f32 each
+            this.histData = dev.createBuffer({
+                label: 'histData',
+                size: dataSize,
                 usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-                label: 'histMeta'
             });
-
+            // histMeta: 4 u32 per particle (writeIdx, count, creationTimeBits, _pad)
+            const metaSize = maxParticles * 4 * 4; // 4 u32 per particle
+            this.histMeta = dev.createBuffer({
+                label: 'histMeta',
+                size: metaSize,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+            });
             this.historyAllocated = true;
         },
 
