@@ -15,75 +15,7 @@ fn pcgRand(seed: u32) -> f32 {
     return f32(pcgHash(seed)) / 4294967296.0;
 }
 
-// ── Packed struct definitions ──
-
-struct ParticleState {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-struct ParticleAux {
-    radius: f32,
-    particleId: u32,
-    deathTime: f32,
-    deathMass: f32,
-    deathAngVel: f32,
-};
-
-struct Photon {
-    posX: f32, posY: f32,
-    velX: f32, velY: f32,
-    energy: f32,
-    emitterId: u32, lifetime: f32, flags: u32,
-};
-
-struct Pion {
-    posX: f32, posY: f32,
-    wX: f32, wY: f32,
-    mass: f32, charge: i32, energy: f32,
-    emitterId: u32, age: u32, flags: u32,
-    _pad0: u32, _pad1: u32,
-};
-
-struct SimUniforms {
-    dt: f32,
-    simTime: f32,
-    domainW: f32,
-    domainH: f32,
-    speedScale: f32,
-    softening: f32,
-    softeningSq: f32,
-    toggles0: u32,
-    toggles1: u32,
-    yukawaCoupling: f32,
-    yukawaMu: f32,
-    higgsMass: f32,
-    axionMass: f32,
-    boundaryMode: u32,
-    topologyMode: u32,
-    collisionMode: u32,
-    maxParticles: u32,
-    aliveCount: u32,
-    extGravity: f32,
-    extGravityAngle: f32,
-    extElectric: f32,
-    extElectricAngle: f32,
-    extBz: f32,
-    bounceFriction: f32,
-    extGx: f32,
-    extGy: f32,
-    extEx: f32,
-    extEy: f32,
-    axionCoupling: f32,
-    higgsCoupling: f32,
-    particleCount: u32,
-    bhTheta: f32,
-    frameCount: u32,
-    _pad4: u32,
-};
+// Struct definitions (ParticleState, ParticleAux, Photon, Pion, SimUniforms) provided by shared-structs.wgsl.
 
 @group(0) @binding(0) var<uniform> u: SimUniforms;
 @group(0) @binding(1) var<storage, read_write> aliveCountAtomic: atomic<u32>;

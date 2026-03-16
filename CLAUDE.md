@@ -62,18 +62,19 @@ src/
   relativity.js            25 lines  angwToAngVel(), setVelocity()
   canvas-renderer.js       20 lines  CanvasRenderer: thin adapter wrapping Renderer to RenderBackend
   gpu/
-    gpu-physics.js       3790 lines  GPUPhysics: WebGPU compute pipeline orchestrator, addParticle/serialize,
+    gpu-physics.js       3791 lines  GPUPhysics: WebGPU compute pipeline orchestrator, addParticle/serialize,
                                       all dispatch methods, bind group creation, adaptive substepping, readback,
                                       per-field uniform buffers (Higgs/Axion), pre-allocated write buffers
-    gpu-pipelines.js     1834 lines  Pipeline + bind group layout creation for all compute/render shaders
-    gpu-renderer.js      1214 lines  WebGPU instanced rendering: particles, bosons, field overlays, heatmap,
+    gpu-pipelines.js     1883 lines  Pipeline + bind group layout creation for all compute/render shaders,
+                                      fetchShader() (single source of truth), getSharedPrefix() caching
+    gpu-renderer.js      1215 lines  WebGPU instanced rendering: particles, bosons, field overlays, heatmap,
                                       trails, force arrows, spin rings, torque arcs, dashed rings
                                       (dual light/dark pipeline variants)
     gpu-buffers.js        564 lines  Buffer allocation: packed structs, quadtree, collision, field, history,
                                       trail buffers, staging
     gpu-constants.js      291 lines  buildWGSLConstants(): generates WGSL const block from config.js +
                                       _PALETTE colors, single source of truth for JS/WGSL constants
-    shaders/               47 files  WGSL compute + render shaders (10555 lines total)
+    shaders/               49 files  WGSL compute + render shaders (9214 lines total)
 ```
 
 ## Key Imports
@@ -100,9 +101,9 @@ massless-boson.js <- Vec2, config, boson-utils
 pion.js         <- Vec2, config, boson-utils
 save-load.js    <- BACKEND_GPU (backend-interface)
 
-gpu-physics.js   <- gpu-buffers, gpu-pipelines, gpu-constants (buildWGSLConstants)
-gpu-pipelines.js <- gpu-constants (buildWGSLConstants), fetchShader (loads .wgsl files)
-gpu-renderer.js  <- gpu-pipelines (render pipeline creators)
+gpu-physics.js   <- gpu-buffers, gpu-pipelines (fetchShader + pipeline creators), gpu-constants
+gpu-pipelines.js <- gpu-constants (buildWGSLConstants), exports fetchShader + getSharedPrefix
+gpu-renderer.js  <- gpu-pipelines (fetchShader + render pipeline creators)
 gpu-constants.js <- config, _PALETTE (generates WGSL const block from JS constants + palette)
 ```
 
@@ -365,10 +366,16 @@ Falls back to CPU on WebGPU unavailability or device loss. Force CPU via `?cpu=1
 
 ### Shader Organization
 
-**Prepended**: Phase 2 shaders + `boundary.wgsl` get `common.wgsl`. Force shaders also get `signal-delay-common.wgsl`.
-**Field shaders**: Get `field-common.wgsl`.
-**Standalone**: Phase 3, Phase 4, render shaders define own structs -- keep in sync with `common.wgsl`.
-**All shaders**: Receive `buildWGSLConstants()` block at compile time.
+**Shared includes** (prepended to ALL shaders via `getSharedPrefix()`):
+- `shared-structs.wgsl`: All packed struct definitions (ParticleState, ParticleAux, ParticleDerived, AllForces, SimUniforms, RadiationState, Photon, Pion). Single source of truth — never redefine these in individual shaders.
+- `shared-topology.wgsl`: `fullMinImageP(ox, oy, sx, sy, domW, domH, topo)` parameterized topology-aware minimum image function.
+
+**Prepend chains** (all start with `wgslConstants + shared-structs + shared-topology`):
+- Phase 2 shaders + `boundary.wgsl`: + `common.wgsl` (toggle helpers, `fullMinImage` wrapper). Force shaders also get `signal-delay-common.wgsl`.
+- Field shaders: + `field-common.wgsl` (FieldUniforms, PQS helpers).
+- Signal delay shaders (forces-tree, onePN, heatmap): + `signal-delay-common.wgsl` (getDelayedStateGPU).
+- All other standalone shaders: shared prefix only.
+- `fetchShader()` exported from `gpu-pipelines.js` (single source of truth, imported by gpu-physics.js and gpu-renderer.js).
 
 ### GPU ↔ CPU Sync
 

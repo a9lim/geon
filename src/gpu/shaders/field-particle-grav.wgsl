@@ -3,27 +3,7 @@
 // PQS interpolation of pre-computed grid gradients: O(N × 16).
 // Dispatched once per active field (Higgs, Axion) when fieldGravEnabled.
 
-struct ParticleState_FG {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-struct AllForces_FG {
-    f0: vec4<f32>,
-    f1: vec4<f32>,
-    f2: vec4<f32>,
-    f3: vec4<f32>,
-    f4: vec4<f32>,
-    f5: vec4<f32>,
-    torques: vec4<f32>,
-    bFields: vec4<f32>,
-    bFieldGrads: vec4<f32>,
-    totalForce: vec2<f32>,
-    jerk: vec2<f32>,
-};
+// Struct definitions (ParticleState, AllForces) provided by shared-structs.wgsl.
 
 struct FGUniforms {
     domainW: f32,
@@ -33,8 +13,8 @@ struct FGUniforms {
 };
 
 @group(0) @binding(0) var<uniform> u: FGUniforms;
-@group(0) @binding(1) var<storage, read_write> particles: array<ParticleState_FG>;
-@group(0) @binding(2) var<storage, read_write> allForces: array<AllForces_FG>;
+@group(0) @binding(1) var<storage, read_write> particles: array<ParticleState>;
+@group(0) @binding(2) var<storage, read_write> allForces: array<AllForces>;
 
 @group(1) @binding(0) var<storage, read> sgGradX: array<f32>;
 @group(1) @binding(1) var<storage, read> sgGradY: array<f32>;

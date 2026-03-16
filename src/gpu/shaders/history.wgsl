@@ -7,36 +7,9 @@
 
 // Constants provided by generated wgslConstants block.
 
-// ── Packed struct definitions ──
+// Struct definitions (ParticleState, SimUniforms) provided by shared-structs.wgsl.
 
-struct ParticleState {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-// Must match SimUniforms byte layout in common.wgsl / writeUniforms() exactly.
-// Only a few fields used; preceding fields kept as padding for alignment.
-struct SimUniforms {
-    _dt: f32,               // [0] dt
-    simTime: f32,           // [1] simTime
-    domainW: f32,           // [2] domainW
-    domainH: f32,           // [3] domainH
-    _pad0: f32,             // [4] speedScale
-    _pad1: f32,             // [5] softening
-    _pad2: f32,             // [6] softeningSq
-    _pad3: u32,             // [7] toggles0
-    _pad4: u32,             // [8] toggles1
-    _pad5: f32,             // [9] yukawaCoupling
-    _pad6: f32,             // [10] yukawaMu
-    _pad7: f32,             // [11] higgsMass
-    _pad8: f32,             // [12] axionMass
-    boundaryMode: u32,      // [13] boundaryMode
-    topologyMode: u32,      // [14] topologyMode
-};
-
+// History uses SimUniforms but only reads a few fields. Binding aliases the full struct.
 @group(0) @binding(0) var<uniform> u: SimUniforms;
 @group(0) @binding(1) var<storage, read_write> particles: array<ParticleState>;
 // Note: particles bound as read_write so we can clear FLAG_REBORN

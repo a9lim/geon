@@ -5,71 +5,7 @@
 
 // Constants provided by generated wgslConstants block.
 
-// ── Packed buffer structs (standalone — common.wgsl not prepended) ──
-
-struct ParticleState {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-struct ParticleAux {
-    radius: f32,
-    particleId: u32,
-    deathTime: f32,
-    deathMass: f32,
-    deathAngVel: f32,
-};
-
-struct ParticleDerived {
-    magMoment: f32,
-    angMomentum: f32,
-    invMass: f32,
-    radiusSq: f32,
-    velX: f32,
-    velY: f32,
-    angVel: f32,
-    _pad: f32,
-};
-
-struct SimUniforms {
-    dt: f32,
-    simTime: f32,
-    domainW: f32,
-    domainH: f32,
-    speedScale: f32,
-    softening: f32,
-    softeningSq: f32,
-    toggles0: u32,
-    toggles1: u32,
-    yukawaCoupling: f32,
-    yukawaMu: f32,
-    higgsMass: f32,
-    axionMass: f32,
-    boundaryMode: u32,
-    topologyMode: u32,
-    collisionMode: u32,
-    maxParticles: u32,
-    aliveCount: u32,
-    extGravity: f32,
-    extGravityAngle: f32,
-    extElectric: f32,
-    extElectricAngle: f32,
-    extBz: f32,
-    bounceFriction: f32,
-    extGx: f32,
-    extGy: f32,
-    extEx: f32,
-    extEy: f32,
-    axionCoupling: f32,
-    higgsCoupling: f32,
-    particleCount: u32,
-    bhTheta: f32,
-    frameCount: u32,
-    _pad4: u32,
-};
+// Struct definitions (ParticleState, ParticleAux, ParticleDerived, SimUniforms) provided by shared-structs.wgsl.
 
 // Group 0: packed particle state (read_write for encoder compat)
 @group(0) @binding(0) var<storage, read_write> particleState: array<ParticleState>;

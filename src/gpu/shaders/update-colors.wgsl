@@ -7,14 +7,7 @@
 //   BH mode → use theme text color as base (light: #1A1612, dark: #E8DED4)
 //   antimatter → visual distinction via dashed ring overlay (rendered separately)
 
-// Packed particle state struct (matches common.wgsl ParticleState)
-struct ParticleState {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
+// Struct definition (ParticleState) provided by shared-structs.wgsl.
 
 struct ColorUniforms {
     blackHoleEnabled: u32,

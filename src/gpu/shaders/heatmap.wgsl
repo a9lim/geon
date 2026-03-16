@@ -5,23 +5,6 @@
 // Dead/retired particles contribute via signal delay history (deathMass for gravity/Yukawa).
 // Direct O(N*GRID^2) pairwise — tree acceleration deferred to future optimization.
 
-// Packed particle state struct (matches common.wgsl ParticleState)
-struct ParticleState_HM {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-struct ParticleAux_HM {
-    radius: f32,
-    particleId: u32,
-    deathTime: f32,
-    deathMass: f32,
-    deathAngVel: f32,
-};
-
 struct HeatmapUniforms {
     // Camera/viewport for world-space grid
     viewLeft: f32,
@@ -52,8 +35,8 @@ struct HeatmapUniforms {
 };
 
 // Group 0: particleState + particleAux (read_write for encoder compat)
-@group(0) @binding(0) var<storage, read_write> particles: array<ParticleState_HM>;
-@group(0) @binding(1) var<storage, read_write> particleAux: array<ParticleAux_HM>;
+@group(0) @binding(0) var<storage, read_write> particles: array<ParticleState>;
+@group(0) @binding(1) var<storage, read_write> particleAux: array<ParticleAux>;
 
 @group(1) @binding(0) var<storage, read_write> gravPotential: array<f32>;
 @group(1) @binding(1) var<storage, read_write> elecPotential: array<f32>;
@@ -65,78 +48,6 @@ struct HeatmapUniforms {
 @group(2) @binding(1) var<storage, read_write> histMeta: array<u32>;
 
 // Constants provided by generated wgslConstants block.
-
-// ─── Topology-aware minimum image displacement ───
-fn hmMinImage(ox: f32, oy: f32, sx: f32, sy: f32) -> vec2<f32> {
-    let w = hu.domainW;
-    let h = hu.domainH;
-    let halfW = w * 0.5;
-    let halfH = h * 0.5;
-    let topo = hu.topologyMode;
-
-    // Torus early return
-    if (topo == TOPO_TORUS) {
-        var dx = sx - ox;
-        if (dx > halfW) { dx -= w; } else if (dx < -halfW) { dx += w; }
-        var dy = sy - oy;
-        if (dy > halfH) { dy -= h; } else if (dy < -halfH) { dy += h; }
-        return vec2(dx, dy);
-    }
-
-    // Candidate 0: only torus-wrap axes with translational (not glide) periodicity.
-    // Klein: x periodic (period W), y glide (period 2H) — only wrap x.
-    // RP²: both glide — no wrapping.
-    var dx0 = sx - ox;
-    var dy0 = sy - oy;
-    if (topo == TOPO_KLEIN) {
-        if (dx0 > halfW) { dx0 -= w; } else if (dx0 < -halfW) { dx0 += w; }
-    }
-    var bestSq = dx0 * dx0 + dy0 * dy0;
-    var bestDx = dx0;
-    var bestDy = dy0;
-
-    if (topo == TOPO_KLEIN) {
-        let gx = w - sx;
-        var dx1 = gx - ox;
-        if (dx1 > halfW) { dx1 -= w; } else if (dx1 < -halfW) { dx1 += w; }
-        var dy1 = (sy + h) - oy;
-        if (dy1 > h) { dy1 -= 2.0 * h; } else if (dy1 < -h) { dy1 += 2.0 * h; }
-        let dSq1 = dx1 * dx1 + dy1 * dy1;
-        if (dSq1 < bestSq) { bestDx = dx1; bestDy = dy1; bestSq = dSq1; }
-        var dy1b = (sy - h) - oy;
-        if (dy1b > h) { dy1b -= 2.0 * h; } else if (dy1b < -h) { dy1b += 2.0 * h; }
-        let dSq1b = dx1 * dx1 + dy1b * dy1b;
-        if (dSq1b < bestSq) { bestDx = dx1; bestDy = dy1b; }
-    } else {
-        // RP²: both axes glide reflections (translational periods 2W, 2H)
-
-        // Candidate 1: y-glide  (x,y) ~ (W-x, y+H) — x not wrapped
-        let gx = w - sx;
-        let dxG = gx - ox;
-        var dyG = (sy + h) - oy;
-        if (dyG > h) { dyG -= 2.0 * h; } else if (dyG < -h) { dyG += 2.0 * h; }
-        let dSqG = dxG * dxG + dyG * dyG;
-        if (dSqG < bestSq) { bestDx = dxG; bestDy = dyG; bestSq = dSqG; }
-
-        // Candidate 2: x-glide  (x,y) ~ (x+W, H-y) — y not wrapped
-        let gy = h - sy;
-        var dxH = (sx + w) - ox;
-        if (dxH > w) { dxH -= 2.0 * w; } else if (dxH < -w) { dxH += 2.0 * w; }
-        let dyH = gy - oy;
-        let dSqH = dxH * dxH + dyH * dyH;
-        if (dSqH < bestSq) { bestDx = dxH; bestDy = dyH; bestSq = dSqH; }
-
-        // Candidate 3: both glides  (x,y) ~ (2W-x, 2H-y)
-        var dxC = (2.0 * w - sx) - ox;
-        if (dxC > w) { dxC -= 2.0 * w; } else if (dxC < -w) { dxC += 2.0 * w; }
-        var dyC = (2.0 * h - sy) - oy;
-        if (dyC > h) { dyC -= 2.0 * h; } else if (dyC < -h) { dyC += 2.0 * h; }
-        let dSqC = dxC * dxC + dyC * dyC;
-        if (dSqC < bestSq) { bestDx = dxC; bestDy = dyC; }
-    }
-
-    return vec2(bestDx, bestDy);
-}
 
 // Yukawa cutoff: exp(-mu*r) < 0.002 when mu*r > 6
 fn yukawaCutoffSq(mu: f32) -> f32 {
@@ -184,7 +95,7 @@ fn computeHeatmap(@builtin(global_invocation_id) gid: vec3<u32>) {
 
         var dx: f32; var dy: f32;
         if (hu.periodic != 0u) {
-            let d = hmMinImage(wx, wy, srcX, srcY);
+            let d = fullMinImageP(wx, wy, srcX, srcY, hu.domainW, hu.domainH, hu.topologyMode);
             dx = d.x; dy = d.y;
         } else {
             dx = srcX - wx; dy = srcY - wy;
@@ -216,7 +127,7 @@ fn computeHeatmap(@builtin(global_invocation_id) gid: vec3<u32>) {
             let dAux = particleAux[di];
             var dx: f32; var dy: f32;
             if (hu.periodic != 0u) {
-                let d = hmMinImage(wx, wy, ret.x, ret.y);
+                let d = fullMinImageP(wx, wy, ret.x, ret.y, hu.domainW, hu.domainH, hu.topologyMode);
                 dx = d.x; dy = d.y;
             } else {
                 dx = ret.x - wx; dy = ret.y - wy;

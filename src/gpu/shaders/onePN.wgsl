@@ -9,47 +9,12 @@
 //   compute1PN — recomputes 1PN forces at post-drift positions (pairwise)
 //   vvKick1PN — applies VV correction kick: w += (f1pn_new - f1pn_old) * dt/(2m)
 //
-// Standalone shader — defines own structs (NOT prepended with common.wgsl).
-// Requires signal-delay-common.wgsl prepended (provides getDelayedStateGPU, DelayedState).
+// Prepended with: wgslConstants + shared-structs.wgsl + shared-topology.wgsl + signal-delay-common.wgsl
+// Shared structs (ParticleState, ParticleDerived, AllForces, etc.) provided by shared-structs.wgsl.
+// Topology helpers (fullMinImageP) provided by shared-topology.wgsl.
+// Signal delay (getDelayedStateGPU, DelayedState) provided by signal-delay-common.wgsl.
 // Signal delay: when relativity is on, uses retarded positions/velocities for all 1PN terms.
 // No aberration — 1PN is already O(v²/c²). Dead particles excluded from 1PN.
-
-// Constants provided by generated wgslConstants block.
-
-// ── Packed struct definitions ──
-
-struct ParticleState {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-struct ParticleDerived {
-    magMoment: f32,
-    angMomentum: f32,
-    invMass: f32,
-    radiusSq: f32,
-    velX: f32,
-    velY: f32,
-    angVel: f32,
-    _pad: f32,
-};
-
-struct AllForces {
-    f0: vec4<f32>,
-    f1: vec4<f32>,
-    f2: vec4<f32>,
-    f3: vec4<f32>,
-    f4: vec4<f32>,
-    f5: vec4<f32>,
-    torques: vec4<f32>,
-    bFields: vec4<f32>,
-    bFieldGrads: vec4<f32>,
-    totalForce: vec2<f32>,
-    jerk: vec2<f32>,
-};
 
 // Must match SimUniforms byte layout in common.wgsl / writeUniforms() exactly.
 // Fields we don't use are kept as padding to preserve alignment.
@@ -101,55 +66,9 @@ fn accum1PN(
     var rx = sx - px;
     var ry = sy - py;
     if (periodic) {
-        let halfW = domW * 0.5;
-        let halfH = domH * 0.5;
-        if (topo == TOPO_TORUS) {
-            if (rx > halfW) { rx -= domW; } else if (rx < -halfW) { rx += domW; }
-            if (ry > halfH) { ry -= domH; } else if (ry < -halfH) { ry += domH; }
-        } else if (topo == TOPO_KLEIN) {
-            // Torus wrap for direct
-            var dx0 = rx;
-            if (dx0 > halfW) { dx0 -= domW; } else if (dx0 < -halfW) { dx0 += domW; }
-            var dy0 = ry;
-            if (dy0 > halfH) { dy0 -= domH; } else if (dy0 < -halfH) { dy0 += domH; }
-            var bestSq = dx0 * dx0 + dy0 * dy0;
-            rx = dx0; ry = dy0;
-            // Klein glide: (W-sx, sy+H) and (W-sx, sy-H)
-            let gx = domW - sx;
-            var dx1 = gx - px;
-            if (dx1 > halfW) { dx1 -= domW; } else if (dx1 < -halfW) { dx1 += domW; }
-            var dy1 = (sy + domH) - py;
-            if (dy1 > domH) { dy1 -= 2.0 * domH; } else if (dy1 < -domH) { dy1 += 2.0 * domH; }
-            if (dx1 * dx1 + dy1 * dy1 < bestSq) { rx = dx1; ry = dy1; bestSq = dx1 * dx1 + dy1 * dy1; }
-            var dy1b = (sy - domH) - py;
-            if (dy1b > domH) { dy1b -= 2.0 * domH; } else if (dy1b < -domH) { dy1b += 2.0 * domH; }
-            if (dx1 * dx1 + dy1b * dy1b < bestSq) { rx = dx1; ry = dy1b; }
-        } else {
-            // RP²: both axes glide reflections
-            var dx0 = rx;
-            if (dx0 > halfW) { dx0 -= domW; } else if (dx0 < -halfW) { dx0 += domW; }
-            var dy0 = ry;
-            if (dy0 > halfH) { dy0 -= domH; } else if (dy0 < -halfH) { dy0 += domH; }
-            var bestSq = dx0 * dx0 + dy0 * dy0;
-            rx = dx0; ry = dy0;
-            let gx = domW - sx;
-            var dxG = gx - px;
-            if (dxG > halfW) { dxG -= domW; } else if (dxG < -halfW) { dxG += domW; }
-            var dyG = (sy + domH) - py;
-            if (dyG > domH) { dyG -= 2.0 * domH; } else if (dyG < -domH) { dyG += 2.0 * domH; }
-            if (dxG * dxG + dyG * dyG < bestSq) { rx = dxG; ry = dyG; bestSq = dxG * dxG + dyG * dyG; }
-            let gy = domH - sy;
-            var dxH = (sx + domW) - px;
-            if (dxH > domW) { dxH -= 2.0 * domW; } else if (dxH < -domW) { dxH += 2.0 * domW; }
-            var dyH = gy - py;
-            if (dyH > halfH) { dyH -= domH; } else if (dyH < -halfH) { dyH += domH; }
-            if (dxH * dxH + dyH * dyH < bestSq) { rx = dxH; ry = dyH; bestSq = dxH * dxH + dyH * dyH; }
-            var dxC = (domW - sx + domW) - px;
-            if (dxC > domW) { dxC -= 2.0 * domW; } else if (dxC < -domW) { dxC += 2.0 * domW; }
-            var dyC = (domH - sy + domH) - py;
-            if (dyC > domH) { dyC -= 2.0 * domH; } else if (dyC < -domH) { dyC += 2.0 * domH; }
-            if (dxC * dxC + dyC * dyC < bestSq) { rx = dxC; ry = dyC; }
-        }
+        let d = fullMinImageP(px, py, sx, sy, domW, domH, topo);
+        rx = d.x;
+        ry = d.y;
     }
     let rSq = rx * rx + ry * ry + softeningSq;
     let invRSq = 1.0 / rSq;

@@ -15,31 +15,7 @@ struct CameraUniforms {
     isDarkMode: f32,
 };
 
-struct ParticleState {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-struct ParticleAux {
-    radius: f32,
-    particleId: u32,
-    deathTime: f32,
-    deathMass: f32,
-    deathAngVel: f32,
-};
-
-struct ParticleDerived {
-    magMoment: f32,
-    angMomentum: f32,
-    invMass: f32,
-    radiusSq: f32,
-    velX: f32, velY: f32,
-    angVel: f32,
-    _pad: f32,
-};
+// Struct definitions (ParticleState, ParticleAux, ParticleDerived) provided by shared-structs.wgsl.
 
 struct RingParams {
     color: vec4f,       // ring color (non-premultiplied — premultiply in fragment)

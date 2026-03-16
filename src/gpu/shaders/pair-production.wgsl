@@ -2,22 +2,7 @@
 // Photon → particle-antiparticle pair near massive bodies.
 // One thread per photon. Writes spawn events to append buffer.
 
-// Packed photon struct (matches common.wgsl Photon)
-struct Photon {
-    posX: f32, posY: f32,
-    velX: f32, velY: f32,
-    energy: f32,
-    emitterId: u32, lifetime: f32, flags: u32,
-};
-
-// Packed particle state struct (matches common.wgsl ParticleState)
-struct ParticleState_PP {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
+// Struct definitions (Photon, ParticleState) provided by shared-structs.wgsl.
 
 struct PairProdUniforms {
     minEnergy: f32,       // 0.5
@@ -50,7 +35,7 @@ struct PairEvent {
 @group(0) @binding(1) var<storage, read_write> phCount: array<u32>;
 
 // Group 1: particleState (read_write for encoder compat)
-@group(1) @binding(0) var<storage, read_write> particles: array<ParticleState_PP>;
+@group(1) @binding(0) var<storage, read_write> particles: array<ParticleState>;
 
 @group(2) @binding(0) var<storage, read_write> pairEvents: array<PairEvent>;
 @group(2) @binding(1) var<storage, read_write> pairCounter: atomic<u32>;

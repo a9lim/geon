@@ -29,57 +29,14 @@ struct ArrowUniforms {
     _pad1: f32,
 };
 
-// Packed particle state struct (matches common.wgsl ParticleState)
-struct ParticleState_AR {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-// Packed auxiliary struct (matches common.wgsl ParticleAux)
-struct ParticleAux_AR {
-    radius: f32,
-    particleId: u32,
-    deathTime: f32,
-    deathMass: f32,
-    deathAngVel: f32,
-};
-
-// Packed force struct (mirrors common.wgsl AllForces)
-struct AllForces_AR {
-    f0: vec4<f32>,
-    f1: vec4<f32>,
-    f2: vec4<f32>,
-    f3: vec4<f32>,
-    f4: vec4<f32>,
-    f5: vec4<f32>,
-    torques: vec4<f32>,
-    bFields: vec4<f32>,
-    bFieldGrads: vec4<f32>,
-    totalForce: vec2<f32>,
-    jerk: vec2<f32>,
-};
-
-// Packed derived struct (mirrors common.wgsl ParticleDerived)
-struct ParticleDerived_AR {
-    magMoment: f32,
-    angMomentum: f32,
-    invMass: f32,
-    radiusSq: f32,
-    velX: f32,
-    velY: f32,
-    angVel: f32,
-    _pad: f32,
-};
+// Struct definitions (ParticleState, ParticleAux, AllForces, ParticleDerived) provided by shared-structs.wgsl.
 
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
 @group(0) @binding(1) var<uniform> arrowParams: ArrowUniforms;
-@group(0) @binding(2) var<storage, read> particles: array<ParticleState_AR>;
-@group(0) @binding(3) var<storage, read> particleAux: array<ParticleAux_AR>;
-@group(0) @binding(4) var<storage, read> allForces: array<AllForces_AR>;
-@group(0) @binding(5) var<storage, read> derived: array<ParticleDerived_AR>;
+@group(0) @binding(2) var<storage, read> particles: array<ParticleState>;
+@group(0) @binding(3) var<storage, read> particleAux: array<ParticleAux>;
+@group(0) @binding(4) var<storage, read> allForces: array<AllForces>;
+@group(0) @binding(5) var<storage, read> derived: array<ParticleDerived>;
 
 // Constants (FLAG_ALIVE, VELOCITY_VECTOR_SCALE) provided by generated wgslConstants block.
 // Shaft/head sizes in world units — scale naturally with camera zoom.

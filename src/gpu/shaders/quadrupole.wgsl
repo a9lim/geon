@@ -4,8 +4,9 @@
 //   quadrupoleContrib — compute per-particle d³I/d³Q + update residual force history, workgroup-reduce global sums
 //   quadrupoleApply  — finalize power, apply drag, accumulate energy, emit photons/gravitons
 //
-// Standalone shader — defines own structs (NOT prepended with common.wgsl).
-// Constants provided by generated wgslConstants block.
+// Prepended with: wgslConstants + shared-structs.wgsl
+// Shared structs (ParticleState, ParticleAux, ParticleDerived, AllForces,
+// RadiationState, Photon) provided by shared-structs.wgsl.
 
 // ── RNG ──
 fn pcgHash(seed: u32) -> u32 {
@@ -16,64 +17,6 @@ fn pcgHash(seed: u32) -> u32 {
 fn pcgRand(seed: u32) -> f32 {
     return f32(pcgHash(seed)) / 4294967296.0;
 }
-
-// ── Packed struct definitions (must match common.wgsl / writeUniforms() byte layout) ──
-
-struct ParticleState {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-struct ParticleAux {
-    radius: f32,
-    particleId: u32,
-    deathTime: f32,
-    deathMass: f32,
-    deathAngVel: f32,
-};
-
-struct ParticleDerived {
-    magMoment: f32,
-    angMomentum: f32,
-    invMass: f32,
-    radiusSq: f32,
-    velX: f32,
-    velY: f32,
-    angVel: f32,
-    _pad: f32,
-};
-
-struct AllForces {
-    f0: vec4<f32>,          // gravity.xy, coulomb.xy
-    f1: vec4<f32>,          // magnetic.xy, gravitomag.xy
-    f2: vec4<f32>,          // f1pn.xy, spinCurv.xy
-    f3: vec4<f32>,          // radiation.xy, yukawa.xy
-    f4: vec4<f32>,          // external.xy, higgs.xy
-    f5: vec4<f32>,          // axion.xy, pad, pad
-    torques: vec4<f32>,
-    bFields: vec4<f32>,
-    bFieldGrads: vec4<f32>,
-    totalForce: vec2<f32>,
-    jerk: vec2<f32>,
-};
-
-struct RadiationState {
-    radAccum: f32, hawkAccum: f32, yukawaRadAccum: f32,
-    radDisplayX: f32, radDisplayY: f32,
-    quadAccum: f32, emQuadAccum: f32,
-    d3IContrib: f32, d3QContrib: f32,
-    _pad0: f32, _pad1: f32, _pad2: f32,
-};
-
-struct Photon {
-    posX: f32, posY: f32,
-    velX: f32, velY: f32,
-    energy: f32,
-    emitterId: u32, lifetime: f32, flags: u32,
-};
 
 struct Uniforms {
     dt: f32,
