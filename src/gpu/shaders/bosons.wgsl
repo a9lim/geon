@@ -6,14 +6,7 @@
 // Constants provided by generated wgslConstants block.
 
 // PCG hash RNG (high quality, replaces sin-based LCG)
-fn pcgHash(seed: u32) -> u32 {
-    var state = seed * 747796405u + 2891336453u;
-    let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-    return (word >> 22u) ^ word;
-}
-fn pcgRand(seed: u32) -> f32 {
-    return f32(pcgHash(seed)) / 4294967296.0;
-}
+// pcgHash/pcgRand from shared-rng.wgsl (prepended)
 
 // Struct definitions (ParticleState, ParticleAux, Photon, Pion, SimUniforms) provided by shared-structs.wgsl.
 

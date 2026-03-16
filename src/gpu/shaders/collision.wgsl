@@ -16,18 +16,7 @@ const MERGE_INELASTIC: u32 = 1u;
 // Struct definitions (ParticleState, ParticleAux, AllForces, SimUniforms) and
 // fullMinImageP() provided by prepended shared includes.
 
-const NODE_STRIDE: u32 = 20u;
-fn nodeOffset(idx: u32) -> u32 { return idx * NODE_STRIDE; }
-
-fn getMinX(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx)]); }
-fn getMinY(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx) + 1u]); }
-fn getMaxX(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx) + 2u]); }
-fn getMaxY(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx) + 3u]); }
-fn getNW(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 12u]); }
-fn getNE(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 13u]); }
-fn getSW(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 14u]); }
-fn getSE(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 15u]); }
-fn getParticleIndex(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 16u]); }
+// Node layout accessors from shared-tree-nodes.wgsl (prepended)
 
 @group(0) @binding(0) var<storage, read_write> nodes: array<u32>;
 @group(0) @binding(1) var<uniform> uniforms: SimUniforms;

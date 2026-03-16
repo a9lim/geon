@@ -328,14 +328,15 @@ export default class GPUPhysics {
     /** Load WGSL shaders and create compute pipelines. Must be called before update(). */
     async init() {
         const wgslConstants = buildWGSLConstants();
-        // Fetch shared struct/topology includes + common.wgsl
-        const [sharedStructs, sharedTopo, commonSrc, boundaryWGSL] = await Promise.all([
+        // Fetch shared includes + common.wgsl
+        const [sharedStructs, sharedTopo, sharedRng, commonSrc, boundaryWGSL] = await Promise.all([
             fetchShader('shared-structs.wgsl'),
             fetchShader('shared-topology.wgsl'),
+            fetchShader('shared-rng.wgsl'),
             fetchShader('common.wgsl'),
             fetchShader('boundary.wgsl'),
         ]);
-        const commonWGSL = wgslConstants + '\n' + sharedStructs + '\n' + sharedTopo + '\n' + commonSrc;
+        const commonWGSL = wgslConstants + '\n' + sharedStructs + '\n' + sharedTopo + '\n' + sharedRng + '\n' + commonSrc;
 
         // --- Boundary pipeline ---
         const boundaryModule = this.device.createShaderModule({

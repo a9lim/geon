@@ -8,28 +8,7 @@
 const NONE: i32 = -1;
 const MAX_STACK: u32 = 48u;
 
-// Node layout accessors (same as tree-build.wgsl)
-const NODE_STRIDE: u32 = 20u;
-fn nodeOffset(idx: u32) -> u32 { return idx * NODE_STRIDE; }
-
-fn getMinX(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx)]); }
-fn getMinY(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx) + 1u]); }
-fn getMaxX(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx) + 2u]); }
-fn getMaxY(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx) + 3u]); }
-fn getComX(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx) + 4u]); }
-fn getComY(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx) + 5u]); }
-fn getTotalMass(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx) + 6u]); }
-fn getTotalCharge(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx) + 7u]); }
-fn getTotalMagMoment(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx) + 8u]); }
-fn getTotalAngMomentum(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx) + 9u]); }
-fn getTotalMomX(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx) + 10u]); }
-fn getTotalMomY(idx: u32) -> f32 { return bitcast<f32>(nodes[nodeOffset(idx) + 11u]); }
-fn getNW(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 12u]); }
-fn getNE(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 13u]); }
-fn getSW(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 14u]); }
-fn getSE(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 15u]); }
-fn getParticleIndex(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 16u]); }
-fn getParticleCount(idx: u32) -> u32 { return nodes[nodeOffset(idx) + 17u]; }
+// Node layout accessors from shared-tree-nodes.wgsl (prepended)
 
 @group(0) @binding(0) var<storage, read_write> nodes: array<u32>;
 @group(0) @binding(1) var<uniform> uniforms: SimUniforms;
@@ -74,7 +53,7 @@ fn accumulateForce(
     sMass: f32, sCharge: f32,
     sAngVel: f32, sMagMoment: f32, sAngMomentum: f32,
     sAxMod: f32, sYukMod: f32,
-    pBodyRadiusSq: f32,
+    pRi5: f32,
     jerkOut: ptr<function, vec2<f32>>,
     useAberration: bool,
 ) {
@@ -144,9 +123,8 @@ fn accumulateForce(
         if ((toggles & COULOMB_BIT) != 0u && pMass > EPSILON) {
             coupling += pCharge * sCharge / pMass;
         }
-        let ri5 = pBodyRadiusSq * pBodyRadiusSq * pow(pMass, 1.0/3.0);
         let invR6 = invRSq * invRSq * invRSq;
-        (*af).torques.z += -TIDAL_STRENGTH * coupling * coupling * ri5 * invR6 * dw;
+        (*af).torques.z += -TIDAL_STRENGTH * coupling * coupling * pRi5 * invR6 * dw;
     }
 
     // Coulomb: -q1*q2/r^2 (like repels)
@@ -376,6 +354,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let pAux = particleAux[pIdx];
     let pRadius = pAux.radius;
     let pBodyRadiusSq = pRadius * pRadius; // Approximation; BH mode uses different formula
+    // Pre-hoist ri5 = mass^(5/3) for tidal locking (avoids pow() per pair in accumulateForce)
+    let pRi5 = pBodyRadiusSq * pBodyRadiusSq * pRadius;
     let pAngW = ps.angW;
     let pAxMod = axYukMod_in[pIdx].x;
     let pYukMod = axYukMod_in[pIdx].y;
@@ -478,7 +458,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     sPs.mass, sPs.charge,
                     sAngVelRet, sMagMomRet, sAngMomRet,
                     sAYM.x, sAYM.y,
-                    pBodyRadiusSq,
+                    pRi5,
                     &localJerk,
                     true, // useAberration
                 );
@@ -512,7 +492,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     sPs.mass, sPs.charge,
                     sAngVelRet, sMagMomRet, sAngMomRet,
                     sAYM.x, sAYM.y,
-                    pBodyRadiusSq,
+                    pRi5,
                     &localJerk,
                     true, // useAberration
                 );
@@ -529,7 +509,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     sDerived.angVel,
                     sDerived.magMoment, sDerived.angMomentum,
                     sAYM.x, sAYM.y,
-                    pBodyRadiusSq,
+                    pRi5,
                     &localJerk,
                     false, // no aberration
                 );
@@ -549,7 +529,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 0.0, // sAngVel = 0 for aggregate
                 getTotalMagMoment(nodeIdx), getTotalAngMomentum(nodeIdx),
                 1.0, 1.0, // axMod/yukMod = 1 for aggregate
-                pBodyRadiusSq,
+                pRi5,
                 &localJerk,
                 hasSignalDelay, // aberration on aggregates when signal delay active
             );
@@ -604,15 +584,17 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             sAngVelRet, sMagMomRet, sAngMomRet,
             select(deadAxYuk.x, 1.0, abs(deadAxYuk.x) < EPSILON),
             select(deadAxYuk.y, 1.0, abs(deadAxYuk.y) < EPSILON),
-            pBodyRadiusSq,
+            pRi5,
             &localJerk,
             true, // useAberration
         );
     }
 
     // NaN guard on total force — must happen BEFORE writing to global memory
-    if (localAF.totalForce.x != localAF.totalForce.x) { localAF.totalForce = vec2(0.0, localAF.totalForce.y); }
-    if (localAF.totalForce.y != localAF.totalForce.y) { localAF.totalForce = vec2(localAF.totalForce.x, 0.0); }
+    localAF.totalForce = vec2(
+        select(localAF.totalForce.x, 0.0, localAF.totalForce.x != localAF.totalForce.x),
+        select(localAF.totalForce.y, 0.0, localAF.totalForce.y != localAF.totalForce.y)
+    );
 
     // Write accumulated jerk to AllForces (NaN guard)
     localAF.jerk = vec2(

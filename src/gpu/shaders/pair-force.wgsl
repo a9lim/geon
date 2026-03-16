@@ -402,7 +402,7 @@ fn main(
     var pYukMod: f32 = 1.0;
     var pInvMass: f32 = 0.0;
     var pRadiusSq: f32 = 0.0;
-    var pBodyRadiusSq: f32 = 0.0;  // cbrt(mass)^2
+    // pRi5 = mass^(5/3) pre-hoisted for tidal locking
 
     // Pre-hoisted tidal locking constant: ri5 = mass^(5/3) = bodyRadiusSq^2 * bodyRadius
     var pRi5: f32 = 0.0;
@@ -424,12 +424,8 @@ fn main(
         let aym = axYukMod[idx];
         pAxMod = aym.x;
         pYukMod = aym.y;
-        // Body radius for tidal locking: cbrt(mass)
-        pBodyRadiusSq = pow(pMass, 2.0 / 3.0);
-        // Hoist ri5 out of inner loop: ri5 = bodyRadiusSq^2 * bodyRadius = mass^(5/3)
-        // Uses sqrt(bodyRadiusSq) = mass^(1/3) to avoid a second pow() transcendental
-        let pBodyRadius = sqrt(pBodyRadiusSq);
-        pRi5 = pBodyRadiusSq * pBodyRadiusSq * pBodyRadius;
+        // Hoist ri5 = mass^(5/3) out of inner loop (avoids pow per pair)
+        pRi5 = pow(pMass, 5.0 / 3.0);
     }
 
     // Read toggle bits
@@ -585,8 +581,8 @@ fn main(
 
             let src = makeDelayedSource(
                 delayed, deadMass, deadCharge,
-                select(deadAxYuk.x, 1.0, deadAxYuk.x == 0.0),
-                select(deadAxYuk.y, 1.0, deadAxYuk.y == 0.0),
+                select(deadAxYuk.x, 1.0, abs(deadAxYuk.x) < EPSILON),
+                select(deadAxYuk.y, 1.0, abs(deadAxYuk.y) < EPSILON),
                 bodyRadSq
             );
 

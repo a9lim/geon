@@ -11,15 +11,7 @@
 // Shared structs (ParticleState, ParticleAux, ParticleDerived, AllForces,
 // RadiationState, Photon, Pion) provided by shared-structs.wgsl.
 
-// PCG hash RNG (high quality, replaces sin-based LCG)
-fn pcgHash(seed: u32) -> u32 {
-    var state = seed * 747796405u + 2891336453u;
-    let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-    return (word >> 22u) ^ word;
-}
-fn pcgRand(seed: u32) -> f32 {
-    return f32(pcgHash(seed)) / 4294967296.0;
-}
+// pcgHash/pcgRand from shared-rng.wgsl (prepended)
 
 // Must match SimUniforms byte layout in common.wgsl / writeUniforms() exactly.
 // Fields we don't use are kept as padding to preserve alignment.

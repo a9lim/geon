@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 29;
+const SHADER_VERSION = 30;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -19,22 +19,36 @@ export async function fetchShader(filename, prepend = '') {
     return prepend ? prepend + '\n' + source : source;
 }
 
-/** Module-level cache for shared WGSL includes (structs + topology) */
-let _sharedStructsWGSL = null;
-let _sharedTopoWGSL = null;
+/** Module-level cache for shared WGSL includes */
+let _sharedCache = null;
+
+async function _ensureSharedCache() {
+    if (!_sharedCache) {
+        const [structs, topo, treeNodes, rng] = await Promise.all([
+            fetchShader('shared-structs.wgsl'),
+            fetchShader('shared-topology.wgsl'),
+            fetchShader('shared-tree-nodes.wgsl'),
+            fetchShader('shared-rng.wgsl'),
+        ]);
+        _sharedCache = { structs, topo, treeNodes, rng };
+    }
+    return _sharedCache;
+}
 
 /**
- * Build the standard prefix for all shaders: wgslConstants + shared-structs + shared-topology.
+ * Build the standard prefix for all shaders: wgslConstants + shared-structs + shared-topology + shared-rng.
  * Shared files are fetched once and cached for the lifetime of the page.
  */
 async function getSharedPrefix(wgslConstants) {
-    if (!_sharedStructsWGSL) {
-        [_sharedStructsWGSL, _sharedTopoWGSL] = await Promise.all([
-            fetchShader('shared-structs.wgsl'),
-            fetchShader('shared-topology.wgsl'),
-        ]);
-    }
-    return wgslConstants + '\n' + _sharedStructsWGSL + '\n' + _sharedTopoWGSL;
+    const c = await _ensureSharedCache();
+    return wgslConstants + '\n' + c.structs + '\n' + c.topo + '\n' + c.rng;
+}
+
+/** Prefix for tree-walk shaders: standard prefix + read-only node accessors */
+async function getTreePrefix(wgslConstants) {
+    const c = await _ensureSharedCache();
+    const prefix = await getSharedPrefix(wgslConstants);
+    return prefix + '\n' + c.treeNodes;
 }
 
 /**
@@ -241,11 +255,11 @@ export async function createTreeBuildPipelines(device, wgslConstants = '') {
  *   Total: 10 storage buffers + 1 uniform
  */
 export async function createTreeForcePipeline(device, wgslConstants = '') {
-    const prefix = await getSharedPrefix(wgslConstants);
+    const treePrefix = await getTreePrefix(wgslConstants);
     const signalDelayWGSL = await fetchShader('signal-delay-common.wgsl');
     const treeForceWGSL = await fetchShader('forces-tree.wgsl');
-    // Prepend: prefix (structs+topology) → signal-delay-common → forces-tree
-    const code = prefix + '\n' + signalDelayWGSL + '\n' + treeForceWGSL;
+    // Prepend: treePrefix (structs+topology+nodeAccessors) → signal-delay-common → forces-tree
+    const code = treePrefix + '\n' + signalDelayWGSL + '\n' + treeForceWGSL;
     const module = device.createShaderModule({ label: 'treeForce', code });
 
     const group0Layout = device.createBindGroupLayout({
@@ -305,8 +319,8 @@ export async function createTreeForcePipeline(device, wgslConstants = '') {
  *   Total: 9 storage buffers per stage
  */
 export async function createCollisionPipelines(device, wgslConstants = '') {
-    const prefix = await getSharedPrefix(wgslConstants);
-    const code = await fetchShader('collision.wgsl', prefix);
+    const treePrefix = await getTreePrefix(wgslConstants);
+    const code = await fetchShader('collision.wgsl', treePrefix);
     const module = device.createShaderModule({ label: 'collision', code });
 
     const group0Layout = device.createBindGroupLayout({
