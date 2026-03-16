@@ -3,13 +3,7 @@
 // Momentum drag: w *= (1 - H*dt)
 // Standalone shader — NOT prepended with common.wgsl.
 
-struct ParticleState {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
+// Struct definition (ParticleState) provided by shared-structs.wgsl.
 
 struct ExpansionUniforms {
     hubbleParam: f32,

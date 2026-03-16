@@ -8,7 +8,7 @@
  * dark mode uses additive blending ('lighter' equivalent, matching CPU Canvas 2D).
  * On theme change setTheme() swaps _pipeline / _photonPipeline / _pionPipeline.
  */
-import { createBosonRenderPipelines, createFieldRenderPipeline, createHeatmapRenderPipeline, createArrowRenderPipeline, createSpinRenderPipeline, createTorqueRenderPipeline, createRingRenderPipeline, createTrailRenderPipeline } from './gpu-pipelines.js';
+import { fetchShader, createBosonRenderPipelines, createFieldRenderPipeline, createHeatmapRenderPipeline, createArrowRenderPipeline, createSpinRenderPipeline, createTorqueRenderPipeline, createRingRenderPipeline, createTrailRenderPipeline } from './gpu-pipelines.js';
 import { TRAIL_LEN } from './gpu-buffers.js';
 import { buildWGSLConstants, paletteRGB } from './gpu-constants.js';
 import { HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA, MAX_PHOTONS, MAX_PIONS } from '../config.js';
@@ -165,7 +165,13 @@ export default class GPURenderer {
     async init() {
         const wgslConstants = buildWGSLConstants();
         this._wgslConstants = wgslConstants; // cache for theme-change rebuilds
-        const shaderCode = await fetchShader('particle.wgsl', wgslConstants);
+        // Fetch shared includes + particle shader
+        const [sharedStructs, sharedTopo] = await Promise.all([
+            fetchShader('shared-structs.wgsl'),
+            fetchShader('shared-topology.wgsl'),
+        ]);
+        const prefix = wgslConstants + '\n' + sharedStructs + '\n' + sharedTopo;
+        const shaderCode = await fetchShader('particle.wgsl', prefix);
 
         const module = this.device.createShaderModule({
             label: 'particle render',
@@ -1206,9 +1212,4 @@ export default class GPURenderer {
     }
 }
 
-async function fetchShader(filename, prepend = '') {
-    const resp = await fetch(`src/gpu/shaders/${filename}?v=17`);
-    if (!resp.ok) throw new Error(`Failed to load shader: ${filename}`);
-    const source = await resp.text();
-    return prepend ? prepend + '\n' + source : source;
-}
+// fetchShader imported from gpu-pipelines.js (single source of truth)

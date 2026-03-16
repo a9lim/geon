@@ -15,63 +15,7 @@ const LOCK_BIT: i32 = -2147483648; // 0x80000000 (MSB)
 const FP_SCALE: f32 = 65536.0;
 const FP_INV_SCALE: f32 = 0.0000152587890625; // 1/65536
 
-// ── Packed buffer structs (standalone — common.wgsl not prepended) ──
-
-struct ParticleState {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-struct ParticleDerived {
-    magMoment: f32,
-    angMomentum: f32,
-    invMass: f32,
-    radiusSq: f32,
-    velX: f32,
-    velY: f32,
-    angVel: f32,
-    _pad: f32,
-};
-
-struct SimUniforms {
-    dt: f32,
-    simTime: f32,
-    domainW: f32,
-    domainH: f32,
-    speedScale: f32,
-    softening: f32,
-    softeningSq: f32,
-    toggles0: u32,
-    toggles1: u32,
-    yukawaCoupling: f32,
-    yukawaMu: f32,
-    higgsMass: f32,
-    axionMass: f32,
-    boundaryMode: u32,
-    topologyMode: u32,
-    collisionMode: u32,
-    maxParticles: u32,
-    aliveCount: u32,
-    extGravity: f32,
-    extGravityAngle: f32,
-    extElectric: f32,
-    extElectricAngle: f32,
-    extBz: f32,
-    bounceFriction: f32,
-    extGx: f32,
-    extGy: f32,
-    extEx: f32,
-    extEy: f32,
-    axionCoupling: f32,
-    higgsCoupling: f32,
-    particleCount: u32,  // totalCount = aliveCount + ghostCount (set by JS)
-    bhTheta: f32,
-    frameCount: u32,
-    _pad4: u32,
-};
+// Struct definitions (ParticleState, ParticleDerived, SimUniforms) provided by shared-structs.wgsl.
 
 // Node layout in flat buffer: 20 u32 words per node
 // [0..3]: minX, minY, maxX, maxY (as f32 reinterpreted)

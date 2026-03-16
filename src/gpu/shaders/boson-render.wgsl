@@ -13,22 +13,7 @@ struct CameraUniforms {
     isDarkMode: f32,
 };
 
-// Packed photon struct (matches common.wgsl Photon)
-struct Photon {
-    posX: f32, posY: f32,
-    velX: f32, velY: f32,
-    energy: f32,
-    emitterId: u32, lifetime: f32, flags: u32,
-};
-
-// Packed pion struct (matches common.wgsl Pion)
-struct Pion {
-    posX: f32, posY: f32,
-    wX: f32, wY: f32,
-    mass: f32, charge: i32, energy: f32,
-    emitterId: u32, age: u32, flags: u32,
-    _pad0: u32, _pad1: u32,
-};
+// Photon and Pion structs from shared-structs.wgsl (prepended)
 
 struct VertexOutput {
     @builtin(position) position: vec4f,

@@ -8,70 +8,6 @@
 const NONE: i32 = -1;
 const MAX_STACK: u32 = 48u;
 
-// Minimum-image displacement (inlined from common.wgsl since standalone shader)
-fn torusMinImage(ox: f32, oy: f32, sx: f32, sy: f32, w: f32, h: f32) -> vec2<f32> {
-    let halfW = w * 0.5;
-    let halfH = h * 0.5;
-    var rx = sx - ox;
-    if (rx > halfW) { rx -= w; } else if (rx < -halfW) { rx += w; }
-    var ry = sy - oy;
-    if (ry > halfH) { ry -= h; } else if (ry < -halfH) { ry += h; }
-    return vec2(rx, ry);
-}
-
-fn fullMinImage(ox: f32, oy: f32, sx: f32, sy: f32, w: f32, h: f32, topo: u32) -> vec2<f32> {
-    if (topo == TOPO_TORUS) {
-        return torusMinImage(ox, oy, sx, sy, w, h);
-    }
-    let halfW = w * 0.5;
-    let halfH = h * 0.5;
-    // Candidate 0: only torus-wrap axes with translational (not glide) periodicity.
-    var dx0 = sx - ox;
-    var dy0 = sy - oy;
-    if (topo == TOPO_KLEIN) {
-        if (dx0 > halfW) { dx0 -= w; } else if (dx0 < -halfW) { dx0 += w; }
-    }
-    var bestSq = dx0 * dx0 + dy0 * dy0;
-    var bestDx = dx0;
-    var bestDy = dy0;
-    if (topo == TOPO_KLEIN) {
-        let gx = w - sx;
-        var dx1 = gx - ox;
-        if (dx1 > halfW) { dx1 -= w; } else if (dx1 < -halfW) { dx1 += w; }
-        var dy1 = (sy + h) - oy;
-        if (dy1 > h) { dy1 -= 2.0 * h; } else if (dy1 < -h) { dy1 += 2.0 * h; }
-        let dSq1 = dx1 * dx1 + dy1 * dy1;
-        if (dSq1 < bestSq) { bestDx = dx1; bestDy = dy1; bestSq = dSq1; }
-        var dy1b = (sy - h) - oy;
-        if (dy1b > h) { dy1b -= 2.0 * h; } else if (dy1b < -h) { dy1b += 2.0 * h; }
-        let dSq1b = dx1 * dx1 + dy1b * dy1b;
-        if (dSq1b < bestSq) { bestDx = dx1; bestDy = dy1b; }
-    } else {
-        // Candidate 1: y-glide  (x,y) ~ (W-x, y+H) — x not wrapped
-        let gx = w - sx;
-        let dxG = gx - ox;
-        var dyG = (sy + h) - oy;
-        if (dyG > h) { dyG -= 2.0 * h; } else if (dyG < -h) { dyG += 2.0 * h; }
-        let dSqG = dxG * dxG + dyG * dyG;
-        if (dSqG < bestSq) { bestDx = dxG; bestDy = dyG; bestSq = dSqG; }
-        // Candidate 2: x-glide  (x,y) ~ (x+W, H-y) — y not wrapped
-        let gy = h - sy;
-        var dxH = (sx + w) - ox;
-        if (dxH > w) { dxH -= 2.0 * w; } else if (dxH < -w) { dxH += 2.0 * w; }
-        let dyH = gy - oy;
-        let dSqH = dxH * dxH + dyH * dyH;
-        if (dSqH < bestSq) { bestDx = dxH; bestDy = dyH; bestSq = dSqH; }
-        // Candidate 3: both glides  (x,y) ~ (2W-x, 2H-y)
-        var dxC = (2.0 * w - sx) - ox;
-        if (dxC > w) { dxC -= 2.0 * w; } else if (dxC < -w) { dxC += 2.0 * w; }
-        var dyC = (2.0 * h - sy) - oy;
-        if (dyC > h) { dyC -= 2.0 * h; } else if (dyC < -h) { dyC += 2.0 * h; }
-        let dSqC = dxC * dxC + dyC * dyC;
-        if (dSqC < bestSq) { bestDx = dxC; bestDy = dyC; }
-    }
-    return vec2(bestDx, bestDy);
-}
-
 // Node layout accessors (same as tree-build.wgsl)
 const NODE_STRIDE: u32 = 20u;
 fn nodeOffset(idx: u32) -> u32 { return idx * NODE_STRIDE; }
@@ -94,86 +30,6 @@ fn getSW(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 14u]); }
 fn getSE(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 15u]); }
 fn getParticleIndex(idx: u32) -> i32 { return bitcast<i32>(nodes[nodeOffset(idx) + 16u]); }
 fn getParticleCount(idx: u32) -> u32 { return nodes[nodeOffset(idx) + 17u]; }
-
-// ── Packed buffer structs (standalone — common.wgsl not prepended) ──
-
-struct ParticleState {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-struct ParticleAux {
-    radius: f32,
-    particleId: u32,
-    deathTime: f32,
-    deathMass: f32,
-    deathAngVel: f32,
-};
-
-struct ParticleDerived {
-    magMoment: f32,
-    angMomentum: f32,
-    invMass: f32,
-    radiusSq: f32,
-    velX: f32,
-    velY: f32,
-    angVel: f32,
-    _pad: f32,
-};
-
-struct AllForces {
-    f0: vec4<f32>,
-    f1: vec4<f32>,
-    f2: vec4<f32>,
-    f3: vec4<f32>,
-    f4: vec4<f32>,
-    f5: vec4<f32>,
-    torques: vec4<f32>,
-    bFields: vec4<f32>,
-    bFieldGrads: vec4<f32>,
-    totalForce: vec2<f32>,
-    jerk: vec2<f32>,
-};
-
-struct SimUniforms {
-    dt: f32,
-    simTime: f32,
-    domainW: f32,
-    domainH: f32,
-    speedScale: f32,
-    softening: f32,
-    softeningSq: f32,
-    toggles0: u32,
-    toggles1: u32,
-    yukawaCoupling: f32,
-    yukawaMu: f32,
-    higgsMass: f32,
-    axionMass: f32,
-    boundaryMode: u32,
-    topologyMode: u32,
-    collisionMode: u32,
-    maxParticles: u32,
-    aliveCount: u32,
-    extGravity: f32,
-    extGravityAngle: f32,
-    extElectric: f32,
-    extElectricAngle: f32,
-    extBz: f32,
-    bounceFriction: f32,
-    extGx: f32,
-    extGy: f32,
-    extEx: f32,
-    extEy: f32,
-    axionCoupling: f32,
-    higgsCoupling: f32,
-    particleCount: u32,
-    bhTheta: f32,
-    frameCount: u32,
-    _pad4: u32,
-};
 
 @group(0) @binding(0) var<storage, read_write> nodes: array<u32>;
 @group(0) @binding(1) var<uniform> uniforms: SimUniforms;
@@ -229,7 +85,7 @@ fn accumulateForce(
     let periodic = uniforms.boundaryMode == BOUND_LOOP;
     var disp = vec2<f32>(sx - px, sy - py);
     if (periodic) {
-        disp = fullMinImage(px, py, sx, sy, uniforms.domainW, uniforms.domainH, uniforms.topologyMode);
+        disp = fullMinImageP(px, py, sx, sy, uniforms.domainW, uniforms.domainH, uniforms.topologyMode);
     }
     let rx = disp.x;
     let ry = disp.y;
@@ -569,7 +425,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         let comY = getComY(nodeIdx);
         var comDisp = vec2<f32>(comX - px, comY - py);
         if (isPeriodic) {
-            comDisp = fullMinImage(px, py, comX, comY, uniforms.domainW, uniforms.domainH, uniforms.topologyMode);
+            comDisp = fullMinImageP(px, py, comX, comY, uniforms.domainW, uniforms.domainH, uniforms.topologyMode);
         }
         let dx = comDisp.x;
         let dy = comDisp.y;
@@ -746,8 +602,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             delayed.vx, delayed.vy,
             deadMass, deadCharge,
             sAngVelRet, sMagMomRet, sAngMomRet,
-            select(deadAxYuk.x, 1.0, deadAxYuk.x == 0.0),
-            select(deadAxYuk.y, 1.0, deadAxYuk.y == 0.0),
+            select(deadAxYuk.x, 1.0, abs(deadAxYuk.x) < EPSILON),
+            select(deadAxYuk.y, 1.0, abs(deadAxYuk.y) < EPSILON),
             pBodyRadiusSq,
             &localJerk,
             true, // useAberration

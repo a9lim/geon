@@ -28,37 +28,7 @@ struct StatsUniforms {
     _pad3: u32,          // 48
 };
 
-struct ParticleState {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-struct ParticleDerived {
-    magMoment: f32,
-    angMomentum: f32,
-    invMass: f32,
-    radiusSq: f32,
-    velX: f32, velY: f32,
-    angVel: f32,
-    _pad: f32,
-};
-
-struct AllForces {
-    f0: vec4<f32>,
-    f1: vec4<f32>,
-    f2: vec4<f32>,
-    f3: vec4<f32>,
-    f4: vec4<f32>,
-    f5: vec4<f32>,
-    torques: vec4<f32>,
-    bFields: vec4<f32>,
-    bFieldGrads: vec4<f32>,
-    totalForce: vec2<f32>,
-    jerk: vec2<f32>,
-};
+// Struct definitions (ParticleState, ParticleDerived, AllForces) provided by shared-structs.wgsl.
 
 struct AxYukMod {
     axMod: f32,

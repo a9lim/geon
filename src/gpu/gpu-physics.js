@@ -35,7 +35,7 @@
  *  - recordHistory            (Phase 4 — every HISTORY_STRIDE frames)
  */
 import { createParticleBuffers, createUniformBuffer, writeUniforms, createFieldBuffers, createAtomicGridBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createPairProductionBuffers, createTrailBuffers, FIELD_GRID_RES, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
-import { createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldSelfGravPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createPairProductionPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline } from './gpu-pipelines.js';
+import { fetchShader, createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldSelfGravPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createPairProductionPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline } from './gpu-pipelines.js';
 import { buildWGSLConstants, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT, GRAVITOMAG_BIT, ONE_PN_BIT, RELATIVITY_BIT, SPIN_ORBIT_BIT, RADIATION_BIT, BLACK_HOLE_BIT, DISINTEGRATION_BIT, EXPANSION_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BARNES_HUT_BIT, BOSON_GRAV_BIT, FIELD_GRAV_BIT_T1, HIST_META_STRIDE } from './gpu-constants.js';
 import {
     HISTORY_STRIDE, MAX_PHOTONS, MAX_PIONS,
@@ -328,8 +328,14 @@ export default class GPUPhysics {
     /** Load WGSL shaders and create compute pipelines. Must be called before update(). */
     async init() {
         const wgslConstants = buildWGSLConstants();
-        const commonWGSL = wgslConstants + '\n' + await fetchShader('common.wgsl');
-        const boundaryWGSL = await fetchShader('boundary.wgsl');
+        // Fetch shared struct/topology includes + common.wgsl
+        const [sharedStructs, sharedTopo, commonSrc, boundaryWGSL] = await Promise.all([
+            fetchShader('shared-structs.wgsl'),
+            fetchShader('shared-topology.wgsl'),
+            fetchShader('common.wgsl'),
+            fetchShader('boundary.wgsl'),
+        ]);
+        const commonWGSL = wgslConstants + '\n' + sharedStructs + '\n' + sharedTopo + '\n' + commonSrc;
 
         // --- Boundary pipeline ---
         const boundaryModule = this.device.createShaderModule({
@@ -3782,9 +3788,4 @@ const FLAG_ALIVE = 1;
 const FLAG_RETIRED = 2;
 const FLAG_ANTIMATTER = 4;
 
-/** Fetch a WGSL shader file relative to src/gpu/shaders/ */
-async function fetchShader(filename) {
-    const resp = await fetch(`src/gpu/shaders/${filename}`);
-    if (!resp.ok) throw new Error(`Failed to load shader: ${filename}`);
-    return resp.text();
-}
+// fetchShader imported from gpu-pipelines.js (single source of truth)

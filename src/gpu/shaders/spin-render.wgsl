@@ -17,35 +17,7 @@ struct CameraUniforms {
     isDarkMode: f32,
 };
 
-// Packed particle state struct (matches common.wgsl ParticleState)
-struct ParticleState {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-// Packed auxiliary struct (matches common.wgsl ParticleAux)
-struct ParticleAux {
-    radius: f32,
-    particleId: u32,
-    deathTime: f32,
-    deathMass: f32,
-    deathAngVel: f32,
-};
-
-// Cached derived quantities (matches common.wgsl ParticleDerived)
-struct ParticleDerived {
-    magMoment: f32,
-    angMomentum: f32,
-    invMass: f32,
-    radiusSq: f32,
-    velX: f32,
-    velY: f32,
-    angVel: f32,
-    _pad: f32,
-};
+// Struct definitions (ParticleState, ParticleAux, ParticleDerived) provided by shared-structs.wgsl.
 
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
 @group(0) @binding(1) var<storage, read> particles: array<ParticleState>;

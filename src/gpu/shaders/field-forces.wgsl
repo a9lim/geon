@@ -1,56 +1,13 @@
 // ─── Scalar Field → Particle Forces ───
 // One thread per particle. PQS-interpolated gradient forces + Higgs mass modulation.
 
-// Packed particle state struct (matches common.wgsl ParticleState)
-struct ParticleState_FF {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-// Packed auxiliary struct (matches common.wgsl ParticleAux)
-struct ParticleAux_FF {
-    radius: f32,
-    particleId: u32,
-    deathTime: f32,
-    deathMass: f32,
-    deathAngVel: f32,
-};
-
-// Packed struct (mirrors common.wgsl ParticleDerived)
-struct ParticleDerived_FF {
-    magMoment: f32,
-    angMomentum: f32,
-    invMass: f32,
-    radiusSq: f32,
-    velX: f32,
-    velY: f32,
-    angVel: f32,
-    _pad: f32,
-};
-
-// Packed struct (mirrors common.wgsl AllForces)
-struct AllForces_FF {
-    f0: vec4<f32>,
-    f1: vec4<f32>,
-    f2: vec4<f32>,
-    f3: vec4<f32>,
-    f4: vec4<f32>,
-    f5: vec4<f32>,
-    torques: vec4<f32>,
-    bFields: vec4<f32>,
-    bFieldGrads: vec4<f32>,
-    totalForce: vec2<f32>,
-    jerk: vec2<f32>,
-};
+// Struct definitions (ParticleState, ParticleAux, ParticleDerived, AllForces) provided by shared-structs.wgsl.
 
 // Group 0: particleState (rw) + derived (rw)
 // NOTE: particleAux.radius NOT updated here (would exceed 10 storage buffer limit).
 // cacheDerived at start of next substep recomputes radius from updated mass.
-@group(0) @binding(0) var<storage, read_write> particles: array<ParticleState_FF>;
-@group(0) @binding(1) var<storage, read_write> derived: array<ParticleDerived_FF>;
+@group(0) @binding(0) var<storage, read_write> particles: array<ParticleState>;
+@group(0) @binding(1) var<storage, read_write> derived: array<ParticleDerived>;
 
 // Higgs field arrays (read_write for encoder compat)
 @group(1) @binding(0) var<storage, read_write> higgsField: array<f32>;
@@ -62,7 +19,7 @@ struct AllForces_FF {
 @group(1) @binding(5) var<storage, read_write> axionGradY: array<f32>;
 
 // Packed force accumulators + axYukMod output
-@group(2) @binding(0) var<storage, read_write> allForces: array<AllForces_FF>;
+@group(2) @binding(0) var<storage, read_write> allForces: array<AllForces>;
 @group(2) @binding(1) var<storage, read_write> axYukMod: array<vec2<f32>>; // packed: axMod, yukMod
 
 @group(3) @binding(0) var<uniform> uniforms: FieldUniforms;

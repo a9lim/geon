@@ -5,35 +5,7 @@
 
 // Constants provided by generated wgslConstants block.
 
-// Packed particle state struct (matches common.wgsl ParticleState)
-struct ParticleState_DI {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-// Packed auxiliary struct (matches common.wgsl ParticleAux)
-struct ParticleAux_DI {
-    radius: f32,
-    particleId: u32,
-    deathTime: f32,
-    deathMass: f32,
-    deathAngVel: f32,
-};
-
-// Packed struct (mirrors common.wgsl ParticleDerived)
-struct DisintDerived {
-    magMoment: f32,
-    angMomentum: f32,
-    invMass: f32,
-    radiusSq: f32,
-    velX: f32,
-    velY: f32,
-    angVel: f32,
-    _pad: f32,
-};
+// Struct definitions (ParticleState, ParticleAux, ParticleDerived) provided by shared-structs.wgsl.
 
 struct DisintUniforms {
     softeningSq: f32,
@@ -65,9 +37,9 @@ struct DisintEvent {
 };
 
 // Group 0: particleState + particleAux + derived (read_write for encoder compat)
-@group(0) @binding(0) var<storage, read_write> particles: array<ParticleState_DI>;
-@group(0) @binding(1) var<storage, read_write> particleAux: array<ParticleAux_DI>;
-@group(0) @binding(2) var<storage, read_write> derived: array<DisintDerived>;
+@group(0) @binding(0) var<storage, read_write> particles: array<ParticleState>;
+@group(0) @binding(1) var<storage, read_write> particleAux: array<ParticleAux>;
+@group(0) @binding(2) var<storage, read_write> derived: array<ParticleDerived>;
 
 @group(1) @binding(0) var<storage, read_write> events: array<DisintEvent>;
 @group(1) @binding(1) var<storage, read_write> eventCounter: atomic<u32>;

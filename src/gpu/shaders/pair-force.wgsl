@@ -617,16 +617,15 @@ fn main(
         af.torques = vec4(0.0, accum.frameDrag, accum.tidal, 0.0);
         af.bFields = vec4(accum.bz, accum.bgz, 0.0, 0.0);  // extBz added by external fields pass
         af.bFieldGrads = vec4(accum.dbzdx, accum.dbzdy, accum.dbgzdx, accum.dbgzdy);
-        af.totalForce = vec2(accum.totalX, accum.totalY);
-        // Write jerk to AllForces (NaN guard — jerk can diverge from ill-conditioned pairs)
+        // NaN guard on total force and jerk — must happen BEFORE writing to global memory
+        af.totalForce = vec2(
+            select(accum.totalX, 0.0, accum.totalX != accum.totalX),
+            select(accum.totalY, 0.0, accum.totalY != accum.totalY)
+        );
         af.jerk = vec2(
             select(accum.jerkX, 0.0, accum.jerkX != accum.jerkX),
             select(accum.jerkY, 0.0, accum.jerkY != accum.jerkY)
         );
-
-        // NaN guard on total force — must happen BEFORE writing to global memory
-        if (accum.totalX != accum.totalX) { af.totalForce = vec2(0.0, af.totalForce.y); }
-        if (accum.totalY != accum.totalY) { af.totalForce = vec2(af.totalForce.x, 0.0); }
 
         allForces[idx] = af;
 

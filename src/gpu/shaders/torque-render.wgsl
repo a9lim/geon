@@ -35,41 +35,13 @@ struct TorqueUniforms {
     _pad2: f32,
 };
 
-struct ParticleState_TQ {
-    posX: f32, posY: f32,
-    velWX: f32, velWY: f32,
-    mass: f32, charge: f32, angW: f32,
-    baseMass: f32,
-    flags: u32,
-};
-
-struct ParticleAux_TQ {
-    radius: f32,
-    particleId: u32,
-    deathTime: f32,
-    deathMass: f32,
-    deathAngVel: f32,
-};
-
-struct AllForces_TQ {
-    f0: vec4<f32>,
-    f1: vec4<f32>,
-    f2: vec4<f32>,
-    f3: vec4<f32>,
-    f4: vec4<f32>,
-    f5: vec4<f32>,
-    torques: vec4<f32>,     // spinOrbit, frameDrag, tidal, contact
-    bFields: vec4<f32>,
-    bFieldGrads: vec4<f32>,
-    totalForce: vec2<f32>,
-    jerk: vec2<f32>,
-};
+// Struct definitions (ParticleState, ParticleAux, AllForces) provided by shared-structs.wgsl.
 
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
 @group(0) @binding(1) var<uniform> torqueParams: TorqueUniforms;
-@group(0) @binding(2) var<storage, read> particles: array<ParticleState_TQ>;
-@group(0) @binding(3) var<storage, read> particleAux: array<ParticleAux_TQ>;
-@group(0) @binding(4) var<storage, read> allForces: array<AllForces_TQ>;
+@group(0) @binding(2) var<storage, read> particles: array<ParticleState>;
+@group(0) @binding(3) var<storage, read> particleAux: array<ParticleAux>;
+@group(0) @binding(4) var<storage, read> allForces: array<AllForces>;
 
 // Constants (FLAG_ALIVE, INERTIA_K, PI, TWO_PI, HALF_PI) from wgslConstants block.
 const ARC_SEGMENTS: u32 = 32u;
