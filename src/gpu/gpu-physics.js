@@ -6,16 +6,14 @@
  * scalar fields, heatmap, expansion, disintegration, pair production.
  *
  * Dispatch sequence per substep:
- *   1. resetForces
+ *   1. resetForces (DMA clear)
  *   2. cacheDerived
  *   3. generateGhosts        (Phase 3 — if periodic boundary)
  *   4a-d. treeBuild           (Phase 3 — if BH enabled)
  *   5. computeForces          (Phase 2 pairwise OR Phase 3 tree walk)
  *   5b. externalFields
  *   5c. scalarFieldForces      (Phase 5 — gradient forces + mass/axMod modulation, before Boris)
- *   6. borisHalfKick (first)
- *   7. borisRotate
- *   8. borisHalfKick (second)
+ *   6-8. borisFused            (halfKick + rotate + halfKick in one pass)
  *   9. spinOrbit
  *  10. applyTorques
  *  11. radiationReaction      (Phase 4 — Larmor, Hawking, pion emission)
@@ -94,6 +92,35 @@ const _retiredFlagU32 = new Uint32Array([2]);         // FLAG_RETIRED for remove
 const _deathMetaData = new ArrayBuffer(12);           // deathTime(f32), deathMass(f32), deathAngVel(f32)
 const _deathMetaF32 = new Float32Array(_deathMetaData);
 
+// Pre-allocated hitTest uniform data (avoids per-call allocation)
+const _hitUniformData = new ArrayBuffer(16);
+const _hitUniformF32 = new Float32Array(_hitUniformData);
+const _hitUniformU32 = new Uint32Array(_hitUniformData);
+
+// Pre-allocated requestStats uniform data (avoids per-call allocation)
+const _statsUniformData = new ArrayBuffer(48);
+const _statsUniformF32 = new Float32Array(_statsUniformData);
+const _statsUniformU32 = new Uint32Array(_statsUniformData);
+const _statsUniformI32 = new Int32Array(_statsUniformData);
+
+// Pre-allocated FFT params data (avoids per-butterfly-stage allocation in self-gravity)
+const _fftParamsData = new ArrayBuffer(32);
+const _fftParamsF32 = new Float32Array(_fftParamsData);
+const _fftParamsU32 = new Uint32Array(_fftParamsData);
+const _fftParamsI32 = new Int32Array(_fftParamsData);
+
+// Pre-allocated field excitation event data (max 64 events × 4 floats)
+const _excitationEventData = new Float32Array(64 * 4);
+const _excitationCountData = new Uint32Array(1);
+
+// Pre-allocated field vacuum data (reused across _initFieldToVacuum calls)
+const _FIELD_GRID_SQ = 128 * 128; // GPU_SCALAR_GRID² (max supported)
+const _vacuumFieldData = new Float32Array(_FIELD_GRID_SQ);
+const _zeroFieldData = new Float32Array(_FIELD_GRID_SQ);
+
+// Pre-allocated Green's hat upload buffer
+const _greenHatUploadData = new Float32Array(_FIELD_GRID_SQ * 2);
+
 export default class GPUPhysics {
     /**
      * @param {GPUDevice} device
@@ -117,6 +144,13 @@ export default class GPUPhysics {
         // Phase 1 pipelines
         this._boundaryPipeline = null;
         this._boundaryBindGroup = null;
+
+        // Shared 4-byte dummy storage buffer (placeholder for unallocated history bind groups)
+        this._dummyHistBuf = device.createBuffer({
+            label: 'dummy-hist',
+            size: 4,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        });
 
         // Phase 2 pipelines + bind groups
         this._phase2 = null;
@@ -463,10 +497,6 @@ export default class GPUPhysics {
                 entries: buffers.map((buf, i) => ({ binding: i, resource: { buffer: buf } })),
             });
 
-        // resetForces: uniforms + 1 allForces
-        this._bg_resetForces = bg('resetForces', p2.resetForces.bindGroupLayouts[0],
-            [this.uniformBuffer, b.allForces]);
-
         // cacheDerived: uniforms + particleState (packed) + derived + particleAux + axYukMod
         this._bg_cacheDerived = bg('cacheDerived', p2.cacheDerived.bindGroupLayouts[0],
             [this.uniformBuffer, b.particleState, b.derived, b.particleAux, b.axYukMod]);
@@ -481,18 +511,9 @@ export default class GPUPhysics {
             [b.allForces, b.maxAccelBuffer]);
         // Group 3: history buffers — created lazily in _ensurePairForceHistoryBG()
         this._bg_pairForce3 = null;
-        this._pairForceDummyHistBuf = null;
 
         // externalFields (packed particleState + allForces)
         this._bg_extFields = bg('extFields', p2.externalFields.bindGroupLayouts[0],
-            [this.uniformBuffer, b.particleState, b.allForces]);
-
-        // borisHalfKick (reads from particleState + allForces)
-        this._bg_halfKick = bg('halfKick', p2.borisHalfKick.bindGroupLayouts[0],
-            [this.uniformBuffer, b.particleState, b.allForces]);
-
-        // borisRotate (reads from particleState + allForces)
-        this._bg_rotate = bg('rotate', p2.borisRotate.bindGroupLayouts[0],
             [this.uniformBuffer, b.particleState, b.allForces]);
 
         // borisFused (halfKick + rotate + halfKick in one pass)
@@ -692,19 +713,12 @@ export default class GPUPhysics {
                 ],
             });
         } else {
-            if (!this._pairForceDummyHistBuf) {
-                this._pairForceDummyHistBuf = this.device.createBuffer({
-                    label: 'pairForce-dummy-hist',
-                    size: 4,
-                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-                });
-            }
             this._bg_pairForce3 = this.device.createBindGroup({
                 label: 'pairForce_g3_dummy',
                 layout: p2.pairForce.bindGroupLayouts[3],
                 entries: [
-                    { binding: 0, resource: { buffer: this._pairForceDummyHistBuf } },
-                    { binding: 1, resource: { buffer: this._pairForceDummyHistBuf } },
+                    { binding: 0, resource: { buffer: this._dummyHistBuf } },
+                    { binding: 1, resource: { buffer: this._dummyHistBuf } },
                 ],
             });
             this._bg_pairForce3_isDummy = true;
@@ -713,7 +727,7 @@ export default class GPUPhysics {
 
     /**
      * Ensure tree-force history bind group exists (lazy allocation).
-     * Uses dummy buffers when history not yet allocated.
+     * Uses shared dummy buffer when history not yet allocated.
      */
     _ensureTreeForceHistoryBG() {
         if (this._treeForceGroup3) return;
@@ -729,19 +743,12 @@ export default class GPUPhysics {
                 ],
             });
         } else {
-            if (!this._pairForceDummyHistBuf) {
-                this._pairForceDummyHistBuf = this.device.createBuffer({
-                    label: 'force-dummy-hist',
-                    size: 4,
-                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-                });
-            }
             this._treeForceGroup3 = this.device.createBindGroup({
                 label: 'treeForce_g3_dummy',
                 layout: layouts[3],
                 entries: [
-                    { binding: 0, resource: { buffer: this._pairForceDummyHistBuf } },
-                    { binding: 1, resource: { buffer: this._pairForceDummyHistBuf } },
+                    { binding: 0, resource: { buffer: this._dummyHistBuf } },
+                    { binding: 1, resource: { buffer: this._dummyHistBuf } },
                 ],
             });
             this._treeForceGroup3_isDummy = true;
@@ -881,19 +888,12 @@ export default class GPUPhysics {
         this._phase4BindGroups.onePNG2 = bg('onePN_g2', p4.compute1PN.bindGroupLayouts[2],
             [b.allForces, b.f1pnOld]);
         // Group 3 (history) — dummy until history allocated (pipeline layout requires all groups)
-        if (!this._onePNDummyHistBuf) {
-            this._onePNDummyHistBuf = this.device.createBuffer({
-                label: 'onePN-dummy-hist',
-                size: 4,
-                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-            });
-        }
         this._phase4BindGroups.onePNG3 = this.device.createBindGroup({
             label: 'onePN_g3_dummy',
             layout: p4.compute1PN.bindGroupLayouts[3],
             entries: [
-                { binding: 0, resource: { buffer: this._onePNDummyHistBuf } },
-                { binding: 1, resource: { buffer: this._onePNDummyHistBuf } },
+                { binding: 0, resource: { buffer: this._dummyHistBuf } },
+                { binding: 1, resource: { buffer: this._dummyHistBuf } },
             ],
         });
         this._onePNG3_isDummy = true;
@@ -1710,21 +1710,21 @@ export default class GPUPhysics {
         if (!fb) return;
 
         const vacValue = which === 'higgs' ? 1.0 : 0.0;
-        const fieldData = new Float32Array(gridSq).fill(vacValue);
-        this.device.queue.writeBuffer(fb.field, 0, fieldData);
+        _vacuumFieldData.fill(vacValue, 0, gridSq);
+        this.device.queue.writeBuffer(fb.field, 0, _vacuumFieldData, 0, gridSq);
 
-        const zeros = new Float32Array(gridSq);
-        this.device.queue.writeBuffer(fb.fieldDot, 0, zeros);
-        this.device.queue.writeBuffer(fb.gradX, 0, zeros);
-        this.device.queue.writeBuffer(fb.gradY, 0, zeros);
-        this.device.queue.writeBuffer(fb.source, 0, zeros);
-        this.device.queue.writeBuffer(fb.laplacian, 0, zeros);
-        this.device.queue.writeBuffer(fb.thermal, 0, zeros);
-        this.device.queue.writeBuffer(fb.energyDensity, 0, zeros);
-        this.device.queue.writeBuffer(fb.sgPhiFull, 0, zeros);
-        this.device.queue.writeBuffer(fb.sgGradX, 0, zeros);
-        this.device.queue.writeBuffer(fb.sgGradY, 0, zeros);
-
+        // Zero all other field buffers using pre-allocated zero array
+        const zeroBytes = gridSq * 4;
+        this.device.queue.writeBuffer(fb.fieldDot, 0, _zeroFieldData, 0, gridSq);
+        this.device.queue.writeBuffer(fb.gradX, 0, _zeroFieldData, 0, gridSq);
+        this.device.queue.writeBuffer(fb.gradY, 0, _zeroFieldData, 0, gridSq);
+        this.device.queue.writeBuffer(fb.source, 0, _zeroFieldData, 0, gridSq);
+        this.device.queue.writeBuffer(fb.laplacian, 0, _zeroFieldData, 0, gridSq);
+        this.device.queue.writeBuffer(fb.thermal, 0, _zeroFieldData, 0, gridSq);
+        this.device.queue.writeBuffer(fb.energyDensity, 0, _zeroFieldData, 0, gridSq);
+        this.device.queue.writeBuffer(fb.sgPhiFull, 0, _zeroFieldData, 0, gridSq);
+        this.device.queue.writeBuffer(fb.sgGradX, 0, _zeroFieldData, 0, gridSq);
+        this.device.queue.writeBuffer(fb.sgGradY, 0, _zeroFieldData, 0, gridSq);
     }
 
     /**
@@ -1766,51 +1766,20 @@ export default class GPUPhysics {
     }
 
     /**
-     * Write FieldUniforms to the shared field uniform buffer.
-     */
-    _writeFieldUniforms(dt) {
-        if (!this._fieldUniformBuffer) return;
-        const f = _fieldUniformF32;
-        const u = _fieldUniformU32;
-        // Must match FieldUniforms struct in field-common.wgsl exactly:
-        f[0] = dt;                              // dt
-        f[1] = this.domainW;                    // domainW
-        f[2] = this.domainH;                    // domainH
-        u[3] = this.boundaryMode;               // boundaryMode
-        u[4] = this.topologyMode;               // topologyMode
-        // Higgs params
-        f[5] = this._higgsMass;                 // higgsMass
-        f[6] = this._higgsCoupling;             // higgsCoupling
-        f[7] = 0.05;                            // higgsMassFloor (matches CPU HIGGS_MASS_FLOOR)
-        f[8] = 4.0;                             // higgsMassMaxDelta (matches CPU HIGGS_MASS_MAX_DELTA)
-        // Axion params
-        f[9] = this._axionMass;                 // axionMass
-        f[10] = this._axionCoupling;            // axionCoupling
-        // Toggle bits
-        u[11] = this._higgsEnabled ? 1 : 0;     // higgsEnabled
-        u[12] = this._axionEnabled ? 1 : 0;     // axionEnabled
-        u[13] = this._coulombEnabled ? 1 : 0;   // coulombEnabled
-        u[14] = this._yukawaEnabled ? 1 : 0; // yukawaEnabled
-        u[15] = this._fieldGravEnabled ? 1 : 0;  // gravityEnabled (field self-gravity)
-        u[16] = this._relativityEnabled ? 1 : 0;  // relativityEnabled
-        u[17] = this._blackHoleEnabled ? 1 : 0;   // blackHoleEnabled
-        u[18] = this.aliveCount;                  // particleCount
-        f[19] = this._blackHoleEnabled ? 16 : 64;  // softeningSq
-        u[20] = 0;                                // currentFieldType (0=higgs default, set per-dispatch)
-        this.device.queue.writeBuffer(this._fieldUniformBuffer, 0, _fieldUniformData);
-    }
-
-    /**
-     * Write per-field uniforms to the dedicated field uniform buffer.
-     * Eliminates the need for encoder split when both Higgs and Axion are active.
+     * Write FieldUniforms to a target buffer.
+     * When fieldType >= 0, writes to per-field buffer (higgs=0, axion=1).
+     * When fieldType < 0, writes to shared field uniform buffer (fieldType defaults to 0).
      * @param {number} dt
-     * @param {number} fieldType - 0=higgs, 1=axion
+     * @param {number} [fieldType=-1] - -1=shared buffer, 0=higgs, 1=axion
      */
-    _writePerFieldUniforms(dt, fieldType) {
-        const buf = fieldType === 0 ? this._higgsUniformBuffer : this._axionUniformBuffer;
+    _writeFieldUniforms(dt, fieldType = -1) {
+        const buf = fieldType < 0
+            ? this._fieldUniformBuffer
+            : (fieldType === 0 ? this._higgsUniformBuffer : this._axionUniformBuffer);
         if (!buf) return;
         const f = _fieldUniformF32;
         const u = _fieldUniformU32;
+        // Must match FieldUniforms struct in field-common.wgsl exactly:
         f[0] = dt;
         f[1] = this.domainW;
         f[2] = this.domainH;
@@ -1818,8 +1787,8 @@ export default class GPUPhysics {
         u[4] = this.topologyMode;
         f[5] = this._higgsMass;
         f[6] = this._higgsCoupling;
-        f[7] = 0.05;
-        f[8] = 4.0;
+        f[7] = 0.05;                            // higgsMassFloor
+        f[8] = 4.0;                             // higgsMassMaxDelta
         f[9] = this._axionMass;
         f[10] = this._axionCoupling;
         u[11] = this._higgsEnabled ? 1 : 0;
@@ -1831,7 +1800,7 @@ export default class GPUPhysics {
         u[17] = this._blackHoleEnabled ? 1 : 0;
         u[18] = this.aliveCount;
         f[19] = this._blackHoleEnabled ? 16 : 64;
-        u[20] = fieldType;
+        u[20] = fieldType < 0 ? 0 : fieldType;
         this.device.queue.writeBuffer(buf, 0, _fieldUniformData);
     }
 
@@ -2050,12 +2019,11 @@ export default class GPUPhysics {
         fft2d(re, im, N, false);
 
         // Convert Float64 → Float32 interleaved and upload
-        const data = new Float32Array(N2 * 2);
         for (let i = 0; i < N2; i++) {
-            data[i * 2] = re[i];
-            data[i * 2 + 1] = im[i];
+            _greenHatUploadData[i * 2] = re[i];
+            _greenHatUploadData[i * 2 + 1] = im[i];
         }
-        this.device.queue.writeBuffer(fb.greenHat, 0, data);
+        this.device.queue.writeBuffer(fb.greenHat, 0, _greenHatUploadData, 0, N2 * 2);
     }
 
     /**
@@ -2159,11 +2127,8 @@ export default class GPUPhysics {
 
         // Pack real → complex (reads fftB, writes fftA)
         {
-            const params = new ArrayBuffer(32);
-            const u = new Uint32Array(params);
-            const f = new Float32Array(params);
-            u[0] = 1; f[1] = 0; u[2] = 0; u[3] = N; f[4] = 1/N; u[5] = 0; u[6] = 0; u[7] = 0;
-            this.device.queue.writeBuffer(this._fftParamsBuffer, 0, params);
+            _fftParamsU32[0] = 1; _fftParamsF32[1] = 0; _fftParamsU32[2] = 0; _fftParamsU32[3] = N; _fftParamsF32[4] = 1/N; _fftParamsU32[5] = 0; _fftParamsU32[6] = 0; _fftParamsU32[7] = 0;
+            this.device.queue.writeBuffer(this._fftParamsBuffer, 0, _fftParamsData);
         }
         {
             const p = encoder.beginComputePass({ label: `packReal_${tag}_${which}` });
@@ -2176,16 +2141,13 @@ export default class GPUPhysics {
         // Forward FFT rows then columns
         let currentInA = true;
         const dispatchButterfly = (stageLen, axis, isLast) => {
-            const params = new ArrayBuffer(32);
-            const u = new Uint32Array(params);
-            const f = new Float32Array(params);
-            u[0] = stageLen;
-            new Int32Array(params)[1] = -1; // forward
-            u[2] = axis;
-            u[3] = N;
-            f[4] = 1 / N;
-            u[5] = isLast ? 1 : 0;
-            this.device.queue.writeBuffer(this._fftParamsBuffer, 0, params);
+            _fftParamsU32[0] = stageLen;
+            _fftParamsI32[1] = -1; // forward
+            _fftParamsU32[2] = axis;
+            _fftParamsU32[3] = N;
+            _fftParamsF32[4] = 1 / N;
+            _fftParamsU32[5] = isLast ? 1 : 0;
+            this.device.queue.writeBuffer(this._fftParamsBuffer, 0, _fftParamsData);
 
             const bg = currentInA ? fftBG.g0_AB : fftBG.g0_BA;
             const p = encoder.beginComputePass({ label: `fftFwd_${tag}_${axis}_${stageLen}_${which}` });
@@ -2214,16 +2176,13 @@ export default class GPUPhysics {
 
         // Inverse FFT rows then columns
         const dispatchButterflyInv = (stageLen, axis, isLast) => {
-            const params = new ArrayBuffer(32);
-            const u = new Uint32Array(params);
-            const f = new Float32Array(params);
-            u[0] = stageLen;
-            new Int32Array(params)[1] = 1; // inverse
-            u[2] = axis;
-            u[3] = N;
-            f[4] = 1 / N;
-            u[5] = isLast ? 1 : 0;
-            this.device.queue.writeBuffer(this._fftParamsBuffer, 0, params);
+            _fftParamsU32[0] = stageLen;
+            _fftParamsI32[1] = 1; // inverse
+            _fftParamsU32[2] = axis;
+            _fftParamsU32[3] = N;
+            _fftParamsF32[4] = 1 / N;
+            _fftParamsU32[5] = isLast ? 1 : 0;
+            this.device.queue.writeBuffer(this._fftParamsBuffer, 0, _fftParamsData);
 
             const bg = currentInA ? fftBG.g0_AB : fftBG.g0_BA;
             const p = encoder.beginComputePass({ label: `fftInv_${tag}_${axis}_${stageLen}_${which}` });
@@ -2541,17 +2500,17 @@ export default class GPUPhysics {
         // Upload excitation events from pending merge events
         const maxEvents = 64;
         const eventCount = Math.min(mergeCount, maxEvents);
-        const eventData = new Float32Array(eventCount * 4); // ExcitationEvent = 4 floats
         for (let i = 0; i < eventCount; i++) {
             const me = this._pendingMergeEvents[i];
             if (me.type !== 'merge') continue;
-            eventData[i * 4] = me.x;
-            eventData[i * 4 + 1] = me.y;
-            eventData[i * 4 + 2] = me.energy;
-            eventData[i * 4 + 3] = 0; // padding
+            _excitationEventData[i * 4] = me.x;
+            _excitationEventData[i * 4 + 1] = me.y;
+            _excitationEventData[i * 4 + 2] = me.energy;
+            _excitationEventData[i * 4 + 3] = 0; // padding
         }
-        this.device.queue.writeBuffer(this._excitationBuffers.events, 0, eventData);
-        this.device.queue.writeBuffer(this._excitationBuffers.counter, 0, new Uint32Array([eventCount]));
+        this.device.queue.writeBuffer(this._excitationBuffers.events, 0, _excitationEventData, 0, eventCount * 4);
+        _excitationCountData[0] = eventCount;
+        this.device.queue.writeBuffer(this._excitationBuffers.counter, 0, _excitationCountData);
 
         const gridWG = Math.ceil(FIELD_GRID_RES / 8);
         const exc = this._fieldExcitation;
@@ -2850,40 +2809,30 @@ export default class GPUPhysics {
             };
         }
 
-        // Create/recreate history bind group when history buffers become available
-        if (this.buffers.historyAllocated && !this._heatmapBGs.g2) {
-            const b = this.buffers;
-            const hm = this._heatmapPipelines;
-            this._heatmapBGs.g2 = this.device.createBindGroup({
-                label: 'heatmap_g2_history',
-                layout: hm.heatmapLayouts[2],
-                entries: [
-                    { binding: 0, resource: { buffer: b.histData } },
-                    { binding: 1, resource: { buffer: b.histMeta } },
-                ],
-            });
-        }
-
-        // Ensure dummy history bind group exists when history not yet allocated
-        // (pipeline layout requires 3 bind groups even when useDelay=0)
+        // Ensure history bind group exists (dummy when history not yet allocated)
         if (!this._heatmapBGs.g2) {
-            if (!this._heatmapDummyHistBuf) {
-                this._heatmapDummyHistBuf = this.device.createBuffer({
-                    label: 'heatmap-dummy-hist',
-                    size: 4,
-                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-                });
-            }
             const hm = this._heatmapPipelines;
-            this._heatmapBGs.g2 = this.device.createBindGroup({
-                label: 'heatmap_g2_dummy',
-                layout: hm.heatmapLayouts[2],
-                entries: [
-                    { binding: 0, resource: { buffer: this._heatmapDummyHistBuf } },
-                    { binding: 1, resource: { buffer: this._heatmapDummyHistBuf } },
-                ],
-            });
-            this._heatmapBGs._g2IsDummy = true;
+            if (this.buffers.historyAllocated) {
+                const b = this.buffers;
+                this._heatmapBGs.g2 = this.device.createBindGroup({
+                    label: 'heatmap_g2_history',
+                    layout: hm.heatmapLayouts[2],
+                    entries: [
+                        { binding: 0, resource: { buffer: b.histData } },
+                        { binding: 1, resource: { buffer: b.histMeta } },
+                    ],
+                });
+            } else {
+                this._heatmapBGs.g2 = this.device.createBindGroup({
+                    label: 'heatmap_g2_dummy',
+                    layout: hm.heatmapLayouts[2],
+                    entries: [
+                        { binding: 0, resource: { buffer: this._dummyHistBuf } },
+                        { binding: 1, resource: { buffer: this._dummyHistBuf } },
+                    ],
+                });
+                this._heatmapBGs._g2IsDummy = true;
+            }
         }
 
         // Upgrade from dummy to real history bind group when buffers become available
@@ -3246,11 +3195,11 @@ export default class GPUPhysics {
         if (this._fieldDeposit) {
             if (!(this._higgsEnabled || this._axionEnabled)) this._writeFieldUniforms(dtSub);
             if (this._higgsEnabled) {
-                this._writePerFieldUniforms(dtSub, 0); // currentFieldType=0 (Higgs)
+                this._writeFieldUniforms(dtSub, 0); // currentFieldType=0 (Higgs)
                 this._dispatchFieldEvolve(encoder, 'higgs', dtSub);
             }
             if (this._axionEnabled) {
-                this._writePerFieldUniforms(dtSub, 1); // currentFieldType=1 (Axion)
+                this._writeFieldUniforms(dtSub, 1); // currentFieldType=1 (Axion)
                 this._dispatchFieldEvolve(encoder, 'axion', dtSub);
             }
         }
@@ -3423,16 +3372,6 @@ export default class GPUPhysics {
             });
         }
 
-        // Pack toggle state
-        const toggleKeys = [
-            'gravityEnabled', 'bosonGravEnabled', 'fieldGravEnabled',
-            'coulombEnabled', 'magneticEnabled',
-            'gravitomagEnabled', 'relativityEnabled', 'barnesHutEnabled',
-            'radiationEnabled', 'blackHoleEnabled', 'disintegrationEnabled',
-            'spinOrbitEnabled',
-            'onePNEnabled', 'yukawaEnabled', 'axionEnabled',
-            'expansionEnabled', 'higgsEnabled',
-        ];
         // Map internal toggle bits back to boolean flags
         const t0 = this._toggles0;
         const t1 = this._toggles1;
@@ -3554,11 +3493,13 @@ export default class GPUPhysics {
         if (this.buffers.piCount) {
             this.device.queue.writeBuffer(this.buffers.piCount, 0, _zeroU32);
         }
-        // Clear trail ring buffers
+        // Clear trail ring buffers (zero-fill via encoder to avoid allocation)
         if (this._trailBuffers) {
             const tb = this._trailBuffers;
-            this.device.queue.writeBuffer(tb.trailWriteIdx, 0, new Uint32Array(this.buffers.maxParticles));
-            this.device.queue.writeBuffer(tb.trailCount, 0, new Uint32Array(this.buffers.maxParticles));
+            const enc = this.device.createCommandEncoder({ label: 'clearTrails' });
+            enc.clearBuffer(tb.trailWriteIdx);
+            enc.clearBuffer(tb.trailCount);
+            this.device.queue.submit([enc.finish()]);
         }
     }
 
@@ -3613,14 +3554,11 @@ export default class GPUPhysics {
         if (this._hitPending) return; // don't queue while readback is in flight
 
         // Write click coordinates + aliveCount to uniform
-        const data = new Uint8Array(16);
-        const f32 = new Float32Array(data.buffer);
-        const u32 = new Uint32Array(data.buffer);
-        f32[0] = worldX;
-        f32[1] = worldY;
-        u32[2] = this.aliveCount;
-        u32[3] = 0;
-        this.device.queue.writeBuffer(this._hitUniformBuffer, 0, data);
+        _hitUniformF32[0] = worldX;
+        _hitUniformF32[1] = worldY;
+        _hitUniformU32[2] = this.aliveCount;
+        _hitUniformU32[3] = 0;
+        this.device.queue.writeBuffer(this._hitUniformBuffer, 0, _hitUniformData);
 
         // Dispatch single-thread compute
         const encoder = this.device.createCommandEncoder({ label: 'hitTest' });
@@ -3700,23 +3638,19 @@ export default class GPUPhysics {
         if (this._statsPending) return; // readback still in flight
 
         // Write uniforms (StatsUniforms: 48 bytes = 12 u32/f32)
-        const data = new ArrayBuffer(48);
-        const u32 = new Uint32Array(data);
-        const i32 = new Int32Array(data);
-        const f32 = new Float32Array(data);
-        u32[0] = this.aliveCount;
-        i32[1] = selectedGpuIdx;
-        u32[2] = this._toggles0;
-        f32[3] = this.domainW;
-        f32[4] = this.domainH;
-        f32[5] = this._yukawaMu;
-        f32[6] = this._higgsMass;
-        f32[7] = this._axionMass || 0.05;
-        u32[8] = FIELD_GRID_RES; // fieldGridRes (GPU_SCALAR_GRID)
-        u32[9] = 0;
-        u32[10] = 0;
-        u32[11] = 0;
-        this.device.queue.writeBuffer(this._statsUniformBuffer, 0, data);
+        _statsUniformU32[0] = this.aliveCount;
+        _statsUniformI32[1] = selectedGpuIdx;
+        _statsUniformU32[2] = this._toggles0;
+        _statsUniformF32[3] = this.domainW;
+        _statsUniformF32[4] = this.domainH;
+        _statsUniformF32[5] = this._yukawaMu;
+        _statsUniformF32[6] = this._higgsMass;
+        _statsUniformF32[7] = this._axionMass || 0.05;
+        _statsUniformU32[8] = FIELD_GRID_RES; // fieldGridRes (GPU_SCALAR_GRID)
+        _statsUniformU32[9] = 0;
+        _statsUniformU32[10] = 0;
+        _statsUniformU32[11] = 0;
+        this.device.queue.writeBuffer(this._statsUniformBuffer, 0, _statsUniformData);
 
         // Rebuild field bind group if needed (field buffers may have been lazily allocated)
         if (!this._statsBindGroup1 ||
@@ -3839,7 +3773,7 @@ export default class GPUPhysics {
     destroy() {
         this.buffers.destroy();
         this.uniformBuffer.destroy();
-        if (this._heatmapDummyHistBuf) this._heatmapDummyHistBuf.destroy();
+        if (this._dummyHistBuf) this._dummyHistBuf.destroy();
     }
 }
 

@@ -7,7 +7,7 @@
  * Packed struct buffers reduce storage buffer count per shader stage:
  *   ParticleState  (36 bytes) — posX,posY,velWX,velWY,mass,charge,angW,baseMass,flags
  *   ParticleAux    (20 bytes) — radius,particleId,deathTime,deathMass,deathAngVel
- *   RadiationState (96 bytes) — jerk,accumulators,display,quadrupole history,Larmor backward-diff
+ *   RadiationState (48 bytes) — accumulators,display,quadrupole contrib
  *   Photon         (32 bytes) — pos,vel,energy,emitterId,lifetime,flags
  *   Pion           (48 bytes) — pos,w,mass,charge,energy,emitterId,age,flags,pad
  */
@@ -16,6 +16,7 @@ import {
     HISTORY_SIZE, MAX_PHOTONS, MAX_PIONS, MAX_TRAIL_LENGTH,
     GPU_SCALAR_GRID,
 } from '../config.js';
+import { HIST_STRIDE as HIST_STRIDE_CONST } from './gpu-constants.js';
 
 // Signal delay history constants
 const HISTORY_LEN = HISTORY_SIZE;
@@ -80,7 +81,7 @@ export function createParticleBuffers(device, maxParticles) {
     const color = storageBuffer('color', UINT_SIZE, maxParticles);
 
     // ── Radiation state (packed struct) ──
-    // RadiationState (96 bytes): jerk, accumulators, display, quadrupole history, Larmor backward-diff history
+    // RadiationState (48 bytes): accumulators, display, quadrupole contrib
     const radiationState = storageBuffer('radiationState', RADIATION_STATE_SIZE, maxParticles);
 
     // ── Quadrupole radiation reduction buffer ──
@@ -323,7 +324,7 @@ export function createParticleBuffers(device, maxParticles) {
          */
         allocateHistoryBuffers(dev) {
             if (this.historyAllocated) return;
-            const HIST_STRIDE = 6; // posX, posY, velX, velY, angW, time
+            const HIST_STRIDE = HIST_STRIDE_CONST;
             const dataSize = maxParticles * HISTORY_LEN * HIST_STRIDE * 4; // f32 each
             this.histData = dev.createBuffer({
                 label: 'histData',
@@ -356,8 +357,6 @@ export function createParticleBuffers(device, maxParticles) {
 // Default GRID_RES = 64 (matches CPU SCALAR_GRID), configurable as power-of-2
 const FIELD_GRID_RES = GPU_SCALAR_GRID;
 const FIELD_GRID_SQ = FIELD_GRID_RES * FIELD_GRID_RES;
-const PQS_STENCIL_SIZE = 16; // 4x4 stencil per particle (legacy, unused)
-
 /**
  * Allocate GPU buffers for one scalar field instance.
  * @param {GPUDevice} device
@@ -491,7 +490,7 @@ export function createTrailBuffers(device, maxParticles) {
 }
 
 export {
-    FIELD_GRID_RES, FIELD_GRID_SQ, PQS_STENCIL_SIZE,
+    FIELD_GRID_RES, FIELD_GRID_SQ,
     PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE,
     PHOTON_SIZE, PION_SIZE, DERIVED_SIZE, VEC2_SIZE, ALLFORCES_SIZE, TRAIL_LEN,
 };
@@ -559,8 +558,7 @@ export function writeUniforms(device, buffer, params) {
     f[29] = params.higgsCoupling || 1.0;
     u[30] = params.particleCount || 0;  // actual alive particle count for dispatch sizing
     f[31] = params.bhTheta || 0.5;     // Barnes-Hut opening angle
-    // _pad3 at index 32, _pad4 at index 33 in common.wgsl — reuse for Phase 4
-    u[32] = params.frameCount || 0;    // frame counter for RNG seed
+    u[32] = params.frameCount || 0;    // frameCount field in SimUniforms
 
     device.queue.writeBuffer(buffer, 0, _uniformData);
 }
