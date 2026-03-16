@@ -310,6 +310,14 @@ fn computeBosonAggregates(@builtin(global_invocation_id) gid: vec3u) {
     setNodeU32(nodeIdx, N_PARTICLE_COUNT, 1u); // mark as having data
 }
 
+// Shared BH gravity force: F = massFactor * nodeMass / (r² + softening)^{3/2} * r̂
+fn bhGravForce(dx: f32, dy: f32, nodeMass: f32, massFactor: f32) -> vec2f {
+    let rSq = dx * dx + dy * dy + BOSON_SOFTENING_SQ;
+    let invRSq = 1.0 / rSq;
+    let f = massFactor * nodeMass * sqrt(invRSq) * invRSq;
+    return vec2f(dx * f, dy * f);
+}
+
 // Gravitational force from bosons onto particles via BH tree walk.
 @compute @workgroup_size(64)
 fn computeBosonGravity(@builtin(global_invocation_id) gid: vec3u) {
@@ -320,7 +328,7 @@ fn computeBosonGravity(@builtin(global_invocation_id) gid: vec3u) {
     let px = particles[i].posX; let py = particles[i].posY;
     let pMass = particles[i].mass;
 
-    var fx: f32 = 0.0; var fy: f32 = 0.0;
+    var force = vec2f(0.0);
 
     // Stack-based BH tree walk (boson tree)
     var stack: array<u32, 48>;
@@ -342,22 +350,9 @@ fn computeBosonGravity(@builtin(global_invocation_id) gid: vec3u) {
         let size = nodeF32(nIdx, N_MAX_X) - nodeF32(nIdx, N_MIN_X);
         let isDivided = nodeU32(nIdx, N_DIVIDED) != 0u;
 
-        if (!isDivided) {
-            // Leaf: direct gravity with BOSON_SOFTENING_SQ
-            let rSq = dSq + BOSON_SOFTENING_SQ;
-            let invRSq = 1.0 / rSq;
-            let f = pMass * nodeMass * sqrt(invRSq) * invRSq;
-            fx += dx * f;
-            fy += dy * f;
-        } else if (size * size < BH_THETA_SQ * dSq) {
-            // Distant: use aggregate
-            let rSq = dSq + BOSON_SOFTENING_SQ;
-            let invRSq = 1.0 / rSq;
-            let f = pMass * nodeMass * sqrt(invRSq) * invRSq;
-            fx += dx * f;
-            fy += dy * f;
+        if (!isDivided || size * size < BH_THETA_SQ * dSq) {
+            force += bhGravForce(dx, dy, nodeMass, pMass);
         } else if (top + 4 <= 48) {
-            // Open: push children (with stack overflow guard)
             stack[top] = nodeU32(nIdx, N_NW); top++;
             stack[top] = nodeU32(nIdx, N_NE); top++;
             stack[top] = nodeU32(nIdx, N_SW); top++;
@@ -367,8 +362,8 @@ fn computeBosonGravity(@builtin(global_invocation_id) gid: vec3u) {
 
     // Add to gravity force accumulators (allForces.f0.xy = gravity)
     var af = allForces[i];
-    af.f0.x += fx;
-    af.f0.y += fy;
+    af.f0.x += force.x;
+    af.f0.y += force.y;
     allForces[i] = af;
 }
 
@@ -400,7 +395,8 @@ fn applyBosonBosonGravity(@builtin(global_invocation_id) gid: vec3u) {
     }
 
     // BH tree walk of boson tree
-    var kx: f32 = 0.0; var ky: f32 = 0.0;
+    let massFactor = grFactor * dt;
+    var kick = vec2f(0.0);
 
     var stack: array<u32, 48>;
     var top: i32 = 0;
@@ -421,18 +417,8 @@ fn applyBosonBosonGravity(@builtin(global_invocation_id) gid: vec3u) {
         let size = nodeF32(nIdx, N_MAX_X) - nodeF32(nIdx, N_MIN_X);
         let isDivided = nodeU32(nIdx, N_DIVIDED) != 0u;
 
-        if (!isDivided) {
-            let rSq = dSq + BOSON_SOFTENING_SQ;
-            let invRSq = 1.0 / rSq;
-            let f = grFactor * nodeMass * sqrt(invRSq) * invRSq * dt;
-            kx += dx * f;
-            ky += dy * f;
-        } else if (size * size < BH_THETA_SQ * dSq) {
-            let rSq = dSq + BOSON_SOFTENING_SQ;
-            let invRSq = 1.0 / rSq;
-            let f = grFactor * nodeMass * sqrt(invRSq) * invRSq * dt;
-            kx += dx * f;
-            ky += dy * f;
+        if (!isDivided || size * size < BH_THETA_SQ * dSq) {
+            kick += bhGravForce(dx, dy, nodeMass, massFactor);
         } else if (top + 4 <= 48) {
             stack[top] = nodeU32(nIdx, N_NW); top++;
             stack[top] = nodeU32(nIdx, N_NE); top++;
@@ -443,8 +429,8 @@ fn applyBosonBosonGravity(@builtin(global_invocation_id) gid: vec3u) {
 
     // Apply impulse
     if (i < phN) {
-        var pvx = photons[i].velX + kx;
-        var pvy = photons[i].velY + ky;
+        var pvx = photons[i].velX + kick.x;
+        var pvy = photons[i].velY + kick.y;
         // Renormalize photon to c=1
         let vSq = pvx * pvx + pvy * pvy;
         if (vSq > EPSILON) {
@@ -458,7 +444,7 @@ fn applyBosonBosonGravity(@builtin(global_invocation_id) gid: vec3u) {
         photons[i].velY = pvy;
     } else {
         let pi2 = i - phN;
-        pions[pi2].wX += kx;
-        pions[pi2].wY += ky;
+        pions[pi2].wX += kick.x;
+        pions[pi2].wY += kick.y;
     }
 }

@@ -4,12 +4,12 @@
  * Each function creates a pipeline + bind group layout for one shader.
  * Shaders are loaded via fetch() and prepended with common.wgsl.
  *
- * Buffer packing: ParticleState (36B), ParticleAux (20B), RadiationState (96B),
+ * Buffer packing: ParticleState (36B), ParticleAux (20B), RadiationState (48B),
  * Photon (32B), Pion (48B) packed structs reduce storage buffer count per stage to ≤10.
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 27;
+const SHADER_VERSION = 28;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 async function fetchShader(filename, prepend = '') {
@@ -50,12 +50,6 @@ export async function createPhase2Pipelines(device, wgslConstants = '') {
 
         return { pipeline, bindGroupLayouts };
     }
-
-    // --- resetForces ---
-    // 1 uniform + 1 storage (allForces) = 1 storage buffer per stage
-    const resetForces = await makePipeline('resetForces', 'reset-forces.wgsl', [
-        ['uniform', 'storage'],
-    ]);
 
     // --- cacheDerived ---
     // uniforms + particleState (rw) + derived (rw) + particleAux (rw) + axYukMod (rw) = 4 storage
@@ -100,18 +94,6 @@ export async function createPhase2Pipelines(device, wgslConstants = '') {
         ['uniform', 'storage', 'storage'],
     ]);
 
-    // --- borisHalfKick ---
-    // uniforms + particleState (rw) + allForces (rw) = 2 storage
-    const borisHalfKick = await makePipeline('borisHalfKick', 'boris-half-kick.wgsl', [
-        ['uniform', 'storage', 'storage'],
-    ]);
-
-    // --- borisRotate ---
-    // uniforms + particleState (rw) + allForces (rw) = 2 storage
-    const borisRotate = await makePipeline('borisRotate', 'boris-rotate.wgsl', [
-        ['uniform', 'storage', 'storage'],
-    ]);
-
     // --- borisDrift ---
     // uniforms + particleState (rw) + derived (rw) + allForces (rw) = 3 storage
     const borisDrift = await makePipeline('borisDrift', 'boris.wgsl', [
@@ -146,8 +128,8 @@ export async function createPhase2Pipelines(device, wgslConstants = '') {
     ]);
 
     return {
-        resetForces, cacheDerived, pairForce, externalFields,
-        borisHalfKick, borisRotate, borisDrift, spinOrbit, applyTorques,
+        cacheDerived, pairForce, externalFields,
+        borisDrift, spinOrbit, applyTorques,
         saveF1pn, borisFused,
     };
 }
