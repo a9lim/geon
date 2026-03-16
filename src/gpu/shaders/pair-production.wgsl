@@ -41,16 +41,7 @@ struct PairEvent {
 @group(2) @binding(1) var<storage, read_write> pairCounter: atomic<u32>;
 @group(2) @binding(2) var<uniform> pu: PairProdUniforms;
 
-// Simple hash-based PRNG (per-thread deterministic from photon index + simTime)
-fn pcgHash(input: u32) -> u32 {
-    var state = input * 747796405u + 2891336453u;
-    let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-    return (word >> 22u) ^ word;
-}
-
-fn randomFloat(seed: u32) -> f32 {
-    return f32(pcgHash(seed)) / 4294967296.0;
-}
+// pcgHash/pcgRand from shared-rng.wgsl (prepended)
 
 @compute @workgroup_size(256)
 fn checkPairProduction(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -66,7 +57,7 @@ fn checkPairProduction(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     // Check probability
     let seed = phIdx * 12345u + bitcast<u32>(pu.simTime);
-    if (randomFloat(seed) > pu.probability) { return; }
+    if (pcgRand(seed) > pu.probability) { return; }
 
     // Find nearest massive body within proximity
     let phX = ph.posX;
