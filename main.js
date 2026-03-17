@@ -380,6 +380,11 @@ class Simulation {
                 gpuCanvas.height = this.height;
             }
             this._gpuRenderer.resize(this.width, this.height);
+            this._gpuRenderer.setDomain(this.domainW, this.domainH);
+        }
+        if (this._gpuPhysics) {
+            this._gpuPhysics.domainW = this.domainW;
+            this._gpuPhysics.domainH = this.domainH;
         }
         // R11: Refresh cached layout dimensions for sidebar plots
         this.phasePlot.cacheSize();
