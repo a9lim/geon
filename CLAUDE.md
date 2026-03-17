@@ -362,6 +362,12 @@ Two interchangeable backends via `selectBackend()`:
 
 Falls back to CPU on WebGPU unavailability or device loss. Force CPU via `?cpu=1`. Runtime toggle in Engine tab.
 
+### Update Loop Architecture
+
+**CPU**: main.js drains the accumulator one PHYSICS_DT tick at a time. Each tick: `physics.update(PHYSICS_DT)` (adaptive substeps internally), then photon/pion update + decay, pair production, disintegration. Pion decay checked once per tick.
+
+**GPU**: main.js calls `gpuPhysics.update(PHYSICS_DT * N)` once per frame with all accumulated ticks batched. Internally runs the same adaptive substep loop over the total dt. Post-substep passes (pion decay, boson interaction, quadrupole radiation, stats readback) run once per `update()` call. Pion decay probability scaled by `1-(1-p)^N` to match CPU's per-tick rate.
+
 ### Capacity Limits
 
 | Resource | CPU | GPU |
