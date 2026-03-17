@@ -968,6 +968,11 @@ export default class GPUPhysics {
         this._phase4BindGroups.bosG3 = bg('bosons_g3', p4.updatePhotons.bindGroupLayouts[3],
             [b.pionPool, b.piCount]);
 
+        // ── Boson Tree Walk (updatePhotonsTree, updatePionsTree, absorbPhotonsTree, absorbPionsTree) ──
+        // Group 1 adds tree nodes buffer at binding 2; groups 0,2,3 shared with non-tree variants.
+        this._phase4BindGroups.bosTreeG1 = bg('bosonsTree_g1', p4.updatePhotonsTree.bindGroupLayouts[1],
+            [b.particleState, b.particleAux, b.qtNodeBuffer]);
+
         // ── Boson Tree (insertBosonsIntoTree, computeBosonAggregates, computeBosonGravity, applyBosonBosonGravity) ──
         // Group 0: uniforms + tree nodes (atomic) + counter + visitor flags
         this._phase4BindGroups.btG0 = bg('bosonTree_g0', p4.insertBosonsIntoTree.bindGroupLayouts[0],
@@ -1155,13 +1160,21 @@ export default class GPUPhysics {
         if (!this._radiationEnabled && !this._yukawaEnabled) return;
         const p4 = this._phase4;
         const bgs = this._phase4BindGroups;
+        const useBHTree = this._barnesHutEnabled;
+
+        // Select tree or pairwise pipelines for lensing + absorption
+        const phUpdatePipeline = useBHTree ? p4.updatePhotonsTree.pipeline : p4.updatePhotons.pipeline;
+        const piUpdatePipeline = useBHTree ? p4.updatePionsTree.pipeline : p4.updatePions.pipeline;
+        const phAbsorbPipeline = useBHTree ? p4.absorbPhotonsTree.pipeline : p4.absorbPhotons.pipeline;
+        const piAbsorbPipeline = useBHTree ? p4.absorbPionsTree.pipeline : p4.absorbPions.pipeline;
+        const g1 = useBHTree ? bgs.bosTreeG1 : bgs.bosG1;
 
         // updatePhotons: drift + lensing
         const phWG = Math.ceil(MAX_PHOTONS / 64);
         const passPhotons = encoder.beginComputePass({ label: 'updatePhotons' });
-        passPhotons.setPipeline(p4.updatePhotons.pipeline);
+        passPhotons.setPipeline(phUpdatePipeline);
         passPhotons.setBindGroup(0, bgs.bosG0);
-        passPhotons.setBindGroup(1, bgs.bosG1);
+        passPhotons.setBindGroup(1, g1);
         passPhotons.setBindGroup(2, bgs.bosG2);
         passPhotons.setBindGroup(3, bgs.bosG3);
         passPhotons.dispatchWorkgroups(phWG);
@@ -1170,9 +1183,9 @@ export default class GPUPhysics {
         // updatePions: drift with proper velocity
         const piWG = Math.ceil(MAX_PIONS / 64);
         const passPions = encoder.beginComputePass({ label: 'updatePions' });
-        passPions.setPipeline(p4.updatePions.pipeline);
+        passPions.setPipeline(piUpdatePipeline);
         passPions.setBindGroup(0, bgs.bosG0);
-        passPions.setBindGroup(1, bgs.bosG1);
+        passPions.setBindGroup(1, g1);
         passPions.setBindGroup(2, bgs.bosG2);
         passPions.setBindGroup(3, bgs.bosG3);
         passPions.dispatchWorkgroups(piWG);
@@ -1180,9 +1193,9 @@ export default class GPUPhysics {
 
         // absorbPhotons
         const passAbsorbPh = encoder.beginComputePass({ label: 'absorbPhotons' });
-        passAbsorbPh.setPipeline(p4.absorbPhotons.pipeline);
+        passAbsorbPh.setPipeline(phAbsorbPipeline);
         passAbsorbPh.setBindGroup(0, bgs.bosG0);
-        passAbsorbPh.setBindGroup(1, bgs.bosG1);
+        passAbsorbPh.setBindGroup(1, g1);
         passAbsorbPh.setBindGroup(2, bgs.bosG2);
         passAbsorbPh.setBindGroup(3, bgs.bosG3);
         passAbsorbPh.dispatchWorkgroups(phWG);
@@ -1190,15 +1203,15 @@ export default class GPUPhysics {
 
         // absorbPions
         const passAbsorbPi = encoder.beginComputePass({ label: 'absorbPions' });
-        passAbsorbPi.setPipeline(p4.absorbPions.pipeline);
+        passAbsorbPi.setPipeline(piAbsorbPipeline);
         passAbsorbPi.setBindGroup(0, bgs.bosG0);
-        passAbsorbPi.setBindGroup(1, bgs.bosG1);
+        passAbsorbPi.setBindGroup(1, g1);
         passAbsorbPi.setBindGroup(2, bgs.bosG2);
         passAbsorbPi.setBindGroup(3, bgs.bosG3);
         passAbsorbPi.dispatchWorkgroups(piWG);
         passAbsorbPi.end();
 
-        // decayPions
+        // decayPions (always pairwise — no tree needed)
         const passDecay = encoder.beginComputePass({ label: 'decayPions' });
         passDecay.setPipeline(p4.decayPions.pipeline);
         passDecay.setBindGroup(0, bgs.bosG0);
