@@ -187,7 +187,6 @@ class Simulation {
         // Backend detection (async, completes after first frame)
         this.backend = BACKEND_CPU;
         this._cpuPhysics = new CPUPhysics(this.physics);
-        this._canvasRenderer = new CanvasRenderer(this.ctx, this.width, this.height);
         // GPU backend will be initialized in Phase 1
 
         // Selected particle DOM refs

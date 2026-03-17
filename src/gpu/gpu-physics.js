@@ -252,8 +252,6 @@ export default class GPUPhysics {
         this._pairProdBuffers = null;
         this._higgsEnabled = false;
         this._axionEnabled = false;
-        this._fieldResolution = FIELD_GRID_RES; // default: 64, configurable to 128/256
-        this._gravityEnabled = false;
         this._expansionEnabled = false;
         this._disintegrationEnabled = false;
         this._hubbleParam = 0.001;
@@ -1615,22 +1613,6 @@ export default class GPUPhysics {
         } finally {
             this._ghostCountPending = false;
         }
-    }
-
-    /**
-     * Change the scalar field grid resolution. Requires reallocating field buffers.
-     * @param {number} res - Power of 2: 64, 128, or 256
-     */
-    setFieldResolution(res) {
-        if (res !== 64 && res !== 128 && res !== 256) return;
-        if (res === this._fieldResolution) return;
-
-        this._fieldResolution = res;
-
-        // TODO: Reallocate field buffers at new resolution once field compute is fully wired.
-        // this._reallocFieldBuffers(res);
-
-        if (typeof showToast === 'function') showToast(`Field grid: ${res}\u00D7${res}`);
     }
 
     /**
@@ -3312,7 +3294,6 @@ export default class GPUPhysics {
         // Use per-field uniform buffers to avoid encoder split when both fields active.
         // Each field gets its own uniform buffer with the correct currentFieldType baked in.
         if (this._fieldDeposit) {
-            if (!(this._higgsEnabled || this._axionEnabled)) this._writeFieldUniforms(dtSub);
             if (this._higgsEnabled) {
                 this._writeFieldUniforms(dtSub, 0); // currentFieldType=0 (Higgs)
                 this._dispatchFieldEvolve(encoder, 'higgs', dtSub);
@@ -3874,25 +3855,6 @@ export default class GPUPhysics {
      */
     getParticleCount() {
         return this.aliveCount;
-    }
-
-    /**
-     * Get the cached state of a particle by index.
-     * Returns null if no cached readback data is available.
-     * @param {number} idx
-     * @returns {Object|null} { x, y, radius, mass, charge, antimatter }
-     */
-    getParticleState(idx) {
-        if (!this._cachedParticleState || idx >= this.aliveCount) return null;
-        const s = this._cachedParticleState;
-        return {
-            x: s.posX[idx],
-            y: s.posY[idx],
-            radius: s.radius[idx],
-            mass: s.mass[idx],
-            charge: s.charge[idx],
-            antimatter: !!(s.flags[idx] & FLAG_ANTIMATTER),
-        };
     }
 
     destroy() {

@@ -55,7 +55,6 @@ export default class Physics {
         this.boundary = { x: 0, y: 0, w: 0, h: 0 };
         this.pool = new QuadTreePool(QUADTREE_CAPACITY);
         this._bosonPool = new QuadTreePool(QUADTREE_CAPACITY, 128);
-        this._collisionCount = 0;
 
         this.gravityEnabled = true;
         this.bosonInterEnabled = false;
@@ -759,7 +758,6 @@ export default class Physics {
                         const fSq = fx * fx + fy * fy;
                         const vDotF = vx * fx + vy * fy;
                         const invM = p.invMass;
-                        const g2 = gamma * gamma;
 
                         // Terms 2+3: −τ·γ·v·(F² − (v·F)²)/(m)
                         // Standard LL form: both power-dissipation terms along v
@@ -1041,7 +1039,6 @@ export default class Physics {
             // Step 6: Collisions (bounce uses force-based Hertz repulsion; only merge goes here)
             if (collisionMode === COL_MERGE) {
                 const { annihilations, merges, removed, spawns } = handleCollisions(particles, this.pool, root, collisionMode, this.bounceFriction, this.relativityEnabled, this.periodic, this.domainW, this.domainH, this._topologyConst);
-                this._collisionCount += annihilations.length + merges.length;
                 // Retire removed particles for signal delay fade-out
                 for (let ri = 0; ri < removed.length; ri++) this._retireParticle(removed[ri]);
                 // Deselect removed particles
