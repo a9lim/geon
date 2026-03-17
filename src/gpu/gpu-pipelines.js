@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 37;
+const SHADER_VERSION = 38;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -728,6 +728,35 @@ export async function createPhase4Pipelines(device, wgslConstants = '') {
                 compute: { module: bosonsModule, entryPoint: entry },
             }),
             bindGroupLayouts: bosLayouts,
+        };
+    }
+
+    // ── Boson Tree Walk (bosons-tree-walk.wgsl) ──
+    // Tree-accelerated lensing + absorption using main particle BH tree.
+    // Group 1 gains binding 2 (tree nodes buffer), everything else matches bosons.wgsl.
+    const treePrefix = await getTreePrefix(wgslConstants);
+    const bosonsTreeCode = await fetchShader('bosons-tree-walk.wgsl', treePrefix);
+    const bosonsTreeModule = device.createShaderModule({ label: 'bosonsTreeWalk', code: bosonsTreeCode });
+
+    const bosTreeG1 = device.createBindGroupLayout({
+        label: 'bosonsTree_g1',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleState (rw)
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleAux (rw)
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // tree nodes (rw for accessor compat)
+        ],
+    });
+    const bosTreeLayouts = [bosG0, bosTreeG1, bosG2, bosG3];
+    const bosTreePipelineLayout = device.createPipelineLayout({ bindGroupLayouts: bosTreeLayouts });
+
+    const bosonTreeWalkEntries = ['updatePhotonsTree', 'updatePionsTree', 'absorbPhotonsTree', 'absorbPionsTree'];
+    for (const entry of bosonTreeWalkEntries) {
+        bosonPipelines[entry] = {
+            pipeline: device.createComputePipeline({
+                label: entry, layout: bosTreePipelineLayout,
+                compute: { module: bosonsTreeModule, entryPoint: entry },
+            }),
+            bindGroupLayouts: bosTreeLayouts,
         };
     }
 
