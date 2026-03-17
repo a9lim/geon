@@ -33,7 +33,6 @@
  * @typedef {Object} PhysicsBackend
  * @property {function(number): void} update - Advance simulation by dt
  * @property {function(): number} getParticleCount
- * @property {function(number): ParticleState} getParticleState
  * @property {function(): SimStats} getStats
  * @property {function(Object): number} addParticle - Returns slot index
  * @property {function(number): void} removeParticle

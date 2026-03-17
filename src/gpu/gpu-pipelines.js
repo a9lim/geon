@@ -369,19 +369,13 @@ export async function createCollisionPipelines(device, wgslConstants = '') {
         compute: { module, entryPoint: 'resolveCollisions' },
     });
 
-    const detectCollisionsPairwise = device.createComputePipeline({
-        label: 'detectCollisionsPairwise',
-        layout: pipelineLayout,
-        compute: { module, entryPoint: 'detectCollisionsPairwise' },
-    });
-
     const resolveBouncePairwise = device.createComputePipeline({
         label: 'resolveBouncePairwise',
         layout: pipelineLayout,
         compute: { module, entryPoint: 'resolveBouncePairwise' },
     });
 
-    return { detectCollisions, resolveCollisions, detectCollisionsPairwise, resolveBouncePairwise, bindGroupLayouts };
+    return { detectCollisions, resolveCollisions, resolveBouncePairwise, bindGroupLayouts };
 }
 
 /**

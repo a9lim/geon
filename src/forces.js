@@ -2,7 +2,7 @@
 // Pairwise and Barnes-Hut force accumulation. Separates E-like (position-dependent)
 // from B-like (velocity-dependent) forces for the Boris integrator.
 
-import { BH_THETA, BH_THETA_SQ, INERTIA_K, MAG_MOMENT_K, TIDAL_STRENGTH, YUKAWA_COUPLING, HIGGS_MASS_FLOOR, EPSILON, TORUS, BOSON_SOFTENING_SQ, BOSON_MIN_AGE } from './config.js';
+import { BH_THETA_SQ, INERTIA_K, MAG_MOMENT_K, TIDAL_STRENGTH, YUKAWA_COUPLING, HIGGS_MASS_FLOOR, EPSILON, TORUS, BOSON_SOFTENING_SQ, BOSON_MIN_AGE } from './config.js';
 import { getDelayedState } from './signal-delay.js';
 import { minImage } from './topology.js';
 
@@ -88,7 +88,7 @@ export function computeAllForces(particles, toggles, pool, root, barnesHutEnable
         // Pre-size stack once before per-particle tree walks
         if (root >= 0 && _bhStack.length < pool.maxNodes) _bhStack = new Int32Array(pool.maxNodes * 2);
         if (root >= 0) for (let i = 0; i < n; i++) {
-            calculateForce(particles[i], pool, root, BH_THETA, particles[i].force, toggles, periodic, domW, domH, halfDomW, halfDomH, topology, useSignalDelay, simTime);
+            calculateForce(particles[i], pool, root, particles[i].force, toggles, periodic, domW, domH, halfDomW, halfDomH, topology, useSignalDelay, simTime);
         }
     } else {
         for (let i = 0; i < n; i++) {
@@ -618,7 +618,7 @@ export function compute1PN(particles, SOFTENING_SQ_VAL, periodic, domW, domH, ha
 // Pre-allocated stack for iterative tree walk (avoids recursion overhead)
 let _bhStack = new Int32Array(256);
 
-export function calculateForce(particle, pool, rootIdx, theta, out, toggles, periodic, domW, domH, halfDomW, halfDomH, topology, useSignalDelay, simTime) {
+export function calculateForce(particle, pool, rootIdx, out, toggles, periodic, domW, domH, halfDomW, halfDomH, topology, useSignalDelay, simTime) {
     const thetaSq = BH_THETA_SQ;
     const px = particle.pos.x, py = particle.pos.y;
     let stackTop = 0;

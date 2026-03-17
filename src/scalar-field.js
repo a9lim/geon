@@ -107,14 +107,6 @@ export default class ScalarField {
         return ny * GRID + nx;
     }
 
-    /** Clamp-read field at grid coords. */
-    _fieldAt(cx, cy) {
-        const GRID = this._grid;
-        if (cx < 0) cx = 0; else if (cx >= GRID) cx = GRID - 1;
-        if (cy < 0) cy = 0; else if (cy >= GRID) cy = GRID - 1;
-        return this.field[cy * GRID + cx];
-    }
-
     /** Compute PQS (cubic B-spline) weights for position (x, y).
      *  Stores base index + fractional offset in _pqs, value weights in _wx/_wy.
      *  4×4 stencil: nodes [ix-1..ix+2] × [iy-1..iy+2].
