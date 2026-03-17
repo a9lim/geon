@@ -695,11 +695,11 @@ export async function createPhase4Pipelines(device, wgslConstants = '') {
     }
 
     // ── Boson Tree (boson-tree.wgsl) ──
-    // Group 0: uniforms + bosonTreeNodes + bosonTreeCounter = 3 (1 uniform + 2 storage)
+    // Group 0: uniforms + bosonTreeNodes (atomic) + bosonTreeCounter + bosonVisitorFlags = 4 (1 uniform + 3 storage)
     // Group 1: photonPool (rw) + phCount (rw) = 2
     // Group 2: pionPool (rw) + piCount (rw) = 2
     // Group 3: particleState (ro) + allForces (rw) = 2
-    // Total: 4 groups, 8 storage buffers per stage
+    // Total: 4 groups, 9 storage buffers per stage
     const bosonTreeCode = await fetchShader('boson-tree.wgsl', prefix);
     const bosonTreeModule = device.createShaderModule({ label: 'bosonTree', code: bosonTreeCode });
 
@@ -707,8 +707,9 @@ export async function createPhase4Pipelines(device, wgslConstants = '') {
         label: 'bosonTree_g0',
         entries: [
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // bosonTreeNodes
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // bosonTreeNodes (atomic)
             { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // bosonTreeCounter
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // bosonVisitorFlags
         ],
     });
     const btG1 = device.createBindGroupLayout({
