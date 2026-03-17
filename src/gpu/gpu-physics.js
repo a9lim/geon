@@ -942,9 +942,9 @@ export default class GPUPhysics {
             [b.pionPool, b.piCount]);
 
         // ── Boson Tree (insertBosonsIntoTree, computeBosonAggregates, computeBosonGravity, applyBosonBosonGravity) ──
-        // Group 0: uniforms + tree nodes (merged to fit within 4 bind groups)
+        // Group 0: uniforms + tree nodes (atomic) + counter + visitor flags
         this._phase4BindGroups.btG0 = bg('bosonTree_g0', p4.insertBosonsIntoTree.bindGroupLayouts[0],
-            [this.uniformBuffer, b.bosonTreeNodes, b.bosonTreeCounter]);
+            [this.uniformBuffer, b.bosonTreeNodes, b.bosonTreeCounter, b.bosonVisitorFlags]);
         this._phase4BindGroups.btG1 = bg('bosonTree_g1', p4.insertBosonsIntoTree.bindGroupLayouts[1],
             [b.photonPool, b.phCount]);
         this._phase4BindGroups.btG2 = bg('bosonTree_g2', p4.insertBosonsIntoTree.bindGroupLayouts[2],
@@ -1179,12 +1179,22 @@ export default class GPUPhysics {
         // Reset boson tree node counter to 1 (root = node 0)
         this.device.queue.writeBuffer(b.bosonTreeCounter, 0, _qtNodeCounterData);
 
-        // Initialize root node bounds (reuse pre-allocated arrays to avoid GC)
+        // Clear visitor flags before insertion
+        encoder.clearBuffer(b.bosonVisitorFlags);
+
+        // Initialize root node (reuse pre-allocated arrays to avoid GC)
+        // Child pointers (words 14-17) = 0xFFFFFFFF (NONE), particleIdx (18) = 0xFFFFFFFF, parent (19) = 0xFFFFFFFF
         _bosonRootData.fill(0);
         _bosonRootF32[0] = 0;              // minX
         _bosonRootF32[1] = 0;              // minY
         _bosonRootF32[2] = this.domainW;   // maxX
         _bosonRootF32[3] = this.domainH;   // maxY
+        _bosonRootData[14] = 0xFFFFFFFF;   // NW = NONE
+        _bosonRootData[15] = 0xFFFFFFFF;   // NE = NONE
+        _bosonRootData[16] = 0xFFFFFFFF;   // SW = NONE
+        _bosonRootData[17] = 0xFFFFFFFF;   // SE = NONE
+        _bosonRootData[18] = 0xFFFFFFFF;   // particleIdx = NONE
+        _bosonRootData[19] = 0xFFFFFFFF;   // parent = NONE (-1)
         this.device.queue.writeBuffer(b.bosonTreeNodes, 0, _bosonRootData);
 
         const totalBosons = MAX_PHOTONS + MAX_PIONS;
@@ -1200,16 +1210,14 @@ export default class GPUPhysics {
         passInsert.dispatchWorkgroups(bosonWG);
         passInsert.end();
 
-        // computeBosonAggregates
-        const maxBosonNodes = b.MAX_BOSON_NODES;
-        const aggWG = Math.ceil(maxBosonNodes / 64);
+        // computeBosonAggregates (one thread per boson, bottom-up leaf->root walk)
         const passAgg = encoder.beginComputePass({ label: 'computeBosonAggregates' });
         passAgg.setPipeline(p4.computeBosonAggregates.pipeline);
         passAgg.setBindGroup(0, bgs.btG0);
         passAgg.setBindGroup(1, bgs.btG1);
         passAgg.setBindGroup(2, bgs.btG2);
         passAgg.setBindGroup(3, bgs.btG3);
-        passAgg.dispatchWorkgroups(aggWG);
+        passAgg.dispatchWorkgroups(bosonWG);
         passAgg.end();
 
         // computeBosonGravity: particle <- boson gravity

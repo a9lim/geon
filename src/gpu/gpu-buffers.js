@@ -266,6 +266,11 @@ export function createParticleBuffers(device, maxParticles) {
         size: 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         label: 'bosonTreeCounter'
     });
+    const bosonVisitorFlags = device.createBuffer({
+        label: 'bosonVisitorFlags',
+        size: MAX_BOSON_NODES * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
 
     return {
         maxParticles,
@@ -309,7 +314,7 @@ export function createParticleBuffers(device, maxParticles) {
         pionPool, piCount,
         MAX_PIONS,
         // Boson tree (Phase 4)
-        bosonTreeNodes, bosonTreeCounter, MAX_BOSON_NODES,
+        bosonTreeNodes, bosonTreeCounter, bosonVisitorFlags, MAX_BOSON_NODES,
 
         // Signal delay history (lazy-allocated)
         historyAllocated: false,

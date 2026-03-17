@@ -4,6 +4,7 @@
 // Traversal shaders: particle<-boson gravity and boson<->boson mutual gravity.
 //
 // Standalone shader — defines own structs (NOT prepended with common.wgsl).
+// Uses CAS lock insertion + bottom-up visitor-flag aggregation (matches tree-build.wgsl).
 
 // Constants provided by generated wgslConstants block.
 
@@ -11,6 +12,8 @@
 
 // Boson tree node: same 20-word layout as particle tree but only mass+CoM used
 const NODE_WORDS: u32 = 20u;
+const NONE: i32 = -1;
+const LOCK_BIT: i32 = -2147483648; // 0x80000000 (MSB)
 
 // Node field offsets
 const N_MIN_X: u32 = 0u;
@@ -27,12 +30,13 @@ const N_NE: u32 = 15u;
 const N_SW: u32 = 16u;
 const N_SE: u32 = 17u;
 const N_PARTICLE_IDX: u32 = 18u;
-const N_DEPTH: u32 = 19u;
+const N_PARENT: u32 = 19u;
 
-// Group 0: uniforms + boson tree nodes (merged to stay within 4 bind groups)
+// Group 0: uniforms + boson tree nodes (atomic) + counter + visitor flags
 @group(0) @binding(0) var<uniform> u: SimUniforms;
-@group(0) @binding(1) var<storage, read_write> bosonTree: array<u32>;
+@group(0) @binding(1) var<storage, read_write> bosonTree: array<atomic<u32>>;
 @group(0) @binding(2) var<storage, read_write> bosonNodeCounter: atomic<u32>;
+@group(0) @binding(3) var<storage, read_write> bosonVisitorFlags: array<atomic<u32>>;
 
 // Group 1: photon pool (packed)
 @group(1) @binding(0) var<storage, read_write> photons: array<Photon>;
@@ -46,24 +50,37 @@ const N_DEPTH: u32 = 19u;
 @group(3) @binding(0) var<storage, read_write> particles: array<ParticleState>;
 @group(3) @binding(1) var<storage, read_write> allForces: array<AllForces>;
 
-// Helper: read f32 from tree node
+// ── Atomic node accessors ──
+
 fn nodeF32(nodeIdx: u32, field: u32) -> f32 {
-    return bitcast<f32>(bosonTree[nodeIdx * NODE_WORDS + field]);
+    return bitcast<f32>(atomicLoad(&bosonTree[nodeIdx * NODE_WORDS + field]));
 }
 
-// Helper: read u32 from tree node
 fn nodeU32(nodeIdx: u32, field: u32) -> u32 {
-    return bosonTree[nodeIdx * NODE_WORDS + field];
+    return atomicLoad(&bosonTree[nodeIdx * NODE_WORDS + field]);
 }
 
-// Helper: write f32 to tree node
 fn setNodeF32(nodeIdx: u32, field: u32, val: f32) {
-    bosonTree[nodeIdx * NODE_WORDS + field] = bitcast<u32>(val);
+    atomicStore(&bosonTree[nodeIdx * NODE_WORDS + field], bitcast<u32>(val));
 }
 
-// Helper: write u32 to tree node
 fn setNodeU32(nodeIdx: u32, field: u32, val: u32) {
-    bosonTree[nodeIdx * NODE_WORDS + field] = val;
+    atomicStore(&bosonTree[nodeIdx * NODE_WORDS + field], val);
+}
+
+// Atomic CAS on particleIndex field (for lock protocol)
+fn casParticleIdx(nodeIdx: u32, expected: i32, desired: i32) -> i32 {
+    let offset = nodeIdx * NODE_WORDS + N_PARTICLE_IDX;
+    let result = atomicCompareExchangeWeak(&bosonTree[offset], bitcast<u32>(expected), bitcast<u32>(desired));
+    return bitcast<i32>(result.old_value);
+}
+
+fn getParentIndex(nodeIdx: u32) -> i32 {
+    return bitcast<i32>(atomicLoad(&bosonTree[nodeIdx * NODE_WORDS + N_PARENT]));
+}
+
+fn atomicAddParticleCount(nodeIdx: u32, val: u32) -> u32 {
+    return atomicAdd(&bosonTree[nodeIdx * NODE_WORDS + N_PARTICLE_COUNT], val);
 }
 
 // Allocate a new tree node, returns index
@@ -71,27 +88,73 @@ fn allocNode() -> u32 {
     return atomicAdd(&bosonNodeCounter, 1u);
 }
 
-// Initialize a node with bounds
-fn initNode(idx: u32, minX: f32, minY: f32, maxX: f32, maxY: f32, depth: u32) {
+// Initialize a node with bounds and parent index
+fn initNode(idx: u32, minX: f32, minY: f32, maxX: f32, maxY: f32, parentIdx: i32) {
     let base = idx * NODE_WORDS;
-    bosonTree[base + N_MIN_X] = bitcast<u32>(minX);
-    bosonTree[base + N_MIN_Y] = bitcast<u32>(minY);
-    bosonTree[base + N_MAX_X] = bitcast<u32>(maxX);
-    bosonTree[base + N_MAX_Y] = bitcast<u32>(maxY);
-    bosonTree[base + N_COM_X] = bitcast<u32>(0.0);
-    bosonTree[base + N_COM_Y] = bitcast<u32>(0.0);
-    bosonTree[base + N_TOTAL_MASS] = bitcast<u32>(0.0);
-    bosonTree[base + N_PARTICLE_COUNT] = 0u;
-    bosonTree[base + N_DIVIDED] = 0u;
-    bosonTree[base + N_NW] = 0u;
-    bosonTree[base + N_NE] = 0u;
-    bosonTree[base + N_SW] = 0u;
-    bosonTree[base + N_SE] = 0u;
-    bosonTree[base + N_PARTICLE_IDX] = 0xFFFFFFFFu;
-    bosonTree[base + N_DEPTH] = depth;
+    atomicStore(&bosonTree[base + N_MIN_X], bitcast<u32>(minX));
+    atomicStore(&bosonTree[base + N_MIN_Y], bitcast<u32>(minY));
+    atomicStore(&bosonTree[base + N_MAX_X], bitcast<u32>(maxX));
+    atomicStore(&bosonTree[base + N_MAX_Y], bitcast<u32>(maxY));
+    atomicStore(&bosonTree[base + N_COM_X], bitcast<u32>(0.0));
+    atomicStore(&bosonTree[base + N_COM_Y], bitcast<u32>(0.0));
+    atomicStore(&bosonTree[base + N_TOTAL_MASS], bitcast<u32>(0.0));
+    atomicStore(&bosonTree[base + N_PARTICLE_COUNT], 0u);
+    atomicStore(&bosonTree[base + N_DIVIDED], 0u);
+    atomicStore(&bosonTree[base + N_NW], 0xFFFFFFFFu);
+    atomicStore(&bosonTree[base + N_NE], 0xFFFFFFFFu);
+    atomicStore(&bosonTree[base + N_SW], 0xFFFFFFFFu);
+    atomicStore(&bosonTree[base + N_SE], 0xFFFFFFFFu);
+    atomicStore(&bosonTree[base + N_PARTICLE_IDX], bitcast<u32>(NONE));
+    atomicStore(&bosonTree[base + N_PARENT], bitcast<u32>(parentIdx));
 }
 
-// Insert a boson into the tree (iterative)
+// Determine which child a point falls into
+fn quadrantChild(parent: u32, x: f32, y: f32, midX: f32, midY: f32,
+                 nw: u32, ne: u32, sw: u32, se: u32) -> u32 {
+    if (x < midX) { return select(nw, sw, y >= midY); }
+    else { return select(ne, se, y >= midY); }
+}
+
+fn childFor(nodeIdx: u32, px: f32, py: f32) -> u32 {
+    let minX = nodeF32(nodeIdx, N_MIN_X);
+    let minY = nodeF32(nodeIdx, N_MIN_Y);
+    let maxX = nodeF32(nodeIdx, N_MAX_X);
+    let maxY = nodeF32(nodeIdx, N_MAX_Y);
+    let midX = (minX + maxX) * 0.5;
+    let midY = (minY + maxY) * 0.5;
+    let nw = nodeU32(nodeIdx, N_NW);
+    let ne = nodeU32(nodeIdx, N_NE);
+    let sw = nodeU32(nodeIdx, N_SW);
+    let se = nodeU32(nodeIdx, N_SE);
+    return quadrantChild(nodeIdx, px, py, midX, midY, nw, ne, sw, se);
+}
+
+fn subdivide(nodeIdx: u32) {
+    let minX = nodeF32(nodeIdx, N_MIN_X);
+    let minY = nodeF32(nodeIdx, N_MIN_Y);
+    let maxX = nodeF32(nodeIdx, N_MAX_X);
+    let maxY = nodeF32(nodeIdx, N_MAX_Y);
+    let cx = (minX + maxX) * 0.5;
+    let cy = (minY + maxY) * 0.5;
+    let parentI32 = i32(nodeIdx);
+
+    let nw = allocNode();
+    let ne = allocNode();
+    let sw = allocNode();
+    let se = allocNode();
+
+    initNode(nw, minX, minY, cx, cy, parentI32);
+    initNode(ne, cx, minY, maxX, cy, parentI32);
+    initNode(sw, minX, cy, cx, maxY, parentI32);
+    initNode(se, cx, cy, maxX, maxY, parentI32);
+
+    setNodeU32(nodeIdx, N_NW, nw);
+    setNodeU32(nodeIdx, N_NE, ne);
+    setNodeU32(nodeIdx, N_SW, sw);
+    setNodeU32(nodeIdx, N_SE, se);
+}
+
+// Insert a boson into the tree (CAS lock protocol, matches tree-build.wgsl)
 @compute @workgroup_size(64)
 fn insertBosonsIntoTree(@builtin(global_invocation_id) gid: vec3u) {
     let i = gid.x;
@@ -116,127 +179,158 @@ fn insertBosonsIntoTree(@builtin(global_invocation_id) gid: vec3u) {
         bMass = pions[pi].mass * gamma;
     }
 
-    // Standard iterative tree insert (walk from root, subdivide on collision)
-    var nodeIdx = 0u;
-    for (var depth = 0u; depth < MAX_DEPTH; depth++) {
-        let minX = nodeF32(nodeIdx, N_MIN_X);
-        let minY = nodeF32(nodeIdx, N_MIN_Y);
-        let maxX = nodeF32(nodeIdx, N_MAX_X);
-        let maxY = nodeF32(nodeIdx, N_MAX_Y);
-        let midX = (minX + maxX) * 0.5;
-        let midY = (minY + maxY) * 0.5;
+    // CAS lock insertion: walk from root, subdivide on collision
+    var cur: u32 = 0u;
+    var depth: u32 = 0u;
 
-        // Determine quadrant
-        let isEast = bx >= midX;
-        let isSouth = by >= midY;
+    loop {
+        if (depth >= MAX_DEPTH) { break; }
 
-        if (nodeU32(nodeIdx, N_DIVIDED) != 0u) {
-            // Already subdivided — descend into correct child
-            var childField: u32;
-            if (!isEast && !isSouth) { childField = N_NW; }
-            else if (isEast && !isSouth) { childField = N_NE; }
-            else if (!isEast && isSouth) { childField = N_SW; }
-            else { childField = N_SE; }
-            nodeIdx = nodeU32(nodeIdx, childField);
-            continue;
+        // Try to CAS particleIndex from NONE to our boson index (claim empty leaf)
+        let prev = casParticleIdx(cur, NONE, i32(i));
+
+        if (prev == NONE) {
+            // Successfully claimed empty node — we are a leaf
+            setNodeU32(cur, N_PARTICLE_COUNT, 1u);
+            let parentIdx = getParentIndex(cur);
+            if (parentIdx >= 0) {
+                atomicAddParticleCount(u32(parentIdx), 1u);
+            }
+            break;
         }
 
-        let pCount = nodeU32(nodeIdx, N_PARTICLE_COUNT);
-        if (pCount == 0u) {
-            // Empty leaf — insert here
-            setNodeU32(nodeIdx, N_PARTICLE_IDX, i);
-            setNodeU32(nodeIdx, N_PARTICLE_COUNT, 1u);
-            setNodeF32(nodeIdx, N_COM_X, bx);
-            setNodeF32(nodeIdx, N_COM_Y, by);
-            setNodeF32(nodeIdx, N_TOTAL_MASS, bMass);
-            return;
+        // Node is occupied or being subdivided
+        let prevUnlocked = prev & ~LOCK_BIT;
+
+        if (prevUnlocked >= 0 && bitcast<i32>(nodeU32(cur, N_NW)) == NONE) {
+            // Occupied leaf with no children — try to lock for subdivision
+            let lockResult = casParticleIdx(cur, prev, prev | LOCK_BIT);
+            if (lockResult == prev) {
+                // Got the lock — subdivide
+                subdivide(cur);
+
+                // Reinsert displaced boson into correct child
+                let displacedIdx = u32(prev);
+                var dispX: f32; var dispY: f32;
+                if (displacedIdx < phN) {
+                    dispX = photons[displacedIdx].posX;
+                    dispY = photons[displacedIdx].posY;
+                } else {
+                    let dpi = displacedIdx - phN;
+                    dispX = pions[dpi].posX;
+                    dispY = pions[dpi].posY;
+                }
+
+                let childForDisplaced = childFor(cur, dispX, dispY);
+                // Write displaced boson as leaf of child
+                atomicStore(&bosonTree[childForDisplaced * NODE_WORDS + N_PARTICLE_IDX], bitcast<u32>(prev));
+                setNodeU32(childForDisplaced, N_PARTICLE_COUNT, 1u);
+                atomicAddParticleCount(cur, 1u); // cur now has one populated child
+
+                // Mark current node as internal (clear particleIndex)
+                atomicStore(&bosonTree[cur * NODE_WORDS + N_PARTICLE_IDX], bitcast<u32>(NONE));
+
+                // Descend into correct child for our boson
+                cur = childFor(cur, bx, by);
+                depth += 1u;
+                continue;
+            }
+            // Failed to lock — someone else is subdividing. Spin/retry.
         }
 
-        // Leaf with one particle — subdivide
-        let nw = allocNode();
-        let ne = allocNode();
-        let sw = allocNode();
-        let se = allocNode();
-        initNode(nw, minX, minY, midX, midY, depth + 1u);
-        initNode(ne, midX, minY, maxX, midY, depth + 1u);
-        initNode(sw, minX, midY, midX, maxY, depth + 1u);
-        initNode(se, midX, midY, maxX, maxY, depth + 1u);
-        setNodeU32(nodeIdx, N_NW, nw);
-        setNodeU32(nodeIdx, N_NE, ne);
-        setNodeU32(nodeIdx, N_SW, sw);
-        setNodeU32(nodeIdx, N_SE, se);
-        setNodeU32(nodeIdx, N_DIVIDED, 1u);
-
-        // Re-insert the existing particle into the correct child
-        let existIdx = nodeU32(nodeIdx, N_PARTICLE_IDX);
-        let exX = nodeF32(nodeIdx, N_COM_X);
-        let exY = nodeF32(nodeIdx, N_COM_Y);
-        let exMass = nodeF32(nodeIdx, N_TOTAL_MASS);
-
-        var exChild: u32;
-        let exEast = exX >= midX;
-        let exSouth = exY >= midY;
-        if (!exEast && !exSouth) { exChild = nw; }
-        else if (exEast && !exSouth) { exChild = ne; }
-        else if (!exEast && exSouth) { exChild = sw; }
-        else { exChild = se; }
-        setNodeU32(exChild, N_PARTICLE_IDX, existIdx);
-        setNodeU32(exChild, N_PARTICLE_COUNT, 1u);
-        setNodeF32(exChild, N_COM_X, exX);
-        setNodeF32(exChild, N_COM_Y, exY);
-        setNodeF32(exChild, N_TOTAL_MASS, exMass);
-
-        // Clear parent leaf data
-        setNodeU32(nodeIdx, N_PARTICLE_IDX, 0xFFFFFFFFu);
-
-        // Now descend for the new boson
-        var newChildField: u32;
-        if (!isEast && !isSouth) { newChildField = N_NW; }
-        else if (isEast && !isSouth) { newChildField = N_NE; }
-        else if (!isEast && isSouth) { newChildField = N_SW; }
-        else { newChildField = N_SE; }
-        nodeIdx = nodeU32(nodeIdx, newChildField);
+        // Node has children (internal node) or is being subdivided — descend
+        if (bitcast<i32>(nodeU32(cur, N_NW)) != NONE) {
+            cur = childFor(cur, bx, by);
+            depth += 1u;
+        }
+        // If NW is still NONE, another thread is subdividing — spin (bounded by depth guard)
     }
 }
 
-// Bottom-up aggregate: only totalMass + comX/comY
+// Bottom-up aggregate via visitor flags (leaf->root walk).
+// Each boson thread finds its leaf, writes leaf data, then walks up via N_PARENT.
+// Last visitor to each internal node aggregates children.
 @compute @workgroup_size(64)
 fn computeBosonAggregates(@builtin(global_invocation_id) gid: vec3u) {
-    let nodeIdx = gid.x;
-    let nodeCount = atomicLoad(&bosonNodeCounter);
-    if (nodeIdx >= nodeCount) { return; }
-    if (nodeU32(nodeIdx, N_DIVIDED) == 0u) { return; } // leaf, already has data
+    let i = gid.x;
+    let phN = atomicLoad(&phCount);
+    let piN = atomicLoad(&piCount);
+    let total = phN + piN;
+    if (i >= total) { return; }
 
-    // Aggregate from children
-    var totalM: f32 = 0.0;
-    var comX: f32 = 0.0;
-    var comY: f32 = 0.0;
+    var bx: f32; var by: f32; var bMass: f32;
+    var alive: bool;
+    if (i < phN) {
+        alive = (photons[i].flags & 1u) != 0u;
+        bx = photons[i].posX; by = photons[i].posY;
+        bMass = photons[i].energy;
+    } else {
+        let pi = i - phN;
+        alive = (pions[pi].flags & 1u) != 0u;
+        bx = pions[pi].posX; by = pions[pi].posY;
+        let wx = pions[pi].wX; let wy = pions[pi].wY;
+        let gamma = sqrt(1.0 + wx * wx + wy * wy);
+        bMass = pions[pi].mass * gamma;
+    }
+    if (!alive) { return; }
 
-    let children = array<u32, 4>(
-        nodeU32(nodeIdx, N_NW), nodeU32(nodeIdx, N_NE),
-        nodeU32(nodeIdx, N_SW), nodeU32(nodeIdx, N_SE)
-    );
+    // Walk root->leaf to find our leaf node
+    var leafNode: u32 = 0u;
+    var depth: u32 = 0u;
+    loop {
+        if (depth >= MAX_DEPTH) { break; }
+        if (bitcast<i32>(nodeU32(leafNode, N_NW)) == NONE) { break; } // leaf
+        leafNode = childFor(leafNode, bx, by);
+        depth += 1u;
+    }
 
-    for (var c = 0u; c < 4u; c++) {
-        let childIdx = children[c];
-        let cMass = nodeF32(childIdx, N_TOTAL_MASS);
-        if (cMass > EPSILON) {
-            comX += cMass * nodeF32(childIdx, N_COM_X);
-            comY += cMass * nodeF32(childIdx, N_COM_Y);
-            totalM += cMass;
+    // Write leaf aggregates (single boson)
+    setNodeF32(leafNode, N_TOTAL_MASS, bMass);
+    if (bMass > 0.0) {
+        setNodeF32(leafNode, N_COM_X, bx);
+        setNodeF32(leafNode, N_COM_Y, by);
+    }
+
+    // Walk up to root via parent indices
+    var curNode: i32 = getParentIndex(leafNode);
+    loop {
+        if (curNode < 0) { break; } // reached root's parent (NONE)
+
+        let nodeU = u32(curNode);
+        // Each visitor increments the flag. Only the last visitor (the one
+        // that brings the count up to the number of populated children) is
+        // allowed to aggregate and continue climbing.
+        let expectedVisitors = nodeU32(nodeU, N_PARTICLE_COUNT); // populated child count
+        let prev2 = atomicAdd(&bosonVisitorFlags[nodeU], 1u);
+        if (prev2 < expectedVisitors - 1u) {
+            // Not the last visitor — exit
+            break;
         }
-    }
 
-    if (totalM > EPSILON) {
-        let invM = 1.0 / totalM;
-        setNodeF32(nodeIdx, N_COM_X, comX * invM);
-        setNodeF32(nodeIdx, N_COM_Y, comY * invM);
+        // Last visitor — aggregate children
+        let c0 = nodeU32(nodeU, N_NW);
+        let c1 = nodeU32(nodeU, N_NE);
+        let c2 = nodeU32(nodeU, N_SW);
+        let c3 = nodeU32(nodeU, N_SE);
+
+        let m0 = nodeF32(c0, N_TOTAL_MASS);
+        let m1 = nodeF32(c1, N_TOTAL_MASS);
+        let m2 = nodeF32(c2, N_TOTAL_MASS);
+        let m3 = nodeF32(c3, N_TOTAL_MASS);
+        let totalM = m0 + m1 + m2 + m3;
+
+        setNodeF32(nodeU, N_TOTAL_MASS, totalM);
+        if (totalM > EPSILON) {
+            let invM = 1.0 / totalM;
+            setNodeF32(nodeU, N_COM_X, (nodeF32(c0, N_COM_X) * m0 + nodeF32(c1, N_COM_X) * m1 + nodeF32(c2, N_COM_X) * m2 + nodeF32(c3, N_COM_X) * m3) * invM);
+            setNodeF32(nodeU, N_COM_Y, (nodeF32(c0, N_COM_Y) * m0 + nodeF32(c1, N_COM_Y) * m1 + nodeF32(c2, N_COM_Y) * m2 + nodeF32(c3, N_COM_Y) * m3) * invM);
+        }
+
+        curNode = getParentIndex(nodeU);
     }
-    setNodeF32(nodeIdx, N_TOTAL_MASS, totalM);
-    setNodeU32(nodeIdx, N_PARTICLE_COUNT, 1u); // mark as having data
 }
 
-// Shared BH gravity force: F = massFactor * nodeMass / (r² + softening)^{3/2} * r̂
+// Shared BH gravity force: F = massFactor * nodeMass / (r^2 + softening)^{3/2} * r_hat
 fn bhGravForce(dx: f32, dy: f32, nodeMass: f32, massFactor: f32) -> vec2f {
     let rSq = dx * dx + dy * dy + BOSON_SOFTENING_SQ;
     let invRSq = 1.0 / rSq;
@@ -274,7 +368,7 @@ fn computeBosonGravity(@builtin(global_invocation_id) gid: vec3u) {
         let dy = cy - py;
         let dSq = dx * dx + dy * dy;
         let size = nodeF32(nIdx, N_MAX_X) - nodeF32(nIdx, N_MIN_X);
-        let isDivided = nodeU32(nIdx, N_DIVIDED) != 0u;
+        let isDivided = bitcast<i32>(nodeU32(nIdx, N_NW)) != NONE;
 
         if (!isDivided || size * size < BH_THETA_SQ * dSq) {
             force += bhGravForce(dx, dy, nodeMass, pMass);
@@ -341,7 +435,7 @@ fn applyBosonBosonGravity(@builtin(global_invocation_id) gid: vec3u) {
         let dy = cy - by;
         let dSq = dx * dx + dy * dy;
         let size = nodeF32(nIdx, N_MAX_X) - nodeF32(nIdx, N_MIN_X);
-        let isDivided = nodeU32(nIdx, N_DIVIDED) != 0u;
+        let isDivided = bitcast<i32>(nodeU32(nIdx, N_NW)) != NONE;
 
         if (!isDivided || size * size < BH_THETA_SQ * dSq) {
             kick += bhGravForce(dx, dy, nodeMass, massFactor);
