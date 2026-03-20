@@ -180,6 +180,7 @@ export function loadState(state, sim) {
 
 function _restoreSettings(state, sim) {
     if (state.settings) {
+        // Legacy compat: 'repel' was renamed to 'bounce' in an earlier version
         const col = state.settings.collision === 'repel' ? 'bounce' : (state.settings.collision || 'pass');
         sim.collisionMode = colFromString(col);
         sim.boundaryMode = boundFromString(state.settings.boundary);

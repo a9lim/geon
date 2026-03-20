@@ -796,9 +796,10 @@ export default class ScalarField {
         const prevQuality = ctx.imageSmoothingQuality;
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
+        const prevAlpha = ctx.globalAlpha;
         ctx.globalAlpha = 0.6;
         ctx.drawImage(this.canvas, 0, 0, domainW, domainH);
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = prevAlpha;
         ctx.imageSmoothingEnabled = prevSmooth;
         ctx.imageSmoothingQuality = prevQuality;
     }

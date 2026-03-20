@@ -329,7 +329,7 @@ export const REFERENCE = {
 <p>The axion is a hypothetical particle originally proposed to solve the strong CP problem in quantum chromodynamics — the puzzle of why the strong force conserves CP symmetry despite having no reason to. It has since become a leading dark matter candidate.</p>
 
 <h3>The Dynamical Field</h3>
-<p>The axion field $a(\\mathbf{x},t)$ lives on a 64×64 grid, governed by the Klein-Gordon equation with a quadratic potential:</p>
+<p>The axion field $a(\\mathbf{x},t)$ lives on a 64×64 grid (CPU) or 128×128 grid (GPU), governed by the Klein-Gordon equation with a quadratic potential:</p>
 <p>$$\\frac{\\partial^2 a}{\\partial t^2} = \\nabla^2 a - m_a^2\\,a - \\gamma\\dot{a} + \\text{source}$$</p>
 <p>The potential $V(a) = \\frac{1}{2}m_a^2 a^2$ has its minimum at $a=0$ — unlike the Higgs, there is no symmetry breaking. The field oscillates around zero with frequency $m_a$, exactly as cosmological axion dark matter does. Damping $g\\,m_a\\dot{a}$ gives $Q = 1/g$, so the resonant buildup exactly compensates the coupling strength ($g \\cdot Q = 1$). In nature, the axion oscillation is essentially undamped (cosmological damping comes only from Hubble friction $3H\\dot{a}$).</p>
 
@@ -407,7 +407,7 @@ export const REFERENCE = {
 <p>The vacuum energy $V(v)$ is subtracted so the ground state carries zero field energy.</p>
 
 <h3>The Mass Slider</h3>
-<p>Controls $m_H$ (range 0.25&ndash;1). Smaller $m_H$ means a shallower potential well, longer interaction range ($\\sim 1/m_H$), and weaker restoring force — easier to displace from the VEV and trigger phase transitions.</p>
+<p>Controls $m_H$ (range 0.25&ndash;0.75). Smaller $m_H$ means a shallower potential well, longer interaction range ($\\sim 1/m_H$), and weaker restoring force — easier to displace from the VEV and trigger phase transitions.</p>
 `,
     },
 
@@ -633,7 +633,7 @@ export const REFERENCE = {
 <p>Gravitational deflection uses the massive-particle geodesic factor $(1 + v^2)$, which correctly reduces to $2\\times$ (null geodesic) as $v \\to c$ and $1\\times$ (Newtonian) as $v \\to 0$.</p>
 
 <h3>Decay</h3>
-<p>Pions decay after a finite lifetime. Neutral pions decay ~4× faster than charged pions (half-life 32 vs 128), reflecting the electromagnetic vs weak decay channels:</p>
+<p>Pions decay after a finite lifetime. Neutral pions decay faster than charged pions (half-life 32 vs 64), reflecting the electromagnetic vs weak decay channels:</p>
 <ul>
 <li>$\\pi^0 \\to 2\\gamma$ — two photons emitted back-to-back in the rest frame, Lorentz-boosted to the lab</li>
 <li>$\\pi^+ \\to e^+ + \\gamma$ — positron + photon (simplified from $\\mu^+\\nu_\\mu$)</li>
@@ -692,7 +692,7 @@ export const REFERENCE = {
 <h4>Particle–Field Gravity</h4>
 <p>Each grid cell acts as a point mass $\\rho\\,dA$ that attracts particles via Newtonian gravity:</p>
 <p>$$\\mathbf{F} = m\\sum_j \\frac{\\rho_j\\,dA}{r_j^2}\\,\\hat{r}_j$$</p>
-<p>This is a direct $O(N \\times 64^2)$ summation over all grid cells, using the same Plummer softening as particle–particle gravity. Topology-aware for periodic boundaries.</p>
+<p>This is a direct $O(N \\times G^2)$ summation over all grid cells ($G$ = 64 on CPU, 128 on GPU), using the same Plummer softening as particle–particle gravity. Topology-aware for periodic boundaries.</p>
 
 <h4>Field Self-Gravity</h4>
 <p>The field's own energy density curves the local geometry, modifying its wave equation. In the weak-field limit ($|\\Phi| \\ll 1$), the Klein-Gordon equation gains GR corrections:</p>

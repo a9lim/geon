@@ -14,18 +14,6 @@ export default class Vec2 {
         return new Vec2(this.x, this.y);
     }
 
-    add(v) {
-        this.x += v.x;
-        this.y += v.y;
-        return this;
-    }
-
-    sub(v) {
-        this.x -= v.x;
-        this.y -= v.y;
-        return this;
-    }
-
     scale(s) {
         this.x *= s;
         this.y *= s;

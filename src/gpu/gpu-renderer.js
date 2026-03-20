@@ -732,6 +732,9 @@ export default class GPURenderer {
                 }
 
                 // Antimatter rings (always, when antimatter particles exist)
+                // TODO: skip when no antimatter particles — currently submits 5 WebGPU
+                // API calls per frame even with zero antimatter. Would need an
+                // antimatter count tracked across addParticle/removeParticle.
                 {
                     const [ar, ag, ab] = this.isLight ? [0.533, 0.533, 0.533] : [0.8, 0.8, 0.8];
                     const aa = 1.0;

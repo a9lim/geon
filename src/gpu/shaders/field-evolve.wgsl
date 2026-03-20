@@ -70,24 +70,36 @@ fn higgsHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
     let fdC = fieldDot[idx];
 
     // Numerical viscosity: ν·∇²(ȧ) with ν = 1/(2√(1/dx²+1/dy²)) → Q=1 at Nyquist, vanishes for physical modes
-    let fdL = select(fdC, fieldDot[idx - 1u], ix > 0u);
-    let fdR = select(fdC, fieldDot[idx + 1u], ix < GRID_LAST);
-    let fdT = select(fdC, fieldDot[idx - GRID], iy > 0u);
-    let fdB = select(fdC, fieldDot[idx + GRID], iy < GRID_LAST);
+    var fdL: f32; var fdR: f32; var fdT: f32; var fdB: f32;
+    if (ix > 0u && ix < GRID_LAST && iy > 0u && iy < GRID_LAST) {
+        // Interior fast path: direct indexing
+        fdL = fieldDot[idx - 1u];
+        fdR = fieldDot[idx + 1u];
+        fdT = fieldDot[idx - GRID];
+        fdB = fieldDot[idx + GRID];
+    } else {
+        // Border: topology-aware via nbIndex
+        let bcMode = uniforms.boundaryMode;
+        let topoMode = uniforms.topologyMode;
+        let iL = nbIndex(i32(ix) - 1, i32(iy), bcMode, topoMode);
+        let iR = nbIndex(i32(ix) + 1, i32(iy), bcMode, topoMode);
+        let iT = nbIndex(i32(ix), i32(iy) - 1, bcMode, topoMode);
+        let iB = nbIndex(i32(ix), i32(iy) + 1, bcMode, topoMode);
+        fdL = select(fdC, fieldDot[iL], iL >= 0);
+        fdR = select(fdC, fieldDot[iR], iR >= 0);
+        fdT = select(fdC, fieldDot[iT], iT >= 0);
+        fdB = select(fdC, fieldDot[iB], iB >= 0);
+    }
     let fdLap = (fdL + fdR - 2.0 * fdC) * invCWsq + (fdT + fdB - 2.0 * fdC) * invCHsq;
     let viscosity = 0.5 * inverseSqrt(invCWsq + invCHsq) * fdLap;
 
     var ddphi = lapI + muSqEff * phi - muSq * phi * phi * phi
               - damp * fdC + srcTerm + viscosity;
 
-    // Hoist portal field read once (avoids two redundant global memory loads)
+    // Higgs-Axion portal coupling: -λa²φ (only when both fields active)
     var portalA: f32 = 0.0;
     if (uniforms.higgsEnabled != 0u && uniforms.axionEnabled != 0u) {
         portalA = otherField[idx];
-    }
-
-    // Higgs-Axion portal coupling: -λa²φ (only when both fields active)
-    if (uniforms.higgsEnabled != 0u && uniforms.axionEnabled != 0u) {
         ddphi -= HIGGS_AXION_COUPLING * portalA * portalA * phi;
     }
 
@@ -141,23 +153,35 @@ fn axionHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
     let fdC = fieldDot[idx];
 
     // Numerical viscosity: ν·∇²(ȧ) with ν = 1/(2√(1/dx²+1/dy²)) → Q=1 at Nyquist, vanishes for physical modes
-    let fdL = select(fdC, fieldDot[idx - 1u], ix > 0u);
-    let fdR = select(fdC, fieldDot[idx + 1u], ix < GRID_LAST);
-    let fdT = select(fdC, fieldDot[idx - GRID], iy > 0u);
-    let fdB = select(fdC, fieldDot[idx + GRID], iy < GRID_LAST);
+    var fdL: f32; var fdR: f32; var fdT: f32; var fdB: f32;
+    if (ix > 0u && ix < GRID_LAST && iy > 0u && iy < GRID_LAST) {
+        // Interior fast path: direct indexing
+        fdL = fieldDot[idx - 1u];
+        fdR = fieldDot[idx + 1u];
+        fdT = fieldDot[idx - GRID];
+        fdB = fieldDot[idx + GRID];
+    } else {
+        // Border: topology-aware via nbIndex
+        let bcMode = uniforms.boundaryMode;
+        let topoMode = uniforms.topologyMode;
+        let iL = nbIndex(i32(ix) - 1, i32(iy), bcMode, topoMode);
+        let iR = nbIndex(i32(ix) + 1, i32(iy), bcMode, topoMode);
+        let iT = nbIndex(i32(ix), i32(iy) - 1, bcMode, topoMode);
+        let iB = nbIndex(i32(ix), i32(iy) + 1, bcMode, topoMode);
+        fdL = select(fdC, fieldDot[iL], iL >= 0);
+        fdR = select(fdC, fieldDot[iR], iR >= 0);
+        fdT = select(fdC, fieldDot[iT], iT >= 0);
+        fdB = select(fdC, fieldDot[iB], iB >= 0);
+    }
     let fdLap = (fdL + fdR - 2.0 * fdC) * invCWsq + (fdT + fdB - 2.0 * fdC) * invCHsq;
     let viscosity = 0.5 * inverseSqrt(invCWsq + invCHsq) * fdLap;
 
     var ddA = lapI - mASq * aVal - damp * fdC + srcTerm + viscosity;
 
-    // Hoist portal field read once (avoids two redundant global memory loads)
+    // Higgs-Axion portal coupling: -λφ²a (only when both fields active)
     var portalPhi: f32 = 0.0;
     if (uniforms.higgsEnabled != 0u && uniforms.axionEnabled != 0u) {
         portalPhi = otherField[idx];
-    }
-
-    // Higgs-Axion portal coupling: -λφ²a (only when both fields active)
-    if (uniforms.higgsEnabled != 0u && uniforms.axionEnabled != 0u) {
         ddA -= HIGGS_AXION_COUPLING * portalPhi * portalPhi * aVal;
     }
 

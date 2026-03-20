@@ -3,6 +3,7 @@
 import { TWO_PI, PHASE_BUFFER_LEN, TORUS } from './config.js';
 import { minImage } from './topology.js';
 
+const _PAL = window._PALETTE;
 const _miOut = { x: 0, y: 0 };
 
 const BUFFER_LEN = PHASE_BUFFER_LEN;
@@ -96,17 +97,17 @@ export default class PhasePlot {
 
         c.clearRect(0, 0, ps, ps);
 
-        c.fillStyle = isLight ? '#FCF7F244' : '#0C0B0988';
+        c.fillStyle = isLight ? _PAL.light.panelSolid + '44' : _PAL.dark.canvas + '88';
         c.fillRect(0, 0, ps, ps);
 
-        c.strokeStyle = isLight ? '#1A161233' : '#E8DED433';
+        c.strokeStyle = isLight ? _PAL.light.text + '33' : _PAL.dark.text + '33';
         c.lineWidth = 0.5;
         c.beginPath();
         c.moveTo(MARGIN, 0); c.lineTo(MARGIN, ps);
         c.moveTo(0, ps - MARGIN); c.lineTo(ps, ps - MARGIN);
         c.stroke();
 
-        c.fillStyle = isLight ? '#1A161288' : '#E8DED488';
+        c.fillStyle = isLight ? _PAL.light.text + '88' : _PAL.dark.text + '88';
         c.font = '9px Noto Sans Mono';
         c.fillText('r', ps - 12, ps - MARGIN + 12);
         c.fillText('v\u1D63', MARGIN - 18, 12);
@@ -123,13 +124,13 @@ export default class PhasePlot {
                 c.lineTo(x, y);
             }
         }
-        c.strokeStyle = '#FE3B01CC';
+        c.strokeStyle = _PAL.accent + 'CC';
         c.stroke();
 
         const lastIdx = (this.head - 1 + BUFFER_LEN) % BUFFER_LEN;
         const cx = MARGIN + ((this.rBuf[lastIdx] - rMin) / rRange) * (ps - MARGIN - 4);
         const cy = (ps - MARGIN) - ((this.vrBuf[lastIdx] - vrMin) / vrRange) * (ps - MARGIN - 4);
-        c.fillStyle = '#FE3B01';
+        c.fillStyle = _PAL.accent;
         c.beginPath();
         c.arc(cx, cy, 3, 0, TWO_PI);
         c.fill();

@@ -142,31 +142,44 @@ export default class QuadTreePool {
     }
 
     // P7: Iterative insert — eliminates recursive stack frames (up to depth 48)
+    // Uses a local work stack for displaced particles during subdivision to avoid
+    // unbounded recursion when co-located particles cause repeated subdivisions.
     insert(idx, particle) {
         if (!this._contains(idx, particle.pos.x, particle.pos.y)) return false;
         const cap = this.nodeCapacity;
-        const px = particle.pos.x, py = particle.pos.y;
-        let depth = 0;
+        // Work stack for particles displaced during subdivision
+        const work = this._insertWork || (this._insertWork = []);
+        work.length = 0;
+        work.push(idx, particle);
 
-        while (depth <= 48) {
-            if (this.pointCount[idx] < cap && !this.divided[idx]) {
-                this.points[idx * cap + this.pointCount[idx]] = particle;
-                this.pointCount[idx]++;
-                return true;
-            }
-            if (!this.divided[idx]) {
-                this._subdivide(idx);
-                const base = idx * cap;
-                for (let i = 0; i < this.pointCount[idx]; i++) {
-                    const p = this.points[base + i];
-                    this.insert(this._childFor(idx, p.pos.x, p.pos.y), p);
+        while (work.length > 0) {
+            let pt = work.pop();
+            let nodeIdx = work.pop();
+            const px = pt.pos.x, py = pt.pos.y;
+            let depth = 0;
+
+            while (depth <= 48) {
+                if (this.pointCount[nodeIdx] < cap && !this.divided[nodeIdx]) {
+                    this.points[nodeIdx * cap + this.pointCount[nodeIdx]] = pt;
+                    this.pointCount[nodeIdx]++;
+                    break;
                 }
-                this.pointCount[idx] = 0;
+                if (!this.divided[nodeIdx]) {
+                    this._subdivide(nodeIdx);
+                    const base = nodeIdx * cap;
+                    for (let i = 0; i < this.pointCount[nodeIdx]; i++) {
+                        const p = this.points[base + i];
+                        work.push(this._childFor(nodeIdx, p.pos.x, p.pos.y), p);
+                    }
+                    this.pointCount[nodeIdx] = 0;
+                }
+                nodeIdx = this._childFor(nodeIdx, px, py);
+                depth++;
             }
-            idx = this._childFor(idx, px, py);
-            depth++;
+            // depth guard: particle accepted at max depth (pointCount not incremented,
+            // but this prevents infinite loops for co-located particles)
         }
-        return true; // depth guard: accept particle at max depth
+        return true;
     }
 
     calculateMassDistribution(rootIdx) {

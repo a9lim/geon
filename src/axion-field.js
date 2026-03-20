@@ -18,7 +18,7 @@
 //    yukMod = 1 + g·a for matter, 1 - g·a for antimatter.
 //    At vacuum (a=0): yukMod = 1 for both → CP conserved (PQ solution).
 
-import { SCALAR_GRID, SCALAR_FIELD_MAX, DEFAULT_AXION_MASS, AXION_COUPLING, HIGGS_AXION_COUPLING, SELFGRAV_PHI_MAX, EPSILON, BOUND_LOOP } from './config.js';
+import { SCALAR_GRID, SCALAR_FIELD_MAX, DEFAULT_AXION_MASS, AXION_COUPLING, HIGGS_AXION_COUPLING, SELFGRAV_PHI_MAX, EPSILON } from './config.js';
 import ScalarField from './scalar-field.js';
 
 // Parse overlay colors from shared palette at module load (0-255 ints)
@@ -114,7 +114,7 @@ export default class AxionField extends ScalarField {
                     - 2 * Phi * mASq * aVal
                     - portalTerm * aVal - 2 * Phi * portalTerm * aVal;
                 fieldDot[i] += ddA * halfDt;
-                if (aVal !== aVal) { field[i] = 0; fieldDot[i] = 0; }
+                if (!isFinite(fieldDot[i])) { fieldDot[i] = 0; field[i] = 0; }
             }
         } else if (portalArr) {
             for (let i = 0; i < GRID_SQ; i++) {
@@ -122,14 +122,14 @@ export default class AxionField extends ScalarField {
                 const ddA = lap[i] - mASq * aVal - damp * fieldDot[i] + src[i] * invCellArea + visc[i]
                     - HIGGS_AXION_COUPLING * portalArr[i] * portalArr[i] * aVal;
                 fieldDot[i] += ddA * halfDt;
-                if (aVal !== aVal) { field[i] = 0; fieldDot[i] = 0; }
+                if (!isFinite(fieldDot[i])) { fieldDot[i] = 0; field[i] = 0; }
             }
         } else {
             for (let i = 0; i < GRID_SQ; i++) {
                 const aVal = field[i];
                 const ddA = lap[i] - mASq * aVal - damp * fieldDot[i] + src[i] * invCellArea + visc[i];
                 fieldDot[i] += ddA * halfDt;
-                if (aVal !== aVal) { field[i] = 0; fieldDot[i] = 0; }
+                if (!isFinite(fieldDot[i])) { fieldDot[i] = 0; field[i] = 0; }
             }
         }
 
@@ -161,20 +161,20 @@ export default class AxionField extends ScalarField {
                     - 2 * Phi * mASq * aVal
                     - portalTerm * aVal - 2 * Phi * portalTerm * aVal;
                 fieldDot[i] += ddA * halfDt;
-                if (aVal !== aVal) { field[i] = 0; fieldDot[i] = 0; }
+                if (!isFinite(fieldDot[i])) { fieldDot[i] = 0; field[i] = 0; }
             }
         } else if (portalArr) {
             for (let i = 0; i < GRID_SQ; i++) {
                 const ddA = lap[i] - mASq * field[i] - damp * fieldDot[i] + src[i] * invCellArea + visc[i]
                     - HIGGS_AXION_COUPLING * portalArr[i] * portalArr[i] * field[i];
                 fieldDot[i] += ddA * halfDt;
-                if (field[i] !== field[i]) { field[i] = 0; fieldDot[i] = 0; }
+                if (!isFinite(fieldDot[i])) { fieldDot[i] = 0; field[i] = 0; }
             }
         } else {
             for (let i = 0; i < GRID_SQ; i++) {
                 const ddA = lap[i] - mASq * field[i] - damp * fieldDot[i] + src[i] * invCellArea + visc[i];
                 fieldDot[i] += ddA * halfDt;
-                if (field[i] !== field[i]) { field[i] = 0; fieldDot[i] = 0; }
+                if (!isFinite(fieldDot[i])) { fieldDot[i] = 0; field[i] = 0; }
             }
         }
 

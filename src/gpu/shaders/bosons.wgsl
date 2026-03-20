@@ -138,90 +138,92 @@ fn updatePions(@builtin(global_invocation_id) gid: vec3u) {
     pions[i] = pi;
 }
 
-// Photon absorption: transfer momentum to nearby particles
-@compute @workgroup_size(64)
+// Photon absorption: transfer momentum to nearby particles.
+// Single-threaded to avoid data races: multiple bosons targeting the same
+// particle would race on non-atomic f32 velocity/charge writes.
+@compute @workgroup_size(1)
 fn absorbPhotons(@builtin(global_invocation_id) gid: vec3u) {
-    let i = gid.x;
     let count = atomicLoad(&phCount);
-    if (i >= count) { return; }
-
-    // Load photon state once
-    let ph = photons[i];
-    if ((ph.flags & 1u) == 0u) { return; }
-    if (ph.lifetime < BOSON_MIN_AGE_TIME) { return; }
-
-    let phX = ph.posX;
-    let phY = ph.posY;
-    let phEmitterId = ph.emitterId;
-    let phEnergy = ph.energy;
-    let phVelX = ph.velX;
-    let phVelY = ph.velY;
     let aliveN = u.aliveCount;
 
-    // Check all alive particles for overlap
-    for (var j = 0u; j < aliveN; j++) {
-        let pj = particles[j];
-        if ((pj.flags & FLAG_ALIVE) == 0u) { continue; }
-        let auxJ = particleAux[j];
-        if (auxJ.particleId == phEmitterId) { continue; } // self-absorption blocked
+    for (var i = 0u; i < count; i++) {
+        let ph = photons[i];
+        if ((ph.flags & 1u) == 0u) { continue; }
+        if (ph.lifetime < BOSON_MIN_AGE_TIME) { continue; }
 
-        let dx = phX - pj.posX;
-        let dy = phY - pj.posY;
-        let distSq = dx * dx + dy * dy;
-        let rSq = auxJ.radius * auxJ.radius;
-        if (distSq < rSq) {
-            // Absorb: transfer momentum to proper velocity
-            let invTM = select(0.0, 1.0 / pj.mass, pj.mass > EPSILON);
-            particles[j].velWX += phEnergy * phVelX * invTM;
-            particles[j].velWY += phEnergy * phVelY * invTM;
-            photons[i].flags &= ~1u; // mark dead
-            break;
+        let phX = ph.posX;
+        let phY = ph.posY;
+        let phEmitterId = ph.emitterId;
+        let phEnergy = ph.energy;
+        let phVelX = ph.velX;
+        let phVelY = ph.velY;
+
+        // Check all alive particles for overlap
+        for (var j = 0u; j < aliveN; j++) {
+            let pj = particles[j];
+            if ((pj.flags & FLAG_ALIVE) == 0u) { continue; }
+            let auxJ = particleAux[j];
+            if (auxJ.particleId == phEmitterId) { continue; } // self-absorption blocked
+
+            let dx = phX - pj.posX;
+            let dy = phY - pj.posY;
+            let distSq = dx * dx + dy * dy;
+            let rSq = auxJ.radius * auxJ.radius;
+            if (distSq < rSq) {
+                // Absorb: transfer momentum to proper velocity
+                let invTM = select(0.0, 1.0 / pj.mass, pj.mass > EPSILON);
+                particles[j].velWX += phEnergy * phVelX * invTM;
+                particles[j].velWY += phEnergy * phVelY * invTM;
+                photons[i].flags &= ~1u; // mark dead
+                break;
+            }
         }
     }
 }
 
-// Pion absorption: transfer momentum + charge to nearby particles
-@compute @workgroup_size(64)
+// Pion absorption: transfer momentum + charge to nearby particles.
+// Single-threaded to avoid data races: multiple bosons targeting the same
+// particle would race on non-atomic f32 velocity/charge writes.
+@compute @workgroup_size(1)
 fn absorbPions(@builtin(global_invocation_id) gid: vec3u) {
-    let i = gid.x;
     let count = atomicLoad(&piCount);
-    if (i >= count) { return; }
-
-    // Load pion state once
-    let pi = pions[i];
-    if ((pi.flags & 1u) == 0u) { return; }
-    if (pi.age < BOSON_MIN_AGE) { return; }
-
-    let piX = pi.posX;
-    let piY = pi.posY;
-    let piEmitterId = pi.emitterId;
-    let piWX = pi.wX;
-    let piWY = pi.wY;
-    let piEnergy = pi.energy;
-    let piCharge = pi.charge;
     let aliveN = u.aliveCount;
 
-    // Precompute pion velocity direction
-    let gamma = sqrt(1.0 + piWX * piWX + piWY * piWY);
-    let invG = 1.0 / gamma;
+    for (var i = 0u; i < count; i++) {
+        let pi = pions[i];
+        if ((pi.flags & 1u) == 0u) { continue; }
+        if (pi.age < BOSON_MIN_AGE) { continue; }
 
-    for (var j = 0u; j < aliveN; j++) {
-        let pj = particles[j];
-        if ((pj.flags & FLAG_ALIVE) == 0u) { continue; }
-        let auxJ = particleAux[j];
-        if (auxJ.particleId == piEmitterId) { continue; }
+        let piX = pi.posX;
+        let piY = pi.posY;
+        let piEmitterId = pi.emitterId;
+        let piWX = pi.wX;
+        let piWY = pi.wY;
+        let piEnergy = pi.energy;
+        let piCharge = pi.charge;
 
-        let dx = piX - pj.posX;
-        let dy = piY - pj.posY;
-        if (dx * dx + dy * dy < auxJ.radius * auxJ.radius) {
-            // Transfer momentum
-            let invTM = select(0.0, 1.0 / pj.mass, pj.mass > EPSILON);
-            particles[j].velWX += piEnergy * (piWX * invG) * invTM;
-            particles[j].velWY += piEnergy * (piWY * invG) * invTM;
-            // Transfer charge
-            particles[j].charge += f32(piCharge);
-            pions[i].flags &= ~1u;
-            break;
+        // Precompute pion velocity direction
+        let gamma = sqrt(1.0 + piWX * piWX + piWY * piWY);
+        let invG = 1.0 / gamma;
+
+        for (var j = 0u; j < aliveN; j++) {
+            let pj = particles[j];
+            if ((pj.flags & FLAG_ALIVE) == 0u) { continue; }
+            let auxJ = particleAux[j];
+            if (auxJ.particleId == piEmitterId) { continue; }
+
+            let dx = piX - pj.posX;
+            let dy = piY - pj.posY;
+            if (dx * dx + dy * dy < auxJ.radius * auxJ.radius) {
+                // Transfer momentum
+                let invTM = select(0.0, 1.0 / pj.mass, pj.mass > EPSILON);
+                particles[j].velWX += piEnergy * (piWX * invG) * invTM;
+                particles[j].velWY += piEnergy * (piWY * invG) * invTM;
+                // Transfer charge
+                particles[j].charge += f32(piCharge);
+                pions[i].flags &= ~1u;
+                break;
+            }
         }
     }
 }

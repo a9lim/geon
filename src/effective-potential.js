@@ -5,6 +5,7 @@
 import { TWO_PI, SOFTENING_SQ, BH_SOFTENING_SQ, YUKAWA_COUPLING, TORUS } from './config.js';
 import { minImage } from './topology.js';
 
+const _PAL = window._PALETTE;
 const N_SAMPLES = 200;
 const _miOut = { x: 0, y: 0 };
 const MARGIN = 28;
@@ -189,11 +190,11 @@ export default class EffectivePotentialPlot {
         const plotH = ps - MARGIN - 4;
 
         c.clearRect(0, 0, ps, ps);
-        c.fillStyle = isLight ? '#FCF7F244' : '#0C0B0988';
+        c.fillStyle = isLight ? _PAL.light.panelSolid + '44' : _PAL.dark.canvas + '88';
         c.fillRect(0, 0, ps, ps);
 
         // Axes
-        c.strokeStyle = isLight ? '#1A161233' : '#E8DED433';
+        c.strokeStyle = isLight ? _PAL.light.text + '33' : _PAL.dark.text + '33';
         c.lineWidth = 0.5;
         c.beginPath();
         c.moveTo(MARGIN, 0); c.lineTo(MARGIN, ps);
@@ -203,7 +204,7 @@ export default class EffectivePotentialPlot {
         // Zero line (if visible)
         if (vMin < 0 && vMax > 0) {
             const y0 = (ps - MARGIN) - ((-vMin) / vSpan) * plotH;
-            c.strokeStyle = isLight ? '#1A161218' : '#E8DED418';
+            c.strokeStyle = isLight ? _PAL.light.text + '18' : _PAL.dark.text + '18';
             c.setLineDash([4, 4]);
             c.beginPath();
             c.moveTo(MARGIN, y0);
@@ -213,7 +214,7 @@ export default class EffectivePotentialPlot {
         }
 
         // Labels
-        c.fillStyle = isLight ? '#1A161288' : '#E8DED488';
+        c.fillStyle = isLight ? _PAL.light.text + '88' : _PAL.dark.text + '88';
         c.font = '9px Noto Sans Mono';
         c.fillText('r', ps - 12, ps - MARGIN + 12);
         c.fillText('V\u2091ff', MARGIN - 4, 12);
@@ -230,7 +231,7 @@ export default class EffectivePotentialPlot {
             if (!started) { c.moveTo(x, y); started = true; }
             else c.lineTo(x, y);
         }
-        c.strokeStyle = '#5C92A8CC';
+        c.strokeStyle = _PAL.extended.blue + 'CC';
         c.stroke();
 
         // Current position marker
@@ -238,7 +239,7 @@ export default class EffectivePotentialPlot {
         if (rNorm >= 0 && rNorm <= 1 && isFinite(this.currentV)) {
             const cx = MARGIN + rNorm * plotW;
             const cy = (ps - MARGIN) - ((this.currentV - vMin) / vSpan) * plotH;
-            c.fillStyle = '#FE3B01';
+            c.fillStyle = _PAL.accent;
             c.beginPath();
             c.arc(cx, cy, 4, 0, TWO_PI);
             c.fill();

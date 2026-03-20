@@ -538,7 +538,7 @@ export function setupUI(sim) {
         const v = parseFloat(extGravitySlider.value);
         sim.physics.extGravity = v;
         extGravityLabel.textContent = v.toFixed(2);
-        extGravityAngleGroup.style.display = v > 0 ? '' : 'none';
+        extGravityAngleGroup.style.display = v !== 0 ? '' : 'none';
         _syncSlidersToGPU();
         _haptics.trigger('selection');
     });
@@ -559,7 +559,7 @@ export function setupUI(sim) {
         const v = parseFloat(extElectricSlider.value);
         sim.physics.extElectric = v;
         extElectricLabel.textContent = v.toFixed(2);
-        extElectricAngleGroup.style.display = v > 0 ? '' : 'none';
+        extElectricAngleGroup.style.display = v !== 0 ? '' : 'none';
         _syncSlidersToGPU();
         _haptics.trigger('selection');
     });
@@ -591,7 +591,11 @@ export function setupUI(sim) {
     // ─── Step button ───
     const stepSim = () => {
         if (!sim.running) {
-            sim.physics.update(sim.particles, PHYSICS_DT, sim.collisionMode, sim.boundaryMode, sim.topology, sim.domainW, sim.domainH, 0, 0);
+            if (sim.backend === BACKEND_GPU && sim._gpuPhysics) {
+                sim._gpuPhysics.update(PHYSICS_DT);
+            } else {
+                sim.physics.update(sim.particles, PHYSICS_DT, sim.collisionMode, sim.boundaryMode, sim.topology, sim.domainW, sim.domainH, 0, 0);
+            }
             sim._dirty = true;
         }
     };

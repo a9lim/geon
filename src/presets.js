@@ -1,6 +1,6 @@
 // ─── Preset Definitions ───
 // Each preset configures toggles, engine settings, visuals, and spawns particles.
-import { PI, TWO_PI, WORLD_SCALE, SOFTENING_SQ } from './config.js';
+import { PI, TWO_PI, WORLD_SCALE, SOFTENING_SQ, DEFAULT_PION_MASS, DEFAULT_HIGGS_MASS, DEFAULT_AXION_MASS } from './config.js';
 
 // Plummer-softened circular orbit velocity: F = coupling*r/(r²+ε²)^{3/2}, set F/m = v²/r
 const _vCirc = (coupling, r, m) => {
@@ -659,7 +659,7 @@ export function loadPreset(name, sim) {
     }
 
     // 5. Reset external fields (presets can override via settings)
-    const extDefaults = { extGravity: 0, extGravityAngle: 90, extElectric: 0, extElectricAngle: 0, extBz: 0, yukawaMu: 0.15, higgsMass: 0.50, axionMass: 0.05 };
+    const extDefaults = { extGravity: 0, extGravityAngle: 90, extElectric: 0, extElectricAngle: 0, extBz: 0, yukawaMu: DEFAULT_PION_MASS, higgsMass: DEFAULT_HIGGS_MASS, axionMass: DEFAULT_AXION_MASS };
     for (const [key, elId] of Object.entries(SLIDER_MAP)) {
         if (key in extDefaults && !(preset.settings && key in preset.settings)) {
             const el = document.getElementById(elId);

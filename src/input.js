@@ -1,5 +1,6 @@
 import Vec2 from './vec2.js';
 import { PINCH_DEBOUNCE, DRAG_THRESHOLD, SHOOT_VELOCITY_SCALE } from './config.js';
+import { BACKEND_GPU } from './backend-interface.js';
 
 export default class InputHandler {
     constructor(canvas, sim) {
@@ -35,6 +36,7 @@ export default class InputHandler {
         this._pendingClick = null; // { pos: Vec2, rightButton: bool }
 
         sim.camera.bindWheel(canvas);
+        sim.camera.bindMousePan(canvas);
         canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
         canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
         canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
@@ -153,7 +155,7 @@ export default class InputHandler {
     _deleteParticle(p) {
         this.sim.physics._retireParticle(p);
         // GPU path: mark particle dead on GPU side with death metadata for signal delay
-        if (this.sim._gpuReady && this.sim.backend === 'gpu' && p._gpuIdx != null) {
+        if (this.sim._gpuReady && this.sim.backend === BACKEND_GPU && p._gpuIdx != null) {
             this.sim._gpuPhysics.removeParticle(p._gpuIdx, p._deathMass || p.mass, p._deathAngVel || p.angVel);
         }
         // A9: swap-and-pop instead of filter (O(1) vs O(N), no allocation)
@@ -199,7 +201,7 @@ export default class InputHandler {
 
         // In GPU mode, right-click on particle handled via deferred hit test (onMouseUp)
         // In CPU mode, handle immediately
-        if (isRight && this.sim.backend !== 'gpu') {
+        if (isRight && this.sim.backend !== BACKEND_GPU) {
             const hit = this._cpuFindParticleAt(pos);
             const bhOn = this.sim.physics.blackHoleEnabled;
             if (hit) {
@@ -233,7 +235,7 @@ export default class InputHandler {
                 this._hoverPending = false;
                 const ev = this._hoverE;
                 // GPU mode: dispatch hit test for hover, result handled in pollGPUHitResult
-                if (this.sim.backend === 'gpu' && this.sim._gpuReady) {
+                if (this.sim.backend === BACKEND_GPU && this.sim._gpuReady) {
                     this.sim._gpuPhysics.hitTest(this.currentPos.x, this.currentPos.y);
                     // Tooltip updated when poll returns result — hide stale tooltip
                     this.hoveredParticle = null;
@@ -266,7 +268,7 @@ export default class InputHandler {
 
         // Short click: select, delete, or spawn
         if (this.dragStart.dist(endPos) < DRAG_THRESHOLD) {
-            if (this.sim.backend === 'gpu' && this.sim._gpuReady) {
+            if (this.sim.backend === BACKEND_GPU && this.sim._gpuReady) {
                 // GPU mode: defer action until GPU hit test result arrives
                 this.sim._gpuPhysics.hitTest(endPos.x, endPos.y);
                 this._pendingClick = { pos: endPos, rightButton: this._rightButton };
@@ -327,7 +329,7 @@ export default class InputHandler {
      */
     refreshTooltip() {
         if (this.tooltip.hidden) return;
-        if (this.sim.backend === 'gpu' && this.sim._gpuReady) {
+        if (this.sim.backend === BACKEND_GPU && this.sim._gpuReady) {
             // Re-dispatch hit test at the current world position for fresh data
             this.sim._gpuPhysics.hitTest(this.currentPos.x, this.currentPos.y);
         } else if (this.hoveredParticle) {
@@ -343,7 +345,7 @@ export default class InputHandler {
      * Completes deferred click actions and updates hover state.
      */
     pollGPUHitResult() {
-        if (!this.sim._gpuReady || this.sim.backend !== 'gpu') return;
+        if (!this.sim._gpuReady || this.sim.backend !== BACKEND_GPU) return;
         const result = this.sim._gpuPhysics.readHitResult();
         if (result === null) return; // not ready yet
 
