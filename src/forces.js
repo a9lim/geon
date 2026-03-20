@@ -388,7 +388,7 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
         const mu = toggles.higgsEnabled ? toggles.yukawaMu * Math.sqrt(p.higgsMod * sHiggsMod) : toggles.yukawaMu;
         const r = 1 / invR;
         const expMuR = Math.exp(-mu * r);
-        const yukModPair = Math.sqrt(p.yukMod * sYukMod);
+        const yukModPair = _needAxMod ? Math.sqrt(p.yukMod * sYukMod) : 1;
         const ym = yukModPair;
         const fDir = YUKAWA_COUPLING * ym * p.mass * sMass * expMuR * (invRSq + mu * invR) * (signalDelayed ? invR * aberr : invR);
         out.x += rx * fDir;
@@ -434,7 +434,8 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
         const dw = p.angVel - wOrbit;
         let coupling = sMass;
         if (toggles.coulombEnabled && p.mass > EPSILON) coupling += p.charge * sCharge / p.mass;
-        const ri5 = p.bodyRadiusSq * p.bodyRadiusSq * Math.cbrt(p.mass);
+        const bodyR = Math.sqrt(p.bodyRadiusSq);
+        const ri5 = p.bodyRadiusSq * p.bodyRadiusSq * bodyR;
         const invR6 = invRSq * invRSq * invRSq;
         p._tidalTorque -= TIDAL_STRENGTH * coupling * coupling * ri5 * invR6 * dw;
     }
@@ -699,22 +700,25 @@ let _bosonBHStack = new Int32Array(256);
 const _bwOut = { x: 0, y: 0 };
 
 /**
- * Shared BH tree walk for boson gravity. Accumulates gravitational impulse into _bwOut.
- * Reads _srcMass from leaf points, totalMass from aggregate nodes.
- * @param {number} px, py      - query position
- * @param {number} scale       - pre-multiplied factor (e.g. 1 for force, grFactor*dt for kick)
- * @param {number} softeningSq - gravitational softening squared
- * @param {Object} pool        - boson QuadTreePool
- * @param {number} root        - tree root index
+ * Core BH tree walk for boson interactions. Accumulates impulse into _bwOut.
+ * @param {number}   px, py        - query position
+ * @param {number}   scale         - pre-multiplied factor (e.g. grFactor*dt)
+ * @param {number}   softeningSq   - gravitational softening squared
+ * @param {Object}   pool          - boson QuadTreePool
+ * @param {number}   root          - tree root index
+ * @param {function} nodeVal       - (pool, nodeIdx) -> aggregate scalar (mass or charge)
+ * @param {function} pointVal      - (b) -> per-point scalar (._srcMass or ._srcCharge)
+ * @param {function} skipNode      - (pool, nodeIdx) -> bool: skip this node entirely
+ * @param {function} skipPoint     - (b) -> bool: skip this leaf point
  */
-function _walkBosonTree(px, py, scale, softeningSq, pool, root, periodic, topology, domW, domH, halfDomW, halfDomH) {
+function _walkBosonTreeCore(px, py, scale, softeningSq, pool, root, periodic, topology, domW, domH, halfDomW, halfDomH, nodeVal, pointVal, skipNode, skipPoint) {
     let kx = 0, ky = 0;
     let stackTop = 0;
     _bosonBHStack[stackTop++] = root;
 
     while (stackTop > 0) {
         const nodeIdx = _bosonBHStack[--stackTop];
-        if (pool.totalMass[nodeIdx] < EPSILON) continue;
+        if (skipNode(pool, nodeIdx)) continue;
 
         let dx, dy;
         if (periodic) {
@@ -732,6 +736,7 @@ function _walkBosonTree(px, py, scale, softeningSq, pool, root, periodic, topolo
             const base = nodeIdx * pool.nodeCapacity;
             for (let k = 0; k < cnt; k++) {
                 const b = pool.points[base + k];
+                if (skipPoint(b)) continue;
                 let bdx, bdy;
                 if (periodic) {
                     minImage(px, py, b.pos.x, b.pos.y, topology, domW, domH, halfDomW, halfDomH, _miOut);
@@ -742,14 +747,14 @@ function _walkBosonTree(px, py, scale, softeningSq, pool, root, periodic, topolo
                 }
                 const rSq = bdx * bdx + bdy * bdy + softeningSq;
                 const invRSq = 1 / rSq;
-                const f = scale * b._srcMass * Math.sqrt(invRSq) * invRSq;
+                const f = scale * pointVal(b) * Math.sqrt(invRSq) * invRSq;
                 kx += bdx * f;
                 ky += bdy * f;
             }
         } else if (pool.divided[nodeIdx] && size * size < BH_THETA_SQ * dSq) {
             const rSq = dSq + softeningSq;
             const invRSq = 1 / rSq;
-            const f = scale * pool.totalMass[nodeIdx] * Math.sqrt(invRSq) * invRSq;
+            const f = scale * nodeVal(pool, nodeIdx) * Math.sqrt(invRSq) * invRSq;
             kx += dx * f;
             ky += dy * f;
         } else if (pool.divided[nodeIdx]) {
@@ -762,6 +767,25 @@ function _walkBosonTree(px, py, scale, softeningSq, pool, root, periodic, topolo
 
     _bwOut.x = kx;
     _bwOut.y = ky;
+}
+
+// Callbacks for gravity walk (mass-based)
+const _massNodeVal   = (pool, idx) => pool.totalMass[idx];
+const _massPointVal  = (b) => b._srcMass;
+const _massSkipNode  = (pool, idx) => pool.totalMass[idx] < EPSILON;
+const _massSkipPoint = () => false;
+
+/**
+ * Shared BH tree walk for boson gravity. Accumulates gravitational impulse into _bwOut.
+ * Reads _srcMass from leaf points, totalMass from aggregate nodes.
+ * @param {number} px, py      - query position
+ * @param {number} scale       - pre-multiplied factor (e.g. 1 for force, grFactor*dt for kick)
+ * @param {number} softeningSq - gravitational softening squared
+ * @param {Object} pool        - boson QuadTreePool
+ * @param {number} root        - tree root index
+ */
+function _walkBosonTree(px, py, scale, softeningSq, pool, root, periodic, topology, domW, domH, halfDomW, halfDomH) {
+    _walkBosonTreeCore(px, py, scale, softeningSq, pool, root, periodic, topology, domW, domH, halfDomW, halfDomH, _massNodeVal, _massPointVal, _massSkipNode, _massSkipPoint);
 }
 
 /**
@@ -819,71 +843,22 @@ export function applyBosonBosonGravity(photons, pions, dt, bosonPool, bosonRoot,
         _walkBosonTree(pn.pos.x, pn.pos.y, (1 + pn.vSq) * dt, BOSON_SOFTENING_SQ, bosonPool, bosonRoot, periodic, topology, domW, domH, halfDomW, halfDomH);
         pn.w.x += _bwOut.x;
         pn.w.y += _bwOut.y;
-        pn._syncVel();
+        // _syncVel() deferred: integrator batch-syncs all pions after both boson passes (H2)
     }
 }
+
+// Callbacks for Coulomb walk (charge-based)
+const _chargeNodeVal   = (pool, idx) => pool.totalCharge[idx];
+const _chargePointVal  = (b) => b._srcCharge;
+const _chargeSkipNode  = (pool, idx) => pool.totalCharge[idx] === 0;
+const _chargeSkipPoint = (b) => b._srcCharge === 0;
 
 /**
  * Shared BH tree walk for boson Coulomb. Accumulates Coulomb impulse into _bwOut.
  * Reads _srcCharge from leaf points, totalCharge from aggregate nodes.
  */
 function _walkBosonTreeCharge(px, py, scale, softeningSq, pool, root, periodic, topology, domW, domH, halfDomW, halfDomH) {
-    let kx = 0, ky = 0;
-    let stackTop = 0;
-    _bosonBHStack[stackTop++] = root;
-
-    while (stackTop > 0) {
-        const nodeIdx = _bosonBHStack[--stackTop];
-        const nodeCharge = pool.totalCharge[nodeIdx];
-        if (nodeCharge === 0) continue;
-
-        let dx, dy;
-        if (periodic) {
-            minImage(px, py, pool.comX[nodeIdx], pool.comY[nodeIdx], topology, domW, domH, halfDomW, halfDomH, _miOut);
-            dx = _miOut.x; dy = _miOut.y;
-        } else {
-            dx = pool.comX[nodeIdx] - px;
-            dy = pool.comY[nodeIdx] - py;
-        }
-        const dSq = dx * dx + dy * dy;
-        const size = pool.bw[nodeIdx] * 2;
-        const cnt = pool.pointCount[nodeIdx];
-
-        if (!pool.divided[nodeIdx] && cnt > 0) {
-            const base = nodeIdx * pool.nodeCapacity;
-            for (let k = 0; k < cnt; k++) {
-                const b = pool.points[base + k];
-                if (b._srcCharge === 0) continue;
-                let bdx, bdy;
-                if (periodic) {
-                    minImage(px, py, b.pos.x, b.pos.y, topology, domW, domH, halfDomW, halfDomH, _miOut);
-                    bdx = _miOut.x; bdy = _miOut.y;
-                } else {
-                    bdx = b.pos.x - px;
-                    bdy = b.pos.y - py;
-                }
-                const rSq = bdx * bdx + bdy * bdy + softeningSq;
-                const invRSq = 1 / rSq;
-                const f = scale * b._srcCharge * Math.sqrt(invRSq) * invRSq;
-                kx += bdx * f;
-                ky += bdy * f;
-            }
-        } else if (pool.divided[nodeIdx] && size * size < BH_THETA_SQ * dSq) {
-            const rSq = dSq + softeningSq;
-            const invRSq = 1 / rSq;
-            const f = scale * nodeCharge * Math.sqrt(invRSq) * invRSq;
-            kx += dx * f;
-            ky += dy * f;
-        } else if (pool.divided[nodeIdx]) {
-            _bosonBHStack[stackTop++] = pool.nw[nodeIdx];
-            _bosonBHStack[stackTop++] = pool.ne[nodeIdx];
-            _bosonBHStack[stackTop++] = pool.sw[nodeIdx];
-            _bosonBHStack[stackTop++] = pool.se[nodeIdx];
-        }
-    }
-
-    _bwOut.x = kx;
-    _bwOut.y = ky;
+    _walkBosonTreeCore(px, py, scale, softeningSq, pool, root, periodic, topology, domW, domH, halfDomW, halfDomH, _chargeNodeVal, _chargePointVal, _chargeSkipNode, _chargeSkipPoint);
 }
 
 /**
@@ -902,7 +877,7 @@ export function applyPionPionCoulomb(pions, dt, bosonPool, bosonRoot, periodic, 
         _walkBosonTreeCharge(pn.pos.x, pn.pos.y, -pn.charge * dt, BOSON_SOFTENING_SQ, bosonPool, bosonRoot, periodic, topology, domW, domH, halfDomW, halfDomH);
         pn.w.x += _bwOut.x;
         pn.w.y += _bwOut.y;
-        pn._syncVel();
+        // _syncVel() deferred: integrator batch-syncs all pions after both boson passes (H2)
     }
 }
 
