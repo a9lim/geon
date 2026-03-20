@@ -21,7 +21,7 @@ function _particleKE(p) {
 
 /** Detect overlaps via quadtree query and resolve as merge.
  *  Returns array of annihilation events [{x, y, energy, px, py}] for photon emission. */
-export function handleCollisions(particles, pool, root, mode, bounceFriction, relativityEnabled, periodic, domW, domH, topology = TORUS) {
+export function handleCollisions(particles, pool, root, mode, periodic, domW, domH, topology = TORUS) {
     const halfDomW = domW * 0.5;
     const halfDomH = domH * 0.5;
     _annihilations.length = 0;
@@ -83,7 +83,7 @@ export function handleCollisions(particles, pool, root, mode, bounceFriction, re
                     // Save pre-merge mass for signal delay retirement (both particles die)
                     p1._deathMass = p1.mass;
                     real2._deathMass = real2.mass;
-                    const spawn = resolveMerge(p1, real2, relativityEnabled, periodic, dx, dy);
+                    const spawn = resolveMerge(p1, real2, dx, dy);
                     const keLost = Math.max(0, keBefore - spawn.ke);
                     if (keLost > 0) merges.push({ x: spawn.x, y: spawn.y, energy: keLost });
                     spawns.push(spawn);
@@ -109,7 +109,7 @@ export function handleCollisions(particles, pool, root, mode, bounceFriction, re
 }
 
 /** Compute merged state from p1+p2, kill both, return spawn data for new particle. */
-export function resolveMerge(p1, p2, relativityEnabled, periodic, miDx, miDy) {
+function resolveMerge(p1, p2, miDx, miDy) {
     const totalMass = p1.mass + p2.mass;
     const newWx = (p1.mass * p1.w.x + p2.mass * p2.w.x) / totalMass;
     const newWy = (p1.mass * p1.w.y + p2.mass * p2.w.y) / totalMass;
