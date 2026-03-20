@@ -1,4 +1,6 @@
 // ─── Potential Energy Computation ───
+// FALLBACK ONLY: PE is accumulated inline in pairForce() via _peAccum during simulation.
+// This module is used only for preset-load recomputation when the force loop hasn't run yet.
 // Mirrors force calculation structure (BH tree or pairwise) for consistent PE.
 // When signal delay is active, uses retarded source positions at leaf/pairwise level.
 
@@ -63,7 +65,7 @@ let _peStack = new Int32Array(256);
  * Iterative BH tree walk for PE; same theta criterion as force calculation.
  * Signal delay applied at leaf level; distant aggregates use current positions.
  */
-export function treePE(particle, pool, rootIdx, theta, toggles, periodic, domW, domH, halfDomW, halfDomH, topology = TORUS, useSignalDelay = false, simTime = 0) {
+function treePE(particle, pool, rootIdx, theta, toggles, periodic, domW, domH, halfDomW, halfDomH, topology = TORUS, useSignalDelay = false, simTime = 0) {
     const thetaSq = theta * theta;
     const px = particle.pos.x, py = particle.pos.y;
     let pe = 0;
@@ -139,7 +141,7 @@ export function treePE(particle, pool, rootIdx, theta, toggles, periodic, domW, 
 }
 
 /** Pairwise PE: gravity + Coulomb + magnetic dipole + GM dipole + 1PN correction. */
-export function pairPE(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMoment, sAngMomentum, toggles, periodic, domW, domH, halfDomW, halfDomH, topology = TORUS, sAxMod = 1, sYukMod = 1, sHiggsMod = 1) {
+function pairPE(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMoment, sAngMomentum, toggles, periodic, domW, domH, halfDomW, halfDomH, topology = TORUS, sAxMod = 1, sYukMod = 1, sHiggsMod = 1) {
     let rx, ry;
     if (periodic) {
         minImage(p.pos.x, p.pos.y, sx, sy, topology, domW, domH, halfDomW, halfDomH, _miOut);

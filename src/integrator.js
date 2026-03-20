@@ -1038,7 +1038,7 @@ export default class Physics {
 
             // Step 6: Collisions (bounce uses force-based Hertz repulsion; only merge goes here)
             if (collisionMode === COL_MERGE) {
-                const { annihilations, merges, removed, spawns } = handleCollisions(particles, this.pool, root, collisionMode, this.bounceFriction, this.relativityEnabled, this.periodic, this.domainW, this.domainH, this._topologyConst);
+                const { annihilations, merges, removed, spawns } = handleCollisions(particles, this.pool, root, collisionMode, this.periodic, this.domainW, this.domainH, this._topologyConst);
                 // Retire removed particles for signal delay fade-out
                 for (let ri = 0; ri < removed.length; ri++) this._retireParticle(removed[ri]);
                 // Deselect removed particles

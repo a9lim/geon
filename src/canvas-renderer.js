@@ -15,6 +15,5 @@ export default class CanvasRenderer {
         this.engine = new Renderer(ctx, width, height);
     }
 
-    /** Expose underlying Renderer during migration period. */
-    get _engine() { return this.engine; }
+
 }

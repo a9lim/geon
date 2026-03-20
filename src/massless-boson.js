@@ -53,12 +53,6 @@ export default class MasslessBoson {
         if (_poolSize < MAX_PHOTONS) _pool[_poolSize++] = b;
     }
 
-    /** Drain all pooled instances (call on simulation reset). */
-    static clearPool() {
-        _poolSize = 0;
-        _pool.length = 0;
-    }
-
     update(dt, particles, pool, root, periodic, topology, domW, domH, halfDomW, halfDomH) {
         // Gravitational deflection: GR gives 2× Newtonian (null geodesic)
         if (pool && root >= 0) {

@@ -109,7 +109,7 @@ const _hmObs = { pos: { x: 0, y: 0 } };
 const _miOut = { x: 0, y: 0 };
 
 // Heatmap display modes
-export const HEATMAP_MODES = ['all', 'gravity', 'electric', 'yukawa'];
+const HEATMAP_MODES = ['all', 'gravity', 'electric', 'yukawa'];
 
 export default class Heatmap {
     constructor() {

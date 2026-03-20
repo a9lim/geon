@@ -16,10 +16,5 @@ export default class CPUPhysics {
         this.engine = engine;
     }
 
-    /**
-     * Expose the underlying Physics engine for code that still needs direct access
-     * during the migration period (ui.js, save-load.js, etc.).
-     * This will be removed once all callers use the shared interface.
-     */
-    get _engine() { return this.engine; }
+
 }
