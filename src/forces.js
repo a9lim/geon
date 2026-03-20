@@ -771,7 +771,7 @@ function _walkBosonTree(px, py, scale, softeningSq, pool, root, periodic, topolo
 export function computeBosonGravity(particles, bosonPool, bosonRoot, softeningSq, periodic, topology, domW, domH) {
     const n = particles.length;
     if (n === 0 || bosonRoot < 0 || bosonPool.totalMass[bosonRoot] < EPSILON) return;
-    if (_bosonBHStack.length < bosonPool.maxNodes) _bosonBHStack = new Int32Array(bosonPool.maxNodes);
+    if (_bosonBHStack.length < bosonPool.maxNodes * 2) _bosonBHStack = new Int32Array(bosonPool.maxNodes * 2);
     const halfDomW = domW * 0.5, halfDomH = domH * 0.5;
 
     for (let i = 0; i < n; i++) {
@@ -794,7 +794,7 @@ export function applyBosonBosonGravity(photons, pions, dt, bosonPool, bosonRoot,
     const nPh = photons ? photons.length : 0;
     const nPi = pions ? pions.length : 0;
     if (nPh + nPi < 2 || bosonRoot < 0 || bosonPool.totalMass[bosonRoot] < EPSILON) return;
-    if (_bosonBHStack.length < bosonPool.maxNodes) _bosonBHStack = new Int32Array(bosonPool.maxNodes);
+    if (_bosonBHStack.length < bosonPool.maxNodes * 2) _bosonBHStack = new Int32Array(bosonPool.maxNodes * 2);
     const halfDomW = domW * 0.5, halfDomH = domH * 0.5;
 
     // Photons: receiver GR factor = 2, kick into vel, renormalize to c=1
@@ -893,7 +893,7 @@ function _walkBosonTreeCharge(px, py, scale, softeningSq, pool, root, periodic, 
 export function applyPionPionCoulomb(pions, dt, bosonPool, bosonRoot, periodic, topology, domW, domH) {
     const nPi = pions ? pions.length : 0;
     if (nPi < 2 || bosonRoot < 0) return;
-    if (_bosonBHStack.length < bosonPool.maxNodes) _bosonBHStack = new Int32Array(bosonPool.maxNodes);
+    if (_bosonBHStack.length < bosonPool.maxNodes * 2) _bosonBHStack = new Int32Array(bosonPool.maxNodes * 2);
     const halfDomW = domW * 0.5, halfDomH = domH * 0.5;
 
     for (let i = 0; i < nPi; i++) {
@@ -930,7 +930,7 @@ export function findPionAnnihilations(pions, bosonPool, bosonRoot) {
             const other = candidates[ci];
             if (other === pn || !other.alive) continue;
             // Only pions have _srcCharge !== undefined and charge !== 0
-            if (!other.charge || other.charge === 0) continue;
+            if (!other.charge) continue;
             if (other.charge === pn.charge) continue; // same sign: no annihilation
             if (other.age < BOSON_MIN_AGE) continue;
             const dx = pn.pos.x - other.pos.x;

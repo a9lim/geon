@@ -177,6 +177,15 @@ export default class GPUPhysics {
         new Int32Array(this._qtBoundsSrc.getMappedRange()).set([2147483647, 2147483647, -2147483647, -2147483647]);
         this._qtBoundsSrc.unmap();
 
+        // Encoder-side staging buffer for boson tree root node reset.
+        // 20 u32s = 80 bytes — written each frame with current domain dims,
+        // then copied to bosonTreeNodes via encoder.copyBufferToBuffer.
+        this._bosonRootSrc = device.createBuffer({
+            label: 'boson-root-src',
+            size: 80,
+            usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+        });
+
         // Phase 2 pipelines + bind groups
         this._phase2 = null;
 
@@ -1216,24 +1225,24 @@ export default class GPUPhysics {
         passPions.dispatchWorkgroups(piWG);
         passPions.end();
 
-        // absorbPhotons
+        // absorbPhotons (single-threaded: serialized to avoid f32 data races)
         const passAbsorbPh = encoder.beginComputePass({ label: 'absorbPhotons' });
         passAbsorbPh.setPipeline(phAbsorbPipeline);
         passAbsorbPh.setBindGroup(0, bgs.bosG0);
         passAbsorbPh.setBindGroup(1, g1);
         passAbsorbPh.setBindGroup(2, bgs.bosG2);
         passAbsorbPh.setBindGroup(3, bgs.bosG3);
-        passAbsorbPh.dispatchWorkgroups(phWG);
+        passAbsorbPh.dispatchWorkgroups(1);
         passAbsorbPh.end();
 
-        // absorbPions
+        // absorbPions (single-threaded: serialized to avoid f32 data races)
         const passAbsorbPi = encoder.beginComputePass({ label: 'absorbPions' });
         passAbsorbPi.setPipeline(piAbsorbPipeline);
         passAbsorbPi.setBindGroup(0, bgs.bosG0);
         passAbsorbPi.setBindGroup(1, g1);
         passAbsorbPi.setBindGroup(2, bgs.bosG2);
         passAbsorbPi.setBindGroup(3, bgs.bosG3);
-        passAbsorbPi.dispatchWorkgroups(piWG);
+        passAbsorbPi.dispatchWorkgroups(1);
         passAbsorbPi.end();
 
     }
@@ -1268,8 +1277,11 @@ export default class GPUPhysics {
         const bgs = this._phase4BindGroups;
         const b = this.buffers;
 
-        // Reset boson tree node counter to 1 (root = node 0)
-        this.device.queue.writeBuffer(b.bosonTreeCounter, 0, _qtNodeCounterData);
+        // Reset boson tree node counter to 1 (root = node 0).
+        // Uses encoder.copyBufferToBuffer (not queue.writeBuffer) so the reset
+        // executes in-order within the command buffer. Reuses _qtCounterSrc
+        // (same static [1] data as the particle tree counter reset).
+        encoder.copyBufferToBuffer(this._qtCounterSrc, 0, b.bosonTreeCounter, 0, 4);
 
         // Clear visitor flags before insertion
         encoder.clearBuffer(b.bosonVisitorFlags);
@@ -1287,7 +1299,10 @@ export default class GPUPhysics {
         _bosonRootData[17] = 0xFFFFFFFF;   // SE = NONE
         _bosonRootData[18] = 0xFFFFFFFF;   // particleIdx = NONE
         _bosonRootData[19] = 0xFFFFFFFF;   // parent = NONE (-1)
-        this.device.queue.writeBuffer(b.bosonTreeNodes, 0, _bosonRootData);
+        // Write root data to staging buffer (queue time), then copy to tree nodes
+        // (encoder time) so the reset is ordered correctly within the command buffer.
+        this.device.queue.writeBuffer(this._bosonRootSrc, 0, _bosonRootData);
+        encoder.copyBufferToBuffer(this._bosonRootSrc, 0, b.bosonTreeNodes, 0, 80);
 
         const totalBosons = GPU_MAX_PHOTONS + GPU_MAX_PIONS;
         const bosonWG = Math.ceil(totalBosons / 64);
@@ -3074,6 +3089,7 @@ export default class GPUPhysics {
             // Pion decay: dispatched once per frame. Probability scaled by dt/PHYSICS_DT
             // in the shader to match CPU (which checks once per PHYSICS_DT tick).
             // Write total dt (not substep dt) so the shader can compute tick count.
+            // FRAGILE: assumes dt is at byte offset 0 in SimUniforms — do not reorder struct
             _postSubDt[0] = dt;
             this.device.queue.writeBuffer(this.uniformBuffer, 0, _postSubDt);
             this._dispatchPionDecay(encoder);
@@ -3916,6 +3932,7 @@ export default class GPUPhysics {
         _d(this._dummyHistBuf);
         _d(this._qtCounterSrc);
         _d(this._qtBoundsSrc);
+        _d(this._bosonRootSrc);
 
         // Scalar field buffers
         _dObj(this._higgsBuffers);
@@ -3987,6 +4004,7 @@ export default class GPUPhysics {
         this._dummyHistBuf = null;
         this._qtCounterSrc = null;
         this._qtBoundsSrc = null;
+        this._bosonRootSrc = null;
     }
 }
 

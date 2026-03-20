@@ -54,12 +54,12 @@ export default class StatsDisplay {
             this.initialAngMom = angMom;
         }
 
-        const eDrift = this.initialEnergy !== null && this.initialEnergy !== 0
-            ? ((total - this.initialEnergy) / Math.abs(this.initialEnergy) * 100) : 0;
-        const pDrift = this.initialMomentum !== null && this.initialMomentum !== 0
-            ? ((pMag - this.initialMomentum) / Math.abs(this.initialMomentum) * 100) : 0;
-        const aDrift = this.initialAngMom !== null && this.initialAngMom !== 0
-            ? ((angMom - this.initialAngMom) / Math.abs(this.initialAngMom) * 100) : 0;
+        const eDrift = this.initialEnergy !== null
+            ? ((total - this.initialEnergy) / Math.max(Math.abs(this.initialEnergy), 1e-6) * 100) : 0;
+        const pDrift = this.initialMomentum !== null
+            ? ((pMag - this.initialMomentum) / Math.max(Math.abs(this.initialMomentum), 1e-6) * 100) : 0;
+        const aDrift = this.initialAngMom !== null
+            ? ((angMom - this.initialAngMom) / Math.max(Math.abs(this.initialAngMom), 1e-6) * 100) : 0;
 
         _set(this.dom.linearKE, fmt(e.linearKE));
         _set(this.dom.spinKE, fmt(e.spinKE));
@@ -104,12 +104,12 @@ export default class StatsDisplay {
             this.initialAngMom = angMom;
         }
 
-        const eDrift = this.initialEnergy !== null && this.initialEnergy !== 0
-            ? ((total - this.initialEnergy) / Math.abs(this.initialEnergy) * 100) : 0;
-        const pDrift = this.initialMomentum !== null && this.initialMomentum !== 0
-            ? ((pMag - this.initialMomentum) / Math.abs(this.initialMomentum) * 100) : 0;
-        const aDrift = this.initialAngMom !== null && this.initialAngMom !== 0
-            ? ((angMom - this.initialAngMom) / Math.abs(this.initialAngMom) * 100) : 0;
+        const eDrift = this.initialEnergy !== null
+            ? ((total - this.initialEnergy) / Math.max(Math.abs(this.initialEnergy), 1e-6) * 100) : 0;
+        const pDrift = this.initialMomentum !== null
+            ? ((pMag - this.initialMomentum) / Math.max(Math.abs(this.initialMomentum), 1e-6) * 100) : 0;
+        const aDrift = this.initialAngMom !== null
+            ? ((angMom - this.initialAngMom) / Math.max(Math.abs(this.initialAngMom), 1e-6) * 100) : 0;
 
         _set(this.dom.linearKE, fmt(e.linearKE));
         _set(this.dom.spinKE, fmt(e.spinKE));

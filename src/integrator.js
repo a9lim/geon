@@ -161,8 +161,8 @@ export default class Physics {
         p.histHead = (h + 1) & HISTORY_MASK;
         if (p.histCount < HISTORY_SIZE) p.histCount++;
         // Cache dipole moments at death (won't be recached in computeAllForces)
-        p.magMoment = MAG_MOMENT_K * p.charge * p.angVel * p.radiusSq;
-        p.angMomentum = INERTIA_K * p._deathMass * p.angVel * p.radiusSq;
+        p.magMoment = MAG_MOMENT_K * p.charge * p.angVel * p.bodyRadiusSq;
+        p.angMomentum = INERTIA_K * p._deathMass * p.angVel * p.bodyRadiusSq;
         this.sim.deadParticles.push(p);
     }
 
@@ -1323,7 +1323,7 @@ export default class Physics {
                 const quadPower = gwPower + emPower;
 
                 if (quadPower > 0) {
-                    const dE = quadPower * dt;
+                    const dE = quadPower * dtSub;
 
                     // Split dE proportionally between GW and EM channels
                     const gwFrac = gwPower / quadPower;

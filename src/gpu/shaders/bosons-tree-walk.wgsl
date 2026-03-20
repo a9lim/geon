@@ -171,137 +171,141 @@ fn updatePionsTree(@builtin(global_invocation_id) gid: vec3u) {
 
 // ─── absorbPhotonsTree ───
 // BH tree range query for photon absorption by nearby particles.
-@compute @workgroup_size(64)
+// Single-threaded to avoid data races: multiple bosons targeting the same
+// particle would race on non-atomic f32 velocity/charge writes.
+@compute @workgroup_size(1)
 fn absorbPhotonsTree(@builtin(global_invocation_id) gid: vec3u) {
-    let i = gid.x;
     let count = atomicLoad(&phCount);
-    if (i >= count) { return; }
 
-    let ph = photons[i];
-    if ((ph.flags & 1u) == 0u) { return; }
-    if (ph.lifetime < BOSON_MIN_AGE_TIME) { return; }
+    for (var i = 0u; i < count; i++) {
+        let ph = photons[i];
+        if ((ph.flags & 1u) == 0u) { continue; }
+        if (ph.lifetime < BOSON_MIN_AGE_TIME) { continue; }
 
-    let phX = ph.posX;
-    let phY = ph.posY;
-    let phEmitterId = ph.emitterId;
-    let phEnergy = ph.energy;
-    let phVelX = ph.velX;
-    let phVelY = ph.velY;
+        let phX = ph.posX;
+        let phY = ph.posY;
+        let phEmitterId = ph.emitterId;
+        let phEnergy = ph.energy;
+        let phVelX = ph.velX;
+        let phVelY = ph.velY;
 
-    let searchR = SOFTENING;
+        let searchR = SOFTENING;
 
-    var stack: array<u32, 48>;
-    var top: i32 = 0;
-    stack[0] = 0u;
-    top = 1;
-    var absorbed = false;
+        var stack: array<u32, 48>;
+        var top: i32 = 0;
+        stack[0] = 0u;
+        top = 1;
+        var absorbed = false;
 
-    while (top > 0 && !absorbed) {
-        top--;
-        let nIdx = stack[u32(top)];
+        while (top > 0 && !absorbed) {
+            top--;
+            let nIdx = stack[u32(top)];
 
-        // AABB overlap check
-        if (phX + searchR < getMinX(nIdx) || phX - searchR > getMaxX(nIdx) ||
-            phY + searchR < getMinY(nIdx) || phY - searchR > getMaxY(nIdx)) {
-            continue;
-        }
-
-        let isLeaf = getNW(nIdx) == NONE;
-        if (isLeaf) {
-            let pIdx = getParticleIndex(nIdx);
-            if (pIdx < 0) { continue; }
-            let j = u32(pIdx);
-            let pj = particles[j];
-            if ((pj.flags & FLAG_ALIVE) == 0u) { continue; }
-            let auxJ = particleAux[j];
-            if (auxJ.particleId == phEmitterId) { continue; }
-            let dx = phX - pj.posX;
-            let dy = phY - pj.posY;
-            if (dx * dx + dy * dy < auxJ.radius * auxJ.radius) {
-                let invTM = select(0.0, 1.0 / pj.mass, pj.mass > EPSILON);
-                particles[j].velWX += phEnergy * phVelX * invTM;
-                particles[j].velWY += phEnergy * phVelY * invTM;
-                photons[i].flags &= ~1u;
-                absorbed = true;
+            // AABB overlap check
+            if (phX + searchR < getMinX(nIdx) || phX - searchR > getMaxX(nIdx) ||
+                phY + searchR < getMinY(nIdx) || phY - searchR > getMaxY(nIdx)) {
+                continue;
             }
-        } else if (top + 4 <= 48) {
-            let nw = getNW(nIdx); let ne = getNE(nIdx);
-            let sw = getSW(nIdx); let se = getSE(nIdx);
-            if (nw != NONE) { stack[u32(top)] = u32(nw); top++; }
-            if (ne != NONE) { stack[u32(top)] = u32(ne); top++; }
-            if (sw != NONE) { stack[u32(top)] = u32(sw); top++; }
-            if (se != NONE) { stack[u32(top)] = u32(se); top++; }
+
+            let isLeaf = getNW(nIdx) == NONE;
+            if (isLeaf) {
+                let pIdx = getParticleIndex(nIdx);
+                if (pIdx < 0) { continue; }
+                let j = u32(pIdx);
+                let pj = particles[j];
+                if ((pj.flags & FLAG_ALIVE) == 0u) { continue; }
+                let auxJ = particleAux[j];
+                if (auxJ.particleId == phEmitterId) { continue; }
+                let dx = phX - pj.posX;
+                let dy = phY - pj.posY;
+                if (dx * dx + dy * dy < auxJ.radius * auxJ.radius) {
+                    let invTM = select(0.0, 1.0 / pj.mass, pj.mass > EPSILON);
+                    particles[j].velWX += phEnergy * phVelX * invTM;
+                    particles[j].velWY += phEnergy * phVelY * invTM;
+                    photons[i].flags &= ~1u;
+                    absorbed = true;
+                }
+            } else if (top + 4 <= 48) {
+                let nw = getNW(nIdx); let ne = getNE(nIdx);
+                let sw = getSW(nIdx); let se = getSE(nIdx);
+                if (nw != NONE) { stack[u32(top)] = u32(nw); top++; }
+                if (ne != NONE) { stack[u32(top)] = u32(ne); top++; }
+                if (sw != NONE) { stack[u32(top)] = u32(sw); top++; }
+                if (se != NONE) { stack[u32(top)] = u32(se); top++; }
+            }
         }
     }
 }
 
 // ─── absorbPionsTree ───
 // BH tree range query for pion absorption by nearby particles.
-@compute @workgroup_size(64)
+// Single-threaded to avoid data races: multiple bosons targeting the same
+// particle would race on non-atomic f32 velocity/charge writes.
+@compute @workgroup_size(1)
 fn absorbPionsTree(@builtin(global_invocation_id) gid: vec3u) {
-    let i = gid.x;
     let count = atomicLoad(&piCount);
-    if (i >= count) { return; }
 
-    let pi = pions[i];
-    if ((pi.flags & 1u) == 0u) { return; }
-    if (pi.age < BOSON_MIN_AGE) { return; }
+    for (var i = 0u; i < count; i++) {
+        let pi = pions[i];
+        if ((pi.flags & 1u) == 0u) { continue; }
+        if (pi.age < BOSON_MIN_AGE) { continue; }
 
-    let piX = pi.posX;
-    let piY = pi.posY;
-    let piEmitterId = pi.emitterId;
-    let piWX = pi.wX;
-    let piWY = pi.wY;
-    let piEnergy = pi.energy;
-    let piCharge = pi.charge;
+        let piX = pi.posX;
+        let piY = pi.posY;
+        let piEmitterId = pi.emitterId;
+        let piWX = pi.wX;
+        let piWY = pi.wY;
+        let piEnergy = pi.energy;
+        let piCharge = pi.charge;
 
-    let gamma = sqrt(1.0 + piWX * piWX + piWY * piWY);
-    let invG = 1.0 / gamma;
+        let gamma = sqrt(1.0 + piWX * piWX + piWY * piWY);
+        let invG = 1.0 / gamma;
 
-    let searchR = SOFTENING;
+        let searchR = SOFTENING;
 
-    var stack: array<u32, 48>;
-    var top: i32 = 0;
-    stack[0] = 0u;
-    top = 1;
-    var absorbed = false;
+        var stack: array<u32, 48>;
+        var top: i32 = 0;
+        stack[0] = 0u;
+        top = 1;
+        var absorbed = false;
 
-    while (top > 0 && !absorbed) {
-        top--;
-        let nIdx = stack[u32(top)];
+        while (top > 0 && !absorbed) {
+            top--;
+            let nIdx = stack[u32(top)];
 
-        // AABB overlap check
-        if (piX + searchR < getMinX(nIdx) || piX - searchR > getMaxX(nIdx) ||
-            piY + searchR < getMinY(nIdx) || piY - searchR > getMaxY(nIdx)) {
-            continue;
-        }
-
-        let isLeaf = getNW(nIdx) == NONE;
-        if (isLeaf) {
-            let pIdx = getParticleIndex(nIdx);
-            if (pIdx < 0) { continue; }
-            let j = u32(pIdx);
-            let pj = particles[j];
-            if ((pj.flags & FLAG_ALIVE) == 0u) { continue; }
-            let auxJ = particleAux[j];
-            if (auxJ.particleId == piEmitterId) { continue; }
-            let dx = piX - pj.posX;
-            let dy = piY - pj.posY;
-            if (dx * dx + dy * dy < auxJ.radius * auxJ.radius) {
-                let invTM = select(0.0, 1.0 / pj.mass, pj.mass > EPSILON);
-                particles[j].velWX += piEnergy * (piWX * invG) * invTM;
-                particles[j].velWY += piEnergy * (piWY * invG) * invTM;
-                particles[j].charge += f32(piCharge);
-                pions[i].flags &= ~1u;
-                absorbed = true;
+            // AABB overlap check
+            if (piX + searchR < getMinX(nIdx) || piX - searchR > getMaxX(nIdx) ||
+                piY + searchR < getMinY(nIdx) || piY - searchR > getMaxY(nIdx)) {
+                continue;
             }
-        } else if (top + 4 <= 48) {
-            let nw = getNW(nIdx); let ne = getNE(nIdx);
-            let sw = getSW(nIdx); let se = getSE(nIdx);
-            if (nw != NONE) { stack[u32(top)] = u32(nw); top++; }
-            if (ne != NONE) { stack[u32(top)] = u32(ne); top++; }
-            if (sw != NONE) { stack[u32(top)] = u32(sw); top++; }
-            if (se != NONE) { stack[u32(top)] = u32(se); top++; }
+
+            let isLeaf = getNW(nIdx) == NONE;
+            if (isLeaf) {
+                let pIdx = getParticleIndex(nIdx);
+                if (pIdx < 0) { continue; }
+                let j = u32(pIdx);
+                let pj = particles[j];
+                if ((pj.flags & FLAG_ALIVE) == 0u) { continue; }
+                let auxJ = particleAux[j];
+                if (auxJ.particleId == piEmitterId) { continue; }
+                let dx = piX - pj.posX;
+                let dy = piY - pj.posY;
+                if (dx * dx + dy * dy < auxJ.radius * auxJ.radius) {
+                    let invTM = select(0.0, 1.0 / pj.mass, pj.mass > EPSILON);
+                    particles[j].velWX += piEnergy * (piWX * invG) * invTM;
+                    particles[j].velWY += piEnergy * (piWY * invG) * invTM;
+                    particles[j].charge += f32(piCharge);
+                    pions[i].flags &= ~1u;
+                    absorbed = true;
+                }
+            } else if (top + 4 <= 48) {
+                let nw = getNW(nIdx); let ne = getNE(nIdx);
+                let sw = getSW(nIdx); let se = getSE(nIdx);
+                if (nw != NONE) { stack[u32(top)] = u32(nw); top++; }
+                if (ne != NONE) { stack[u32(top)] = u32(ne); top++; }
+                if (sw != NONE) { stack[u32(top)] = u32(sw); top++; }
+                if (se != NONE) { stack[u32(top)] = u32(se); top++; }
+            }
         }
     }
 }

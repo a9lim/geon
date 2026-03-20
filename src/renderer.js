@@ -592,8 +592,10 @@ export default class Renderer {
         ctx.globalCompositeOperation = 'source-over';
         ctx.lineWidth = 0.25;
         ctx.strokeStyle = color;
-        ctx.fillStyle = color;
 
+        // Arcs pass: one beginPath + one stroke for all particles
+        ctx.beginPath();
+        let hasArcs = false;
         for (const p of particles) {
             let val = getValue(p);
             if (Math.abs(val) < threshold) continue;
@@ -605,26 +607,41 @@ export default class Renderer {
             const startAngle = -HALF_PI;
             const endAngle = startAngle - dir * sweep;
 
-            ctx.beginPath();
+            ctx.moveTo(p.pos.x + Math.cos(startAngle) * ringRadius,
+                       p.pos.y + Math.sin(startAngle) * ringRadius);
             ctx.arc(p.pos.x, p.pos.y, ringRadius, startAngle, endAngle, dir > 0);
-            ctx.stroke();
-
-            if (sweep * ringRadius >= 0.5) {
-                const ax = p.pos.x + Math.cos(endAngle) * ringRadius;
-                const ay = p.pos.y + Math.sin(endAngle) * ringRadius;
-                const sweepDir = endAngle - dir * HALF_PI;
-                const h = 0.5;
-                const tipX = ax + Math.cos(sweepDir) * h;
-                const tipY = ay + Math.sin(sweepDir) * h;
-                const spread = h * 0.4;
-                ctx.beginPath();
-                ctx.moveTo(tipX, tipY);
-                ctx.lineTo(ax + Math.cos(endAngle) * spread, ay + Math.sin(endAngle) * spread);
-                ctx.lineTo(ax - Math.cos(endAngle) * spread, ay - Math.sin(endAngle) * spread);
-                ctx.closePath();
-                ctx.fill();
-            }
+            hasArcs = true;
         }
+        if (hasArcs) ctx.stroke();
+
+        // Arrowheads pass: one beginPath + one fill for all particles
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        let hasHeads = false;
+        for (const p of particles) {
+            let val = getValue(p);
+            if (Math.abs(val) < threshold) continue;
+            val /= INERTIA_K * p.mass * p.radius * p.radius;
+
+            const ringRadius = p.radius + offset;
+            const sweep = Math.min(scale * Math.abs(val), maxSweep);
+            if (sweep * ringRadius < 0.5) continue;
+            const dir = val > 0 ? -1 : 1;
+            const endAngle = -HALF_PI - dir * sweep;
+            const ax = p.pos.x + Math.cos(endAngle) * ringRadius;
+            const ay = p.pos.y + Math.sin(endAngle) * ringRadius;
+            const sweepDir = endAngle - dir * HALF_PI;
+            const h = 0.5;
+            const tipX = ax + Math.cos(sweepDir) * h;
+            const tipY = ay + Math.sin(sweepDir) * h;
+            const spread = h * 0.4;
+            ctx.moveTo(tipX, tipY);
+            ctx.lineTo(ax + Math.cos(endAngle) * spread, ay + Math.sin(endAngle) * spread);
+            ctx.lineTo(ax - Math.cos(endAngle) * spread, ay - Math.sin(endAngle) * spread);
+            ctx.closePath();
+            hasHeads = true;
+        }
+        if (hasHeads) ctx.fill();
     }
 
     drawPhotons(ctx, photons, isLight) {
