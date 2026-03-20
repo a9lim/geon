@@ -1,7 +1,7 @@
 // ─── Relativistic Helpers ───
 // Conversions between celerity (unbounded state variable) and velocity (capped at c=1).
 
-import { MAX_SPEED_RATIO, EPSILON } from './config.js';
+import { MAX_SPEED_RATIO } from './config.js';
 
 /** angw -> angVel: omega = W / sqrt(1 + W^2 r^2). */
 export function angwToAngVel(angw, radius) {

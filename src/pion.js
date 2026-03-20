@@ -62,12 +62,6 @@ export default class Pion {
         if (_poolSize < MAX_PIONS) _pool[_poolSize++] = p;
     }
 
-    /** Drain all pooled instances (call on simulation reset). */
-    static clearPool() {
-        _poolSize = 0;
-        _pool.length = 0;
-    }
-
     _syncVel() {
         const wSq = this.w.x * this.w.x + this.w.y * this.w.y;
         const gamma = Math.sqrt(1 + wSq);

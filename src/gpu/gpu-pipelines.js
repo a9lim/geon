@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 51;
+const SHADER_VERSION = 55;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -35,20 +35,35 @@ async function _ensureSharedCache() {
     return _sharedCache;
 }
 
+/** Module-level cache for concatenated shared prefix (keyed by wgslConstants string) */
+let _cachedPrefix = null;
+let _cachedPrefixKey = null;
+/** Module-level cache for tree prefix (shared prefix + treeNodes, keyed by wgslConstants) */
+let _cachedTreePrefix = null;
+let _cachedTreePrefixKey = null;
+
 /**
  * Build the standard prefix for all shaders: wgslConstants + shared-structs + shared-topology + shared-rng.
  * Shared files are fetched once and cached for the lifetime of the page.
+ * The concatenated result is also cached per-wgslConstants to avoid repeated string allocations.
+ * Exported so callers (e.g. gpu-renderer.js) can build shader modules without re-fetching.
  */
-async function getSharedPrefix(wgslConstants) {
+export async function getSharedPrefix(wgslConstants) {
+    if (wgslConstants === _cachedPrefixKey && _cachedPrefix !== null) return _cachedPrefix;
     const c = await _ensureSharedCache();
-    return wgslConstants + '\n' + c.structs + '\n' + c.topo + '\n' + c.rng;
+    _cachedPrefixKey = wgslConstants;
+    _cachedPrefix = wgslConstants + '\n' + c.structs + '\n' + c.topo + '\n' + c.rng;
+    return _cachedPrefix;
 }
 
 /** Prefix for tree-walk shaders: standard prefix + read-only node accessors */
 async function getTreePrefix(wgslConstants) {
+    if (wgslConstants === _cachedTreePrefixKey && _cachedTreePrefix !== null) return _cachedTreePrefix;
     const c = await _ensureSharedCache();
     const prefix = await getSharedPrefix(wgslConstants);
-    return prefix + '\n' + c.treeNodes;
+    _cachedTreePrefixKey = wgslConstants;
+    _cachedTreePrefix = prefix + '\n' + c.treeNodes;
+    return _cachedTreePrefix;
 }
 
 /**
@@ -828,11 +843,18 @@ export async function createPhase4Pipelines(device, wgslConstants = '') {
  * Group 0: camera uniforms
  * Group 1: photonPool (ro) + phCount (ro) = 2 (was 5)
  * Group 2: pionPool (ro) + piCount (ro) = 2 (was 5)
+ *
+ * @param {GPUShaderModule|null} [sharedModule] - Optional pre-created shader module to reuse.
+ *   When provided the fetch + createShaderModule are skipped, saving one network round-trip
+ *   and one GPU compilation for the light/dark pipeline pair.
  */
-export async function createBosonRenderPipelines(device, format, isLight, wgslConstants = '') {
-    const prefix = await getSharedPrefix(wgslConstants);
-    const code = await fetchShader('boson-render.wgsl', prefix);
-    const module = device.createShaderModule({ label: 'bosonRender', code });
+export async function createBosonRenderPipelines(device, format, isLight, wgslConstants = '', sharedModule = null) {
+    let module = sharedModule;
+    if (!module) {
+        const prefix = await getSharedPrefix(wgslConstants);
+        const code = await fetchShader('boson-render.wgsl', prefix);
+        module = device.createShaderModule({ label: 'bosonRender', code });
+    }
 
     const g0 = device.createBindGroupLayout({
         label: 'bosonRender_g0',
@@ -1297,19 +1319,22 @@ export async function createFieldExcitationPipeline(device, wgslConstants = '') 
 
 /**
  * Create heatmap compute pipelines (Phase 5).
+ * Two heatmap entry points:
+ *   computeHeatmap:     O(N*GRID²) pairwise, signal delay support
+ *   computeHeatmapTree: O(log(N)*GRID²) BH tree walk, no signal delay
  * Bind groups:
  *   heatmapLayout:
- *     Group 0: particleState (ro) = 1 (was 5 separate buffers)
+ *     Group 0: particleState (rw) + particleAux (rw) + treeNodes (rw) = 3
  *     Group 1: potential grids (3 rw) + HeatmapUniforms = 4
  *     Group 2: signal delay history (histData, histMeta) = 2
  *   blurLayout: unchanged
  */
 export async function createHeatmapPipelines(device, wgslConstants = '') {
-    const prefix = await getSharedPrefix(wgslConstants);
+    const treePrefix = await getTreePrefix(wgslConstants);
     const signalDelayWGSL = await fetchShader('signal-delay-common.wgsl');
     const heatmapWGSL = await fetchShader('heatmap.wgsl');
-    // Prepend: prefix (structs+topology) → signal-delay-common → heatmap
-    const code = prefix + '\n' + signalDelayWGSL + '\n' + heatmapWGSL;
+    // Prepend: treePrefix (structs+topology+rng+treeNodes) → signal-delay-common → heatmap
+    const code = treePrefix + '\n' + signalDelayWGSL + '\n' + heatmapWGSL;
     const module = device.createShaderModule({ label: 'heatmap', code });
 
     const hmG0 = device.createBindGroupLayout({
@@ -1317,6 +1342,7 @@ export async function createHeatmapPipelines(device, wgslConstants = '') {
         entries: [
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleState (rw for encoder compat)
             { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleAux
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // treeNodes (rw for accessor compat)
         ],
     });
     const hmG1 = device.createBindGroupLayout({
@@ -1337,11 +1363,18 @@ export async function createHeatmapPipelines(device, wgslConstants = '') {
         ],
     });
     const heatmapLayouts = [hmG0, hmG1, hmG2];
+    const heatmapPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: heatmapLayouts });
 
     const computeHeatmap = device.createComputePipeline({
         label: 'computeHeatmap',
-        layout: device.createPipelineLayout({ bindGroupLayouts: heatmapLayouts }),
+        layout: heatmapPipelineLayout,
         compute: { module, entryPoint: 'computeHeatmap' },
+    });
+
+    const computeHeatmapTree = device.createComputePipeline({
+        label: 'computeHeatmapTree',
+        layout: heatmapPipelineLayout,
+        compute: { module, entryPoint: 'computeHeatmapTree' },
     });
 
     const blurG0 = device.createBindGroupLayout({
@@ -1363,7 +1396,7 @@ export async function createHeatmapPipelines(device, wgslConstants = '') {
         compute: { module, entryPoint: 'blurVertical' },
     });
 
-    return { computeHeatmap, blurHorizontal, blurVertical, heatmapLayouts, blurLayouts };
+    return { computeHeatmap, computeHeatmapTree, blurHorizontal, blurVertical, heatmapLayouts, blurLayouts };
 }
 
 /**
@@ -1918,8 +1951,12 @@ export async function createHitTestPipeline(device, wgslConstants = '') {
 }
 
 /**
- * Create compute-stats pipeline for aggregate stats reduction + selected particle readback.
- * Standalone shader (defines own structs, receives wgslConstants).
+ * Create compute-stats pipelines for parallel stats reduction + selected particle readback.
+ * Four entry points sharing same bind groups:
+ *   statsKEMom:  @workgroup_size(64) — KE, momentum, COM, angular momentum
+ *   statsPE:     @workgroup_size(1)  — O(N²) PE + Darwin field energy
+ *   statsField:  @workgroup_size(64) — Scalar field energy + momentum
+ *   statsPFISel: @workgroup_size(1)  — PFI + selected particle copy
  * Group 0: uniforms, particleState(ro), derived(ro), allForces(ro), stats(rw), axYukMod(ro).
  * Group 1: higgs field(ro), higgs fieldDot(ro), axion field(ro), axion fieldDot(ro).
  */
@@ -1950,11 +1987,17 @@ export async function createComputeStatsPipeline(device, wgslConstants = '') {
         ],
     });
 
-    const pipeline = device.createComputePipeline({
-        label: 'computeStats',
-        layout: device.createPipelineLayout({ bindGroupLayouts: [group0Layout, group1Layout] }),
-        compute: { module, entryPoint: 'main' },
-    });
+    const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [group0Layout, group1Layout] });
 
-    return { pipeline, group0Layout, group1Layout };
+    const entries = ['statsKEMom', 'statsPE', 'statsField', 'statsPFISel'];
+    const pipelines = {};
+    for (const entry of entries) {
+        pipelines[entry] = device.createComputePipeline({
+            label: `computeStats_${entry}`,
+            layout: pipelineLayout,
+            compute: { module, entryPoint: entry },
+        });
+    }
+
+    return { pipelines, group0Layout, group1Layout };
 }

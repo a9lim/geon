@@ -14,27 +14,8 @@ export default class Vec2 {
         return new Vec2(this.x, this.y);
     }
 
-    scale(s) {
-        this.x *= s;
-        this.y *= s;
-        return this;
-    }
-
-    mag() {
-        return Math.sqrt(this.x * this.x + this.y * this.y);
-    }
-
     magSq() {
         return this.x * this.x + this.y * this.y;
-    }
-
-    normalize() {
-        const m = this.mag();
-        if (m > 0) {
-            this.x /= m;
-            this.y /= m;
-        }
-        return this;
     }
 
     dist(v) {

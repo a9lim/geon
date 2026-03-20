@@ -109,7 +109,6 @@ body {
 .tog-relativity  { --tog-color: var(--ext-orange); }
 .tog-radiation    { --tog-color: var(--ext-yellow); }
 .tog-spinorbit    { --tog-color: var(--ext-purple); }
-.tog-tidal        { --tog-color: var(--ext-slate); }
 .tog-onepn        { --tog-color: var(--ext-orange); }
 .tog-blackhole    { --tog-color: var(--text); }
 .tog-yukawa       { --tog-color: var(--ext-green); }

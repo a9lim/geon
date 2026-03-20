@@ -34,7 +34,7 @@
  *  - deadParticleGC           (Phase 3)
  *  - recordHistory            (Phase 4 — every HISTORY_STRIDE frames)
  */
-import { createParticleBuffers, createUniformBuffer, writeUniforms, createFieldBuffers, createAtomicGridBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createPairProductionBuffers, createTrailBuffers, FIELD_GRID_RES, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
+import { createParticleBuffers, createUniformBuffer, writeFrameUniforms, writeSubstepUniforms, createFieldBuffers, createAtomicGridBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createPairProductionBuffers, createTrailBuffers, FIELD_GRID_RES, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
 import { fetchShader, createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldSelfGravPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createPairProductionPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline } from './gpu-pipelines.js';
 import { buildWGSLConstants, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT, GRAVITOMAG_BIT, ONE_PN_BIT, RELATIVITY_BIT, SPIN_ORBIT_BIT, RADIATION_BIT, BLACK_HOLE_BIT, DISINTEGRATION_BIT, EXPANSION_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BARNES_HUT_BIT, BOSON_INTER_BIT, FIELD_GRAV_BIT_T1, HERTZ_BOUNCE_BIT_T1, HIST_META_STRIDE } from './gpu-constants.js';
 import {
@@ -117,11 +117,26 @@ const _excitationCountData = new Uint32Array(1);
 
 // Pre-allocated field vacuum data (reused across _initFieldToVacuum calls)
 const _FIELD_GRID_SQ = 128 * 128; // GPU_SCALAR_GRID² (max supported)
-const _vacuumFieldData = new Float32Array(_FIELD_GRID_SQ);
-const _zeroFieldData = new Float32Array(_FIELD_GRID_SQ);
+const _vacuumFieldData = new Float32Array(_FIELD_GRID_SQ); // Higgs VEV=1 upload
 
 // Pre-allocated Green's hat upload buffer
 const _greenHatUploadData = new Float32Array(_FIELD_GRID_SQ * 2);
+
+// G16: Pre-allocated batch deserialize buffers (GPU_MAX_PARTICLES = 512)
+// Sized for the full GPU particle capacity so no reallocation is needed.
+const _DS_MAX = GPU_MAX_PARTICLES; // 512
+const _dsStateData  = new ArrayBuffer(_DS_MAX * 36);  // PARTICLE_STATE_SIZE = 36
+const _dsStateF32   = new Float32Array(_dsStateData);
+const _dsStateU32   = new Uint32Array(_dsStateData);
+const _dsAuxData    = new ArrayBuffer(_DS_MAX * 20);  // PARTICLE_AUX_SIZE = 20
+const _dsAuxF32     = new Float32Array(_dsAuxData);
+const _dsAuxU32     = new Uint32Array(_dsAuxData);
+const _dsColorData  = new Uint32Array(_DS_MAX);        // 4 bytes each
+const _dsModData    = new Float32Array(_DS_MAX * 4);   // VEC4_SIZE = 16
+const _dsRadData    = new Float32Array(_DS_MAX * 12);  // RADIATION_STATE_SIZE = 48 = 12 f32
+const _dsMetaData   = new ArrayBuffer(_DS_MAX * 16);  // histMeta: 4 u32 per particle
+const _dsMetaF32    = new Float32Array(_dsMetaData);
+const _dsMetaU32    = new Uint32Array(_dsMetaData);
 
 export default class GPUPhysics {
     /**
@@ -248,6 +263,10 @@ export default class GPUPhysics {
         this._extElectric = 0;
         this._extElectricAngle = 0;
         this._extBz = 0;
+        this._cachedExtGx = 0;
+        this._cachedExtGy = 0;
+        this._cachedExtEx = 0;
+        this._cachedExtEy = 0;
         this._bounceFriction = 0.4;
         this._collisionMode = 0;
         this._axionCoupling = 0.05;
@@ -333,8 +352,8 @@ export default class GPUPhysics {
         this._hitStagingI32 = null;
         this._hitStagingF32 = null;
 
-        // Stats readback (compute-stats.wgsl)
-        this._statsPipeline = null;
+        // Stats readback (compute-stats.wgsl — 4 entry points)
+        this._statsPipelines = null;
         this._statsBindGroup0 = null;
         this._statsBindGroup1 = null;
         this._statsGroup0Layout = null;
@@ -493,10 +512,10 @@ export default class GPUPhysics {
             });
         }
 
-        // --- Compute stats pipeline ---
+        // --- Compute stats pipelines (4 entry points) ---
         {
             const cs = await createComputeStatsPipeline(this.device, wgslConstants);
-            this._statsPipeline = cs.pipeline;
+            this._statsPipelines = cs.pipelines;
             this._statsGroup0Layout = cs.group0Layout;
             this._statsGroup1Layout = cs.group1Layout;
             this._statsUniformBuffer = this.device.createBuffer({
@@ -1203,48 +1222,60 @@ export default class GPUPhysics {
         const piAbsorbPipeline = useBHTree ? p4.absorbPionsTree.pipeline : p4.absorbPions.pipeline;
         const g1 = useBHTree ? bgs.bosTreeG1 : bgs.bosG1;
 
-        // updatePhotons: drift + lensing
-        const phWG = Math.ceil(GPU_MAX_PHOTONS / 64);
-        const passPhotons = encoder.beginComputePass({ label: 'updatePhotons' });
-        passPhotons.setPipeline(phUpdatePipeline);
-        passPhotons.setBindGroup(0, bgs.bosG0);
-        passPhotons.setBindGroup(1, g1);
-        passPhotons.setBindGroup(2, bgs.bosG2);
-        passPhotons.setBindGroup(3, bgs.bosG3);
-        passPhotons.dispatchWorkgroups(phWG);
-        passPhotons.end();
+        // G12: Skip photon passes when radiation is off (no photons can exist).
+        // Skip pion passes when Yukawa is off (no pions can exist).
+        const hasPhotons = this._radiationEnabled;
+        const hasPions   = this._yukawaEnabled;
 
-        // updatePions: drift with proper velocity
-        const piWG = Math.ceil(GPU_MAX_PIONS / 64);
-        const passPions = encoder.beginComputePass({ label: 'updatePions' });
-        passPions.setPipeline(piUpdatePipeline);
-        passPions.setBindGroup(0, bgs.bosG0);
-        passPions.setBindGroup(1, g1);
-        passPions.setBindGroup(2, bgs.bosG2);
-        passPions.setBindGroup(3, bgs.bosG3);
-        passPions.dispatchWorkgroups(piWG);
-        passPions.end();
+        if (hasPhotons) {
+            // updatePhotons: drift + lensing
+            const phWG = Math.ceil(GPU_MAX_PHOTONS / 64);
+            const passPhotons = encoder.beginComputePass({ label: 'updatePhotons' });
+            passPhotons.setPipeline(phUpdatePipeline);
+            passPhotons.setBindGroup(0, bgs.bosG0);
+            passPhotons.setBindGroup(1, g1);
+            passPhotons.setBindGroup(2, bgs.bosG2);
+            passPhotons.setBindGroup(3, bgs.bosG3);
+            passPhotons.dispatchWorkgroups(phWG);
+            passPhotons.end();
+        }
 
-        // absorbPhotons (single-threaded: serialized to avoid f32 data races)
-        const passAbsorbPh = encoder.beginComputePass({ label: 'absorbPhotons' });
-        passAbsorbPh.setPipeline(phAbsorbPipeline);
-        passAbsorbPh.setBindGroup(0, bgs.bosG0);
-        passAbsorbPh.setBindGroup(1, g1);
-        passAbsorbPh.setBindGroup(2, bgs.bosG2);
-        passAbsorbPh.setBindGroup(3, bgs.bosG3);
-        passAbsorbPh.dispatchWorkgroups(1);
-        passAbsorbPh.end();
+        if (hasPions) {
+            // updatePions: drift with proper velocity
+            const piWG = Math.ceil(GPU_MAX_PIONS / 64);
+            const passPions = encoder.beginComputePass({ label: 'updatePions' });
+            passPions.setPipeline(piUpdatePipeline);
+            passPions.setBindGroup(0, bgs.bosG0);
+            passPions.setBindGroup(1, g1);
+            passPions.setBindGroup(2, bgs.bosG2);
+            passPions.setBindGroup(3, bgs.bosG3);
+            passPions.dispatchWorkgroups(piWG);
+            passPions.end();
+        }
 
-        // absorbPions (single-threaded: serialized to avoid f32 data races)
-        const passAbsorbPi = encoder.beginComputePass({ label: 'absorbPions' });
-        passAbsorbPi.setPipeline(piAbsorbPipeline);
-        passAbsorbPi.setBindGroup(0, bgs.bosG0);
-        passAbsorbPi.setBindGroup(1, g1);
-        passAbsorbPi.setBindGroup(2, bgs.bosG2);
-        passAbsorbPi.setBindGroup(3, bgs.bosG3);
-        passAbsorbPi.dispatchWorkgroups(1);
-        passAbsorbPi.end();
+        if (hasPhotons) {
+            // absorbPhotons (single-threaded: serialized to avoid f32 data races)
+            const passAbsorbPh = encoder.beginComputePass({ label: 'absorbPhotons' });
+            passAbsorbPh.setPipeline(phAbsorbPipeline);
+            passAbsorbPh.setBindGroup(0, bgs.bosG0);
+            passAbsorbPh.setBindGroup(1, g1);
+            passAbsorbPh.setBindGroup(2, bgs.bosG2);
+            passAbsorbPh.setBindGroup(3, bgs.bosG3);
+            passAbsorbPh.dispatchWorkgroups(1);
+            passAbsorbPh.end();
+        }
 
+        if (hasPions) {
+            // absorbPions (single-threaded: serialized to avoid f32 data races)
+            const passAbsorbPi = encoder.beginComputePass({ label: 'absorbPions' });
+            passAbsorbPi.setPipeline(piAbsorbPipeline);
+            passAbsorbPi.setBindGroup(0, bgs.bosG0);
+            passAbsorbPi.setBindGroup(1, g1);
+            passAbsorbPi.setBindGroup(2, bgs.bosG2);
+            passAbsorbPi.setBindGroup(3, bgs.bosG3);
+            passAbsorbPi.dispatchWorkgroups(1);
+            passAbsorbPi.end();
+        }
     }
 
     /**
@@ -1252,7 +1283,8 @@ export default class GPUPhysics {
      * Decay probability is calibrated per PHYSICS_DT, matching CPU path.
      */
     _dispatchPionDecay(encoder) {
-        if (!this._radiationEnabled && !this._yukawaEnabled) return;
+        // G12: Pions only exist when Yukawa is on; skip entirely otherwise.
+        if (!this._yukawaEnabled) return;
         const p4 = this._phase4;
         const bgs = this._phase4BindGroups;
         const piWG = Math.ceil(GPU_MAX_PIONS / 64);
@@ -1783,6 +1815,13 @@ export default class GPUPhysics {
         this._extElectric = physics.extElectric;
         this._extElectricAngle = physics.extElectricAngle;
         this._extBz = physics.extBz;
+        // Cache precomputed external field direction components (avoid per-frame trig)
+        const gravAngle = physics.extGravityAngle || 0;
+        const elecAngle = physics.extElectricAngle || 0;
+        this._cachedExtGx = (physics.extGravity || 0) * Math.cos(gravAngle);
+        this._cachedExtGy = (physics.extGravity || 0) * Math.sin(gravAngle);
+        this._cachedExtEx = (physics.extElectric || 0) * Math.cos(elecAngle);
+        this._cachedExtEy = (physics.extElectric || 0) * Math.sin(elecAngle);
         this._bounceFriction = physics.bounceFriction;
         this._collisionMode = physics.collisionMode || 0;
         this._axionCoupling = 0.05;
@@ -1871,21 +1910,31 @@ export default class GPUPhysics {
         const fb = which === 'higgs' ? this._higgsBuffers : this._axionBuffers;
         if (!fb) return;
 
-        const vacValue = which === 'higgs' ? 1.0 : 0.0;
-        _vacuumFieldData.fill(vacValue, 0, gridSq);
-        this.device.queue.writeBuffer(fb.field, 0, _vacuumFieldData, 0, gridSq);
+        // G15: Use encoder.clearBuffer() for zero-fills (8 writeBuffer calls → 1 encoder submit).
+        // clearBuffer() executes within the command buffer timeline (no queue-time ordering issues).
+        const enc = this.device.createCommandEncoder({ label: `${which}-field-reset` });
+        enc.clearBuffer(fb.fieldDot);
+        enc.clearBuffer(fb.gradX);
+        enc.clearBuffer(fb.gradY);
+        enc.clearBuffer(fb.source);
+        enc.clearBuffer(fb.thermal);
+        enc.clearBuffer(fb.energyDensity);
+        enc.clearBuffer(fb.sgPhiFull);
+        enc.clearBuffer(fb.sgGradX);
+        enc.clearBuffer(fb.sgGradY);
+        this.device.queue.submit([enc.finish()]);
 
-        // Zero all other field buffers using pre-allocated zero array
-        const zeroBytes = gridSq * 4;
-        this.device.queue.writeBuffer(fb.fieldDot, 0, _zeroFieldData, 0, gridSq);
-        this.device.queue.writeBuffer(fb.gradX, 0, _zeroFieldData, 0, gridSq);
-        this.device.queue.writeBuffer(fb.gradY, 0, _zeroFieldData, 0, gridSq);
-        this.device.queue.writeBuffer(fb.source, 0, _zeroFieldData, 0, gridSq);
-        this.device.queue.writeBuffer(fb.thermal, 0, _zeroFieldData, 0, gridSq);
-        this.device.queue.writeBuffer(fb.energyDensity, 0, _zeroFieldData, 0, gridSq);
-        this.device.queue.writeBuffer(fb.sgPhiFull, 0, _zeroFieldData, 0, gridSq);
-        this.device.queue.writeBuffer(fb.sgGradX, 0, _zeroFieldData, 0, gridSq);
-        this.device.queue.writeBuffer(fb.sgGradY, 0, _zeroFieldData, 0, gridSq);
+        // Write non-zero vacuum value for the main field array (Higgs VEV=1, Axion=0).
+        // Axion vacuum is zero — covered by clearBuffer above, so skip the writeBuffer.
+        if (which === 'higgs') {
+            _vacuumFieldData.fill(1.0, 0, gridSq);
+            this.device.queue.writeBuffer(fb.field, 0, _vacuumFieldData, 0, gridSq);
+        } else {
+            // Axion field vacuum = 0 — use a second encoder clearBuffer to stay consistent
+            const enc2 = this.device.createCommandEncoder({ label: 'axion-field-clear' });
+            enc2.clearBuffer(fb.field);
+            this.device.queue.submit([enc2.finish()]);
+        }
     }
 
     /**
@@ -1964,6 +2013,13 @@ export default class GPUPhysics {
         u[18] = this.aliveCount;
         f[19] = this._blackHoleEnabled ? BH_SOFTENING_SQ : SOFTENING_SQ;
         u[20] = fieldType < 0 ? 0 : fieldType;
+        // Precomputed cell dimensions (G17: avoids per-thread division in shaders)
+        const cellW = this.domainW / FIELD_GRID_RES;
+        const cellH = this.domainH / FIELD_GRID_RES;
+        f[21] = cellW;
+        f[22] = cellH;
+        f[23] = 1 / (cellW * cellW);
+        f[24] = 1 / (cellH * cellH);
         this.device.queue.writeBuffer(buf, 0, _fieldUniformData);
     }
 
@@ -2895,7 +2951,7 @@ export default class GPUPhysics {
         _heatmapUniformU32[14] = this.boundaryMode === BOUND_LOOP ? 1 : 0;
         _heatmapUniformU32[15] = this.topologyMode;
         _heatmapUniformU32[16] = this.aliveCount;
-        _heatmapUniformU32[17] = 0; // _padDead (unused — dead particles found via FLAG_RETIRED scan)
+        _heatmapUniformU32[17] = this._barnesHutEnabled ? 1 : 0; // useTree
         this.device.queue.writeBuffer(this._heatmapUniformBuffer, 0, _heatmapUniformData);
 
         if (!this._heatmapBGs) {
@@ -2909,6 +2965,7 @@ export default class GPUPhysics {
                     entries: [
                         { binding: 0, resource: { buffer: b.particleState } },
                         { binding: 1, resource: { buffer: b.particleAux } },
+                        { binding: 2, resource: { buffer: b.qtNodeBuffer } },
                     ],
                 }),
                 g1: this.device.createBindGroup({
@@ -2968,10 +3025,17 @@ export default class GPUPhysics {
 
         const gridWG = Math.ceil(GPU_HEATMAP_GRID / 8);
 
-        // Compute heatmap
+        // Compute heatmap — use BH tree walk when BH on, signal delay off, non-periodic
+        // (periodic boundaries require minImage wrapping which the tree walk doesn't handle)
         {
-            const p = encoder.beginComputePass({ label: 'computeHeatmap' });
-            p.setPipeline(this._heatmapPipelines.computeHeatmap);
+            const useDelay = this._relativityEnabled && this.buffers.historyAllocated;
+            const isPeriodic = this.boundaryMode === BOUND_LOOP;
+            const useTree = this._barnesHutEnabled && !useDelay && !isPeriodic;
+            const pipeline = useTree
+                ? this._heatmapPipelines.computeHeatmapTree
+                : this._heatmapPipelines.computeHeatmap;
+            const p = encoder.beginComputePass({ label: useTree ? 'computeHeatmapTree' : 'computeHeatmap' });
+            p.setPipeline(pipeline);
             p.setBindGroup(0, this._heatmapBGs.g0);
             p.setBindGroup(1, this._heatmapBGs.g1);
             p.setBindGroup(2, this._heatmapBGs.g2);
@@ -3068,6 +3132,43 @@ export default class GPUPhysics {
         const numSubsteps = Math.min(Math.ceil(dt / dtSafe), maxSubsteps);
         const dtSub = dt / numSubsteps;
 
+        // Write slow-changing uniforms once per frame (toggles, domain, sliders, etc.)
+        writeFrameUniforms(this.device, this.uniformBuffer, {
+            dt: dtSub,
+            simTime: this.simTime,
+            domainW: this.domainW,
+            domainH: this.domainH,
+            speedScale: 1,
+            softening: this._blackHoleEnabled ? 4 : 8,
+            softeningSq: this._blackHoleEnabled ? BH_SOFTENING_SQ : SOFTENING_SQ,
+            toggles0: this._toggles0,
+            toggles1: this._toggles1,
+            yukawaCoupling: this._yukawaCoupling,
+            yukawaMu: this._yukawaMu,
+            higgsMass: this._higgsMass,
+            axionMass: this._axionMass,
+            boundaryMode: this.boundaryMode,
+            topologyMode: this.topologyMode,
+            collisionMode: this._collisionMode,
+            maxParticles: this.buffers.maxParticles,
+            aliveCount: this.aliveCount,
+            extGravity: this._extGravity,
+            extGravityAngle: this._extGravityAngle,
+            extElectric: this._extElectric,
+            extElectricAngle: this._extElectricAngle,
+            extBz: this._extBz,
+            bounceFriction: this._bounceFriction,
+            extGx: this._cachedExtGx,
+            extGy: this._cachedExtGy,
+            extEx: this._cachedExtEx,
+            extEy: this._cachedExtEy,
+            axionCoupling: this._axionCoupling,
+            higgsCoupling: this._higgsCoupling,
+            particleCount: this.aliveCount + this._ghostCount,
+            bhTheta: 0.5,
+            frameCount: this._frameCount,
+        });
+
         for (let step = 0; step < numSubsteps; step++) {
             this.simTime += dtSub;
             this._dispatchSubstep(dtSub);
@@ -3160,38 +3261,10 @@ export default class GPUPhysics {
      * @param {number} dtSub - Substep timestep
      */
     _dispatchSubstep(dtSub) {
-        // Upload uniforms (now includes Phase 2 parameters)
-        writeUniforms(this.device, this.uniformBuffer, {
-            dt: dtSub,
-            simTime: this.simTime,
-            domainW: this.domainW,
-            domainH: this.domainH,
-            speedScale: 1,
-            softening: this._blackHoleEnabled ? 4 : 8,
-            softeningSq: this._blackHoleEnabled ? BH_SOFTENING_SQ : SOFTENING_SQ,
-            toggles0: this._toggles0,
-            toggles1: this._toggles1,
-            yukawaCoupling: this._yukawaCoupling,
-            yukawaMu: this._yukawaMu,
-            higgsMass: this._higgsMass,
-            axionMass: this._axionMass,
-            boundaryMode: this.boundaryMode,
-            topologyMode: this.topologyMode,
-            collisionMode: this._collisionMode,
-            maxParticles: this.buffers.maxParticles,
-            aliveCount: this.aliveCount,
-            extGravity: this._extGravity,
-            extGravityAngle: this._extGravityAngle,
-            extElectric: this._extElectric,
-            extElectricAngle: this._extElectricAngle,
-            extBz: this._extBz,
-            bounceFriction: this._bounceFriction,
-            axionCoupling: this._axionCoupling,
-            higgsCoupling: this._higgsCoupling,
-            particleCount: this.aliveCount + this._ghostCount,
-            bhTheta: 0.5,
-            frameCount: this._frameCount,
-        });
+        // Write only the 5 substep-varying fields (dt, simTime, aliveCount, particleCount, frameCount)
+        writeSubstepUniforms(this.device, this.uniformBuffer,
+            dtSub, this.simTime, this.aliveCount,
+            this.aliveCount + this._ghostCount, this._frameCount);
 
         const workgroups = Math.ceil(this.aliveCount / 64);
         if (workgroups === 0) return; // no particles, skip dispatch
@@ -3582,57 +3655,77 @@ export default class GPUPhysics {
 
         this.reset();
 
-        // Upload particles to GPU using packed structs (reuse pre-allocated buffers)
-        for (const pd of state.particles) {
-            const idx = this.aliveCount;
-            if (idx >= MAX_PARTICLES) break;
+        // G16: Build full packed arrays CPU-side, then issue one writeBuffer per buffer type.
+        // This replaces N×6 individual writeBuffer calls with 6 batched uploads.
+        const particles = state.particles;
+        const count = Math.min(particles.length, MAX_PARTICLES);
 
+        for (let idx = 0; idx < count; idx++) {
+            const pd = particles[idx];
             const m = pd.mass || 1;
             const bm = pd.baseMass ?? m;
             const q = pd.charge || 0;
             const angw = pd.angw || 0;
             const flagBits = FLAG_ALIVE | (pd.antimatter ? FLAG_ANTIMATTER : 0);
 
-            // Reuse pre-allocated addParticle buffers (zero-alloc per particle)
-            _addParticleStateF32[0] = pd.x;    _addParticleStateF32[1] = pd.y;
-            _addParticleStateF32[2] = pd.wx || 0;  _addParticleStateF32[3] = pd.wy || 0;
-            _addParticleStateF32[4] = m;        _addParticleStateF32[5] = q;
-            _addParticleStateF32[6] = angw;     _addParticleStateF32[7] = bm;
-            _addParticleStateU32[8] = flagBits;
-            this.device.queue.writeBuffer(this.buffers.particleState, idx * PARTICLE_STATE_SIZE, _addParticleStateData);
+            // Pack ParticleState (9 × 4 bytes = 36)
+            const sBase = idx * 9; // 9 f32/u32 per particle
+            _dsStateF32[sBase + 0] = pd.x;
+            _dsStateF32[sBase + 1] = pd.y;
+            _dsStateF32[sBase + 2] = pd.wx || 0;
+            _dsStateF32[sBase + 3] = pd.wy || 0;
+            _dsStateF32[sBase + 4] = m;
+            _dsStateF32[sBase + 5] = q;
+            _dsStateF32[sBase + 6] = angw;
+            _dsStateF32[sBase + 7] = bm;
+            _dsStateU32[sBase + 8] = flagBits;
 
-            _addParticleAuxF32[0] = Math.cbrt(m);
-            _addParticleAuxU32[1] = idx;
-            _addParticleAuxF32[2] = 3.4028235e38;
-            _addParticleAuxF32[3] = 0;
-            _addParticleAuxF32[4] = 0;
-            this.device.queue.writeBuffer(this.buffers.particleAux, idx * PARTICLE_AUX_SIZE, _addParticleAuxData);
+            // Pack ParticleAux (5 × 4 bytes = 20)
+            const aBase = idx * 5;
+            _dsAuxF32[aBase + 0] = Math.cbrt(m);  // radius
+            _dsAuxU32[aBase + 1] = idx;            // particleId
+            _dsAuxF32[aBase + 2] = 3.4028235e38;  // deathTime = FLT_MAX (alive)
+            _dsAuxF32[aBase + 3] = 0;              // deathMass
+            _dsAuxF32[aBase + 4] = 0;              // deathAngVel
 
-            _addParticleColorData[0] = 0xFF727E8A;
-            this.device.queue.writeBuffer(this.buffers.color, idx * 4, _addParticleColorData);
+            // Pack color (1 u32)
+            _dsColorData[idx] = 0xFF727E8A;        // default slate (update-colors will refresh)
 
-            _addParticleModData[0] = 1.0; _addParticleModData[1] = 1.0;
-            _addParticleModData[2] = 1.0; _addParticleModData[3] = 0.0;
-            this.device.queue.writeBuffer(this.buffers.axYukMod, idx * 16, _addParticleModData);
+            // Pack axYukMod (4 f32 = 16 bytes): axMod, yukMod, higgsMod, _pad
+            const mBase = idx * 4;
+            _dsModData[mBase + 0] = 1.0;
+            _dsModData[mBase + 1] = 1.0;
+            _dsModData[mBase + 2] = 1.0;
+            _dsModData[mBase + 3] = 0.0;
 
-            _addParticleRadData.fill(0);
-            this.device.queue.writeBuffer(this.buffers.radiationState, idx * RADIATION_STATE_SIZE, _addParticleRadData);
+            // RadiationState (12 f32 = 48 bytes) — all zero (accumulator reset)
+            const rBase = idx * 12;
+            for (let k = 0; k < 12; k++) _dsRadData[rBase + k] = 0;
 
-            // Initialize history metadata for deserialized particles (creationTime = -Infinity)
-            if (this.buffers.historyAllocated) {
-                _addParticleMetaU32[0] = 0;  // writeIdx
-                _addParticleMetaU32[1] = 0;  // count
-                _addParticleMetaF32[2] = -Infinity; // creationTime — always existing
-                _addParticleMetaU32[3] = 0;  // _pad
-                this.device.queue.writeBuffer(
-                    this.buffers.histMeta,
-                    idx * HIST_META_STRIDE * 4,
-                    _addParticleMetaBuf
-                );
-            }
-
-            this.aliveCount++;
+            // histMeta (4 u32 = 16 bytes per particle): writeIdx, count, creationTimeBits, _pad
+            const hBase = idx * 4;
+            _dsMetaU32[hBase + 0] = 0;          // writeIdx
+            _dsMetaU32[hBase + 1] = 0;          // count
+            _dsMetaF32[hBase + 2] = -Infinity;  // creationTime — always existing particle
+            _dsMetaU32[hBase + 3] = 0;          // _pad
         }
+
+        if (count > 0) {
+            const b = this.buffers;
+            // Issue one writeBuffer per buffer type (6 calls total instead of N×6).
+            // ArrayBuffer args: (buffer, bufferByteOffset, arrayBuffer, byteOffset, byteLength)
+            // TypedArray args:  (buffer, bufferByteOffset, typedArray, elementOffset, elementCount)
+            this.device.queue.writeBuffer(b.particleState,  0, _dsStateData,  0, count * PARTICLE_STATE_SIZE);   // ArrayBuffer, bytes
+            this.device.queue.writeBuffer(b.particleAux,    0, _dsAuxData,    0, count * PARTICLE_AUX_SIZE);      // ArrayBuffer, bytes
+            this.device.queue.writeBuffer(b.color,          0, _dsColorData,  0, count);                          // Uint32Array, elements (1 u32 per particle)
+            this.device.queue.writeBuffer(b.axYukMod,       0, _dsModData,    0, count * 4);                      // Float32Array, elements (4 f32 per particle)
+            this.device.queue.writeBuffer(b.radiationState, 0, _dsRadData,    0, count * 12);                     // Float32Array, elements (12 f32 per particle)
+            if (b.historyAllocated) {
+                this.device.queue.writeBuffer(b.histMeta, 0, _dsMetaData, 0, count * HIST_META_STRIDE * 4);      // ArrayBuffer, bytes
+            }
+        }
+
+        this.aliveCount = count;
 
         // Restore slider parameters from save state
         if (state.higgsMass !== undefined) this._higgsMass = state.higgsMass;
@@ -3679,7 +3772,7 @@ export default class GPUPhysics {
      * Called once per frame before compute dispatch.
      */
     syncUniforms() {
-        writeUniforms(this.device, this.uniformBuffer, {
+        writeFrameUniforms(this.device, this.uniformBuffer, {
             dt: 0,
             simTime: this.simTime,
             domainW: this.domainW,
@@ -3702,6 +3795,10 @@ export default class GPUPhysics {
             extElectric: this._extElectric,
             extElectricAngle: this._extElectricAngle,
             extBz: this._extBz,
+            extGx: this._cachedExtGx,
+            extGy: this._cachedExtGy,
+            extEx: this._cachedExtEx,
+            extEy: this._cachedExtEy,
             maxParticles: this.buffers.maxParticles,
             particleCount: this.aliveCount + this._ghostCount,
             bhTheta: 0.5,
@@ -3805,7 +3902,7 @@ export default class GPUPhysics {
      * @param {number} selectedGpuIdx  GPU buffer index of selected particle, or -1
      */
     requestStats(selectedGpuIdx = -1) {
-        if (!this._statsPipeline || !this._statsUniformBuffer) return;
+        if (!this._statsPipelines || !this._statsUniformBuffer) return;
         if (this._statsPending) return; // readback still in flight
 
         // Write uniforms (StatsUniforms: 48 bytes = 12 u32/f32)
@@ -3832,14 +3929,41 @@ export default class GPUPhysics {
             this._statsFieldHasAxion = !!this._axionBuffers;
         }
 
-        // Dispatch
+        // Dispatch 4 entry points sequentially in one encoder
         const encoder = this.device.createCommandEncoder({ label: 'computeStats' });
-        const pass = encoder.beginComputePass({ label: 'computeStats' });
-        pass.setPipeline(this._statsPipeline);
-        pass.setBindGroup(0, this._statsBindGroup0);
-        pass.setBindGroup(1, this._statsBindGroup1);
-        pass.dispatchWorkgroups(1);
-        pass.end();
+        const sp = this._statsPipelines;
+
+        // Pass 1+2: KE, momentum, COM, angular momentum (parallel, 64 threads)
+        const p1 = encoder.beginComputePass({ label: 'statsKEMom' });
+        p1.setPipeline(sp.statsKEMom);
+        p1.setBindGroup(0, this._statsBindGroup0);
+        p1.setBindGroup(1, this._statsBindGroup1);
+        p1.dispatchWorkgroups(1);
+        p1.end();
+
+        // Pass 3: PE + Darwin (serial O(N²))
+        const p2 = encoder.beginComputePass({ label: 'statsPE' });
+        p2.setPipeline(sp.statsPE);
+        p2.setBindGroup(0, this._statsBindGroup0);
+        p2.setBindGroup(1, this._statsBindGroup1);
+        p2.dispatchWorkgroups(1);
+        p2.end();
+
+        // Pass 4: Scalar field energy + momentum (parallel, 64 threads)
+        const p3 = encoder.beginComputePass({ label: 'statsField' });
+        p3.setPipeline(sp.statsField);
+        p3.setBindGroup(0, this._statsBindGroup0);
+        p3.setBindGroup(1, this._statsBindGroup1);
+        p3.dispatchWorkgroups(1);
+        p3.end();
+
+        // Pass 5+6: PFI + selected particle (serial)
+        const p4 = encoder.beginComputePass({ label: 'statsPFISel' });
+        p4.setPipeline(sp.statsPFISel);
+        p4.setBindGroup(0, this._statsBindGroup0);
+        p4.setBindGroup(1, this._statsBindGroup1);
+        p4.dispatchWorkgroups(1);
+        p4.end();
 
         // Copy to staging (double-buffered)
         const staging = this._statsStagingFlip
