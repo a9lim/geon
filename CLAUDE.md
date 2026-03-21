@@ -507,4 +507,5 @@ Particles, trails, field overlays, heatmap, bosons (photons + pions), spin rings
 - Yukawa cutoff: skip `Math.exp` when `μr > 6`
 - Lazy field init: Higgs/Axion fields `null` until first toggle-on
 - KaTeX CSS preload + render cache
+- Shared utilities: `_toolbar.initSidebar()` for panel toggle/close/swipe, `_toolbar.initTheme('geon-theme')` for theme persistence + system preference, `_toolbar.updatePlayBtn`/`updateSpeedBtn` for playback, `_intro.init()` for intro screen, `_forms.bindModeGroup()` for collision/boundary/topology/grid-res toggles, `_forms.bindSlider()` for all parameter sliders, `registerInfoTips()` for info tips, `initReferenceOverlay()`/`bindReferenceTriggers()` for reference pages
 - rAF-throttled hover, visibilitychange halt, accumulator cap = 2 frames
