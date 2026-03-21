@@ -42,12 +42,10 @@ export function setupUI(sim) {
 
     // ─── Panel toggle ───
     const closePanel = () => {
-        panel.classList.remove('open');
-        panelToggle.classList.remove('active');
+        _toolbar.closeSidebar(panelToggle, panel);
     };
     const togglePanel = () => {
-        panel.classList.toggle('open');
-        panelToggle.classList.toggle('active');
+        _toolbar.toggleSidebar(panelToggle, panel);
     };
 
     panelToggle.addEventListener('click', togglePanel);
@@ -86,10 +84,10 @@ export function setupUI(sim) {
     const togglePause = () => {
         sim.running = !sim.running;
         _haptics.trigger(sim.running ? 'medium' : 'light');
-        _playback.updatePlayBtn(playBtn, sim.running);
+        _toolbar.updatePlayBtn(playBtn, sim.running);
     };
     playBtn.addEventListener('click', togglePause);
-    _playback.updatePlayBtn(playBtn, sim.running);
+    _toolbar.updatePlayBtn(playBtn, sim.running);
 
     // ─── Speed Button ───
     const speedBtn = document.getElementById('speedBtn');
@@ -97,13 +95,13 @@ export function setupUI(sim) {
     const cycleSpeed = () => {
         sim.speedIndex = (sim.speedIndex + 1) % SPEED_OPTIONS.length;
         sim.speedScale = SPEED_OPTIONS[sim.speedIndex];
-        _playback.updateSpeedBtn(speedBtn, sim.speedScale);
+        _toolbar.updateSpeedBtn(speedBtn, sim.speedScale);
         _haptics.trigger('selection');
     };
     const decycleSpeed = () => {
         sim.speedIndex = (sim.speedIndex - 1 + SPEED_OPTIONS.length) % SPEED_OPTIONS.length;
         sim.speedScale = SPEED_OPTIONS[sim.speedIndex];
-        _playback.updateSpeedBtn(speedBtn, sim.speedScale);
+        _toolbar.updateSpeedBtn(speedBtn, sim.speedScale);
         _haptics.trigger('selection');
     };
     speedBtn.addEventListener('click', cycleSpeed);
@@ -623,9 +621,8 @@ export function setupUI(sim) {
 
     // ─── Theme toggle ───
     const toggleTheme = () => {
-        const html = document.documentElement;
-        html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
-        const isLight = html.dataset.theme !== 'dark';
+        const theme = _toolbar.toggleTheme();
+        const isLight = theme === 'light';
         sim.renderer.setTheme(isLight);
         if (sim._gpuRenderer) sim._gpuRenderer.setTheme(isLight);
         sim._dirty = true;
