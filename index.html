@@ -4,13 +4,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Geon</title>
-    <meta name="description" content="Interactive N-body simulation with relativistic gravity, electromagnetism, scalar fields, and signal delay. Boris integrator with adaptive substepping.">
-    <meta property="og:title" content="Geon">
-    <meta property="og:description" content="Interactive N-body simulation with relativistic gravity, electromagnetism, scalar fields, and signal delay.">
+    <title>Geon — Interactive Particle Physics Simulator</title>
+    <meta name="description" content="Explore relativistic N-body physics in the browser. Geon simulates gravity, electromagnetism, Yukawa forces, scalar fields, and signal delay using a Boris integrator with Barnes-Hut acceleration and WebGPU compute shaders. Includes 19 presets spanning planetary orbits, electromagnetic scattering, Higgs fields, and cosmological expansion.">
+    <meta property="og:title" content="Geon — Interactive Particle Physics Simulator">
+    <meta property="og:description" content="Explore relativistic N-body physics with gravity, electromagnetism, scalar fields, and 19 educational presets — all running in real time in the browser with WebGPU.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://a9l.im/physsim">
+    <meta property="og:site_name" content="Hayashinet">
     <meta name="twitter:card" content="summary">
+    <meta name="twitter:site" content="@a9_lim">
+    <meta name="twitter:creator" content="@a9_lim">
+    <meta name="author" content="Hayashi">
+    <meta name="theme-color" content="#C8553D">
+    <link rel="canonical" href="https://a9l.im/physsim">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -35,6 +41,46 @@
     <script defer src="/shared-shortcuts.js"></script>
     <script defer src="/shared-tooltip.js"></script>
     <script defer src="colors.js"></script>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Geon",
+      "url": "https://a9l.im/physsim",
+      "description": "Interactive relativistic N-body simulator with 11 force types, Boris integration, Barnes-Hut tree acceleration, Higgs and axion scalar fields, and WebGPU compute shaders. Educational tool for exploring gravity, electromagnetism, Yukawa interactions, signal delay, and cosmological expansion across 19 curated presets.",
+      "applicationCategory": "EducationalApplication",
+      "educationalUse": "Interactive simulation for learning classical mechanics, special relativity, electromagnetism, and particle physics",
+      "learningResourceType": "Simulation",
+      "educationalLevel": "Undergraduate",
+      "about": [
+        {"@type": "Thing", "name": "N-body simulation"},
+        {"@type": "Thing", "name": "Special relativity"},
+        {"@type": "Thing", "name": "Electromagnetism"},
+        {"@type": "Thing", "name": "Particle physics"},
+        {"@type": "Thing", "name": "Scalar field theory"},
+        {"@type": "Thing", "name": "WebGPU"}
+      ],
+      "keywords": "physics simulator, N-body, relativity, gravity, electromagnetism, Boris integrator, Barnes-Hut, Higgs field, axion, WebGPU, educational",
+      "operatingSystem": "Any (Web Browser)",
+      "browserRequirements": "Modern browser with WebGPU or Canvas support",
+      "author": {
+        "@type": "Person",
+        "name": "Hayashi",
+        "url": "https://a9l.im/#about"
+      },
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Hayashinet",
+        "url": "https://a9l.im"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    }
+    </script>
 </head>
 
 <body>
