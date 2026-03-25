@@ -5,6 +5,7 @@ import { PHYSICS_DT, WORLD_SCALE, SCALAR_GRID, GPU_SCALAR_GRID, COL_MERGE, COL_B
 import { REFERENCE } from './reference.js';
 import { BACKEND_CPU, BACKEND_GPU } from './backend-interface.js';
 import Particle from './particle.js';
+import { quickSave, quickLoad, downloadState, uploadState } from './save-load.js';
 
 const HINT_FADE_DELAY = 5000;
 
@@ -548,11 +549,28 @@ export function setupUI(sim) {
     };
     document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
 
+    // ─── Tab cycling helper ───
+    function cycleTab(dir) {
+        var btns = document.querySelectorAll('.tab-btn');
+        var idx = 0;
+        btns.forEach(function(b, i) { if (b.classList.contains('active')) idx = i; });
+        var next = (idx + dir + btns.length) % btns.length;
+        btns[next].click();
+    }
+
+    // ─── Zoom helpers ───
+    const canvas = sim.canvas || document.getElementById('simCanvas');
+    const zoomIn  = () => sim.camera.zoomBy(1.25, canvas.width / 2, canvas.height / 2);
+    const zoomOut = () => sim.camera.zoomBy(0.8,  canvas.width / 2, canvas.height / 2);
+    const zoomReset = () => sim.camera.reset(sim.domainW / 2, sim.domainH / 2, WORLD_SCALE);
+
     // ─── Keyboard shortcuts ───
     const shortcuts = [
         { key: 'Space', label: 'Pause / Play', group: 'Simulation', action: togglePause },
         { key: 'R', label: 'Reset simulation', group: 'Simulation', action: () => document.getElementById('clearBtn').click() },
-        { key: '.', label: 'Step forward', group: 'Simulation', action: stepSim },
+        { key: '.', label: 'Speed up', group: 'Simulation', action: cycleSpeed },
+        { key: ',', label: 'Slow down', group: 'Simulation', action: decycleSpeed },
+        { key: '/', label: 'Step forward', group: 'Simulation', action: stepSim },
         ...PRESET_ORDER.slice(0, 9).map((key, i) => ({
             key: String(i + 1),
             label: PRESETS[key].name,
@@ -580,10 +598,16 @@ export function setupUI(sim) {
         { key: 'T', label: 'Toggle theme', group: 'View', action: toggleTheme },
         { key: 'S', label: 'Toggle sidebar', group: 'View', action: () => _toolbar.toggleSidebar() },
         { key: 'Escape', label: 'Close panel', group: 'View', action: () => _toolbar.closeSidebar() },
-        { key: 'Ctrl+S', label: 'Quick save', group: 'Save / Load', action: () => {} },
-        { key: 'Ctrl+L', label: 'Quick load', group: 'Save / Load', action: () => {} },
-        { key: 'Ctrl+Shift+S', label: 'Download state', group: 'Save / Load', action: () => {} },
-        { key: 'Ctrl+Shift+L', label: 'Upload state', group: 'Save / Load', action: () => {} },
+        { key: '[', label: 'Previous tab', group: 'View', action: () => cycleTab(-1) },
+        { key: ']', label: 'Next tab', group: 'View', action: () => cycleTab(1) },
+        { key: '=', label: 'Zoom in', group: 'View', action: zoomIn },
+        { key: '-', label: 'Zoom out', group: 'View', action: zoomOut },
+        { key: '0', label: 'Reset zoom', group: 'View', action: zoomReset },
+        { key: 'X', label: 'Toggle antimatter mode', group: 'Simulation', action: () => {} },
+        { key: 'Ctrl+S', label: 'Quick save', group: 'Save / Load', action: () => quickSave(sim) },
+        { key: 'Ctrl+L', label: 'Quick load', group: 'Save / Load', action: () => { quickLoad(sim); sim._dirty = true; } },
+        { key: 'Ctrl+Shift+S', label: 'Download state', group: 'Save / Load', action: () => downloadState(sim) },
+        { key: 'Ctrl+Shift+L', label: 'Upload state', group: 'Save / Load', action: () => { uploadState(sim); sim._dirty = true; } },
     ];
 
     if (typeof initShortcuts === 'function') {
