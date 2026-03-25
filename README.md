@@ -188,8 +188,8 @@ src/
 
 ## Sibling Projects
 
-- [Metabolism](https://github.com/a9lim/biosim) -- [a9l.im/biosim](https://a9l.im/biosim)
-- [Redistricting](https://github.com/a9lim/gerry) -- [a9l.im/gerry](https://a9l.im/gerry)
+- [Cyano](https://github.com/a9lim/biosim) -- [a9l.im/biosim](https://a9l.im/biosim)
+- [Gerry](https://github.com/a9lim/gerry) -- [a9l.im/gerry](https://a9l.im/gerry)
 - [Shoals](https://github.com/a9lim/finsim) -- [a9l.im/finsim](https://a9l.im/finsim)
 
 ## License
