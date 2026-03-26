@@ -16,6 +16,7 @@ export default class MasslessBoson {
         this.gravMass = 2 * energy; // E·(1+v²) = E·2 since |v|=c=1
         this._srcMass = energy;     // source gravitational mass (no receiver GR factor)
         this._srcCharge = 0;        // photons carry no charge (for boson tree aggregation)
+        this._kind = 0;             // 0=photon, 1=pion, 2=lepton
         this.lifetime = 0;
         this.alive = true;
         this.emitterId = emitterId;
@@ -31,6 +32,7 @@ export default class MasslessBoson {
         this.gravMass = 2 * energy;
         this._srcMass = energy;
         this._srcCharge = 0;
+        this._kind = 0;
         this.lifetime = 0;
         this.alive = true;
         this.emitterId = emitterId;

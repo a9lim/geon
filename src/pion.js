@@ -5,6 +5,7 @@
 import Vec2 from './vec2.js';
 import { BOSON_SOFTENING_SQ, ELECTRON_MASS, MAX_SPEED_RATIO, EPSILON, MAX_PIONS, spawnOffset } from './config.js';
 import { treeDeflectBoson, treeDeflectBosonCoulomb } from './boson-utils.js';
+import Lepton from './lepton.js';
 
 // ─── Object Pool ───
 // Recycles dead Pion instances to eliminate GC pressure from
@@ -24,6 +25,7 @@ export default class Pion {
         this.vSq = 0;       // cached coordinate velocity squared (set by _syncVel)
         this.gravMass = 0;   // cached gravitational mass = m·γ (set by _syncVel)
         this._srcCharge = charge; // source charge for boson tree aggregation
+        this._kind = 1;          // 0=photon, 1=pion, 2=lepton
         this.lifetime = 0;
         this.alive = true;
         this.emitterId = emitterId;
@@ -39,6 +41,7 @@ export default class Pion {
         this.mass = mass;
         this.charge = charge;
         this._srcCharge = charge;
+        this._kind = 1;
         this.energy = energy;
         this.lifetime = 0;
         this.alive = true;
@@ -240,15 +243,14 @@ export default class Pion {
             sim.totalRadiatedPx += phMag * phCos;
             sim.totalRadiatedPy += phMag * phSin;
 
-            // Electron (pi-) or positron (pi+)
-            const elVx = elPx / elELab;
-            const elVy = elPy / elELab;
-            sim.addParticle(
+            // Electron (pi-) or positron (pi+) — emitted as lepton boson
+            const elCharge = this.charge > 0 ? 1 : -1; // π⁺ → positron (+1), π⁻ → electron (-1)
+            const el = Lepton.acquire(
                 this.pos.x - phCos * offset,
                 this.pos.y - phSin * offset,
-                elVx, elVy,
-                { mass: mE, charge: this.charge, antimatter: this.charge > 0, spin: 0, skipBaseline: true }
+                elPx, elPy, elCharge, this.emitterId
             );
+            sim.leptons.push(el);
         }
         this.alive = false;
     }

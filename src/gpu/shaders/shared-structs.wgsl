@@ -79,7 +79,7 @@ struct Pion {
     wX: f32, wY: f32,
     mass: f32, charge: i32, energy: f32,
     emitterId: u32, age: u32, flags: u32,
-    _pad0: u32, _pad1: u32,
+    kind: u32, _pad1: u32,   // kind: 0=pion, 1=lepton
 };
 
 // Sim uniforms: the full uniform buffer layout shared by most shaders.

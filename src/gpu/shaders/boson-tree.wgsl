@@ -538,7 +538,7 @@ fn applyPionPionCoulomb(@builtin(global_invocation_id) gid: vec3u) {
 }
 
 // π⁺π⁻ annihilation: opposite-charge pions within softening distance → 2 photons.
-// Pairwise scan over pions only (MAX_PIONS = 1024, so O(1024²) is acceptable).
+// Pairwise scan over pion pool (pions + leptons, PION_POOL_CAP entries).
 @compute @workgroup_size(64)
 fn annihilatePions(@builtin(global_invocation_id) gid: vec3u) {
     let i = gid.x;
@@ -553,11 +553,13 @@ fn annihilatePions(@builtin(global_invocation_id) gid: vec3u) {
     let p1x = pi1.posX;
     let p1y = pi1.posY;
     let p1c = pi1.charge;
+    let p1k = pi1.kind;
 
     // Search for nearest opposite-charge pion (lower index wins tie to avoid double-annihilation)
     for (var j = i + 1u; j < piN; j++) {
         let pi2 = pions[j];
         if ((pi2.flags & 1u) == 0u) { continue; }
+        if (pi2.kind != p1k) { continue; } // only same-kind annihilates (pion+pion or lepton+lepton)
         if (pi2.charge == 0 || pi2.charge == p1c) { continue; } // need opposite charge
         if (pi2.age < BOSON_MIN_AGE) { continue; }
 

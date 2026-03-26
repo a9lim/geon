@@ -814,10 +814,11 @@ export function computeBosonGravity(particles, bosonPool, bosonRoot, softeningSq
  * GR receiver factors: 2 for photons (null geodesic), 1+v² for pions (massive).
  * O(N_bosons × log(N_bosons)).
  */
-export function applyBosonBosonGravity(photons, pions, dt, bosonPool, bosonRoot, periodic, topology, domW, domH) {
+export function applyBosonBosonGravity(photons, pions, leptons, dt, bosonPool, bosonRoot, periodic, topology, domW, domH) {
     const nPh = photons ? photons.length : 0;
     const nPi = pions ? pions.length : 0;
-    if (nPh + nPi < 2 || bosonRoot < 0 || bosonPool.totalMass[bosonRoot] < EPSILON) return;
+    const nLe = leptons ? leptons.length : 0;
+    if (nPh + nPi + nLe < 2 || bosonRoot < 0 || bosonPool.totalMass[bosonRoot] < EPSILON) return;
     if (_bosonBHStack.length < bosonPool.maxNodes * 2) _bosonBHStack = new Int32Array(bosonPool.maxNodes * 2);
     const halfDomW = domW * 0.5, halfDomH = domH * 0.5;
 
@@ -843,7 +844,17 @@ export function applyBosonBosonGravity(photons, pions, dt, bosonPool, bosonRoot,
         _walkBosonTree(pn.pos.x, pn.pos.y, (1 + pn.vSq) * dt, BOSON_SOFTENING_SQ, bosonPool, bosonRoot, periodic, topology, domW, domH, halfDomW, halfDomH);
         pn.w.x += _bwOut.x;
         pn.w.y += _bwOut.y;
-        // _syncVel() deferred: integrator batch-syncs all pions after both boson passes (H2)
+        // _syncVel() deferred: integrator batch-syncs after both boson passes (H2)
+    }
+
+    // Leptons: same as pions (massive, 1+v² factor)
+    for (let i = 0; i < nLe; i++) {
+        const lp = leptons[i];
+        if (!lp.alive) continue;
+        _walkBosonTree(lp.pos.x, lp.pos.y, (1 + lp.vSq) * dt, BOSON_SOFTENING_SQ, bosonPool, bosonRoot, periodic, topology, domW, domH, halfDomW, halfDomH);
+        lp.w.x += _bwOut.x;
+        lp.w.y += _bwOut.y;
+        // _syncVel() deferred: integrator batch-syncs after both boson passes
     }
 }
 
@@ -865,9 +876,10 @@ function _walkBosonTreeCharge(px, py, scale, softeningSq, pool, root, periodic, 
  * Mutual Coulomb interaction between charged pions via Barnes-Hut tree walk.
  * F = -q_i * q_j / r² (like-charges repel). O(N_pions × log(N_bosons)).
  */
-export function applyPionPionCoulomb(pions, dt, bosonPool, bosonRoot, periodic, topology, domW, domH) {
+export function applyPionPionCoulomb(pions, leptons, dt, bosonPool, bosonRoot, periodic, topology, domW, domH) {
     const nPi = pions ? pions.length : 0;
-    if (nPi < 2 || bosonRoot < 0) return;
+    const nLe = leptons ? leptons.length : 0;
+    if (nPi + nLe < 2 || bosonRoot < 0) return;
     if (_bosonBHStack.length < bosonPool.maxNodes * 2) _bosonBHStack = new Int32Array(bosonPool.maxNodes * 2);
     const halfDomW = domW * 0.5, halfDomH = domH * 0.5;
 
@@ -877,7 +889,14 @@ export function applyPionPionCoulomb(pions, dt, bosonPool, bosonRoot, periodic, 
         _walkBosonTreeCharge(pn.pos.x, pn.pos.y, -pn.charge * dt, BOSON_SOFTENING_SQ, bosonPool, bosonRoot, periodic, topology, domW, domH, halfDomW, halfDomH);
         pn.w.x += _bwOut.x;
         pn.w.y += _bwOut.y;
-        // _syncVel() deferred: integrator batch-syncs all pions after both boson passes (H2)
+    }
+
+    for (let i = 0; i < nLe; i++) {
+        const lp = leptons[i];
+        if (!lp.alive || lp.charge === 0) continue;
+        _walkBosonTreeCharge(lp.pos.x, lp.pos.y, -lp.charge * dt, BOSON_SOFTENING_SQ, bosonPool, bosonRoot, periodic, topology, domW, domH, halfDomW, halfDomH);
+        lp.w.x += _bwOut.x;
+        lp.w.y += _bwOut.y;
     }
 }
 
@@ -904,7 +923,7 @@ export function findPionAnnihilations(pions, bosonPool, bosonRoot) {
         for (let ci = 0; ci < candidates.length; ci++) {
             const other = candidates[ci];
             if (other === pn || !other.alive) continue;
-            // Only pions have _srcCharge !== undefined and charge !== 0
+            if (other._kind !== 1) continue; // only annihilate with other pions
             if (!other.charge) continue;
             if (other.charge === pn.charge) continue; // same sign: no annihilation
             if (other.age < BOSON_MIN_AGE) continue;
@@ -921,3 +940,43 @@ export function findPionAnnihilations(pions, bosonPool, bosonRoot) {
     return _annihPairs;
 }
 const _annihPairs = [];
+
+/**
+ * e⁺e⁻ annihilation: opposite-charge leptons within softening distance → 2 photons.
+ * Returns flat array of [lepton1, lepton2, ...] pairs.
+ * Uses boson tree range query. O(N_charged × log(N_bosons)).
+ */
+export function findLeptonAnnihilations(leptons, bosonPool, bosonRoot) {
+    const nLe = leptons ? leptons.length : 0;
+    if (nLe < 2 || bosonRoot < 0) return _lepAnnihPairs;
+    _lepAnnihPairs.length = 0;
+
+    const annihDistSq = BOSON_SOFTENING_SQ;
+    const searchR = Math.sqrt(BOSON_SOFTENING_SQ);
+
+    for (let i = 0; i < nLe; i++) {
+        const lp = leptons[i];
+        if (!lp.alive || lp.charge === 0 || lp.age < BOSON_MIN_AGE) continue;
+
+        const candidates = bosonPool.queryReuse(bosonRoot,
+            lp.pos.x, lp.pos.y, searchR, searchR);
+        for (let ci = 0; ci < candidates.length; ci++) {
+            const other = candidates[ci];
+            if (other === lp || !other.alive) continue;
+            if (other._kind !== 2) continue; // only annihilate with other leptons
+            if (!other.charge) continue;
+            if (other.charge === lp.charge) continue;
+            if (other.age < BOSON_MIN_AGE) continue;
+            const dx = lp.pos.x - other.pos.x;
+            const dy = lp.pos.y - other.pos.y;
+            if (dx * dx + dy * dy < annihDistSq) {
+                lp.alive = false;
+                other.alive = false;
+                _lepAnnihPairs.push(lp, other);
+                break;
+            }
+        }
+    }
+    return _lepAnnihPairs;
+}
+const _lepAnnihPairs = [];
