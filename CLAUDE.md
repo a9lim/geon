@@ -22,7 +22,7 @@ Serve from `a9lim.github.io/` -- shared files load via absolute paths. ES6 modul
 
 ```
 main.js                   838 lines  Simulation class, fixed-timestep loop, backend selection (CPU/GPU),
-                                      pair production, pion loop, dirty-flag render, window.sim
+                                      pair production, pion/lepton loop, dirty-flag render, window.sim
 index.html                498 lines  UI: 4-tab sidebar, reference overlay, zoom controls, field sliders
 styles.css                295 lines  Project-specific CSS overrides, toggle/slider theme colors
 colors.js                  18 lines  Project color tokens (extends shared-tokens.js)
@@ -61,7 +61,9 @@ src/
   stats-display.js        250 lines  Sidebar energy/momentum/drift readout, textContent change detection
   effective-potential.js  247 lines  V_eff(r) sidebar canvas, auto-scaling, axMod/yukMod/higgsMod modulation, dirty-flag skip
   pion.js                 261 lines  Massive Yukawa force carrier: proper velocity, (1+v²) GR deflection, decay, pool,
-                                      baseMass for Higgs mass modulation in flight
+                                      baseMass for Higgs mass modulation in flight. Charged decay emits Lepton.
+  lepton.js               113 lines  Lepton (electron/positron): massive charged fermion, proper velocity,
+                                      gravity + Coulomb deflection via BH tree, object pool, no decay
   potential.js            211 lines  computePE(), treePE(), pairPE() (7 PE terms)
   energy.js               195 lines  KE, spin KE, PE, field energy, momentum, angular momentum
   config.js               168 lines  Named constants, mode enums (COL_*/BOUND_*/TORUS/KLEIN/RP²), helpers
@@ -101,12 +103,12 @@ src/
 ```
 main.js       <- Physics, Renderer, InputHandler, Particle, HiggsField, AxionField,
                  Heatmap, PhasePlot, EffectivePotentialPlot, StatsDisplay, setupUI, config,
-                 MasslessBoson, Pion, save-load, relativity,
+                 MasslessBoson, Pion, Lepton, save-load, relativity,
                  BACKEND_CPU/BACKEND_GPU (backend-interface), CPUPhysics, CanvasRenderer,
                  GPUPhysics, GPURenderer
 
 integrator.js <- QuadTreePool, config, MasslessBoson, Pion, angwToAngVel,
-                 forces (resetForces/computeAllForces/compute1PN/computeBosonGravity),
+                 forces (resetForces/computeAllForces/compute1PN/computeBosonGravity/findLeptonAnnihilations),
                  handleCollisions, computePE, topology
 
 forces.js     <- config, getDelayedState, topology
@@ -117,7 +119,8 @@ higgs-field.js  <- config, ScalarField
 axion-field.js  <- config, ScalarField
 boson-utils.js  <- config (BOSON_SOFTENING_SQ), topology (minImage)
 massless-boson.js <- Vec2, config, boson-utils (topology params passed through)
-pion.js         <- Vec2, config, boson-utils (topology params passed through)
+pion.js         <- Vec2, config, boson-utils, Lepton (topology params passed through)
+lepton.js       <- Vec2, config, boson-utils (topology params passed through)
 save-load.js    <- BACKEND_GPU (backend-interface)
 
 gpu-physics.js   <- gpu-buffers, gpu-pipelines (fetchShader + pipeline creators), gpu-constants
@@ -259,7 +262,7 @@ Mass = `yukawaMu` (stored as `baseMass`). Proper velocity `w`: `vel = w/√(1+w�
 
 **Emission**: Scalar Larmor `P = g²F_yuk²/3`. Species: π⁰ (50%), π⁺/π⁻ (25% each). MAX_PIONS = 256 (CPU), GPU_MAX_PIONS = 1024 (GPU).
 
-**Decay**: π⁰→2γ (half-life 32), π⁺→e⁺+γ (half-life 64), π⁻→e⁻+γ (half-life 64). Two-body kinematics in rest frame, Lorentz-boosted.
+**Decay**: π⁰→2γ (half-life 32), π⁺→e⁺+γ (half-life 64), π⁻→e⁻+γ (half-life 64). Two-body kinematics in rest frame, Lorentz-boosted. Charged decay products are emitted as Lepton objects (not full particles).
 
 **Absorption**: Quadtree overlap query (CPU: `queryReuse()`, GPU: tree range query in `bosons-tree-walk.wgsl` when BH on, pairwise fallback in `bosons.wgsl` when BH off). Self-absorption permanently blocked by `emitterId`.
 
@@ -269,7 +272,19 @@ Mass = `yukawaMu` (stored as `baseMass`). Proper velocity `w`: `vel = w/√(1+w�
 
 **π⁺π⁻ annihilation** (requires Boson Interaction toggle): Opposite-charge pions within softening distance annihilate into 2 photons. COM-frame kinematics with Lorentz boost. CPU: `findPionAnnihilations()` via boson tree range query. GPU: pairwise scan in `annihilatePions` entry point.
 
-**Boson Interaction** (requires Barnes-Hut + (Gravity OR Coulomb) -> Boson Interaction toggle): Boson↔boson gravity (BH tree walks), pion↔pion Coulomb (BH tree walk with charge aggregates), and π⁺π⁻ annihilation. GPU boson tree (`boson-tree.wgsl`) uses CAS+lock insertion and visitor-flag bottom-up aggregation with mass + charge. CPU uses separate `_bosonPool` QuadTreePool with `calculateBosonDistribution()` (mass + charge).
+**Boson Interaction** (requires Barnes-Hut + (Gravity OR Coulomb) -> Boson Interaction toggle): Boson↔boson gravity (BH tree walks), pion↔pion Coulomb (BH tree walk with charge aggregates), π⁺π⁻ annihilation, and e⁺e⁻ annihilation. GPU boson tree (`boson-tree.wgsl`) uses CAS+lock insertion and visitor-flag bottom-up aggregation with mass + charge. CPU uses separate `_bosonPool` QuadTreePool with `calculateBosonDistribution()` (mass + charge).
+
+## Leptons (Electrons/Positrons)
+
+Stable charged fermions produced by charged pion decay (π⁺→e⁺+γ, π⁻→e⁻+γ). Mass = `ELECTRON_MASS` (0.05). Proper velocity `w`: `vel = w/√(1+w²)`. GR deflection: `(1+v²)` factor (same as pions).
+
+**CPU**: Separate `Lepton` class (`src/lepton.js`) with object pool (`Lepton.acquire()`/`.release()`). Stored in `sim.leptons[]` array. `_kind = 2` distinguishes from photons (`_kind = 0`) and pions (`_kind = 1`) in the boson tree for annihilation queries. Despawns after `LEPTON_LIFETIME = 512`.
+
+**GPU**: Leptons share the Pion struct and pion pool buffer (no extra bind groups needed). Distinguished by `Pion.kind` field (0=pion, 1=lepton). The `energy` field is repurposed as a lifetime accumulator. `piCount` atomic tracks both pions and leptons. Buffer capacity = `PION_POOL_CAP = GPU_MAX_PIONS + MAX_LEPTONS` (1280). Leptons are not absorbed by particles and do not decay.
+
+**Interactions** (gated behind Boson Interaction toggle): Gravity and Coulomb via boson tree (same as pions). e⁺e⁻ annihilation → 2γ (COM-frame kinematics, Lorentz-boosted). CPU: `findLeptonAnnihilations()` + `_annihilateLeptons()`. GPU: same `annihilatePions` entry point with `kind` check ensures only same-kind pairs annihilate.
+
+**Rendering**: Cyan circles, size = `0.25 + 2 * mass` (same formula as photons/pions; with ELECTRON_MASS=0.05 gives radius ~0.35). Glow halo in dark mode. CPU: `drawLeptons()` in renderer.js. GPU: `vertexPion` checks `kind` to select cyan color.
 
 ## Advanced Physics
 
@@ -453,6 +468,7 @@ Falls back to CPU on WebGPU unavailability or device loss. Force CPU via `?cpu=1
 | Particles | MAX_PARTICLES = 128 | GPU_MAX_PARTICLES = 512 |
 | Photons | MAX_PHOTONS = 1024 | GPU_MAX_PHOTONS = 4096 |
 | Pions | MAX_PIONS = 256 | GPU_MAX_PIONS = 1024 |
+| Leptons | MAX_LEPTONS = 256 | Shares pion pool (PION_POOL_CAP = 1280) |
 
 CPU particle array pre-allocated to `MAX_PARTICLES` slots in constructor/reset to avoid reallocation. `addParticle()` caps at `MAX_PARTICLES` in CPU mode.
 
@@ -466,7 +482,7 @@ CPU particle array pre-allocated to `MAX_PARTICLES` slots in constructor/reset t
 | `AllForces` | 160B | 11 force vec2s, 3 torques, B-fields, B-gradients, totalForce, jerk |
 | `RadiationState` | 48B | radAccum, hawkAccum, yukawaRadAccum, radDisplay, quadAccum, d3I/d3Q contrib |
 | `Photon` | 32B | pos, vel, energy, emitterId, lifetime, flags |
-| `Pion` | 48B | pos, w, mass, charge, energy, emitterId, age, flags |
+| `Pion` | 48B | pos, w, mass, charge, energy, emitterId, age, flags, kind (0=pion, 1=lepton) |
 
 ### Shader Organization
 
@@ -542,11 +558,12 @@ Evolve bind group 0: field, fieldDot, otherField (portal coupling, read-only —
 - **Heatmap**: 64×64 (CPU) / 128×128 (GPU), 3-channel (gravity/slate, electric/blue-red, Yukawa/green), mode selector (All/Grav/Elec/Yukawa)
 - **Photons**: yellow (EM) / red (grav), alpha fades over PHOTON_LIFETIME=256
 - **Pions**: green, constant alpha
+- **Leptons**: cyan, constant alpha, size = 0.25 + 2×mass (tiny due to ELECTRON_MASS=0.05)
 - **V_eff plot**: 200-sample sidebar canvas
 
 ### GPU Renderer Passes
 
-Particles, trails, field overlays, heatmap, bosons (photons + pions), spin rings, force arrows, torque arcs, dashed rings (ergosphere + antimatter). All with dual light/dark pipeline variants.
+Particles, trails, field overlays, heatmap, bosons (photons + pions + leptons), spin rings, force arrows, torque arcs, dashed rings (ergosphere + antimatter). All with dual light/dark pipeline variants.
 
 ## Key Patterns
 
@@ -561,7 +578,7 @@ Particles, trails, field overlays, heatmap, bosons (photons + pions), spin rings
 - `forceRadiation` cleared for all particles before substep loop
 - History recording counts `update()` calls, not substeps
 - PE accumulated inline in `pairForce()` via `_peAccum`; `potential.js` is fallback only
-- Object pooling: `MasslessBoson.acquire()`/`.release()` and `Pion.acquire()`/`.release()` with pool caps (64)
+- Object pooling: `MasslessBoson.acquire()`/`.release()`, `Pion.acquire()`/`.release()`, and `Lepton.acquire()`/`.release()` with pool caps
 - Dirty flag: `sim._dirty` skips entire render/stats when paused with no interaction
 - Batched rendering: force arrows, spin rings, photon alpha buckets -- O(forces) canvas calls not O(particles×forces)
 - All periodic topologies use `minImage()` uniformly (torus, Klein, RP²); no inline fast paths

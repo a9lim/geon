@@ -9,9 +9,10 @@ import PhasePlot from './src/phase-plot.js';
 import EffectivePotentialPlot from './src/effective-potential.js';
 import StatsDisplay from './src/stats-display.js';
 import { setupUI } from './src/ui.js';
-import { TWO_PI, WORLD_SCALE, ZOOM_MIN, ZOOM_MAX, WHEEL_ZOOM_IN, DEFAULT_SPEED_SCALE, SPEED_OPTIONS, DEFAULT_SPEED_INDEX, PHOTON_LIFETIME, PION_DECAY_PROB, CHARGED_PION_DECAY_PROB, SPAWN_MIN_ENERGY, PHYSICS_DT, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, SOFTENING_SQ, BH_SOFTENING_SQ, MAX_SPEED_RATIO, MAX_FRAME_DT, ACCUMULATOR_CAP, SPAWN_COUNT, spawnOffset, SPAWN_OFFSET_FLOOR, PAIR_PROD_MIN_ENERGY, PAIR_PROD_RADIUS, PAIR_PROD_PROB, PAIR_PROD_MAX_PARTICLES, PAIR_PROD_MIN_AGE, COL_PASS, BOUND_DESPAWN, TORUS, HEATMAP_INTERVAL, HEATMAP_GRID, GPU_HEATMAP_GRID, STATS_THROTTLE_MASK, SIDEBAR_THROTTLE_MASK, MAX_PARTICLES } from './src/config.js';
+import { TWO_PI, WORLD_SCALE, ZOOM_MIN, ZOOM_MAX, WHEEL_ZOOM_IN, DEFAULT_SPEED_SCALE, SPEED_OPTIONS, DEFAULT_SPEED_INDEX, PHOTON_LIFETIME, LEPTON_LIFETIME, PION_DECAY_PROB, CHARGED_PION_DECAY_PROB, SPAWN_MIN_ENERGY, PHYSICS_DT, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, SOFTENING_SQ, BH_SOFTENING_SQ, MAX_SPEED_RATIO, MAX_FRAME_DT, ACCUMULATOR_CAP, SPAWN_COUNT, spawnOffset, SPAWN_OFFSET_FLOOR, PAIR_PROD_MIN_ENERGY, PAIR_PROD_RADIUS, PAIR_PROD_PROB, PAIR_PROD_MAX_PARTICLES, PAIR_PROD_MIN_AGE, COL_PASS, BOUND_DESPAWN, TORUS, HEATMAP_INTERVAL, HEATMAP_GRID, GPU_HEATMAP_GRID, STATS_THROTTLE_MASK, SIDEBAR_THROTTLE_MASK, MAX_PARTICLES } from './src/config.js';
 import MasslessBoson from './src/massless-boson.js';
 import Pion from './src/pion.js';
+import Lepton from './src/lepton.js';
 
 import { setVelocity, angwToAngVel } from './src/relativity.js';
 import { saveState, loadState, quickSave, quickLoad, downloadState, uploadState } from './src/save-load.js';
@@ -178,6 +179,7 @@ class Simulation {
         this.selectedParticle = null;
         this.photons = [];
         this.pions = [];
+        this.leptons = [];
         this._MasslessBosonClass = MasslessBoson;  // expose for Pion.decay()
         this.totalRadiated = 0;
         this.totalRadiatedPx = 0;
@@ -476,12 +478,14 @@ class Simulation {
         if (this._gpuPhysics) this._gpuPhysics.reset();
     }
 
-    /** Release all active photons/pions to their pools and clear the arrays. */
+    /** Release all active photons/pions/leptons to their pools and clear the arrays. */
     clearBosons() {
         for (let i = 0; i < this.photons.length; i++) MasslessBoson.release(this.photons[i]);
         for (let i = 0; i < this.pions.length; i++) Pion.release(this.pions[i]);
+        for (let i = 0; i < this.leptons.length; i++) Lepton.release(this.leptons[i]);
         this.photons.length = 0;
         this.pions.length = 0;
+        this.leptons.length = 0;
     }
 
     emitPhotonBurst(x, y, energy, radius, emitterId) {
@@ -620,6 +624,19 @@ class Simulation {
                         }
                     }
                     this.pions.length = piLen;
+
+                    // Update leptons: move, swap-and-pop dead, release to pool
+                    let lLen = this.leptons.length;
+                    for (let i = lLen - 1; i >= 0; i--) {
+                        const lp = this.leptons[i];
+                        lp.update(PHYSICS_DT, _lensParticles, _pool, _root, _bosonInter, _coulomb, _periodic, _topo, _dw, _dh, _hdw, _hdh);
+                        if (!lp.alive || lp.lifetime > LEPTON_LIFETIME) {
+                            lp.alive = false;
+                            Lepton.release(lp);
+                            this.leptons[i] = this.leptons[--lLen];
+                        }
+                    }
+                    this.leptons.length = lLen;
 
                     const { fragments: toFragment, transfers: rocheTransfers } = this.physics.checkDisintegration(this.particles, this.physics._lastRoot);
                     // Handle Roche lobe overflow mass transfers
@@ -823,7 +840,7 @@ class Simulation {
                         this.physics.yukawaEnabled, this.physics.yukawaMu, this.deadParticles,
                         this.physics.gravityEnabled, this.physics.coulombEnabled);
                 }
-                this.renderer.render(this.particles, PHYSICS_DT, this.camera, this.photons, this.pions);
+                this.renderer.render(this.particles, PHYSICS_DT, this.camera, this.photons, this.pions, this.leptons);
             }
 
             // Sidebar plots + stats

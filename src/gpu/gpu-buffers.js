@@ -14,7 +14,7 @@
 
 import {
     HISTORY_SIZE, GPU_MAX_PHOTONS, GPU_MAX_PIONS, MAX_TRAIL_LENGTH,
-    GPU_SCALAR_GRID,
+    GPU_SCALAR_GRID, MAX_LEPTONS,
 } from '../config.js';
 import { HIST_STRIDE as HIST_STRIDE_CONST } from './gpu-constants.js';
 
@@ -248,8 +248,9 @@ export function createParticleBuffers(device, maxParticles) {
         label: 'phCount',
     }); // atomic<u32>
 
-    // Pion pool: array<Pion, GPU_MAX_PIONS> (48 bytes each)
-    const pionPool = storageBuffer('pionPool', PION_SIZE, GPU_MAX_PIONS);
+    // Pion pool: shared buffer for pions + leptons (48 bytes each)
+    const PION_POOL_CAP = GPU_MAX_PIONS + MAX_LEPTONS;
+    const pionPool = storageBuffer('pionPool', PION_SIZE, PION_POOL_CAP);
     const piCount = device.createBuffer({
         size: 4,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
@@ -257,7 +258,7 @@ export function createParticleBuffers(device, maxParticles) {
     }); // atomic<u32>
 
     // ── Boson tree buffers (Phase 4: boson gravity BH tree) ──
-    const MAX_BOSON_NODES = (GPU_MAX_PHOTONS + GPU_MAX_PIONS) * 6;
+    const MAX_BOSON_NODES = (GPU_MAX_PHOTONS + PION_POOL_CAP) * 6;
     const bosonTreeNodes = device.createBuffer({
         size: MAX_BOSON_NODES * QTNODE_SIZE_BYTES,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
@@ -313,7 +314,7 @@ export function createParticleBuffers(device, maxParticles) {
         GPU_MAX_PHOTONS,
         // Pion pool (Phase 4, packed struct)
         pionPool, piCount,
-        GPU_MAX_PIONS,
+        GPU_MAX_PIONS, PION_POOL_CAP,
         // Boson tree (Phase 4)
         bosonTreeNodes, bosonTreeCounter, bosonVisitorFlags, MAX_BOSON_NODES,
 

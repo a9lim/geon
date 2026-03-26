@@ -96,11 +96,12 @@ export default class Renderer {
         this._photonEmGlow = _r(_PAL.extended.yellow, 0.5);
         this._photonGravGlow = _r(_PAL.extended.red, 0.5);
         this._pionGlow = _r(_PAL.extended.green, 0.5);
+        this._leptonGlow = _r(_PAL.extended.cyan, 0.6);
         this._dragColor = isLight
             ? _r(_PAL.light.text, 0.4) : _r(_PAL.dark.text, 0.5);
     }
 
-    render(particles, dt = 0.016, camera, photons, pions) {
+    render(particles, dt = 0.016, camera, photons, pions, leptons) {
         const ctx = this.ctx;
         const isLight = this.isLight;
 
@@ -149,6 +150,7 @@ export default class Renderer {
         this.drawParticles(ctx, particles, isLight);
         if (photons && photons.length) this.drawPhotons(ctx, photons, isLight);
         if (pions && pions.length) this.drawPions(ctx, pions, isLight);
+        if (leptons && leptons.length) this.drawLeptons(ctx, leptons, isLight);
 
         ctx.globalCompositeOperation = 'source-over';
         ctx.shadowBlur = 0;
@@ -737,6 +739,36 @@ export default class Renderer {
             const r = size < 5 ? size : 5;
             ctx.moveTo(pn.pos.x + r, pn.pos.y);
             ctx.arc(pn.pos.x, pn.pos.y, r, 0, TWO_PI);
+        }
+        ctx.fill();
+        if (!isLight) ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+    }
+
+    drawLeptons(ctx, leptons, isLight) {
+        ctx.globalCompositeOperation = isLight ? 'source-over' : 'lighter';
+        const alphaScale = isLight ? 0.7 : 0.9;
+        ctx.fillStyle = _PAL.extended.cyan;
+
+        if (!isLight) {
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = this._leptonGlow;
+        } else {
+            ctx.shadowBlur = 0;
+        }
+
+        const vpL = this._vpLeft - 5, vpR = this._vpRight + 5;
+        const vpT = this._vpTop - 5, vpB = this._vpBottom + 5;
+
+        ctx.globalAlpha = alphaScale;
+        ctx.beginPath();
+        for (let i = 0, len = leptons.length; i < len; i++) {
+            const lp = leptons[i];
+            if (lp.pos.x < vpL || lp.pos.x > vpR || lp.pos.y < vpT || lp.pos.y > vpB) continue;
+            const size = 0.25 + 2 * lp.mass;
+            const r = size < 5 ? size : 5;
+            ctx.moveTo(lp.pos.x + r, lp.pos.y);
+            ctx.arc(lp.pos.x, lp.pos.y, r, 0, TWO_PI);
         }
         ctx.fill();
         if (!isLight) ctx.shadowBlur = 0;

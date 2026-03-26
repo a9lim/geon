@@ -112,16 +112,18 @@ fn vertexPion(
     let quadScale = 1.0 + isDark * (DARK_QUAD_SCALE - 1.0);
 
     // Energy-proportional size in world space (matches CPU renderer)
+    // Leptons repurpose energy as lifetime tracker, so use fixed size
     let qOff = quadOffset(vertexIdx);
-    let worldRadius = clamp(0.25 + 2.0 * pi.energy, 0.25, 5.0);
+    let worldRadius = select(clamp(0.25 + 2.0 * pi.energy, 0.25, 5.0), clamp(0.25 + 2.0 * pi.mass, 0.25, 5.0), pi.kind == 1u);
     let pixelRadius = max(worldRadius * camera.zoom, 2.0);
     let clipPos = camera.viewMatrix * vec4f(pi.posX, pi.posY, 0.0, 1.0);
 
     out.position = clipPos + vec4f(qOff * pixelRadius * quadScale * 2.0 / vec2f(camera.canvasWidth, camera.canvasHeight), 0.0, 0.0);
 
-    // Pion: green (from palette), theme-dependent alpha (0.7 light / 0.9 dark)
-    let pionAlpha = select(0.7, 0.9, isDark > 0.5);
-    out.color = vec4f(COLOR_GREEN, pionAlpha);
+    // Pion: green, lepton: blue (from palette), theme-dependent alpha (0.7 light / 0.9 dark)
+    let bosonAlpha = select(0.7, 0.9, isDark > 0.5);
+    let isLepton = pi.kind == 1u;
+    out.color = select(vec4f(COLOR_GREEN, bosonAlpha), vec4f(COLOR_CYAN, bosonAlpha), isLepton);
     out.uv = qOff * quadScale;
     out.isDark = isDark;
     return out;

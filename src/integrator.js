@@ -8,7 +8,7 @@ import MasslessBoson from './massless-boson.js';
 import Pion from './pion.js';
 import { angwToAngVel } from './relativity.js';
 
-import { resetForces, computeAllForces, compute1PN, computeBosonGravity, applyBosonBosonGravity, applyPionPionCoulomb, findPionAnnihilations, getPEAccum } from './forces.js';
+import { resetForces, computeAllForces, compute1PN, computeBosonGravity, applyBosonBosonGravity, applyPionPionCoulomb, findPionAnnihilations, findLeptonAnnihilations, getPEAccum } from './forces.js';
 import { handleCollisions } from './collisions.js';
 import { computePE } from './potential.js'; // kept for preset-load recomputation
 import { minImage, wrapPosition } from './topology.js';
@@ -257,13 +257,15 @@ export default class Physics {
     _buildBosonTree() {
         const photons = this.sim.photons;
         const pions = this.sim.pions;
-        const nPh = photons.length, nPi = pions.length;
-        if (nPh === 0 && nPi === 0) return -1;
+        const leptons = this.sim.leptons;
+        const nPh = photons.length, nPi = pions.length, nLe = leptons.length;
+        if (nPh === 0 && nPi === 0 && nLe === 0) return -1;
         const bp = this._bosonPool;
         bp.reset();
         const root = bp.alloc(this.boundary.x, this.boundary.y, this.boundary.w, this.boundary.h);
         for (let i = 0; i < nPh; i++) if (photons[i].alive) bp.insert(root, photons[i]);
         for (let i = 0; i < nPi; i++) if (pions[i].alive) bp.insert(root, pions[i]);
+        for (let i = 0; i < nLe; i++) if (leptons[i].alive) bp.insert(root, leptons[i]);
         bp.calculateBosonDistribution(root);
         return root;
     }
@@ -328,6 +330,64 @@ export default class Physics {
             const ph = MBoson.acquire(
                 midX + dirX * offset, midY + dirY * offset,
                 dirX, dirY, pMag, -1 // no emitter
+            );
+            this.sim.photons.push(ph);
+            this.sim.totalRadiated += pMag;
+            this.sim.totalRadiatedPx += pMag * dirX;
+            this.sim.totalRadiatedPy += pMag * dirY;
+        }
+    }
+
+    /** Annihilate an e⁺e⁻ pair into 2 photons. COM-frame kinematics + Lorentz boost. */
+    _annihilateLeptons(l1, l2) {
+        if (!this.sim) return;
+        const MBoson = this.sim._MasslessBosonClass;
+        if (!MBoson) return;
+
+        const g1 = Math.sqrt(1 + l1.w.x * l1.w.x + l1.w.y * l1.w.y);
+        const g2 = Math.sqrt(1 + l2.w.x * l2.w.x + l2.w.y * l2.w.y);
+        const E = l1.mass * g1 + l2.mass * g2;
+        const px = l1.w.x * l1.mass + l2.w.x * l2.mass;
+        const py = l1.w.y * l1.mass + l2.w.y * l2.mass;
+        if (E < EPSILON) return;
+
+        const vComX = px / E, vComY = py / E;
+        const vComSq = vComX * vComX + vComY * vComY;
+        const gammaCom = vComSq < 1e-12 ? 1 : 1 / Math.sqrt(1 - Math.min(vComSq, MAX_SPEED_RATIO * MAX_SPEED_RATIO));
+
+        const sCom = E * E - px * px - py * py;
+        const mInv = sCom > 0 ? Math.sqrt(sCom) : E;
+        const ePhRest = mInv * 0.5;
+
+        const angle = Math.random() * TWO_PI;
+        const cosA = Math.cos(angle), sinA = Math.sin(angle);
+
+        const midX = (l1.pos.x + l2.pos.x) * 0.5;
+        const midY = (l1.pos.y + l2.pos.y) * 0.5;
+        const offset = spawnOffset(Math.cbrt(l1.mass));
+
+        for (let s = 0; s < 2; s++) {
+            const sign = s === 0 ? 1 : -1;
+            let phPx = sign * ePhRest * cosA;
+            let phPy = sign * ePhRest * sinA;
+
+            if (vComSq > 1e-12) {
+                const vCom = Math.sqrt(vComSq);
+                const nx = vComX / vCom, ny = vComY / vCom;
+                const pPar = phPx * nx + phPy * ny;
+                const pPerpX = phPx - pPar * nx;
+                const pPerpY = phPy - pPar * ny;
+                const pParB = gammaCom * (pPar + vCom * ePhRest);
+                phPx = pParB * nx + pPerpX;
+                phPy = pParB * ny + pPerpY;
+            }
+
+            const pMag = Math.sqrt(phPx * phPx + phPy * phPy);
+            if (pMag < EPSILON) continue;
+            const dirX = phPx / pMag, dirY = phPy / pMag;
+            const ph = MBoson.acquire(
+                midX + dirX * offset, midY + dirY * offset,
+                dirX, dirY, pMag, -1
             );
             this.sim.photons.push(ph);
             this.sim.totalRadiated += pMag;
@@ -1243,22 +1303,30 @@ export default class Physics {
                 if (bRoot >= 0) {
                     if (this.gravityEnabled) {
                         computeBosonGravity(particles, this._bosonPool, bRoot, toggles.softeningSq, this.periodic, this._topologyConst, this.domainW, this.domainH);
-                        applyBosonBosonGravity(this.sim.photons, this.sim.pions, dtSub, this._bosonPool, bRoot, this.periodic, this._topologyConst, this.domainW, this.domainH);
+                        applyBosonBosonGravity(this.sim.photons, this.sim.pions, this.sim.leptons, dtSub, this._bosonPool, bRoot, this.periodic, this._topologyConst, this.domainW, this.domainH);
                     }
                     if (this.coulombEnabled) {
-                        applyPionPionCoulomb(this.sim.pions, dtSub, this._bosonPool, bRoot, this.periodic, this._topologyConst, this.domainW, this.domainH);
+                        applyPionPionCoulomb(this.sim.pions, this.sim.leptons, dtSub, this._bosonPool, bRoot, this.periodic, this._topologyConst, this.domainW, this.domainH);
                     }
-                    // H2: Batch sync all pions once after both boson interaction passes
-                    // (individual _syncVel() calls removed from applyBosonBosonGravity/applyPionPionCoulomb)
+                    // H2: Batch sync all pions + leptons once after both boson interaction passes
                     const _pions = this.sim.pions;
                     for (let _pi = 0, _pn = _pions.length; _pi < _pn; _pi++) {
                         if (_pions[_pi].alive) _pions[_pi]._syncVel();
+                    }
+                    const _leptons = this.sim.leptons;
+                    for (let _li = 0, _ln = _leptons.length; _li < _ln; _li++) {
+                        if (_leptons[_li].alive) _leptons[_li]._syncVel();
                     }
                     // π⁺π⁻ annihilation: opposite-charge pions → 2 photons
                     if (this.coulombEnabled || this.yukawaEnabled) {
                         const pairs = findPionAnnihilations(this.sim.pions, this._bosonPool, bRoot);
                         for (let ai = 0; ai < pairs.length; ai += 2) {
                             this._annihilatePions(pairs[ai], pairs[ai + 1]);
+                        }
+                        // e⁺e⁻ annihilation: opposite-charge leptons → 2 photons
+                        const lepPairs = findLeptonAnnihilations(this.sim.leptons, this._bosonPool, bRoot);
+                        for (let ai = 0; ai < lepPairs.length; ai += 2) {
+                            this._annihilateLeptons(lepPairs[ai], lepPairs[ai + 1]);
                         }
                     }
                 }

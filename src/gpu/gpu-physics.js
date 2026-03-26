@@ -38,7 +38,7 @@ import { createParticleBuffers, createUniformBuffer, writeFrameUniforms, writeSu
 import { fetchShader, createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldSelfGravPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createPairProductionPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline } from './gpu-pipelines.js';
 import { buildWGSLConstants, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT, GRAVITOMAG_BIT, ONE_PN_BIT, RELATIVITY_BIT, SPIN_ORBIT_BIT, RADIATION_BIT, BLACK_HOLE_BIT, DISINTEGRATION_BIT, EXPANSION_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BARNES_HUT_BIT, BOSON_INTER_BIT, FIELD_GRAV_BIT_T1, HERTZ_BOUNCE_BIT_T1, HIST_META_STRIDE } from './gpu-constants.js';
 import {
-    HISTORY_STRIDE, GPU_MAX_PHOTONS, GPU_MAX_PIONS,
+    HISTORY_STRIDE, GPU_MAX_PHOTONS, GPU_MAX_PIONS, MAX_LEPTONS,
     GPU_MAX_PARTICLES, GPU_HEATMAP_GRID, PHYSICS_DT,
     COL_MERGE, COL_BOUNCE, BOUND_LOOP,
     COL_NAMES, BOUND_NAMES, TOPO_NAMES,
@@ -48,6 +48,7 @@ import {
 import { fft2d } from '../fft.js';
 
 const MAX_PARTICLES = GPU_MAX_PARTICLES;
+const PION_POOL_CAP = GPU_MAX_PIONS + MAX_LEPTONS;
 
 // Pack palette slate hex to ABGR u32 for WebGPU color buffers
 const _sN = parseInt(window._PALETTE.extended.slate.slice(1), 16);
@@ -1246,7 +1247,7 @@ export default class GPUPhysics {
 
         if (hasPions) {
             // updatePions: drift with proper velocity
-            const piWG = Math.ceil(GPU_MAX_PIONS / 64);
+            const piWG = Math.ceil(PION_POOL_CAP / 64);
             const passPions = encoder.beginComputePass({ label: 'updatePions' });
             passPions.setPipeline(piUpdatePipeline);
             passPions.setBindGroup(0, bgs.bosG0);
@@ -1291,7 +1292,7 @@ export default class GPUPhysics {
         if (!this._yukawaEnabled) return;
         const p4 = this._phase4;
         const bgs = this._phase4BindGroups;
-        const piWG = Math.ceil(GPU_MAX_PIONS / 64);
+        const piWG = Math.ceil(PION_POOL_CAP / 64);
         const passDecay = encoder.beginComputePass({ label: 'decayPions' });
         passDecay.setPipeline(p4.decayPions.pipeline);
         passDecay.setBindGroup(0, bgs.bosG0);
@@ -1340,7 +1341,7 @@ export default class GPUPhysics {
         this.device.queue.writeBuffer(this._bosonRootSrc, 0, _bosonRootData);
         encoder.copyBufferToBuffer(this._bosonRootSrc, 0, b.bosonTreeNodes, 0, 80);
 
-        const totalBosons = GPU_MAX_PHOTONS + GPU_MAX_PIONS;
+        const totalBosons = GPU_MAX_PHOTONS + PION_POOL_CAP;
         const bosonWG = Math.ceil(totalBosons / 64);
 
         // insertBosonsIntoTree
@@ -1390,7 +1391,7 @@ export default class GPUPhysics {
 
         // applyPionPionCoulomb: pion <-> pion Coulomb via boson tree (only when Coulomb enabled)
         if (this._coulombEnabled) {
-            const pionWG = Math.ceil(GPU_MAX_PIONS / 64);
+            const pionWG = Math.ceil(PION_POOL_CAP / 64);
             const passPiCoulomb = encoder.beginComputePass({ label: 'applyPionPionCoulomb' });
             passPiCoulomb.setPipeline(p4.applyPionPionCoulomb.pipeline);
             passPiCoulomb.setBindGroup(0, bgs.btG0);
@@ -1403,7 +1404,7 @@ export default class GPUPhysics {
 
         // annihilatePions: π⁺π⁻ → 2 photons
         {
-            const pionWG = Math.ceil(GPU_MAX_PIONS / 64);
+            const pionWG = Math.ceil(PION_POOL_CAP / 64);
             const passAnnihilate = encoder.beginComputePass({ label: 'annihilatePions' });
             passAnnihilate.setPipeline(p4.annihilatePions.pipeline);
             passAnnihilate.setBindGroup(0, bgs.btG0);

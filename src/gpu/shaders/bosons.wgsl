@@ -135,6 +135,15 @@ fn updatePions(@builtin(global_invocation_id) gid: vec3u) {
     pi.posX += velX * dt;
     pi.posY += velY * dt;
     pi.age += 1u;
+
+    // Lepton lifetime: track via energy field (repurposed), despawn when exceeded
+    if (pi.kind == 1u) {
+        pi.energy += dt;
+        if (pi.energy > LEPTON_LIFETIME) {
+            pi.flags &= ~1u; // mark dead
+        }
+    }
+
     pions[i] = pi;
 }
 
@@ -193,6 +202,7 @@ fn absorbPions(@builtin(global_invocation_id) gid: vec3u) {
         let pi = pions[i];
         if ((pi.flags & 1u) == 0u) { continue; }
         if (pi.age < BOSON_MIN_AGE) { continue; }
+        if (pi.kind != 0u) { continue; } // leptons are not absorbed
 
         let piX = pi.posX;
         let piY = pi.posY;
@@ -238,6 +248,7 @@ fn decayPions(@builtin(global_invocation_id) gid: vec3u) {
     // Load pion state once
     let piState = pions[i];
     if ((piState.flags & 1u) == 0u) { return; }
+    if (piState.kind != 0u) { return; } // only pions decay
 
     // Decay probability: base prob is calibrated per PHYSICS_DT.
     // GPU update() spans N = dt/PHYSICS_DT ticks per frame, so scale:
@@ -392,43 +403,30 @@ fn decayPions(@builtin(global_invocation_id) gid: vec3u) {
                 } else { atomicSub(&phCount, 1u); }
             }
 
-            // Spawn electron/positron via atomic append to particle pool
-            // pi+ -> positron (antimatter, charge=+1)
-            // pi- -> electron (charge=-1)
+            // Spawn electron/positron as lepton in the pion pool (kind=1)
+            // pi+ -> positron (charge=+1), pi- -> electron (charge=-1)
             if (elELab > EPSILON) {
-                let pIdx = atomicAdd(&aliveCountAtomic, 1u);
-                if (pIdx < MAX_PARTICLES) {
-                    let invElELab = 1.0 / max(elELab, EPSILON);
-                    let elVx = elPxR * invElELab;
-                    let elVy = elPyR * invElELab;
+                let lepIdx = atomicAdd(&piCount, 1u);
+                if (lepIdx < PION_POOL_CAP) {
                     let emitOffset = max(mPi * 1.5, 1.0);
-                    let elGamma = 1.0 / sqrt(max(1.0 - elVx * elVx - elVy * elVy, 0.01));
-                    var p: ParticleState;
                     let phDir = select(vec2f(1.0, 0.0), vec2f(phPxR, phPyR) / max(phMag, EPSILON), phMag > EPSILON);
-                    p.posX = piDecayPosX2 - phDir.x * emitOffset;
-                    p.posY = piDecayPosY2 - phDir.y * emitOffset;
-                    p.velWX = elVx * elGamma;
-                    p.velWY = elVy * elGamma;
-                    p.mass = mE;
-                    p.charge = f32(piDecayCharge); // +1 or -1
-                    p.angW = 0.0;
-                    p.baseMass = mE;
-                    p.flags = FLAG_ALIVE; // alive
-                    // Set antimatter flag for pi+ decay (BH mode forbids antimatter)
-                    let bhOn = (u.toggles0 & BLACK_HOLE_BIT) != 0u;
-                    if (piDecayCharge > 0 && !bhOn) { p.flags |= FLAG_ANTIMATTER; }
-                    particles[pIdx] = p;
-
-                    // Initialize particleAux: radius=cbrt(mE), deathTime=+Inf, deathMass=0, deathAngVel=0
-                    // particleId=0 is acceptable (pion decay products are anonymous / not tracked for self-absorption)
-                    var aux: ParticleAux;
-                    aux.radius = pow(mE, 1.0 / 3.0);
-                    aux.particleId = 0xFFFFFFFFu; // sentinel: no emitter identity
-                    aux.deathTime = 1e30; // large sentinel (WGSL disallows Inf)
-                    aux.deathMass = 0.0;
-                    aux.deathAngVel = 0.0;
-                    particleAux[pIdx] = aux;
-                } else { atomicSub(&aliveCountAtomic, 1u); }
+                    var lep: Pion;
+                    lep.posX = piDecayPosX2 - phDir.x * emitOffset;
+                    lep.posY = piDecayPosY2 - phDir.y * emitOffset;
+                    lep.wX = elPxR;
+                    lep.wY = elPyR;
+                    lep.mass = ELECTRON_MASS;
+                    lep.charge = piDecayCharge; // +1 (positron) or -1 (electron)
+                    lep.energy = 0.0;  // repurposed as lifetime tracker
+                    lep.emitterId = piDecayEmitter2;
+                    lep.age = 0u;
+                    lep.flags = 1u; // alive
+                    lep.kind = 1u;  // lepton
+                    lep._pad1 = 0u;
+                    pions[lepIdx] = lep;
+                } else {
+                    atomicSub(&piCount, 1u);
+                }
             }
         }
     }

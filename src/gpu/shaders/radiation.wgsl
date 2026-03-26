@@ -343,7 +343,7 @@ fn pionEmission(@builtin(global_invocation_id) gid: vec3u) {
         let ke = rs.yukawaRadAccum - pionMass;
         if (ke > 0.0) {
             let piIdx = atomicAdd(&piCount, 1u);
-            if (piIdx < MAX_PIONS) {
+            if (piIdx < PION_POOL_CAP) {
                 // Scalar dipole emission angle: cos²θ rejection-sample from ±Yukawa force axis,
                 // then Lorentz-boost from emitter rest frame to lab frame.
                 let accelAngle = atan2(fYukY, fYukX);
@@ -406,7 +406,7 @@ fn pionEmission(@builtin(global_invocation_id) gid: vec3u) {
                 pi.energy = rs.yukawaRadAccum;
                 pi.emitterId = particleAux[i].particleId;
                 pi.age = 0u; pi.flags = 1u;
-                pi._pad0 = 0u; pi._pad1 = 0u;
+                pi.kind = 0u; pi._pad1 = 0u;
                 pions[piIdx] = pi;
 
                 // Radiation reaction: rescale emitter w

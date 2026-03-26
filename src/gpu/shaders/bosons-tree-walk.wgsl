@@ -166,6 +166,15 @@ fn updatePionsTree(@builtin(global_invocation_id) gid: vec3u) {
     pi.posX += velX * dt;
     pi.posY += velY * dt;
     pi.age += 1u;
+
+    // Lepton lifetime: track via energy field (repurposed), despawn when exceeded
+    if (pi.kind == 1u) {
+        pi.energy += dt;
+        if (pi.energy > LEPTON_LIFETIME) {
+            pi.flags &= ~1u; // mark dead
+        }
+    }
+
     pions[i] = pi;
 }
 
@@ -249,6 +258,7 @@ fn absorbPionsTree(@builtin(global_invocation_id) gid: vec3u) {
         let pi = pions[i];
         if ((pi.flags & 1u) == 0u) { continue; }
         if (pi.age < BOSON_MIN_AGE) { continue; }
+        if (pi.kind != 0u) { continue; } // leptons are not absorbed
 
         let piX = pi.posX;
         let piY = pi.posY;
