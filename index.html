@@ -39,7 +39,7 @@
     <script defer src="/shared-info.js"></script>
     <script defer src="/shared-toolbar.js"></script>
     <script defer src="/shared-forms.js"></script>
-    <script defer src="/shared-intro.js"></script>
+
     <script defer src="/shared-shortcuts.js"></script>
     <script defer src="/shared-about.js"></script>
     <script defer src="/shared-tooltip.js"></script>
@@ -86,63 +86,8 @@
     </script>
 </head>
 
-<body class="sim-body">
+<body class="sim-body app-ready">
     <a href="#simCanvas" class="skip-link">Skip to simulation</a>
-    <div id="intro-screen">
-        <div class="intro-bg"></div>
-        <div class="intro-content">
-            <span class="intro-overline">N-Body Physics</span>
-            <h1 class="intro-title">Geon<br><span class="intro-subtitle">Physics Simulation</span></h1>
-            <p class="intro-desc">Fling matter into orbit, shatter it with tidal forces, or watch
-                Higgs fields break symmetry. Everything from Kepler ellipses to pion exchange
-                and gravitational waves&mdash;running at the speed of light.</p>
-            <div class="intro-cards">
-                <div class="intro-card">
-                    <div class="intro-card-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="3"/>
-                            <path d="M12 2a10 10 0 0 1 0 20"/>
-                            <path d="M12 2a10 10 0 0 0 0 20"/>
-                        </svg>
-                    </div>
-                    <div class="intro-card-text">
-                        <strong>Spawn &amp; Fling</strong>
-                        <span>Click to place, drag to launch. Right-click for antimatter.</span>
-                    </div>
-                </div>
-                <div class="intro-card">
-                    <div class="intro-card-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="2" y="3" width="20" height="14" rx="2"/>
-                            <line x1="8" y1="21" x2="16" y2="21"/>
-                            <line x1="12" y1="17" x2="12" y2="21"/>
-                        </svg>
-                    </div>
-                    <div class="intro-card-text">
-                        <strong>19 Scenarios</strong>
-                        <span>Keys 1&ndash;9 load presets: orbits, black holes, axion bursts&hellip;</span>
-                    </div>
-                </div>
-                <div class="intro-card">
-                    <div class="intro-card-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 20V10"/>
-                            <path d="M18 20V4"/>
-                            <path d="M6 20v-4"/>
-                        </svg>
-                    </div>
-                    <div class="intro-card-text">
-                        <strong>Tune Everything</strong>
-                        <span>Toggle forces, fields, relativity, and radiation in the sidebar.</span>
-                    </div>
-                </div>
-            </div>
-            <button id="intro-start">Launch Simulation</button>
-        </div>
-    </div>
 
     <canvas id="simCanvas"></canvas>
 
