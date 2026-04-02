@@ -23,16 +23,13 @@ function _buildGPUToggles(sim) {
 }
 
 export function setupUI(sim) {
-    // ─── Intro screen dismiss ───
     const panel = document.getElementById('control-panel');
     const panelToggle = document.getElementById('panelToggle');
 
-    _intro.init(document.getElementById('intro-screen'), document.getElementById('intro-start'), () => {
-        const hint = document.getElementById('hint-bar');
-        if (hint) setTimeout(() => hint.classList.add('fade-out'), HINT_FADE_DELAY);
-    });
+    const hint = document.getElementById('hint-bar');
+    if (hint) setTimeout(() => hint.classList.add('fade-out'), HINT_FADE_DELAY);
 
-    // ─── Panel toggle (auto-opens on desktop after intro dismiss) ───
+    // ─── Panel toggle ───
     _toolbar.initSidebar(panelToggle, panel, document.getElementById('panelClose'));
 
     // ─── Antimatter mode toggle ───

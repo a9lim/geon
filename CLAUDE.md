@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Part of the **a9l.im** portfolio. See root `CLAUDE.md` for the shared design system and shared code policy. Sibling projects: `shoals`, `cyano`, `gerry`.
+Part of the **a9l.im** portfolio. See root `CLAUDE.md` for the shared design system and shared code policy. Sibling projects: `shoals`, `cyano`, `gerry`, `scripture`.
 
 ## Rules
 
