@@ -218,6 +218,7 @@ const HERTZ_BOUNCE_BIT: u32 = 2u;
 // Barnes-Hut tree constants
 // NOTE: QT_CAPACITY intentionally NOT included — GPU uses 1 (lock-free), CPU uses 4.
 const MAX_DEPTH: u32 = 48u;
+const QT_MAX_NODES: u32 = ${GPU_MAX_PARTICLES * 6}u;
 
 // Boundary
 const DESPAWN_MARGIN: f32 = ${wf(DESPAWN_MARGIN)};
