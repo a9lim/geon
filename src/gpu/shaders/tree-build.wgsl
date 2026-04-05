@@ -118,7 +118,9 @@ fn atomicAddParticleCount(idx: u32, delta: u32) -> u32 {
 }
 
 fn allocNode() -> u32 {
-    return atomicAdd(&nodeCounter, 1u);
+    let idx = atomicAdd(&nodeCounter, 1u);
+    if (idx >= QT_MAX_NODES) { return 0u; } // OOB → alias root (safe no-op)
+    return idx;
 }
 
 // ─── Dispatch 1: computeBounds ───
@@ -232,6 +234,9 @@ fn subdivide(nodeIdx: u32) {
     let ne = allocNode();
     let sw = allocNode();
     let se = allocNode();
+
+    // OOB guard: if any child aliased root, skip subdivision
+    if (nw == 0u || ne == 0u || sw == 0u || se == 0u) { return; }
 
     // Initialize NW
     setMinX(nw, minX); setMinY(nw, minY); setMaxX(nw, cx); setMaxY(nw, cy);
