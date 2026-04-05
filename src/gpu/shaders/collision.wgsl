@@ -439,6 +439,15 @@ fn resolveBouncePairwise(@builtin(global_invocation_id) gid: vec3<u32>) {
     if ((ps1.flags & FLAG_ALIVE) == 0u || (ps2.flags & FLAG_ALIVE) == 0u) { return; }
     if (ps1.mass <= EPSILON || ps2.mass <= EPSILON) { return; }
 
+    // Atomic claim: prevent concurrent impulse on same particle
+    let claim1 = atomicExchange(&collisionClaims[idx1], 1u);
+    let claim2 = atomicExchange(&collisionClaims[idx2], 1u);
+    if (claim1 != 0u || claim2 != 0u) {
+        if (claim1 == 0u) { atomicStore(&collisionClaims[idx1], 0u); }
+        if (claim2 == 0u) { atomicStore(&collisionClaims[idx2], 0u); }
+        return;
+    }
+
     let aux1 = particleAux[idx1];
     let aux2 = particleAux[idx2];
     let r1 = max(aux1.radius, EPSILON);
