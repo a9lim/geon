@@ -25,7 +25,7 @@ fn applyExpansion(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (pid >= eu.particleCount) { return; }
     var p = particles[pid];
     let flag = p.flags;
-    if ((flag & 1u) == 0u) { return; }
+    if ((flag & FLAG_ALIVE) == 0u) { return; }
 
     let H = eu.hubbleParam;
     let dt = eu.dt;
