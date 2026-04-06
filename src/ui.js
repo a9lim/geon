@@ -638,6 +638,7 @@ export function setupUI(sim) {
     if (typeof initAboutPanel === 'function') {
         initAboutPanel({
             title: 'Geon',
+            lastUpdated: '2026-04-05',
             description: 'Spawn particles and watch them interact through gravity, electromagnetism, and exotic forces. Fling matter into orbit, toggle scalar fields, switch between 19 preset scenarios, and explore relativistic physics in real time.',
             controls: [
                 { label: 'Add particle', value: 'Click on canvas' },
