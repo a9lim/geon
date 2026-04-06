@@ -540,6 +540,41 @@ class Simulation {
                     this.accumulator -= substeps * PHYSICS_DT;
                 }
 
+                // Process disintegration events from GPU readback
+                const disintEvents = this._gpuPhysics.consumeDisintegrationEvents();
+                for (let i = 0; i < disintEvents.length; i++) {
+                    const evt = disintEvents[i];
+                    if (evt.eventType === 0) {
+                        // Fragment: retire parent, spawn SPAWN_COUNT children
+                        this._gpuPhysics.removeParticle(evt.particleIdx, evt.mass, evt.angW);
+                        const nf = SPAWN_COUNT;
+                        const fragMass = evt.mass / nf;
+                        const fragCharge = evt.charge / nf;
+                        for (let fi = 0; fi < nf; fi++) {
+                            const angle = (TWO_PI * fi) / nf;
+                            const offset = spawnOffset(evt.radius);
+                            const cos = Math.cos(angle), sin = Math.sin(angle);
+                            const angVel = evt.angW; // approximate
+                            this._gpuPhysics.addParticle({
+                                x: evt.spawnX + cos * offset,
+                                y: evt.spawnY + sin * offset,
+                                vx: evt.spawnVX + (-sin) * angVel * offset,
+                                vy: evt.spawnVY + cos * angVel * offset,
+                                mass: fragMass, charge: fragCharge, angw: evt.angW,
+                            });
+                        }
+                    } else {
+                        // Roche transfer: subtract mass from source, spawn packet
+                        const newMass = evt.mass - evt.transferMass;
+                        this._gpuPhysics.patchMass(evt.particleIdx, newMass, newMass);
+                        this._gpuPhysics.addParticle({
+                            x: evt.spawnX, y: evt.spawnY,
+                            vx: evt.spawnVX, vy: evt.spawnVY,
+                            mass: evt.transferMass, charge: evt.charge,
+                        });
+                    }
+                }
+
                 // Periodic auto-save for GPU error recovery (non-blocking)
                 if (++_autoSaveCounter >= AUTO_SAVE_INTERVAL) {
                     _autoSaveCounter = 0;

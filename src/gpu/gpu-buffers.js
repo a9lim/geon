@@ -463,9 +463,9 @@ export function createExcitationBuffers(device, maxEvents = 64) {
 export function createDisintegrationBuffers(device, maxEvents = 64) {
     const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
     return {
-        events: device.createBuffer({ label: 'disint-events', size: maxEvents * 32, usage }), // DisintEvent = 32 bytes
+        events: device.createBuffer({ label: 'disint-events', size: maxEvents * 48, usage }), // DisintEvent = 48 bytes
         counter: device.createBuffer({ label: 'disint-counter', size: 4, usage }),
-        staging: device.createBuffer({ label: 'disint-staging', size: maxEvents * 32,
+        staging: device.createBuffer({ label: 'disint-staging', size: maxEvents * 48,
             usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }),
         counterStaging: device.createBuffer({ label: 'disint-count-staging', size: 4,
             usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }),
