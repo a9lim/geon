@@ -31,8 +31,11 @@
     <meta property="og:locale" content="en_US">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Geon">
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="/fonts/fonts.css">
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <!-- A2: Non-render-blocking KaTeX CSS — preloads in parallel, applies on download -->
     <link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" as="style" crossorigin="anonymous" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous"></noscript>
@@ -583,6 +586,8 @@
     <p>Gravitomagnetism is the gravitational analogue of the magnetic force. In Geon, rotating or co-moving masses generate a gravitomagnetic field that produces velocity-dependent forces on nearby particles, mimicking the frame-dragging effect predicted by general relativity. This can be seen in the Gravitomagnetic preset, where orbiting masses drag the surrounding space and alter nearby trajectories.</p>
     <h3>Boris Integrator</h3>
     <p>Geon uses the Boris algorithm to integrate particle trajectories. The Boris integrator preserves phase-space volume under strong magnetic fields, preventing artificial energy drift that plagues simpler methods like Euler integration. It splits the force application into electric half-kicks and a magnetic rotation, ensuring stable cyclotron orbits at any timestep.</p>
+    <h3>Accessibility</h3>
+    <p>Geon supports keyboard navigation for all controls, high-contrast mode via the theme toggle, and ARIA labels on all toolbar buttons and interactive elements. Simulation parameters are adjustable via labeled sliders and toggles. Known hazards: flashing particle trails and continuous motion simulation. Users sensitive to motion or flashing content should use presets with lower particle counts.</p>
     <p><em>See also: <a href="/cyano">Cyano</a> for cellular energy simulations, <a href="/shoals">Shoals</a> for financial dynamics.</em></p>
 <h3>Learning Outcomes</h3>
 <p>After using Geon, students should be able to: explain how gravitational and electromagnetic forces produce qualitatively different orbital dynamics; describe the role of the Barnes-Hut algorithm in reducing force computation from O(N²) to O(N log N); identify how relativistic corrections (1PN, gravitomagnetism) modify Newtonian predictions at high velocities; and distinguish between conservative and dissipative forces in phase-space evolution.</p>

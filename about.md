@@ -30,6 +30,10 @@ Six boundary conditions: open (particles escape), reflective (elastic walls), to
 
 Optional signal delay mode computes forces using the light-cone distance rather than instantaneous position, simulating relativistic causality. Requires maintaining a circular history buffer of past particle states. When enabled, each force evaluation interpolates the emitting particle's historical position at the retarded time, producing visible propagation delays at speeds near c.
 
+## Accessibility
+
+Geon supports keyboard navigation for all controls, high-contrast mode via the theme toggle, and ARIA labels on all interactive elements. Simulation parameters are adjustable via labeled sliders and toggles. Known hazards include flashing particle trails and continuous motion simulation.
+
 ## GPU and CPU Backends
 
 WebGPU compute shaders handle pairwise force summation with Barnes-Hut tree acceleration when available. The GPU backend supports up to 512 particles with 4096 photons, compared to 128 particles on CPU. Falls back to a Web Worker pool with SharedArrayBuffer on devices without WebGPU. The Canvas 2D renderer is a final fallback for legacy browsers. Backend selection is automatic but can be forced to CPU via a query parameter. Scalar field evolution (Higgs, axion) uses a 128x128 grid on GPU and 64x64 on CPU, with cubic B-spline interpolation for C2 continuity.
