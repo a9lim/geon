@@ -44,6 +44,7 @@ import {
     COL_NAMES, BOUND_NAMES, TOPO_NAMES,
     SOFTENING_SQ, BH_SOFTENING_SQ,
     HIGGS_MASS_FLOOR, HIGGS_MASS_MAX_DELTA,
+    TIDAL_STRENGTH, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, MIN_MASS, SPAWN_COUNT,
 } from '../config.js';
 import { fft2d } from '../fft.js';
 
@@ -98,6 +99,7 @@ const _zeroU32 = new Uint32Array([0]);                // reusable zero for count
 const _retiredFlagU32 = new Uint32Array([2]);         // FLAG_RETIRED for removeParticle
 const _deathMetaData = new ArrayBuffer(12);           // deathTime(f32), deathMass(f32), deathAngVel(f32)
 const _deathMetaF32 = new Float32Array(_deathMetaData);
+const _patchMassData = new Float32Array(2);           // mass + baseMass patch
 
 // Pre-allocated hitTest uniform data (avoids per-call allocation)
 const _hitUniformData = new ArrayBuffer(16);
@@ -229,6 +231,8 @@ export default class GPUPhysics {
         this._collisionBindGroups = null;
         this._mergeResultsPending = false;
         this._pendingMergeEvents = [];
+        this._disintResultsPending = false;
+        this._pendingDisintEvents = [];
 
         // Phase 3: Dead particle GC
         this._deadGCPipeline = null;
@@ -1577,6 +1581,79 @@ export default class GPUPhysics {
     }
 
     /**
+     * Non-blocking readback of disintegration events (fragment + Roche transfer).
+     * Uses 1-frame latency like other readbacks.
+     */
+    async _readbackDisintegrationResults() {
+        if (this._disintResultsPending) return;
+        if (!this._disintegrationEnabled || !this._disintBuffers) return;
+        this._disintResultsPending = true;
+
+        try {
+            const db = this._disintBuffers;
+            const encoder = this.device.createCommandEncoder();
+            encoder.copyBufferToBuffer(db.counter, 0, db.counterStaging, 0, 4);
+            this.device.queue.submit([encoder.finish()]);
+
+            await db.counterStaging.mapAsync(GPUMapMode.READ);
+            const countData = new Uint32Array(db.counterStaging.getMappedRange().slice(0));
+            db.counterStaging.unmap();
+
+            const eventCount = countData[0];
+            if (eventCount > 0) {
+                const readBytes = Math.min(eventCount, 64) * 48; // DisintEvent = 48 bytes
+                const encoder2 = this.device.createCommandEncoder();
+                encoder2.copyBufferToBuffer(db.events, 0, db.staging, 0, readBytes);
+                this.device.queue.submit([encoder2.finish()]);
+
+                await db.staging.mapAsync(GPUMapMode.READ);
+                const raw = db.staging.getMappedRange(0, readBytes);
+                const f32 = new Float32Array(raw.slice(0));
+                const u32 = new Uint32Array(raw.slice(0));
+                db.staging.unmap();
+
+                // Parse DisintEvent structs (12 fields × 4 bytes = 48 bytes each)
+                const events = [];
+                const count = Math.min(eventCount, 64);
+                for (let i = 0; i < count; i++) {
+                    const base = i * 12;
+                    events.push({
+                        particleIdx: u32[base],
+                        eventType: u32[base + 1],    // 0=fragment, 1=transfer
+                        targetIdx: u32[base + 2],
+                        transferMass: f32[base + 3],
+                        spawnX: f32[base + 4],
+                        spawnY: f32[base + 5],
+                        spawnVX: f32[base + 6],
+                        spawnVY: f32[base + 7],
+                        mass: f32[base + 8],
+                        charge: f32[base + 9],
+                        angW: f32[base + 10],
+                        radius: f32[base + 11],
+                    });
+                }
+                this._pendingDisintEvents = events;
+            } else {
+                this._pendingDisintEvents = [];
+            }
+        } catch (e) {
+            // Device lost or other error — don't block future readbacks
+        } finally {
+            this._disintResultsPending = false;
+        }
+    }
+
+    /**
+     * Consume pending disintegration events.
+     * @returns {Array} Array of DisintEvent objects
+     */
+    consumeDisintegrationEvents() {
+        const events = this._pendingDisintEvents;
+        this._pendingDisintEvents = [];
+        return events;
+    }
+
+    /**
      * Dispatch tree build sequence (always runs — used by collisions, hit test,
      * and optionally by BH tree-walk force computation).
      * Runs after ghost generation, before force computation.
@@ -1773,6 +1850,23 @@ export default class GPUPhysics {
         _deathMetaF32[1] = deathMass;
         _deathMetaF32[2] = deathAngVel;
         this.device.queue.writeBuffer(this.buffers.particleAux, idx * PARTICLE_AUX_SIZE + 8, _deathMetaData);
+    }
+
+    /**
+     * Patch a particle's mass and baseMass in the GPU buffer.
+     * Used for Roche lobe overflow mass subtraction.
+     * @param {number} idx - GPU buffer index
+     * @param {number} newMass - new mass value
+     * @param {number} newBaseMass - new baseMass value
+     */
+    patchMass(idx, newMass, newBaseMass) {
+        if (idx < 0 || idx >= this.aliveCount) return;
+        // ParticleState: mass at offset 16, baseMass at offset 28 — not contiguous,
+        // so write them separately
+        _patchMassData[0] = newMass;
+        this.device.queue.writeBuffer(this.buffers.particleState, idx * PARTICLE_STATE_SIZE + 16, _patchMassData, 0, 1);
+        _patchMassData[0] = newBaseMass;
+        this.device.queue.writeBuffer(this.buffers.particleState, idx * PARTICLE_STATE_SIZE + 28, _patchMassData, 0, 1);
     }
 
     /**
@@ -2798,11 +2892,11 @@ export default class GPUPhysics {
         _disintUniformF32[0] = this._blackHoleEnabled ? BH_SOFTENING_SQ : SOFTENING_SQ; // softeningSq
         _disintUniformF32[1] = this.domainW;
         _disintUniformF32[2] = this.domainH;
-        _disintUniformF32[3] = 0.3;   // tidalStrength
-        _disintUniformF32[4] = 0.9;   // rocheThreshold
-        _disintUniformF32[5] = 0.01;  // rocheTransferRate
-        _disintUniformF32[6] = 0.01;  // minMass
-        _disintUniformU32[7] = 4;     // spawnCount
+        _disintUniformF32[3] = TIDAL_STRENGTH;
+        _disintUniformF32[4] = ROCHE_THRESHOLD;
+        _disintUniformF32[5] = ROCHE_TRANSFER_RATE;
+        _disintUniformF32[6] = MIN_MASS;
+        _disintUniformU32[7] = SPAWN_COUNT;
         _disintUniformU32[8] = this.aliveCount;
         _disintUniformU32[9] = this.boundaryMode === BOUND_LOOP ? 1 : 0;
         _disintUniformU32[10] = this.topologyMode;
@@ -3269,6 +3363,9 @@ export default class GPUPhysics {
 
         // Readback merge results for photon bursts / field excitations (non-blocking)
         this._readbackMergeResults();
+
+        // Readback disintegration events for fragment spawning (non-blocking)
+        this._readbackDisintegrationResults();
 
         // Readback free stack for slot reuse (non-blocking)
         this._readbackFreeStack();
@@ -3763,6 +3860,7 @@ export default class GPUPhysics {
         this._frameCount = 0;
         this._heatmapFrame = 0;
         this._pendingMergeEvents = [];
+        this._pendingDisintEvents = [];
         this._cpuFreeSlots = [];
         // Reset GPU free stack (reuse pre-allocated zero buffer)
         if (this.buffers.freeTop) {
@@ -4126,6 +4224,7 @@ export default class GPUPhysics {
         this._heatmapBuffers = null;
         this._excitationBuffers = null;
         this._disintBuffers = null;
+        this._disintBGs = null;
         this._pairProdBuffers = null;
         this._trailBuffers = null;
         this._fieldUniformBuffer = null;

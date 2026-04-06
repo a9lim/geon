@@ -30,10 +30,14 @@ struct DisintEvent {
     eventType: u32,       // 0=fragment, 1=transfer
     targetIdx: u32,       // strongest other (for transfer)
     transferMass: f32,
-    spawnX: f32,
-    spawnY: f32,
-    spawnVX: f32,
-    spawnVY: f32,
+    spawnX: f32,          // fragment: posX, transfer: spawn posX
+    spawnY: f32,          // fragment: posY, transfer: spawn posY
+    spawnVX: f32,         // fragment: velWX, transfer: spawn velX
+    spawnVY: f32,         // fragment: velWY, transfer: spawn velY
+    mass: f32,            // parent mass
+    charge: f32,          // fragment: parent charge, transfer: proportional charge
+    angW: f32,            // parent angW
+    radius: f32,          // parent radius
 };
 
 // Group 0: particleState + particleAux + derived (read_write for encoder compat)
@@ -72,6 +76,14 @@ fn checkDisintegration(@builtin(global_invocation_id) gid: vec3<u32>) {
             var evt: DisintEvent;
             evt.particleIdx = pid;
             evt.eventType = DISINT_FRAGMENT;
+            evt.spawnX = p.posX;
+            evt.spawnY = p.posY;
+            evt.spawnVX = p.velWX;
+            evt.spawnVY = p.velWY;
+            evt.mass = m;
+            evt.charge = q;
+            evt.angW = p.angW;
+            evt.radius = r;
             events[slot] = evt;
         }
         return;
@@ -182,6 +194,14 @@ fn checkDisintegration(@builtin(global_invocation_id) gid: vec3<u32>) {
             var evt: DisintEvent;
             evt.particleIdx = pid;
             evt.eventType = DISINT_FRAGMENT;
+            evt.spawnX = p.posX;
+            evt.spawnY = p.posY;
+            evt.spawnVX = p.velWX;
+            evt.spawnVY = p.velWY;
+            evt.mass = m;
+            evt.charge = q;
+            evt.angW = p.angW;
+            evt.radius = r;
             events[slot] = evt;
         }
         return;
@@ -214,11 +234,11 @@ fn checkDisintegration(@builtin(global_invocation_id) gid: vec3<u32>) {
                         evt.transferMass = dM;
                         evt.spawnX = px + l1x * r * 1.2;
                         evt.spawnY = py + l1y * r * 1.2;
-                        let dvd = derived[pid];
-                        let dv = vec2<f32>(dvd.velX, dvd.velY);
                         let escapeV = sqrt(oMass / max(rocheDist, EPSILON));
-                        evt.spawnVX = dv.x + (-l1y) * escapeV * 0.5;
-                        evt.spawnVY = dv.y + l1x * escapeV * 0.5;
+                        evt.spawnVX = p.velWX + (-l1y) * escapeV * 0.5;
+                        evt.spawnVY = p.velWY + l1x * escapeV * 0.5;
+                        evt.mass = m;
+                        evt.charge = dM * q / m;  // proportional charge transfer
                         events[slot] = evt;
                     }
                 }
