@@ -18,6 +18,7 @@
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:image:type" content="image/webp">
+    <meta property="og:image:alt" content="Geon particle physics simulator">
     <meta name="twitter:site" content="@a9_lim">
     <meta name="twitter:creator" content="@a9_lim">
     <meta name="author" content="a9lim">
@@ -51,7 +52,7 @@
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "WebApplication",
+      "@type": ["WebApplication", "LearningResource"],
       "name": "Geon",
       "url": "https://a9l.im/geon",
       "description": "Interactive relativistic N-body simulator with 11 force types, Boris integration, Barnes-Hut tree acceleration, Higgs and axion scalar fields, and WebGPU compute shaders. Educational tool for exploring gravity, electromagnetism, Yukawa interactions, signal delay, and cosmological expansion across 19 curated presets.",
@@ -74,6 +75,18 @@
       "keywords": "physics simulator, N-body, relativity, gravity, electromagnetism, Boris integrator, Barnes-Hut, Higgs field, axion, WebGPU, educational",
       "operatingSystem": "Any (Web Browser)",
       "browserRequirements": "Modern browser with WebGPU or Canvas support",
+      "codeRepository": "https://github.com/a9lim/a9lim.github.io",
+      "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+      "interactivityType": "active",
+      "teaches": [
+        "Gravitational N-body dynamics and orbital mechanics",
+        "Electromagnetic force interactions between charged particles",
+        "Special relativistic effects at high velocities",
+        "Scalar field theory including Higgs and axion coupling",
+        "Barnes-Hut tree algorithm for O(N log N) force approximation"
+      ],
+      "datePublished": "2026-02-17",
+      "dateModified": "2026-04-05",
       "author": {
         "@type": "Person",
         "name": "a9lim",
@@ -94,6 +107,81 @@
         "priceCurrency": "USD"
       }
     }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What forces does Geon simulate?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Geon models 11 force types: Newtonian gravity, gravitomagnetism, Coulomb electrostatics, magnetic (Lorentz) force, Yukawa interaction, Higgs field coupling, axion field coupling, cosmological expansion, first post-Newtonian correction, spin-orbit coupling, and radiation reaction."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is the Boris integrator used in Geon?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The Boris integrator is a symplectic method that preserves phase-space volume while handling strong magnetic fields without numerical drift. Geon uses it with adaptive substepping to advance particle trajectories under combined gravitational and electromagnetic forces."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does Geon require WebGPU?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Geon uses WebGPU compute shaders for parallel force calculation when available, but falls back to a Canvas 2D CPU renderer on devices without WebGPU support. Force CPU mode with the ?cpu=1 URL parameter."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is Barnes-Hut tree acceleration?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Barnes-Hut is a spatial partitioning algorithm that groups distant particles into single nodes, reducing N-body force computation from O(N squared) to O(N log N). Geon uses it for gravity, electrostatics, and Yukawa forces."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What are the system requirements for Geon?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Geon runs in any modern browser. For best performance, use a browser with WebGPU support (Chrome 113+, Edge 113+). The simulator falls back to Canvas 2D rendering if WebGPU is unavailable."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does Geon collect any personal data?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Geon runs entirely in your browser with no server-side processing, no cookies, and no analytics tracking. All simulation state stays on your device."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is Geon free and open source?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Geon is licensed under AGPL-3.0 and the source code is available on GitHub. It is free to use for educational and personal purposes."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does Geon work on mobile devices?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Geon is fully responsive and supports touch controls. Performance depends on your device's GPU capabilities."
+          }
+        }
+      ]
+    }
+    </script>
+    <script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://a9l.im"},{"@type":"ListItem","position":2,"name":"Geon"}]}
     </script>
 </head>
 
@@ -435,6 +523,20 @@
             <div id="reference-body" class="sim-overlay-body scrollbar-thin"></div>
         </div>
     </div>
+
+    <details class="edu-content">
+      <summary>About this simulation</summary>
+      <article>
+        <h2>What is Geon?</h2>
+        <p>Geon is a real-time N-body simulator that models how particles move under gravity, electromagnetism, and relativistic effects. It computes pairwise forces between all particles using a Barnes-Hut tree for O(N&thinsp;log&thinsp;N) scaling, then advances trajectories with a Boris integrator that preserves phase-space volume under strong magnetic fields.</p>
+        <h3>Physics</h3>
+        <p>Eleven force types are available: Newtonian gravity, gravitomagnetism (frame-dragging), Coulomb electrostatics, the magnetic Lorentz force, Yukawa interaction, Higgs field coupling, axion field coupling, cosmological expansion via Hubble flow, first post-Newtonian corrections from general relativity, spin-orbit coupling, and radiation reaction. Forces can be toggled independently so students can isolate individual effects.</p>
+        <h3>Scalar Fields</h3>
+        <p>Two scalar fields &mdash; Higgs and axion &mdash; live on a PQS grid with C&sup2; interpolation. The Higgs field modulates particle mass through its local vacuum expectation value, while the axion field couples to charge. Both evolve via St&ouml;rmer-Verlet integration and exert gradient forces on particles.</p>
+        <h3>Presets</h3>
+        <p>Nineteen curated presets demonstrate specific phenomena: Keplerian orbits, electromagnetic confinement, Rutherford scattering, Higgs potential wells, axion halos, Hubble expansion, gravitational wave inspiral, and more. Each preset configures initial conditions and force parameters to illustrate one concept clearly.</p>
+      </article>
+    </details>
 
     <script src="/shared-tabs.js"></script>
     <script type="module" src="main.js"></script>
