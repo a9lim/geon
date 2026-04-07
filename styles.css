@@ -128,7 +128,7 @@
 #eff-pot-container canvas {
     display: block;
     width: 100%;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius);
     aspect-ratio: 1;
 }
 
