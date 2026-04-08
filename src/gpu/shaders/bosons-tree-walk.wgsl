@@ -110,7 +110,7 @@ fn updatePionsTree(@builtin(global_invocation_id) gid: vec3u) {
     let grFactor = 1.0 + vSq;
     let coulombOn = (u.toggles0 & COULOMB_BIT) != 0u;
     let piCharge = pi.charge;
-    let coulombScale = select(0.0, -f32(piCharge) * dt, coulombOn && piCharge != 0);
+    let coulombScale = select(0.0, -piCharge * dt, coulombOn && abs(piCharge) > EPSILON);
 
     var stack: array<u32, 48>;
     var top: i32 = 0;
@@ -304,7 +304,7 @@ fn absorbPionsTree(@builtin(global_invocation_id) gid: vec3u) {
                     let invTM = select(0.0, 1.0 / pj.mass, pj.mass > EPSILON);
                     particles[j].velWX += piEnergy * (piWX * invG) * invTM;
                     particles[j].velWY += piEnergy * (piWY * invG) * invTM;
-                    particles[j].charge += f32(piCharge);
+                    particles[j].charge += piCharge;
                     pions[i].flags &= ~1u;
                     absorbed = true;
                 }

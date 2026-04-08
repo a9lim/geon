@@ -114,8 +114,8 @@ fn updatePions(@builtin(global_invocation_id) gid: vec3u) {
         piWX += grFactor * pj.mass * dx * invR3 * dt;
         piWY += grFactor * pj.mass * dy * invR3 * dt;
         // Coulomb: F = -q_pion * q_particle / r² (like-charges repel)
-        if (coulombOn && piCharge != 0 && pj.charge != 0.0) {
-            let fC = -f32(piCharge) * pj.charge * invR3 * dt;
+        if (coulombOn && abs(piCharge) > EPSILON && abs(pj.charge) > EPSILON) {
+            let fC = -piCharge * pj.charge * invR3 * dt;
             piWX += fC * dx;
             piWY += fC * dy;
         }
@@ -230,7 +230,7 @@ fn absorbPions(@builtin(global_invocation_id) gid: vec3u) {
                 particles[j].velWX += piEnergy * (piWX * invG) * invTM;
                 particles[j].velWY += piEnergy * (piWY * invG) * invTM;
                 // Transfer charge
-                particles[j].charge += f32(piCharge);
+                particles[j].charge += piCharge;
                 pions[i].flags &= ~1u;
                 break;
             }
@@ -253,7 +253,7 @@ fn decayPions(@builtin(global_invocation_id) gid: vec3u) {
     // Decay probability: base prob is calibrated per PHYSICS_DT.
     // GPU update() spans N = dt/PHYSICS_DT ticks per frame, so scale:
     // P_eff = 1 - (1 - p)^N  (probability of decaying in at least one of N trials)
-    let isNeutral = piState.charge == 0;
+    let isNeutral = abs(piState.charge) < EPSILON;
     let baseProb = select(CHARGED_PION_DECAY_PROB, PION_DECAY_PROB, isNeutral);
     let ticks = max(u.dt / PHYSICS_DT, 1.0);
     let prob = 1.0 - pow(1.0 - baseProb, ticks);

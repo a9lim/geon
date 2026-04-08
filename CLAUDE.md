@@ -69,6 +69,10 @@ Expansion                        [independent, in Engine tab]
 
 Declarative `DEPS` array in `ui.js`, topological evaluation via `updateAllDeps()`.
 
+### Quantized Boson Charge
+
+Pion and lepton charges are quantized in units of `BOSON_CHARGE` (config.js, default 0.1). Pion charge is `f32` in both CPU and GPU (WGSL Pion struct). Neutral pions have charge exactly `0.0`; charged pions/leptons carry `±BOSON_CHARGE`. Particle charge is also quantized: `addParticle()` (both CPU `main.js` and GPU `gpu-physics.js`) rounds charge to the nearest `BOSON_CHARGE` multiple. Charge conservation is maintained — emission subtracts `±BOSON_CHARGE` from emitter, absorption/decay adds it back. Disintegration (Roche transfer, tidal fragments) quantizes transferred charge. Annihilation checks use `abs(charge) < EPSILON` for neutral and sign comparison for opposite-charge (not integer equality).
+
 ### Higgs Mass Modulation
 
 When Higgs enabled, Yukawa range parameter μ_eff = `yukawaMu · √(higgsMod_i · higgsMod_j)` where `higgsMod = max(|φ(x)|, HIGGS_MASS_FLOOR)` cached per particle. Geometric mean per pair. GPU: `higgsMod` in `axYukMod.z`.

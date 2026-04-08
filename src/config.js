@@ -72,6 +72,7 @@ export const CHARGED_PION_HALF_LIFE = 64;        // pi+/- half-life (slower weak
 export const PION_DECAY_PROB = 1 - Math.exp(-Math.LN2 / PION_HALF_LIFE * PHYSICS_DT);
 export const CHARGED_PION_DECAY_PROB = 1 - Math.exp(-Math.LN2 / CHARGED_PION_HALF_LIFE * PHYSICS_DT);
 export const ELECTRON_MASS = 0.05;                // decay product mass for pi+/- -> e+/- + photon
+export const BOSON_CHARGE = 0.1;                  // magnitude of pion/lepton charge (tunable)
 export const MAX_REJECTION_SAMPLES = 32;     // quadrupole rejection sampling cap
 export const ABERRATION_THRESHOLD = 1.01;    // min gamma for relativistic aberration
 

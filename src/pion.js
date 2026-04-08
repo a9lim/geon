@@ -244,7 +244,7 @@ export default class Pion {
             sim.totalRadiatedPy += phMag * phSin;
 
             // Electron (pi-) or positron (pi+) — emitted as lepton boson
-            const elCharge = this.charge > 0 ? 1 : -1; // π⁺ → positron (+1), π⁻ → electron (-1)
+            const elCharge = this.charge; // π⁺ → positron (+), π⁻ → electron (-), preserves magnitude
             const el = Lepton.acquire(
                 this.pos.x - phCos * offset,
                 this.pos.y - phSin * offset,

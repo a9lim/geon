@@ -275,7 +275,7 @@ fn computeBosonAggregates(@builtin(global_invocation_id) gid: vec3u) {
         let wx = pions[pi].wX; let wy = pions[pi].wY;
         let gamma = sqrt(1.0 + wx * wx + wy * wy);
         bMass = pions[pi].mass * gamma;
-        bCharge = f32(pions[pi].charge);
+        bCharge = pions[pi].charge;
     }
     if (!alive) { return; }
 
@@ -496,12 +496,12 @@ fn applyPionPionCoulomb(@builtin(global_invocation_id) gid: vec3u) {
 
     let piState = pions[i];
     if ((piState.flags & 1u) == 0u) { return; }
-    if (piState.charge == 0) { return; }
+    if (abs(piState.charge) < EPSILON) { return; }
 
     let dt = u.dt;
     let bx = piState.posX;
     let by = piState.posY;
-    let scale = -f32(piState.charge) * dt;
+    let scale = -piState.charge * dt;
 
     // BH tree walk of boson tree using charge aggregates
     var kick = vec2f(0.0);
@@ -548,7 +548,7 @@ fn annihilatePions(@builtin(global_invocation_id) gid: vec3u) {
 
     var pi1 = pions[i];
     if ((pi1.flags & 1u) == 0u) { return; }
-    if (pi1.charge == 0) { return; }
+    if (abs(pi1.charge) < EPSILON) { return; }
     if (pi1.age < BOSON_MIN_AGE) { return; }
 
     // Claim self via CAS — if another thread already claimed us as their target, bail out
@@ -565,7 +565,7 @@ fn annihilatePions(@builtin(global_invocation_id) gid: vec3u) {
         let pi2 = pions[j];
         if ((pi2.flags & 1u) == 0u) { continue; }
         if (pi2.kind != p1k) { continue; } // only same-kind annihilates (pion+pion or lepton+lepton)
-        if (pi2.charge == 0 || pi2.charge == p1c) { continue; } // need opposite charge
+        if (abs(pi2.charge) < EPSILON || pi2.charge * p1c > 0.0) { continue; } // need opposite charge
         if (pi2.age < BOSON_MIN_AGE) { continue; }
 
         let dx = p1x - pi2.posX;
