@@ -44,7 +44,7 @@ import {
     COL_NAMES, BOUND_NAMES, TOPO_NAMES,
     SOFTENING_SQ, BH_SOFTENING_SQ,
     HIGGS_MASS_FLOOR, HIGGS_MASS_MAX_DELTA,
-    TIDAL_STRENGTH, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, MIN_MASS, SPAWN_COUNT,
+    TIDAL_STRENGTH, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, MIN_MASS, SPAWN_COUNT, BOSON_CHARGE,
 } from '../config.js';
 import { fft2d } from '../fft.js';
 
@@ -1778,7 +1778,7 @@ export default class GPUPhysics {
         _addParticleStateF32[2] = vx;         // velWX
         _addParticleStateF32[3] = vy;         // velWY
         _addParticleStateF32[4] = m;          // mass
-        _addParticleStateF32[5] = q;          // charge
+        _addParticleStateF32[5] = Math.round(q / BOSON_CHARGE) * BOSON_CHARGE; // charge (quantized)
         _addParticleStateF32[6] = angw;       // angW
         _addParticleStateF32[7] = m;          // baseMass
         let flags = FLAG_ALIVE;

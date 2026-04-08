@@ -3,7 +3,7 @@
 // B-like (velocity-dependent) forces for exact |v|-preserving rotation.
 
 import QuadTreePool from './quadtree.js';
-import { PI, TWO_PI, SOFTENING, BH_SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, MAX_SPEED_RATIO, TIDAL_STRENGTH, SPAWN_COUNT, SOFTENING_SQ, BH_SOFTENING_SQ, QUADTREE_CAPACITY, BH_THETA, HISTORY_SIZE, HISTORY_MASK, HISTORY_STRIDE, DEFAULT_PION_MASS, DEFAULT_AXION_MASS, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, DEFAULT_HUBBLE, EPSILON, EPSILON_SQ, MAX_REJECTION_SAMPLES, ABERRATION_THRESHOLD, spawnOffset, kerrNewmanRadius, MAX_PIONS, YUKAWA_COUPLING, BOSON_MIN_AGE, HIGGS_COUPLING, AXION_COUPLING, DEFAULT_HIGGS_MASS, COL_BOUNCE, COL_MERGE, BOUND_LOOP, BOUND_BOUNCE, BOUND_DESPAWN, TORUS, KLEIN, RP2 } from './config.js';
+import { PI, TWO_PI, SOFTENING, BH_SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, MAX_SPEED_RATIO, TIDAL_STRENGTH, SPAWN_COUNT, SOFTENING_SQ, BH_SOFTENING_SQ, QUADTREE_CAPACITY, BH_THETA, HISTORY_SIZE, HISTORY_MASK, HISTORY_STRIDE, DEFAULT_PION_MASS, DEFAULT_AXION_MASS, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, DEFAULT_HUBBLE, EPSILON, EPSILON_SQ, MAX_REJECTION_SAMPLES, ABERRATION_THRESHOLD, spawnOffset, kerrNewmanRadius, MAX_PIONS, YUKAWA_COUPLING, BOSON_MIN_AGE, HIGGS_COUPLING, AXION_COUPLING, DEFAULT_HIGGS_MASS, COL_BOUNCE, COL_MERGE, BOUND_LOOP, BOUND_BOUNCE, BOUND_DESPAWN, TORUS, KLEIN, RP2, BOSON_CHARGE } from './config.js';
 import MasslessBoson from './massless-boson.js';
 import Pion from './pion.js';
 import { angwToAngVel } from './relativity.js';
@@ -1018,7 +1018,7 @@ export default class Physics {
                             const gamma = 1 / Math.sqrt(1 - speed * speed);
                             const wx = gamma * speed * Math.cos(angle);
                             const wy = gamma * speed * Math.sin(angle);
-                            const charge = Math.abs(p.charge) < EPSILON ? 0 : (Math.random() < 0.5 ? 0 : (Math.random() < 0.5 ? 1 : -1));
+                            const charge = Math.abs(p.charge) < EPSILON ? 0 : (Math.random() < 0.5 ? 0 : (Math.random() < 0.5 ? BOSON_CHARGE : -BOSON_CHARGE));
                             p.charge -= charge;
                             if (charge !== 0) p.updateColor();
                             const offset = spawnOffset(p.radius);
@@ -1261,7 +1261,7 @@ export default class Physics {
                             target.w.x += pn.energy * pn.vel.x * invTM;
                             target.w.y += pn.energy * pn.vel.y * invTM;
                             target.charge += pn.charge;
-                            if (pn.charge !== 0) target.updateColor();
+                            if (Math.abs(pn.charge) > EPSILON) target.updateColor();
                             this.sim.totalRadiated -= pn.energy;
                             this.sim.totalRadiatedPx -= pn.energy * pn.vel.x;
                             this.sim.totalRadiatedPy -= pn.energy * pn.vel.y;
@@ -1721,7 +1721,7 @@ export default class Physics {
                             transfers.push({
                                 source: p,
                                 mass: dM,
-                                charge: dM * p.charge / p.mass,
+                                charge: Math.round(dM * p.charge / (p.mass * BOSON_CHARGE)) * BOSON_CHARGE,
                                 spawnX: p.pos.x + l1x * p.radius * 1.2,
                                 spawnY: p.pos.y + l1y * p.radius * 1.2,
                                 vx: p.vel.x + (-l1y) * Math.sqrt(strongestOther.mass / d) * 0.5,

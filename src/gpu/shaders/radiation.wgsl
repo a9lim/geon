@@ -349,13 +349,13 @@ fn pionEmission(@builtin(global_invocation_id) gid: vec3u) {
                 // Species: 50% pi0, 25% pi+, 25% pi-
                 // Neutral emitters cannot emit charged pions (no charge to transfer)
                 let rng = pcgRand((i * 98765u) ^ (u.frameCount * 4321u));
-                var piChg: i32 = 0;
+                var piChg: f32 = 0.0;
                 let emitterIsCharged = abs(particles[i].charge) >= EPSILON;
                 if (rng > 0.5 && emitterIsCharged) {
                     let rng2 = pcgRand((i * 54321u) ^ (u.frameCount * 6789u));
-                    piChg = select(-1, 1, rng2 < 0.5);
+                    piChg = select(-BOSON_CHARGE, BOSON_CHARGE, rng2 < 0.5);
                     // Transfer charge from emitter (particleState is rw)
-                    particles[i].charge -= f32(piChg);
+                    particles[i].charge -= piChg;
                 }
 
                 let offset = max(particleAux[i].radius * SPAWN_OFFSET_MUL, SPAWN_OFFSET_FLOOR);

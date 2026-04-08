@@ -238,7 +238,7 @@ fn checkDisintegration(@builtin(global_invocation_id) gid: vec3<u32>) {
                         evt.spawnVX = p.velWX + (-l1y) * escapeV * 0.5;
                         evt.spawnVY = p.velWY + l1x * escapeV * 0.5;
                         evt.mass = m;
-                        evt.charge = dM * q / m;  // proportional charge transfer
+                        evt.charge = round(dM * q / (m * BOSON_CHARGE)) * BOSON_CHARGE;  // quantized charge transfer
                         events[slot] = evt;
                     }
                 }
