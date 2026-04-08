@@ -98,7 +98,6 @@ export const AXION_COUPLING = 0.05;          // g in L = -(1+g·a)F²/4
 export const HIGGS_AXION_COUPLING = 0.01;    // λ in V_portal = ½λφ²a² (Higgs portal)
 
 // ── Black Hole ──
-export const BH_NAKED_FLOOR = 0.5;           // naked singularity horizon floor (M × this)
 
 // ── Schwinger Discharge ──
 // Vacuum pair production at BH horizon when E > E_cr.
@@ -172,5 +171,5 @@ export function spawnOffset(radius) {
 export function kerrNewmanRadius(M, radiusSq, angVel, charge) {
     const a = INERTIA_K * radiusSq * Math.abs(angVel);
     const disc = M * M - a * a - charge * charge;
-    return disc >= 0 ? M + Math.sqrt(Math.max(0, disc)) : M * BH_NAKED_FLOOR;
+    return disc >= 0 ? M + Math.sqrt(Math.max(0, disc)) : M;
 }

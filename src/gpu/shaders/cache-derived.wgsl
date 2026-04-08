@@ -51,7 +51,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         // kerrNewmanRadius: r+ = M + sqrt(M² - a² - Q²)
         let a = INERTIA_K * bodyRSq * abs(angVel);
         let disc = m * m - a * a - q * q;
-        activeR = select(m * BH_NAKED_FLOOR, m + sqrt(max(0.0, disc)), disc >= 0.0);
+        activeR = select(m, m + sqrt(max(0.0, disc)), disc >= 0.0);
         activeRSq = activeR * activeR;
     }
 

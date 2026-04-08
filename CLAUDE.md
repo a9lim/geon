@@ -69,13 +69,17 @@ Expansion                        [independent, in Engine tab]
 
 Declarative `DEPS` array in `ui.js`, topological evaluation via `updateAllDeps()`.
 
+### Kerr-Newman Horizons
+
+`kerrNewmanRadius(M, radiusSq, angVel, charge)` in `config.js`: `r₊ = M + √(M² - a² - Q²)`. Super-extremal case (`a² + Q² > M²`) clamps to the extremal radius `r₊ = M` — cosmic censorship, no naked singularities. Same logic in `cache-derived.wgsl` and `radiation.wgsl` (3 sites).
+
 ### Schwinger Discharge
 
-Vacuum e⁺e⁻ pair production at BH horizons. Schwinger formula with Kerr-Newman spin correction: `Γ = (e²Q²)/(π²Σ) × exp(-πE_cr Σ/|Q|)`, where `Σ = r₊² + a²` (KN horizon area factor), `e = BOSON_CHARGE`, `m_e = ELECTRON_MASS`, `E_cr = m_e²/e`. Rate coefficient `e²/π²` bakes in area×prefactor (no separate 4πr₊² multiplication). Escaping lepton KE derived from horizon electrostatic potential: `KE = eΦ_H - m_e`, where `Φ_H = |Q|r₊/(r₊² + a²)` for KN. BH mass loss is `ELECTRON_MASS` per event (lepton KE not subtracted — prevents runaway drain). Threshold at `0.5·E_cr` (sub-critical but exponentially suppressed). Requires Black Hole + Coulomb + Radiation (shares evaporation cleanup with Hawking). Accumulates rate per substep into `_schwingerAccum` (CPU) / `RadiationState.schwingerAccum` (GPU); emits when accumulator reaches 1. Same-sign lepton escapes, opposite-sign falls back into BH — net: BH loses `BOSON_CHARGE` of charge and `ELECTRON_MASS` of mass per event. CPU in `integrator.js` (after Hawking radiation), GPU in `radiation.wgsl` (`schwingerDischarge` entry point). GPU leptons use the shared pion pool with `kind=1u`.
+Vacuum pair production at BH horizons. Rate: `Γ = (e²Q²)/(π²Σ) × exp(-πE_cr Σ/|Q|)`, `Σ = r₊² + a²` (KN area factor), `e = BOSON_CHARGE`, `E_cr = m_e²/e`. Threshold `0.5·E_cr`. Lepton KE from horizon potential: `eΦ_H - m_e` where `Φ_H = |Q|r₊/Σ`. Per event: BH loses `BOSON_CHARGE` charge and `ELECTRON_MASS` mass (KE not subtracted — prevents runaway). Same-sign lepton escapes, opposite falls back. Requires BH + Coulomb + Radiation. Accumulates rate per substep; emits at 1. CPU: `integrator.js` (after Hawking). GPU: `radiation.wgsl` `schwingerDischarge`, leptons share pion pool (`kind=1u`).
 
 ### Quantized Boson Charge
 
-Pion and lepton charges are quantized in units of `BOSON_CHARGE` (config.js, default 0.1). Pion charge is `f32` in both CPU and GPU (WGSL Pion struct). Neutral pions have charge exactly `0.0`; charged pions/leptons carry `±BOSON_CHARGE`. Particle charge is also quantized: `addParticle()` (both CPU `main.js` and GPU `gpu-physics.js`) rounds charge to the nearest `BOSON_CHARGE` multiple. Charge conservation is maintained — emission subtracts `±BOSON_CHARGE` from emitter, absorption/decay adds it back. Disintegration (Roche transfer, tidal fragments) quantizes transferred charge. Annihilation checks use `abs(charge) < EPSILON` for neutral and sign comparison for opposite-charge (not integer equality).
+All charges quantized in units of `BOSON_CHARGE` (config.js, default 0.1). `addParticle()` rounds to nearest multiple (CPU `main.js`, GPU `gpu-physics.js`). Pions/leptons carry `±BOSON_CHARGE` or `0.0`. Conservation maintained: emission/absorption/decay/disintegration all transfer in `BOSON_CHARGE` quanta. Annihilation uses `abs(charge) < EPSILON` (not exact equality).
 
 ### Higgs Mass Modulation
 
