@@ -238,18 +238,14 @@ export function setupUI(sim) {
         const bhOn = tEl['blackhole-toggle'].checked;
         const disintOn = tEl['disintegration-toggle'].checked;
         if (bhOn || disintOn) {
-            sim.collisionMode = COL_MERGE;
-            collisionToggles.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-            collisionToggles.querySelector('[data-collision="merge"]').classList.add('active');
+            collisionToggles.querySelector('[data-collision="merge"]').click();
             collisionToggles.classList.add('ctrl-disabled');
         } else {
             collisionToggles.classList.remove('ctrl-disabled');
         }
         // 3. Expansion locks boundary to despawn
         if (tEl['expansion-toggle'].checked) {
-            sim.boundaryMode = BOUND_DESPAWN;
-            boundaryToggles.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-            boundaryToggles.querySelector('[data-boundary="despawn"]').classList.add('active');
+            boundaryToggles.querySelector('[data-boundary="despawn"]').click();
             boundaryToggles.classList.add('ctrl-disabled');
             document.getElementById('topology-group').style.display = 'none';
         } else {
