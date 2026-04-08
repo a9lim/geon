@@ -215,7 +215,6 @@ export default class AxionField extends ScalarField {
      */
     _depositSuperradiance(particles, invCellW, invCellH, bcMode, topoConst, dt) {
         const muA = this.mass;
-        const muASq = muA * muA;
         for (let i = 0; i < particles.length; i++) {
             const p = particles[i];
             if (p.mass <= MIN_MASS) continue;
