@@ -245,7 +245,7 @@ export const REFERENCE = {
 <h3>Kerr-Newman Horizon</h3>
 <p>The outer event horizon radius:</p>
 <p>$$r_+ = M + \\sqrt{M^2 - a^2 - Q^2}$$</p>
-<p>where $a = J/M$ is the spin parameter. The horizon exists only when $M^2 \\geq a^2 + Q^2$; violations would produce a naked singularity, forbidden by cosmic censorship (a minimum radius floor prevents this in the simulation).</p>
+<p>where $a = J/M$ is the spin parameter. The horizon exists only when $M^2 \\geq a^2 + Q^2$; violations would produce a naked singularity, forbidden by cosmic censorship (the simulation clamps to the extremal radius $r_+ = M$).</p>
 
 <h3>Ergosphere</h3>
 <p>The region between the horizon $r_+$ and the static limit:</p>

@@ -284,7 +284,7 @@ fn hawkingRadiation(@builtin(global_invocation_id) gid: vec3u) {
     let newAngVel = particles[i].angW / sqrt(1.0 + particles[i].angW * particles[i].angW * newBodyRSq);
     let newA = INERTIA_K * newBodyRSq * abs(newAngVel);
     let newDisc = newM * newM - newA * newA - Q * Q;
-    let newRadius = select(newM * BH_NAKED_FLOOR, newM + sqrt(max(0.0, newDisc)), newDisc >= 0.0);
+    let newRadius = select(newM, newM + sqrt(max(0.0, newDisc)), newDisc >= 0.0);
 
     var drd = derived[i];
     drd.invMass = select(0.0, 1.0 / newM, newM > EPSILON);
@@ -460,7 +460,7 @@ fn schwingerDischarge(@builtin(global_invocation_id) gid: vec3u) {
     let angvel = angw / sqrt(1.0 + angw * angw * bodyRSq);
     let a = INERTIA_K * bodyRSq * abs(angvel);
     let disc = M * M - a * a - Q * Q;
-    let rPlus = select(M * BH_NAKED_FLOOR, M + sqrt(max(0.0, disc)), disc >= 0.0);
+    let rPlus = select(M, M + sqrt(max(0.0, disc)), disc >= 0.0);
     let rPlusSq = rPlus * rPlus;
     let sigma = rPlusSq + a * a; // KN horizon area factor
     let E_field = absQ / sigma;  // effective KN field strength
@@ -526,7 +526,7 @@ fn schwingerDischarge(@builtin(global_invocation_id) gid: vec3u) {
     let newAngVel = angw / sqrt(1.0 + angw * angw * newBodyRSq);
     let newA = INERTIA_K * newBodyRSq * abs(newAngVel);
     let newDisc = M * M - newA * newA - particles[i].charge * particles[i].charge;
-    let newRadius = select(M * BH_NAKED_FLOOR, M + sqrt(max(0.0, newDisc)), newDisc >= 0.0);
+    let newRadius = select(M, M + sqrt(max(0.0, newDisc)), newDisc >= 0.0);
     var drd = derived[i];
     drd.invMass = select(0.0, 1.0 / M, M > EPSILON);
     drd.radiusSq = newRadius * newRadius;
