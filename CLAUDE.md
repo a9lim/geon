@@ -21,7 +21,7 @@ Interactive particle physics simulator. Boris integrator, BH tree acceleration, 
 
 ## Architecture
 
-**`main.js`** (~838 lines): Simulation class, fixed-timestep loop (PHYSICS_DT = 1/128), backend selection (CPU/GPU), `window.sim` for debugging.
+**`main.js`** (~940 lines): Simulation class, fixed-timestep loop (PHYSICS_DT = 1/128), backend selection (CPU/GPU), `window.sim` for debugging.
 
 **Two interchangeable backends** via `selectBackend()`:
 - **CPU**: `CPUPhysics` (wraps integrator.js) + `CanvasRenderer` (wraps renderer.js)
