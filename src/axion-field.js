@@ -18,7 +18,7 @@
 //    yukMod = 1 + g·a for matter, 1 - g·a for antimatter.
 //    At vacuum (a=0): yukMod = 1 for both → CP conserved (PQ solution).
 
-import { SCALAR_GRID, SCALAR_FIELD_MAX, DEFAULT_AXION_MASS, AXION_COUPLING, HIGGS_AXION_COUPLING, SELFGRAV_PHI_MAX, EPSILON } from './config.js';
+import { SCALAR_GRID, SCALAR_FIELD_MAX, DEFAULT_AXION_MASS, AXION_COUPLING, HIGGS_AXION_COUPLING, SELFGRAV_PHI_MAX, EPSILON, SUPERRADIANCE_COEFF, INERTIA_K, MIN_MASS, kerrNewmanRadius } from './config.js';
 import ScalarField from './scalar-field.js';
 
 // Parse overlay colors from shared palette at module load (0-255 ints)
@@ -45,7 +45,7 @@ export default class AxionField extends ScalarField {
     }
 
     /** Evolve field one timestep using Störmer-Verlet (kick-drift-kick, O(dt²)). */
-    update(dt, particles, boundaryMode, topoConst, domainW, domainH, coulombEnabled = false, yukawaEnabled = false, gravityEnabled = false, softeningSq = 64, otherField = null) {
+    update(dt, particles, boundaryMode, topoConst, domainW, domainH, coulombEnabled = false, yukawaEnabled = false, gravityEnabled = false, softeningSq = 64, otherField = null, blackHoleEnabled = false) {
         if (dt <= 0) return;
         const field = this.field;
         const fieldDot = this.fieldDot;
@@ -66,6 +66,10 @@ export default class AxionField extends ScalarField {
         const src = this._source;
         src.fill(0);
         this._depositSources(particles, invCellW, invCellH, bcMode, topoConst, coulombEnabled, yukawaEnabled);
+
+        if (blackHoleEnabled) {
+            this._depositSuperradiance(particles, invCellW, invCellH, bcMode, topoConst, dt);
+        }
         const cellArea = cellW * cellH;
         const invCellArea = cellArea > EPSILON ? 1 / cellArea : 0;
 
@@ -202,6 +206,49 @@ export default class AxionField extends ScalarField {
             }
             if (s === 0) continue;
             this._depositPQS(this._source, p.pos.x, p.pos.y, s, invCellW, invCellH, bcMode, topoConst);
+        }
+    }
+
+    /** Superradiant instability: spinning BH pumps axion field.
+     *  Rate: Γ = C · (M·μ_a)² · max(Ω_H - μ_a, 0), deposits into _source via PQS.
+     *  Back-reaction: BH angular momentum reduced by dJ = dE/Ω_H.
+     */
+    _depositSuperradiance(particles, invCellW, invCellH, bcMode, topoConst, dt) {
+        const muA = this.mass;
+        const muASq = muA * muA;
+        for (let i = 0; i < particles.length; i++) {
+            const p = particles[i];
+            if (p.mass <= MIN_MASS) continue;
+
+            const M = p.mass;
+            const bodyRSq = p.bodyRadiusSq;
+            const a = INERTIA_K * bodyRSq * Math.abs(p.angVel);
+            const rPlus = kerrNewmanRadius(M, bodyRSq, p.angVel, p.charge);
+            const rPlusSq = rPlus * rPlus;
+            const sigma = rPlusSq + a * a;
+            if (sigma < EPSILON) continue;
+            const omegaH = a / sigma;
+
+            // Superradiance condition: field frequency < horizon angular velocity
+            if (omegaH <= muA) continue;
+
+            const alphaG = M * muA;
+            const rate = SUPERRADIANCE_COEFF * alphaG * alphaG * (omegaH - muA);
+            const dE = rate * dt;
+            if (dE < EPSILON) continue;
+
+            // Deposit into source array (positive = excite field)
+            this._depositPQS(this._source, p.pos.x, p.pos.y, dE, invCellW, invCellH, bcMode, topoConst);
+
+            // Back-reaction: reduce BH angular momentum
+            // dJ = dE / Ω_H, then Δangw = -sign(angw) · dJ / I
+            const I = INERTIA_K * bodyRSq * M;
+            if (I < EPSILON) continue;
+            const dJ = dE / omegaH;
+            p.angw -= Math.sign(p.angw) * dJ / I;
+            // Recompute derived angular velocity
+            const absAngw = Math.abs(p.angw);
+            p.angVel = p.angw / Math.sqrt(1 + absAngw * absAngw * bodyRSq);
         }
     }
 
