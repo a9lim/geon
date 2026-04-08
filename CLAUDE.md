@@ -60,7 +60,7 @@ Forces:                        Physics:
   Coulomb                        Spin-Orbit           [requires Magnetic or GM]
     -> Magnetic                  Radiation             [requires Gravity, Coulomb, or Yukawa]
   Yukawa               [independent]  Boson Interaction [requires BH + (Gravity OR Coulomb)]
-  Axion                [requires Coulomb or Yukawa]
+  Axion                [requires Coulomb, Yukawa, or BH]
   Higgs                [independent]
 Disintegration                   [requires Gravity, locks collision to Merge] **HIDDEN**
 Barnes-Hut                       [independent]
@@ -76,6 +76,10 @@ Declarative `DEPS` array in `ui.js`, topological evaluation via `updateAllDeps()
 ### Schwinger Discharge
 
 Vacuum pair production at BH horizons. Rate: `Γ = (e²Q²)/(π²Σ) × exp(-πE_cr Σ/|Q|)`, `Σ = r₊² + a²` (KN area factor), `e = BOSON_CHARGE`, `E_cr = m_e²/e`. Threshold `0.5·E_cr`. Lepton KE from horizon potential: `eΦ_H - m_e` where `Φ_H = |Q|r₊/Σ`. Per event: BH loses `BOSON_CHARGE` charge and `ELECTRON_MASS` mass (KE not subtracted — prevents runaway). Same-sign lepton escapes, opposite falls back. Requires BH + Coulomb + Radiation. Accumulates rate per substep; emits at 1. CPU: `integrator.js` (after Hawking). GPU: `radiation.wgsl` `schwingerDischarge`, leptons share pion pool (`kind=1u`).
+
+### Superradiance
+
+Axion field amplification by spinning BHs. Rate: `Γ = SUPERRADIANCE_COEFF · (M·μ_a)² · max(Ω_H - μ_a, 0)`, where `Ω_H = a/Σ` is horizon angular velocity. Phenomenological α² scaling (real rate ∝ α⁸, too steep for interactive sim). Back-reaction: BH loses angular momentum `dJ = dE/Ω_H`, reducing `angw`. Natural saturation when `Ω_H ≤ μ_a`. No accumulator (continuous deposit, not discrete event). Deposits into axion `_source` array via PQS at BH position. Requires BH + Axion. CPU: `axion-field.js` `_depositSuperradiance()` (called inside `update()`). GPU: `field-deposit.wgsl` `depositSuperradiance`, dispatched between `depositAxionSource` and `finalizeDeposit`.
 
 ### Quantized Boson Charge
 
