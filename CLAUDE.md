@@ -21,7 +21,7 @@ Interactive particle physics simulator. Boris integrator, BH tree acceleration, 
 
 ## Architecture
 
-**`main.js`** (~940 lines): Simulation class, fixed-timestep loop (PHYSICS_DT = 1/128), backend selection (CPU/GPU), `window.sim` for debugging.
+**`main.js`** (~990 lines): Simulation class, fixed-timestep loop (PHYSICS_DT = 1/128), backend selection (CPU/GPU), `window.sim` for debugging.
 
 **Two interchangeable backends** via `selectBackend()`:
 - **CPU**: `CPUPhysics` (wraps integrator.js) + `CanvasRenderer` (wraps renderer.js)
@@ -144,7 +144,7 @@ UI toggle hidden via `style="display:none"` — still activatable via presets (R
 - `_peAccum` PE is accumulated inline during `pairForce()` — `potential.js` is a fallback only for preset-load recomputation
 - `forceRadiation` cleared for all particles before substep loop
 - History recording strided at HISTORY_STRIDE=64; both CPU and GPU use subtraction (preserves remainder)
-- `.mode-toggles` sets `display: grid` overriding `hidden` — use `style.display`
+- `.mode-toggles` sets `display: flex` overriding `hidden` — use `style.display`
 - External field trig cached once per frame via `_cacheExternalFields()`
 - Lazy field init: Higgs/Axion fields are `null` until first toggle-on
 - Bounce (Hertz) is always quadtree-accelerated when BH on, O(n²) when off — do not early-return when `root < 0`

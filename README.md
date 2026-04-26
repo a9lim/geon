@@ -74,7 +74,7 @@ All charges quantized in units of BOSON_CHARGE (0.1). Emission, absorption, deca
 
 ## Controls
 
-**Mouse**: Click to spawn particles. Drag to launch with velocity. Right-click to select or delete. Scroll to zoom, middle-drag to pan. Hover for a particle tooltip (mass, charge, spin, speed).
+**Mouse**: Click to spawn particles. Drag to launch with velocity. Right-click to spawn antimatter (or to select or delete a particle, depending on whether the click hits a particle of matching type). Scroll to zoom, middle-drag to pan. Hover for a particle tooltip (mass, charge, spin, speed).
 
 **Touch**: Tap to spawn. Two-finger pinch to zoom. Drag to pan.
 
@@ -82,12 +82,13 @@ All charges quantized in units of BOSON_CHARGE (0.1). Emission, absorption, deca
 
 ## Sidebar
 
-Four tabs with full simulation control:
+Three tabs with full simulation control:
 
-- **Settings**: 16 physics toggles with declarative dependency graph, spawn parameter sliders (mass, charge, spin), preset selector, external field controls, and mass sliders for the Yukawa, Higgs, and axion fields
-- **Engine**: backend toggle (GPU or CPU), collision mode (pass, merge, or bounce), boundary mode (despawn, bounce, or loop), topology (torus, Klein, or RP^2), sim speed, overlays (trails, velocity vectors, acceleration vectors, acceleration components, potential field heatmap)
-- **Stats**: energy breakdown (linear KE, spin KE, rest mass, potential, field, radiated) with conservation drift %, momentum (particle, field, and radiated) with drift %, angular momentum (orbital and spin) with drift %, 11-component per-particle force breakdown
+- **Settings**: preset selector, spawn parameter sliders (mass, charge, spin), force toggles (gravity, gravitomagnetic, Coulomb, magnetic, Yukawa, axion, Higgs) with mass sliders for the Yukawa, Higgs, and axion fields, physics toggles (relativity, 1PN, black hole, spin-orbit, radiation, boson interaction), collision mode (pass, merge, or bounce), boundary mode (despawn, loop, or bounce), topology (torus, Klein, or RP^2), expansion toggle with Hubble parameter, and external field controls (gravity, electric, magnetic Bz)
+- **Stats**: energy breakdown (linear KE, angular KE, potential, field, radiated, mass) with conservation drift %, momentum (particle, field, and radiated) with drift %, angular momentum (orbital and spin) with drift %, 11-component per-particle force breakdown
 - **Particle**: selected particle details, phase space plot (r vs v_r, 512-sample ring buffer), effective potential V_eff(r) curve (200 samples, all active forces)
+
+Backend selection is automatic, with a `?cpu=1` query parameter to force CPU. Sim speed, play or pause, step, reset, save, load, theme, and antimatter mode all live on the top toolbar. Overlays (trails, velocity vectors, acceleration vectors, acceleration components, potential field heatmap) and the Barnes-Hut toggle live in the gear-icon settings dropdown.
 
 ## Analysis Tools
 
@@ -98,7 +99,7 @@ Four tabs with full simulation control:
 
 ## Save & Load
 
-Quick-save and quick-load (in-memory), download as JSON, or upload via file picker and drag-drop. Saves particle state, all 16 physics toggles, slider values, collision, boundary, and topology modes, and camera position. GPU state is async-readback compatible with field downsampling (128×128 to 64×64).
+Quick-save and quick-load (localStorage), download as JSON, or upload via file picker and drag-drop. Saves particle state, all 16 physics toggles, slider values, collision, boundary, and topology modes, and camera position. GPU state is async-readback compatible with field downsampling (128×128 to 64×64).
 
 ## Running Locally
 
@@ -111,7 +112,7 @@ Serve from the repository root, because shared design files load via absolute pa
 
 ## Tech
 
-Vanilla JavaScript with no dependencies. 40 ES6 modules (~20,000 lines) and 52 WGSL compute and render shaders (~12,000 lines).
+Vanilla JavaScript with no dependencies. 40 ES6 modules (~21,000 lines) and 53 WGSL compute and render shaders (~11,000 lines).
 
 **CPU backend**: Canvas 2D rendering, pairwise or Barnes-Hut O(N log N) force evaluation, up to 128 particles, 1,024 photons, 256 pions, and 256 leptons.
 
