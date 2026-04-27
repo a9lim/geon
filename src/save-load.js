@@ -267,12 +267,12 @@ export function uploadState(sim, onComplete) {
             try {
                 const state = JSON.parse(reader.result);
                 if (loadState(state, sim)) {
-                    showToast('State loaded');
+                    showToast((window._i18n && window._i18n.t('toast.stateLoaded')) || 'State loaded');
                     if (onComplete) onComplete();
                 } else {
-                    showToast('Invalid state file');
+                    showToast((window._i18n && window._i18n.t('toast.invalidState')) || 'Invalid state file');
                 }
-            } catch { showToast('Failed to parse state file'); }
+            } catch { showToast((window._i18n && window._i18n.t('toast.parseFailed')) || 'Failed to parse state file'); }
         };
         reader.readAsText(file);
     });
@@ -282,17 +282,17 @@ export function uploadState(sim, onComplete) {
 export async function quickSave(sim) {
     const state = await saveState(sim);
     localStorage.setItem('nohair-quicksave', JSON.stringify(state));
-    showToast('Quick saved');
+    showToast((window._i18n && window._i18n.t('toast.quickSaved')) || 'Quick saved');
 }
 
 export function quickLoad(sim, onComplete) {
     const json = localStorage.getItem('nohair-quicksave');
-    if (!json) { showToast('No quick save found'); return; }
+    if (!json) { showToast((window._i18n && window._i18n.t('toast.noQuickSave')) || 'No quick save found'); return; }
     try {
         const state = JSON.parse(json);
         if (loadState(state, sim)) {
-            showToast('Quick loaded');
+            showToast((window._i18n && window._i18n.t('toast.quickLoaded')) || 'Quick loaded');
             if (onComplete) onComplete();
         }
-    } catch { showToast('Failed to load quick save'); }
+    } catch { showToast((window._i18n && window._i18n.t('toast.quickLoadFailed')) || 'Failed to load quick save'); }
 }

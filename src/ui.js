@@ -32,13 +32,20 @@ export function setupUI(sim) {
     // ─── Panel toggle ───
     _toolbar.initSidebar(panelToggle, panel, document.getElementById('panelClose'));
 
+    // i18n helper bound to global runtime; falls back to passed default.
+    const _T = (k, fb) => (window._i18n ? window._i18n.t(k, fb) : (fb != null ? fb : k));
+
     // ─── Antimatter mode toggle ───
     const modeBtn = document.getElementById('mode-btn');
+    const _syncModeBtnLabels = () => {
+        modeBtn.setAttribute('aria-label', antimatterMode ? _T('topbar.modeAntimatter') : _T('topbar.modeNormal'));
+        modeBtn.title = antimatterMode ? _T('topbar.modeAntimatterTitle') : _T('topbar.modeNormalTitle');
+    };
+    _syncModeBtnLabels();
     modeBtn.addEventListener('click', () => {
         antimatterMode = !antimatterMode;
         modeBtn.setAttribute('aria-pressed', String(antimatterMode));
-        modeBtn.setAttribute('aria-label', antimatterMode ? 'Antimatter mode' : 'Normal mode');
-        modeBtn.title = antimatterMode ? 'Antimatter mode (X)' : 'Normal mode (X)';
+        _syncModeBtnLabels();
         const svg = modeBtn.querySelector('svg');
         let vl = svg.querySelector('.vert-line');
         if (antimatterMode && !vl) {
@@ -57,7 +64,15 @@ export function setupUI(sim) {
     // ─── Mobile hint bar ───
     if (window.matchMedia('(pointer: coarse)').matches) {
         const hintEl = document.getElementById('hint-bar');
-        if (hintEl) hintEl.textContent = 'Tap to Spawn \u00b7 Pinch to Zoom \u00b7 X to Toggle Mode';
+        const hintP = hintEl ? hintEl.querySelector('p') : null;
+        if (hintP) {
+            // Re-key the paragraph so applyDOM picks the mobile string up
+            // on subsequent language switches as well.
+            hintP.dataset.i18n = 'hint.mobile';
+            hintP.textContent = _T('hint.mobile');
+        } else if (hintEl) {
+            hintEl.textContent = _T('hint.mobile');
+        }
     }
 
     // ─── Preset dropdown ───
@@ -79,7 +94,7 @@ export function setupUI(sim) {
         sim.camera.reset(sim.domainW / 2, sim.domainH / 2, WORLD_SCALE);
         sim.stats.resetBaseline();
         sim._dirty = true;
-        showToast('Simulation cleared');
+        showToast(_T('toast.cleared', 'Simulation cleared'));
         _haptics.trigger('warning');
     });
 
@@ -586,104 +601,126 @@ export function setupUI(sim) {
     const zoomReset = () => sim.camera.reset(sim.domainW / 2, sim.domainH / 2, WORLD_SCALE);
 
     // ─── Keyboard shortcuts ───
-    const shortcuts = [
-        { key: 'Space', label: 'Pause / Play', group: 'Simulation', action: togglePause },
-        { key: 'R', label: 'Reset simulation', group: 'Simulation', action: () => document.getElementById('clearBtn').click() },
-        { key: '.', label: 'Speed up', group: 'Simulation', action: cycleSpeed },
-        { key: ',', label: 'Slow down', group: 'Simulation', action: decycleSpeed },
-        { key: '/', label: 'Step forward', group: 'Simulation', action: stepSim },
+    // Built as a function so labels/groups can be re-resolved through _i18n
+    // each time the language changes (initShortcuts captures by value).
+    const G_SIM   = () => _T('shortcut.group.simulation', 'Simulation');
+    const G_VIEW  = () => _T('shortcut.group.view',       'View');
+    const G_SL    = () => _T('shortcut.group.saveload',   'Save / Load');
+    const G_PRES  = () => _T('preset.group.gravity',      'Presets'); // not perfect; see note below
+    // Note: presets shown in shortcut help reuse the preset-name strings
+    // directly. The "Presets" header is intentionally rendered as the gravity
+    // group label so that it shows "重力" in JA — close enough for v1, since
+    // the shortcut help groups by preset category.
+    const _buildShortcuts = () => [
+        { key: 'Space', label: _T('shortcut.pausePlay',     'Pause / Play'),     group: G_SIM(), action: togglePause },
+        { key: 'R',     label: _T('shortcut.resetSim',      'Reset simulation'), group: G_SIM(), action: () => document.getElementById('clearBtn').click() },
+        { key: '.',     label: _T('shortcut.speedUp',       'Speed up'),         group: G_SIM(), action: cycleSpeed },
+        { key: ',',     label: _T('shortcut.slowDown',      'Slow down'),        group: G_SIM(), action: decycleSpeed },
+        { key: '/',     label: _T('shortcut.stepForward',   'Step forward'),     group: G_SIM(), action: stepSim },
         ...PRESET_ORDER.slice(0, 9).map((key, i) => ({
             key: String(i + 1),
-            label: PRESETS[key].name,
-            group: 'Presets',
+            label: _T('preset.' + key + '.name', PRESETS[key].name),
+            group: G_PRES(),
             action: () => { loadPreset(key, sim); document.getElementById('preset-select').value = key; sim._dirty = true; },
         })),
-        { key: 'V', label: 'Toggle velocity vectors', group: 'View', action: () => {
+        { key: 'V',          label: _T('shortcut.toggleVel',         'Toggle velocity vectors'),       group: G_VIEW(), action: () => {
             const el = document.getElementById('velocityToggle');
             el.checked = !el.checked;
             sim.renderer.showVelocity = el.checked;
             sim._dirty = true;
         }},
-        { key: 'F', label: 'Toggle acceleration vectors', group: 'View', action: () => {
+        { key: 'F',          label: _T('shortcut.toggleAccel',       'Toggle acceleration vectors'),   group: G_VIEW(), action: () => {
             const el = document.getElementById('forceToggle');
             el.checked = !el.checked;
             sim.renderer.showForce = el.checked;
             sim._dirty = true;
         }},
-        { key: 'C', label: 'Toggle acceleration components', group: 'View', action: () => {
+        { key: 'C',          label: _T('shortcut.toggleAccelComp',   'Toggle acceleration components'), group: G_VIEW(), action: () => {
             const el = document.getElementById('forceComponentsToggle');
             el.checked = !el.checked;
             sim.renderer.showForceComponents = el.checked;
             sim._dirty = true;
         }},
-        { key: 'T', label: 'Toggle theme', group: 'View', action: toggleTheme },
-        { key: 'S', label: 'Toggle sidebar', group: 'View', action: () => _toolbar.toggleSidebar() },
-        { key: 'Escape', label: 'Close panel', group: 'View', action: () => _toolbar.closeSidebar() },
-        { key: '[', label: 'Previous tab', group: 'View', action: () => cycleTab(-1) },
-        { key: ']', label: 'Next tab', group: 'View', action: () => cycleTab(1) },
-        { key: '=', label: 'Zoom in', group: 'View', action: zoomIn },
-        { key: '-', label: 'Zoom out', group: 'View', action: zoomOut },
-        { key: '0', label: 'Reset zoom', group: 'View', action: zoomReset },
-        { key: 'X', label: 'Toggle antimatter mode', group: 'Simulation', action: () => document.getElementById('mode-btn').click() },
-        { key: 'Ctrl+S', label: 'Quick save', group: 'Save / Load', action: () => quickSave(sim) },
-        { key: 'Ctrl+L', label: 'Quick load', group: 'Save / Load', action: () => { quickLoad(sim); sim._dirty = true; } },
-        { key: 'Ctrl+Shift+S', label: 'Download state', group: 'Save / Load', action: () => downloadState(sim) },
-        { key: 'Ctrl+Shift+L', label: 'Upload state', group: 'Save / Load', action: () => { uploadState(sim); sim._dirty = true; } },
+        { key: 'T',          label: _T('shortcut.toggleTheme',       'Toggle theme'),                  group: G_VIEW(), action: toggleTheme },
+        { key: 'S',          label: _T('shortcut.toggleSidebar',     'Toggle sidebar'),                group: G_VIEW(), action: () => _toolbar.toggleSidebar() },
+        { key: 'Escape',     label: _T('shortcut.closePanel',        'Close panel'),                   group: G_VIEW(), action: () => _toolbar.closeSidebar() },
+        { key: '[',          label: _T('shortcut.prevTab',           'Previous tab'),                  group: G_VIEW(), action: () => cycleTab(-1) },
+        { key: ']',          label: _T('shortcut.nextTab',           'Next tab'),                      group: G_VIEW(), action: () => cycleTab(1) },
+        { key: '=',          label: _T('shortcut.zoomIn',            'Zoom in'),                       group: G_VIEW(), action: zoomIn },
+        { key: '-',          label: _T('shortcut.zoomOut',           'Zoom out'),                      group: G_VIEW(), action: zoomOut },
+        { key: '0',          label: _T('shortcut.zoomReset',         'Reset zoom'),                    group: G_VIEW(), action: zoomReset },
+        { key: 'X',          label: _T('shortcut.toggleAntimatter',  'Toggle antimatter mode'),        group: G_SIM(),  action: () => document.getElementById('mode-btn').click() },
+        { key: 'Ctrl+S',     label: _T('shortcut.quickSave',         'Quick save'),                    group: G_SL(),   action: () => quickSave(sim) },
+        { key: 'Ctrl+L',     label: _T('shortcut.quickLoad',         'Quick load'),                    group: G_SL(),   action: () => { quickLoad(sim); sim._dirty = true; } },
+        { key: 'Ctrl+Shift+S', label: _T('shortcut.downloadState',   'Download state'),                group: G_SL(),   action: () => downloadState(sim) },
+        { key: 'Ctrl+Shift+L', label: _T('shortcut.uploadState',     'Upload state'),                  group: G_SL(),   action: () => { uploadState(sim); sim._dirty = true; } },
     ];
+    let shortcuts = _buildShortcuts();
 
+    let _shortcutHandle = null;
     if (typeof initShortcuts === 'function') {
-        initShortcuts(shortcuts, { helpTitle: 'Keyboard Shortcuts' });
+        _shortcutHandle = initShortcuts(shortcuts, { helpTitle: _T('shortcut.help.title', 'Keyboard Shortcuts') });
     }
 
+    // ─── About panel ───
+    let _aboutHandle = null;
+    const _buildAboutConfig = () => ({
+        title: _T('about.title', 'Geon'),
+        lastUpdated: '2026-04-27',
+        description: _T('about.description'),
+        controls: [
+            { label: _T('about.controls.addParticle'),        value: _T('about.controls.addParticleVal') },
+            { label: _T('about.controls.fling'),              value: _T('about.controls.flingVal') },
+            { label: _T('about.controls.spawnAntimatter'),    value: _T('about.controls.spawnAntimatterVal') },
+            { label: _T('about.controls.pan'),                value: _T('about.controls.panVal') },
+            { label: _T('about.controls.zoom'),               value: _T('about.controls.zoomVal') },
+            { label: _T('about.controls.select'),             value: _T('about.controls.selectVal') },
+        ],
+        shortcuts: shortcuts,
+        repo: 'https://github.com/a9lim/geon',
+    });
     if (typeof initAboutPanel === 'function') {
-        initAboutPanel({
-            title: 'Geon',
-            lastUpdated: '2026-04-27',
-            description: 'Spawn particles and watch them interact through gravity, electromagnetism, and exotic forces. Fling matter into orbit, toggle scalar fields, switch between 15 preset scenarios, and explore relativistic physics in real time.',
-            controls: [
-                { label: 'Add particle', value: 'Click on canvas' },
-                { label: 'Fling particle', value: 'Click + drag + release' },
-                { label: 'Spawn antimatter', value: 'Right-click on canvas' },
-                { label: 'Pan', value: 'Middle-click + drag' },
-                { label: 'Zoom', value: 'Scroll wheel / pinch' },
-                { label: 'Select particle', value: 'Click on particle' },
-            ],
-            shortcuts: shortcuts,
-            repo: 'https://github.com/a9lim/geon',
-        });
+        _aboutHandle = initAboutPanel(_buildAboutConfig());
     }
 
     // ─── Info tips ───
-    const infoData = {
-        energy: { title: 'Energy', body: 'Sum of kinetic, potential, field, and radiated energy. "Drift" tracks cumulative numerical error as a percentage of initial energy.' },
-        conserved: { title: 'Conserved Quantities', body: 'Total momentum and angular momentum, including particle, field, and radiated contributions. Exactly conserved with gravity + Coulomb only in pairwise mode.' },
-        spin: { title: 'Spin', body: 'Angular velocity of each particle as a solid sphere ($I = \\frac{2}{5}mr^2$). Determines magnetic moment and angular momentum. Positive = clockwise.' },
-        gravity: { title: 'Gravity', body: 'Attractive $1/r^2$ force between all masses ($F = m_1 m_2/r^2$, $G=1$). The foundation for orbits, binaries, and tidal effects.' },
-        coulomb: { title: 'Coulomb', body: 'Electrostatic $1/r^2$ force ($F = q_1 q_2/r^2$). Like charges repel, opposites attract. Combine with gravity for atom-like bound states.' },
-        magnetic: { title: 'Magnetic', body: 'Lorentz force on moving charges ($q\\mathbf{v}\\times\\mathbf{B}$) plus dipole interactions from spinning charges ($3\\mu_1\\mu_2/r^4$). Requires Coulomb.' },
-        gravitomag: { title: 'Gravitomagnetic', body: 'GR analog of magnetism for masses. Co-rotating masses attract (opposite to EM dipoles). Includes frame-dragging torque. Requires Gravity.' },
-        relativity: { title: 'Relativity', body: 'Enforces $|v| < c$ via proper velocity $\\mathbf{w} = \\gamma\\mathbf{v}$. Enables signal delay \u2014 forces propagate at lightspeed.' },
-        radiation: { title: 'Radiation', body: 'Accelerating charges emit photons (Larmor); orbiting masses emit gravitational waves (quadrupole); Yukawa interactions emit pions (scalar Larmor). Causes orbital decay. Requires Gravity, Coulomb, or Yukawa.' },
-        disintegration: { title: 'Disintegration', body: 'Particles fragment when tidal, centrifugal, and Coulomb stresses exceed self-gravity. Includes Roche lobe mass transfer. Requires Gravity.' },
-        spinorbit: { title: 'Spin\u2013Orbit', body: 'Couples translation and rotation via field gradients: Stern\u2013Gerlach (EM) and Mathisson\u2013Papapetrou (gravity) kicks on spinning particles. Requires Magnetic or GM.' },
-        barneshut: { title: 'Barnes\u2013Hut', body: '$O(N\\log N)$ quadtree approximation ($\\theta = 0.5$). When off, exact $O(N^2)$ pairwise gives machine-precision conservation.' },
-        collision: { title: 'Collisions', body: '<b>Pass</b> \u2014 no contact. <b>Bounce</b> \u2014 Hertz elastic repulsion with friction. <b>Merge</b> \u2014 inelastic coalescence conserving mass, charge, and momentum.' },
-        boundary: { title: 'Boundaries', body: '<b>Despawn</b> \u2014 removed at edges. <b>Loop</b> \u2014 periodic wrapping (opens topology selector). <b>Bounce</b> \u2014 elastic wall repulsion with friction.' },
-        topology: { title: 'Topology', body: '<b>Torus</b> \u2014 normal wrapping. <b>Klein bottle</b> \u2014 y-wrap mirrors x (non-orientable). <b>RP\u00B2</b> \u2014 both axes flip (non-orientable).' },
-        charge: { title: 'Charge', body: 'Quantized in units of the boson charge $e$. Rounded to nearest $e$ on creation. All transfer processes (emission, decay, Schwinger discharge, disintegration) conserve charge in $\\pm e$ steps.' },
-        blackhole: { title: 'Black Hole', body: 'Kerr\u2013Newman horizons ($r_+ = M+\\sqrt{M^2-a^2-Q^2}$), ergospheres, Hawking radiation, and Schwinger discharge. Extremal BHs stop radiating. No hair: antimatter distinction is erased. Requires Relativity + Gravity.' },
-        onepn: { title: '1PN Corrections', body: '$O(v^2/c^2)$ post-Newtonian terms: EIH perihelion precession, Darwin EM corrections, Bazanski cross-terms, scalar Breit (Yukawa). Requires Relativity.' },
-        yukawa: { title: 'Yukawa', body: 'Screened $e^{-\\mu r}/r$ potential \u2014 gravity-like at short range, vanishes exponentially beyond $1/\\mu$. Models massive-mediator forces.' },
-        axion: { title: 'Axion Field', body: 'Quadratic potential ($V=\\frac{1}{2}m_a^2 a^2$) with scalar $aF^2$ EM coupling and pseudoscalar Peccei\u2013Quinn Yukawa coupling. Spinning BHs amplify the field via superradiance when $\\Omega_H > m_a$. Requires Coulomb or Yukawa (couplings) or Black Hole (superradiance).' },
-        expansion: { title: 'Expansion', body: 'Hubble flow ($v_H = Hr$) from domain center. Bound systems resist expansion; unbound particles drift apart.' },
-        higgs: { title: 'Higgs Field', body: 'Scalar field with Mexican hat potential. Particles acquire mass from local field value ($m = m_0|\\phi|$). High temperature restores symmetry \u2014 particles become massless.' },
-        external: { title: 'External Fields', body: '<b>Gravity</b> \u2014 uniform $\\mathbf{F}=m\\mathbf{g}$. <b>Electric</b> \u2014 uniform $\\mathbf{F}=q\\mathbf{E}$. <b>Magnetic $B_z$</b> \u2014 cyclotron motion via Boris rotation.' },
-        pion: { title: 'Pions', body: 'Massive Yukawa force carriers ($m_\\pi = \\mu$). Emitted via scalar Larmor radiation ($P = g^2 m^2 a^2/3$). Travel at $v < c$, experience gravitational deflection with factor $(1+v^2)$, and decay into photons.' },
-        fieldExcitation: { title: 'Scalar Field Dynamics', body: 'Merge collisions deposit Gaussian wave packets into active scalar fields. When gravity is on, field energy density gravitates particles and curves its own wave equation (weak-field GR).' },
-        bosoninter: { title: 'Boson Interaction', body: 'Boson\u2194boson gravity and pion\u2194pion Coulomb via Barnes\u2013Hut tree walks. Requires Barnes\u2013Hut + (Gravity or Coulomb). Includes \u03C0\u207A\u03C0\u207B annihilation into photon pairs.' },
+
+
+    const INFO_KEYS = [
+        'energy', 'conserved', 'spin', 'gravity', 'coulomb', 'magnetic',
+        'gravitomag', 'relativity', 'radiation', 'disintegration', 'spinorbit',
+        'barneshut', 'collision', 'boundary', 'topology', 'charge', 'blackhole',
+        'onepn', 'yukawa', 'axion', 'expansion', 'higgs', 'external', 'pion',
+        'fieldExcitation', 'bosoninter',
+    ];
+    const _buildInfoData = () => {
+        const data = {};
+        for (const k of INFO_KEYS) {
+            data[k] = {
+                title: _T('info.' + k + '.title'),
+                body:  _T('info.' + k + '.body'),
+            };
+        }
+        return data;
     };
 
-    registerInfoTips(infoData);
+    // We bypass registerInfoTips and call createInfoTip directly so we can
+    // track per-trigger cleanup functions and rebuild popovers on lang change
+    // without piling up duplicate event listeners.
+    let _infoCleanups = [];
+    const _registerInfoTipsLocal = () => {
+        for (const c of _infoCleanups) { try { c(); } catch (e) { /* ignore */ } }
+        _infoCleanups = [];
+        const data = _buildInfoData();
+        const triggers = document.querySelectorAll('.info-trigger[data-info]');
+        for (let i = 0; i < triggers.length; i++) {
+            const k = triggers[i].dataset.info;
+            if (!data[k]) continue;
+            const cleanup = createInfoTip(triggers[i], data[k]);
+            if (typeof cleanup === 'function') _infoCleanups.push(cleanup);
+        }
+    };
+    _registerInfoTipsLocal();
 
     // ─── Reference overlay (Shift+click / long-press on info buttons) ───
     const openReference = initReferenceOverlay(
@@ -694,4 +731,26 @@ export function setupUI(sim) {
         REFERENCE
     );
     bindReferenceTriggers(openReference);
+
+    // ─── Language change handler ───
+    // Re-translate dynamic content not covered by data-i18n attributes.
+    if (window._i18n) {
+        window._i18n.onChange(() => {
+            _registerInfoTipsLocal();
+            if (typeof openReference.clearCache === 'function') openReference.clearCache();
+            // Rebuild shortcuts (labels reread through _T on rebuild) and
+            // re-register the keydown handler so the keyMap is fresh too.
+            shortcuts = _buildShortcuts();
+            if (_shortcutHandle && typeof _shortcutHandle.destroy === 'function' && typeof initShortcuts === 'function') {
+                _shortcutHandle.destroy();
+                _shortcutHandle = initShortcuts(shortcuts, { helpTitle: _T('shortcut.help.title', 'Keyboard Shortcuts') });
+            }
+            // About panel: destroy + recreate. _buildAboutConfig closes over
+            // `shortcuts` (let-binding), so the new array is picked up here.
+            if (_aboutHandle && typeof _aboutHandle.destroy === 'function' && typeof initAboutPanel === 'function') {
+                _aboutHandle.destroy();
+                _aboutHandle = initAboutPanel(_buildAboutConfig());
+            }
+        });
+    }
 }

@@ -581,7 +581,10 @@ export function loadPreset(name, sim) {
     // 6. Spawn particles
     preset.spawn(sim);
 
-    // 7. Reset baseline and notify
+    // 7. Reset baseline and notify (i18n: prefer translated preset name)
     sim.stats.resetBaseline();
-    showToast(preset.name);
+    const localized = (typeof window !== 'undefined' && window._i18n)
+        ? window._i18n.t('preset.' + name + '.name', preset.name)
+        : preset.name;
+    showToast(localized);
 }

@@ -9,6 +9,7 @@ import PhasePlot from './src/phase-plot.js';
 import EffectivePotentialPlot from './src/effective-potential.js';
 import StatsDisplay from './src/stats-display.js';
 import { setupUI } from './src/ui.js';
+import { init as initI18n, setLang as setI18nLang, getLang as getI18nLang, t as tI18n, onChange as onI18nChange } from './src/i18n.js';
 import { TWO_PI, WORLD_SCALE, ZOOM_MIN, ZOOM_MAX, WHEEL_ZOOM_IN, DEFAULT_SPEED_SCALE, SPEED_OPTIONS, DEFAULT_SPEED_INDEX, PHOTON_LIFETIME, LEPTON_LIFETIME, PION_DECAY_PROB, CHARGED_PION_DECAY_PROB, SPAWN_MIN_ENERGY, PHYSICS_DT, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, SOFTENING_SQ, BH_SOFTENING_SQ, MAX_SPEED_RATIO, MAX_FRAME_DT, ACCUMULATOR_CAP, SPAWN_COUNT, spawnOffset, SPAWN_OFFSET_FLOOR, PAIR_PROD_MIN_ENERGY, PAIR_PROD_RADIUS, PAIR_PROD_PROB, PAIR_PROD_MAX_PARTICLES, PAIR_PROD_MIN_AGE, COL_PASS, BOUND_DESPAWN, TORUS, HEATMAP_INTERVAL_MASK, HEATMAP_GRID, GPU_HEATMAP_GRID, STATS_THROTTLE_MASK, SIDEBAR_THROTTLE_MASK, MAX_PARTICLES, BOSON_CHARGE, ELECTRON_MASS, MAX_LEPTONS, INERTIA_K, EPSILON } from './src/config.js';
 import MasslessBoson from './src/massless-boson.js';
 import Pion from './src/pion.js';
@@ -317,9 +318,9 @@ class Simulation {
                         // Restore from auto-save if available
                         if (_gpuAutoSave) {
                             loadState(_gpuAutoSave, this);
-                            showToast('GPU lost \u2014 restored from auto-save (CPU mode)');
+                            showToast(tI18n('gpu.lostRestored', 'GPU lost \u2014 restored from auto-save (CPU mode)'));
                         } else {
-                            showToast('GPU lost \u2014 switched to CPU mode');
+                            showToast(tI18n('gpu.lostSwitched', 'GPU lost \u2014 switched to CPU mode'));
                         }
 
                         this._dirty = true;
@@ -356,7 +357,18 @@ class Simulation {
     init() {
         this.resize();
         window.addEventListener('resize', () => this.resize());
+
+        // Initialize i18n before UI setup so static labels are correct on first paint.
+        initI18n();
+        this._wireLangButton();
+        this._wrapSharedToolbar();
+
         setupUI(this);
+
+        // Re-apply DOM translations after UI setup in case any modules
+        // mutated text content during their wiring (e.g. mode-btn label).
+        // Also re-translate on language change so dynamic content updates.
+        if (window._i18n) window._i18n.applyDOM();
 
         // Save/Load buttons
         document.getElementById('saveBtn').addEventListener('click', () => quickSave(this));
@@ -382,6 +394,73 @@ class Simulation {
         });
 
         this._scheduleLoop();
+    }
+
+    /**
+     * Wrap shared-toolbar APIs that bake English strings into aria/title.
+     * The shared module is consumed by every sim, so we don't fork it —
+     * instead we run our translation pass over the affected button after
+     * each call. Idempotent and safe.
+     */
+    _wrapSharedToolbar() {
+        if (typeof _toolbar === 'undefined') return;
+        const origPlay = _toolbar.updatePlayBtn;
+        const origSpeed = _toolbar.updateSpeedBtn;
+        const _retranslatePlay = (btn, playing) => {
+            btn.setAttribute('aria-label', tI18n(playing ? 'topbar.pauseAria' : 'topbar.playAria'));
+            btn.title = tI18n(playing ? 'topbar.pause' : 'topbar.play');
+        };
+        const _retranslateSpeed = (btn, speed) => {
+            btn.title = tI18n('topbar.speedTitle', 'Speed') + ': ' + speed + 'x';
+            btn.setAttribute('aria-label', tI18n('topbar.speed'));
+        };
+        _toolbar.updatePlayBtn = function(btn, playing) {
+            origPlay.call(_toolbar, btn, playing);
+            _retranslatePlay(btn, playing);
+            // Stash state so we can re-translate on language change.
+            btn.dataset._playing = playing ? '1' : '0';
+        };
+        _toolbar.updateSpeedBtn = function(btn, speed) {
+            origSpeed.call(_toolbar, btn, speed);
+            _retranslateSpeed(btn, speed);
+            btn.dataset._speed = String(speed);
+        };
+        // On language change, re-apply current state to play/speed buttons.
+        onI18nChange(() => {
+            const playBtn = document.getElementById('playBtn');
+            if (playBtn && playBtn.dataset._playing != null) {
+                _retranslatePlay(playBtn, playBtn.dataset._playing === '1');
+            }
+            const speedBtn = document.getElementById('speedBtn');
+            if (speedBtn && speedBtn.dataset._speed != null) {
+                _retranslateSpeed(speedBtn, Number(speedBtn.dataset._speed));
+            }
+        });
+    }
+
+    /**
+     * Wire the EN/JA toggle button. Updates label + title to reflect the
+     * *target* language (showing "JA" while in EN means "click to switch to JA").
+     * Persistence and DOM re-translation are handled inside _i18n.setLang.
+     */
+    _wireLangButton() {
+        const btn = document.getElementById('lang-btn');
+        if (!btn) return;
+        const label = btn.querySelector('.lang-label');
+        const sync = () => {
+            const cur = getI18nLang();
+            const target = cur === 'ja' ? 'en' : 'ja';
+            if (label) label.textContent = target.toUpperCase();
+            btn.title = tI18n(cur === 'ja' ? 'topbar.langTitleJA' : 'topbar.langTitleEN');
+            btn.setAttribute('aria-label', tI18n('topbar.lang'));
+        };
+        btn.addEventListener('click', () => {
+            const cur = getI18nLang();
+            setI18nLang(cur === 'ja' ? 'en' : 'ja');
+            if (typeof _haptics !== 'undefined') _haptics.trigger('light');
+        });
+        onI18nChange(sync);
+        sync();
     }
 
     resize() {
