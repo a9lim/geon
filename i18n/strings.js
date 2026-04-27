@@ -145,7 +145,7 @@ const UI_EN = {
     'ext.gravityDir': 'g direction',
     'ext.electric': 'Electric |E|',
     'ext.electricDir': 'E direction',
-    'ext.magneticBz': 'Magnetic B<sub>z</sub>',
+    'ext.magneticB': 'Magnetic B',
 
     // ── Stats ──
     'stats.energyAria': 'Energy info',
@@ -218,6 +218,11 @@ const UI_EN = {
     'shortcut.group.view': 'View',
     'shortcut.group.simulation': 'Simulation',
     'shortcut.group.saveload': 'Save / Load',
+    'shortcut.pausePlay': 'Pause / Play',
+    'shortcut.resetSim': 'Reset simulation',
+    'shortcut.speedUp': 'Speed up',
+    'shortcut.slowDown': 'Slow down',
+    'shortcut.stepForward': 'Step forward',
     'shortcut.toggleVel': 'Toggle velocity vectors',
     'shortcut.toggleAccel': 'Toggle acceleration vectors',
     'shortcut.toggleAccelComp': 'Toggle acceleration components',
@@ -483,7 +488,7 @@ const UI_JA = {
     'ext.gravityDir': 'g の向き',
     'ext.electric': '電場 |E|',
     'ext.electricDir': 'E の向き',
-    'ext.magneticBz': '磁場 B<sub>z</sub>',
+    'ext.magneticB': '磁場 B',
 
     // ── Stats ──
     'stats.energyAria': 'エネルギーの説明',
@@ -556,6 +561,11 @@ const UI_JA = {
     'shortcut.group.view': '表示',
     'shortcut.group.simulation': 'シミュレーション',
     'shortcut.group.saveload': 'セーブ / ロード',
+    'shortcut.pausePlay': '一時停止 / 再生',
+    'shortcut.resetSim': 'シミュレーションをリセット',
+    'shortcut.speedUp': '速度を上げる',
+    'shortcut.slowDown': '速度を下げる',
+    'shortcut.stepForward': '1ステップ進む',
     'shortcut.toggleVel': '速度ベクトル表示',
     'shortcut.toggleAccel': '加速度ベクトル表示',
     'shortcut.toggleAccelComp': '加速度成分表示',
