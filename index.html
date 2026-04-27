@@ -4,11 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Geon — Interactive Particle Physics Simulator | a9l.im</title>
-    <meta name="description" content="Explore how gravity, electromagnetism, and relativistic effects shape particle motion. An interactive N-body simulator with 11 forces, scalar fields, and 15 educational presets — running in real time in your browser with WebGPU.">
+    <title data-i18n="meta.title">Geon — Interactive Particle Physics Simulator | a9l.im</title>
+    <meta name="description" data-i18n-content="meta.description" content="Explore how gravity, electromagnetism, and relativistic effects shape particle motion. An interactive N-body simulator with 11 forces, scalar fields, and 15 educational presets — running in real time in your browser with WebGPU.">
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
-    <meta property="og:title" content="Geon — Interactive Particle Physics Simulator">
-    <meta property="og:description" content="Explore how gravity, electromagnetism, and relativistic effects shape particle motion. An interactive N-body simulator with 15 educational presets, running in real time in your browser.">
+    <meta property="og:title" data-i18n-content="meta.ogTitle" content="Geon — Interactive Particle Physics Simulator">
+    <meta property="og:description" data-i18n-content="meta.ogDescription" content="Explore how gravity, electromagnetism, and relativistic effects shape particle motion. An interactive N-body simulator with 15 educational presets, running in real time in your browser.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://a9l.im/geon">
     <meta property="og:site_name" content="a9l.im">
@@ -21,14 +21,17 @@
     <meta property="og:image:alt" content="Geon particle physics simulator">
     <meta name="twitter:site" content="@_a9lim">
     <meta name="twitter:creator" content="@_a9lim">
-    <meta name="twitter:title" content="Geon — Interactive Particle Physics Simulator">
-    <meta name="twitter:description" content="Explore how gravity, electromagnetism, and relativistic effects shape particle motion. An interactive N-body simulator with 15 educational presets.">
+    <meta name="twitter:title" data-i18n-content="meta.twitterTitle" content="Geon — Interactive Particle Physics Simulator">
+    <meta name="twitter:description" data-i18n-content="meta.twitterDescription" content="Explore how gravity, electromagnetism, and relativistic effects shape particle motion. An interactive N-body simulator with 15 educational presets.">
     <meta name="author" content="a9lim">
     <link rel="icon" href="/favicon.ico">
     <meta name="theme-color" content="#C8553D">
     <link rel="canonical" href="https://a9l.im/geon">
     <link rel="alternate" hreflang="en" href="https://a9l.im/geon">
+    <link rel="alternate" hreflang="ja" href="https://a9l.im/geon?lang=ja">
+    <link rel="alternate" hreflang="x-default" href="https://a9l.im/geon">
     <meta property="og:locale" content="en_US">
+    <meta property="og:locale:alternate" content="ja_JP">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Geon">
@@ -266,25 +269,29 @@
     <nav id="topbar" class="sim-toolbar glass" role="toolbar" aria-label="Simulation controls">
         <div class="topbar-left">
             <a href="/" class="sim-home" title="a9l.im"><img src="/logo.svg" alt="a9l.im" height="28"></a>
-            <h1 class="sim-brand">Geon<span id="gpu-indicator" class="gpu-indicator" hidden>on GPU</span></h1>
+            <h1 class="sim-brand">Geon<span id="gpu-indicator" class="gpu-indicator" data-i18n="topbar.gpuOn" hidden>on GPU</span></h1>
         </div>
         <div class="topbar-right sim-toolbar-actions">
             <button id="mode-btn" class="tool-btn" aria-label="Normal mode" aria-pressed="false" title="Normal mode (X)" data-icon="modeNormal"></button>
             <div class="tool-sep"></div>
             <button id="playBtn" class="tool-btn" title="Pause" aria-label="Pause simulation"></button>
-            <button id="speedBtn" class="tool-btn speed-btn" aria-label="Simulation speed" title="Speed: 1x">
+            <button id="speedBtn" class="tool-btn speed-btn" aria-label="Simulation speed" data-i18n-aria="topbar.speed" title="Speed: 1x">
                 <span class="speed-label">1x</span>
             </button>
-            <button id="stepBtn" class="tool-btn" title="Step Forward" aria-label="Step forward" data-icon="step"></button>
+            <button id="stepBtn" class="tool-btn" title="Step Forward" aria-label="Step forward" data-i18n-title="topbar.step" data-i18n-aria="topbar.stepAria" data-icon="step"></button>
             <div class="tool-sep"></div>
-            <button id="clearBtn" class="tool-btn" title="Reset" aria-label="Reset simulation" data-icon="reset"></button>
-            <button id="saveBtn" class="tool-btn" title="Quick Save (Ctrl+S)" aria-label="Quick save" data-icon="save"></button>
-            <button id="loadBtn" class="tool-btn" title="Quick Load (Ctrl+L)" aria-label="Quick load" data-icon="load"></button>
+            <button id="clearBtn" class="tool-btn" title="Reset" aria-label="Reset simulation" data-i18n-title="topbar.reset" data-i18n-aria="topbar.resetAria" data-icon="reset"></button>
+            <button id="saveBtn" class="tool-btn" title="Quick Save (Ctrl+S)" aria-label="Quick save" data-i18n-title="topbar.save" data-i18n-aria="topbar.saveAria" data-icon="save"></button>
+            <button id="loadBtn" class="tool-btn" title="Quick Load (Ctrl+L)" aria-label="Quick load" data-i18n-title="topbar.load" data-i18n-aria="topbar.loadAria" data-icon="load"></button>
             <div class="tool-sep"></div>
-            <button id="themeToggleBtn" class="tool-btn" title="Toggle Theme" aria-label="Toggle theme" data-icon="theme"></button>
-            <button id="settings-btn" class="tool-btn" title="Settings" aria-label="Settings" data-icon="gear"></button>
-            <button id="about-btn" class="tool-btn" aria-label="About" title="About" data-icon="about"></button>
-            <button id="panelToggle" class="tool-btn" title="Settings" aria-label="Toggle settings panel" aria-expanded="false" data-icon="menu"></button>
+            <button id="themeToggleBtn" class="tool-btn" title="Toggle Theme" aria-label="Toggle theme" data-i18n-title="topbar.theme" data-i18n-aria="topbar.themeAria" data-icon="theme"></button>
+            <button id="lang-btn" class="tool-btn lang-btn" title="Switch to Japanese (日本語)" aria-label="Language">
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15 15 0 010 20M12 2a15 15 0 000 20"/></svg>
+                <span class="lang-label">JA</span>
+            </button>
+            <button id="settings-btn" class="tool-btn" title="Settings" aria-label="Settings" data-i18n-title="topbar.settings" data-i18n-aria="topbar.settings" data-icon="gear"></button>
+            <button id="about-btn" class="tool-btn" aria-label="About" title="About" data-i18n-title="topbar.about" data-i18n-aria="topbar.about" data-icon="about"></button>
+            <button id="panelToggle" class="tool-btn" title="Settings" aria-label="Toggle settings panel" data-i18n-title="topbar.menu" data-i18n-aria="topbar.menuAria" aria-expanded="false" data-icon="menu"></button>
         </div>
     </nav>
 
@@ -292,184 +299,184 @@
         <div class="sheet-handle"></div>
         <div class="stats-header">
             <div class="sidebar-tabs" role="tablist" aria-label="Sidebar tabs">
-                <button class="tab-btn active" data-tab="settings" role="tab" aria-selected="true">Settings</button>
-                <button class="tab-btn" data-tab="stats" role="tab" aria-selected="false">Stats</button>
-                <button class="tab-btn" data-tab="particle" role="tab" aria-selected="false">Particle</button>
+                <button class="tab-btn active" data-tab="settings" role="tab" aria-selected="true" data-i18n="tab.settings">Settings</button>
+                <button class="tab-btn" data-tab="stats" role="tab" aria-selected="false" data-i18n="tab.stats">Stats</button>
+                <button class="tab-btn" data-tab="particle" role="tab" aria-selected="false" data-i18n="tab.particle">Particle</button>
             </div>
-            <button id="panelClose" class="tool-btn icon-tight" title="Close" aria-label="Close panel" data-icon="close" data-icon-size="16"></button>
+            <button id="panelClose" class="tool-btn icon-tight" title="Close" aria-label="Close panel" data-i18n-title="topbar.close" data-i18n-aria="topbar.closePanel" data-icon="close" data-icon-size="16"></button>
         </div>
         <div class="tabs-wrap">
             <div class="tab-panels scrollbar-thin">
                 <!-- ── Settings ── -->
                 <div class="tab-panel active" id="tab-settings" role="tabpanel">
                     <div class="panel-section">
-                        <h2 class="group-label">Preset</h2>
+                        <h2 class="group-label" data-i18n="group.preset">Preset</h2>
                         <select id="preset-select" class="sim-select">
-                            <option value="none" selected>None</option>
-                            <optgroup label="Gravity">
-                                <option value="kepler">Kepler Orbits</option>
-                                <option value="precession">Precession</option>
-                                <option value="inspiral">Binary Inspiral</option>
-                                <option value="hawking">Hawking Evaporation</option>
+                            <option value="none" data-i18n="preset.option.none" selected>None</option>
+                            <optgroup label="Gravity" data-i18n-label="preset.group.gravity">
+                                <option value="kepler" data-i18n="preset.kepler.name">Kepler Orbits</option>
+                                <option value="precession" data-i18n="preset.precession.name">Precession</option>
+                                <option value="inspiral" data-i18n="preset.inspiral.name">Binary Inspiral</option>
+                                <option value="hawking" data-i18n="preset.hawking.name">Hawking Evaporation</option>
                             </optgroup>
-                            <optgroup label="Electromagnetism">
-                                <option value="atom">Atom</option>
-                                <option value="bremsstrahlung">Bremsstrahlung</option>
-                                <option value="magnetic">Magnetic Dipoles</option>
+                            <optgroup label="Electromagnetism" data-i18n-label="preset.group.em">
+                                <option value="atom" data-i18n="preset.atom.name">Atom</option>
+                                <option value="bremsstrahlung" data-i18n="preset.bremsstrahlung.name">Bremsstrahlung</option>
+                                <option value="magnetic" data-i18n="preset.magnetic.name">Magnetic Dipoles</option>
                             </optgroup>
-                            <optgroup label="Exotic">
-                                <option value="nucleus">Atomic Nucleus</option>
-                                <option value="axion">Axion Field</option>
-                                <option value="pionexchange">Pion Exchange</option>
-                                <option value="higgs">Higgs Mechanism</option>
-                                <option value="higgsboson">Higgs Boson</option>
-                                <option value="axionburst">Axion Burst</option>
-                                <option value="pecceiQuinn">Peccei–Quinn</option>
+                            <optgroup label="Exotic" data-i18n-label="preset.group.exotic">
+                                <option value="nucleus" data-i18n="preset.nucleus.name">Atomic Nucleus</option>
+                                <option value="axion" data-i18n="preset.axion.name">Axion Field</option>
+                                <option value="pionexchange" data-i18n="preset.pionexchange.name">Pion Exchange</option>
+                                <option value="higgs" data-i18n="preset.higgs.name">Higgs Mechanism</option>
+                                <option value="higgsboson" data-i18n="preset.higgsboson.name">Higgs Boson</option>
+                                <option value="axionburst" data-i18n="preset.axionburst.name">Axion Burst</option>
+                                <option value="pecceiQuinn" data-i18n="preset.pecceiQuinn.name">Peccei–Quinn</option>
                             </optgroup>
-                            <optgroup label="Cosmological">
-                                <option value="expansion">Expanding Universe</option>
+                            <optgroup label="Cosmological" data-i18n-label="preset.group.cosmological">
+                                <option value="expansion" data-i18n="preset.expansion.name">Expanding Universe</option>
                             </optgroup>
                         </select>
                     </div>
                     <div class="panel-section">
-                        <h2 class="group-label">Particle Properties</h2>
+                        <h2 class="group-label" data-i18n="group.particleProps">Particle Properties</h2>
                         <div class="control-group">
-                            <label>Mass <span class="slider-value" id="massValue">1.00</span></label>
+                            <label><span data-i18n="props.mass">Mass</span> <span class="slider-value" id="massValue">1.00</span></label>
                             <input type="range" id="massInput" min="0.05" max="5" step="0.05" value="1">
                         </div>
                         <div class="control-group">
-                            <label><span>Charge <button class="info-trigger" data-info="charge" aria-label="Charge info">?</button></span> <span class="slider-value" id="chargeValue">0.00</span></label>
+                            <label><span><span data-i18n="props.charge">Charge</span> <button class="info-trigger" data-info="charge" aria-label="Charge info" data-i18n-aria="props.chargeAria">?</button></span> <span class="slider-value" id="chargeValue">0.00</span></label>
                             <input type="range" id="chargeInput" min="-5" max="5" step="0.1" value="0">
                         </div>
                         <div class="control-group">
-                            <label><span>Spin <button class="info-trigger" data-info="spin" aria-label="Angular momentum info">?</button></span> <span class="slider-value" id="spinValue">0.00c</span></label>
+                            <label><span><span data-i18n="props.spin">Spin</span> <button class="info-trigger" data-info="spin" aria-label="Angular momentum info" data-i18n-aria="props.spinAria">?</button></span> <span class="slider-value" id="spinValue">0.00c</span></label>
                             <input type="range" id="spinInput" min="-0.99" max="0.99" step="0.01" value="0">
                         </div>
                     </div>
                     <div class="panel-section">
-                        <h2 class="group-label">Forces</h2>
-                        <div class="ctrl-row"><label for="gravity-toggle">Gravity <button class="info-trigger" data-info="gravity" aria-label="Gravity info">?</button></label>
+                        <h2 class="group-label" data-i18n="group.forces">Forces</h2>
+                        <div class="ctrl-row"><label for="gravity-toggle"><span data-i18n="force.gravity">Gravity</span> <button class="info-trigger" data-info="gravity" aria-label="Gravity info" data-i18n-aria="force.gravityAria">?</button></label>
                             <div class="tog-wrap"><input type="checkbox" id="gravity-toggle" checked role="switch" aria-checked="true">
                             <label for="gravity-toggle" class="tog tog-gravity"><span class="tog-thumb"></span></label></div></div>
-                        <div class="ctrl-row ctrl-sub"><label for="gravitomag-toggle">Gravitomagnetic <button class="info-trigger" data-info="gravitomag" aria-label="Gravitomagnetic info">?</button></label>
+                        <div class="ctrl-row ctrl-sub"><label for="gravitomag-toggle"><span data-i18n="force.gravitomag">Gravitomagnetic</span> <button class="info-trigger" data-info="gravitomag" aria-label="Gravitomagnetic info" data-i18n-aria="force.gravitomagAria">?</button></label>
                             <div class="tog-wrap"><input type="checkbox" id="gravitomag-toggle" checked role="switch" aria-checked="true">
                             <label for="gravitomag-toggle" class="tog tog-gravitomag"><span class="tog-thumb"></span></label></div></div>
-                        <div class="ctrl-row"><label for="coulomb-toggle">Coulomb <button class="info-trigger" data-info="coulomb" aria-label="Coulomb info">?</button></label>
+                        <div class="ctrl-row"><label for="coulomb-toggle"><span data-i18n="force.coulomb">Coulomb</span> <button class="info-trigger" data-info="coulomb" aria-label="Coulomb info" data-i18n-aria="force.coulombAria">?</button></label>
                             <div class="tog-wrap"><input type="checkbox" id="coulomb-toggle" checked role="switch" aria-checked="true">
                             <label for="coulomb-toggle" class="tog tog-coulomb"><span class="tog-thumb"></span></label></div></div>
-                        <div class="ctrl-row ctrl-sub"><label for="magnetic-toggle">Magnetic <button class="info-trigger" data-info="magnetic" aria-label="Magnetic info">?</button></label>
+                        <div class="ctrl-row ctrl-sub"><label for="magnetic-toggle"><span data-i18n="force.magnetic">Magnetic</span> <button class="info-trigger" data-info="magnetic" aria-label="Magnetic info" data-i18n-aria="force.magneticAria">?</button></label>
                             <div class="tog-wrap"><input type="checkbox" id="magnetic-toggle" checked role="switch" aria-checked="true">
                             <label for="magnetic-toggle" class="tog tog-magnetic"><span class="tog-thumb"></span></label></div></div>
-                        <div class="ctrl-row"><label for="yukawa-toggle">Yukawa <button class="info-trigger" data-info="yukawa" aria-label="Yukawa info">?</button></label>
+                        <div class="ctrl-row"><label for="yukawa-toggle"><span data-i18n="force.yukawa">Yukawa</span> <button class="info-trigger" data-info="yukawa" aria-label="Yukawa info" data-i18n-aria="force.yukawaAria">?</button></label>
                             <div class="tog-wrap"><input type="checkbox" id="yukawa-toggle" role="switch" aria-checked="false">
                             <label for="yukawa-toggle" class="tog tog-yukawa"><span class="tog-thumb"></span></label></div></div>
                         <div class="ctrl-sub" id="yukawa-sliders" style="display:none">
                             <div class="control-group">
-                                <label><span>Pion Mass <button class="info-trigger" data-info="pion" aria-label="Pion info">?</button></span> <span class="slider-value" id="yukawaMuValue">0.15</span></label>
+                                <label><span><span data-i18n="force.pionMass">Pion Mass</span> <button class="info-trigger" data-info="pion" aria-label="Pion info" data-i18n-aria="force.pionAria">?</button></span> <span class="slider-value" id="yukawaMuValue">0.15</span></label>
                                 <input type="range" id="yukawaMuInput" min="0.05" max="0.25" step="0.01" value="0.15">
                             </div>
                         </div>
-                        <div class="ctrl-row"><label for="axion-toggle">Axion <button class="info-trigger" data-info="axion" aria-label="Axion info">?</button></label>
+                        <div class="ctrl-row"><label for="axion-toggle"><span data-i18n="force.axion">Axion</span> <button class="info-trigger" data-info="axion" aria-label="Axion info" data-i18n-aria="force.axionAria">?</button></label>
                             <div class="tog-wrap"><input type="checkbox" id="axion-toggle" role="switch" aria-checked="false">
                             <label for="axion-toggle" class="tog tog-axion"><span class="tog-thumb"></span></label></div></div>
                         <div class="ctrl-sub" id="axion-sliders" style="display:none">
                             <div class="control-group">
-                                <label><span>Axion Mass <button class="info-trigger" data-info="fieldExcitation" aria-label="Axion particle info">?</button></span> <span class="slider-value" id="axionMassValue">0.05</span></label>
+                                <label><span><span data-i18n="force.axionMass">Axion Mass</span> <button class="info-trigger" data-info="fieldExcitation" aria-label="Axion particle info" data-i18n-aria="force.axionParticleAria">?</button></span> <span class="slider-value" id="axionMassValue">0.05</span></label>
                                 <input type="range" id="axionMassInput" min="0.01" max="0.10" step="0.01" value="0.05">
                             </div>
                         </div>
-                        <div class="ctrl-row"><label for="higgs-toggle">Higgs <button class="info-trigger" data-info="higgs" aria-label="Higgs field info">?</button></label>
+                        <div class="ctrl-row"><label for="higgs-toggle"><span data-i18n="force.higgs">Higgs</span> <button class="info-trigger" data-info="higgs" aria-label="Higgs field info" data-i18n-aria="force.higgsAria">?</button></label>
                             <div class="tog-wrap"><input type="checkbox" id="higgs-toggle" role="switch" aria-checked="false">
                             <label for="higgs-toggle" class="tog tog-higgs"><span class="tog-thumb"></span></label></div></div>
                         <div class="ctrl-sub" id="higgs-sliders" style="display:none">
                             <div class="control-group">
-                                <label><span>Higgs Mass <button class="info-trigger" data-info="fieldExcitation" aria-label="Higgs boson info">?</button></span> <span class="slider-value" id="higgsMassValue">0.50</span></label>
+                                <label><span><span data-i18n="force.higgsMass">Higgs Mass</span> <button class="info-trigger" data-info="fieldExcitation" aria-label="Higgs boson info" data-i18n-aria="force.higgsBosonAria">?</button></span> <span class="slider-value" id="higgsMassValue">0.50</span></label>
                                 <input type="range" id="higgsMassInput" min="0.25" max="0.75" step="0.01" value="0.50">
                             </div>
                         </div>
                     </div>
                     <div class="panel-section">
-                        <h2 class="group-label">Physics</h2>
-                        <div class="ctrl-row"><label for="relativity-toggle">Relativity <button class="info-trigger" data-info="relativity" aria-label="Relativity info">?</button></label>
+                        <h2 class="group-label" data-i18n="group.physics">Physics</h2>
+                        <div class="ctrl-row"><label for="relativity-toggle"><span data-i18n="physics.relativity">Relativity</span> <button class="info-trigger" data-info="relativity" aria-label="Relativity info" data-i18n-aria="physics.relativityAria">?</button></label>
                             <div class="tog-wrap"><input type="checkbox" id="relativity-toggle" checked role="switch" aria-checked="true">
                             <label for="relativity-toggle" class="tog tog-relativity"><span class="tog-thumb"></span></label></div></div>
-                        <div class="ctrl-row ctrl-sub"><label for="onepn-toggle">1PN <button class="info-trigger" data-info="onepn" aria-label="1PN info">?</button></label>
+                        <div class="ctrl-row ctrl-sub"><label for="onepn-toggle"><span data-i18n="physics.onepn">1PN</span> <button class="info-trigger" data-info="onepn" aria-label="1PN info" data-i18n-aria="physics.onepnAria">?</button></label>
                             <div class="tog-wrap"><input type="checkbox" id="onepn-toggle" checked role="switch" aria-checked="true">
                             <label for="onepn-toggle" class="tog tog-onepn"><span class="tog-thumb"></span></label></div></div>
-                        <div class="ctrl-row ctrl-sub"><label for="blackhole-toggle">Black Hole <button class="info-trigger" data-info="blackhole" aria-label="Black hole info">?</button></label>
+                        <div class="ctrl-row ctrl-sub"><label for="blackhole-toggle"><span data-i18n="physics.blackhole">Black Hole</span> <button class="info-trigger" data-info="blackhole" aria-label="Black hole info" data-i18n-aria="physics.blackholeAria">?</button></label>
                             <div class="tog-wrap"><input type="checkbox" id="blackhole-toggle" role="switch" aria-checked="false">
                             <label for="blackhole-toggle" class="tog tog-blackhole"><span class="tog-thumb"></span></label></div></div>
-                        <div class="ctrl-row"><label for="spinorbit-toggle">Spin-Orbit <button class="info-trigger" data-info="spinorbit" aria-label="Spin-orbit coupling info">?</button></label>
+                        <div class="ctrl-row"><label for="spinorbit-toggle"><span data-i18n="physics.spinorbit">Spin-Orbit</span> <button class="info-trigger" data-info="spinorbit" aria-label="Spin-orbit coupling info" data-i18n-aria="physics.spinorbitAria">?</button></label>
                             <div class="tog-wrap"><input type="checkbox" id="spinorbit-toggle" checked role="switch" aria-checked="true">
                             <label for="spinorbit-toggle" class="tog tog-spinorbit"><span class="tog-thumb"></span></label></div></div>
-                        <div class="ctrl-row"><label for="radiation-toggle">Radiation <button class="info-trigger" data-info="radiation" aria-label="Radiation info">?</button></label>
+                        <div class="ctrl-row"><label for="radiation-toggle"><span data-i18n="physics.radiation">Radiation</span> <button class="info-trigger" data-info="radiation" aria-label="Radiation info" data-i18n-aria="physics.radiationAria">?</button></label>
                             <div class="tog-wrap"><input type="checkbox" id="radiation-toggle" role="switch" aria-checked="true" checked>
                             <label for="radiation-toggle" class="tog tog-radiation"><span class="tog-thumb"></span></label></div></div>
-                        <div class="ctrl-row"><label for="bosoninter-toggle">Boson Interaction <button class="info-trigger" data-info="bosoninter" aria-label="Boson interaction info">?</button></label>
+                        <div class="ctrl-row"><label for="bosoninter-toggle"><span data-i18n="physics.bosoninter">Boson Interaction</span> <button class="info-trigger" data-info="bosoninter" aria-label="Boson interaction info" data-i18n-aria="physics.bosoninterAria">?</button></label>
                             <div class="tog-wrap"><input type="checkbox" id="bosoninter-toggle" role="switch" aria-checked="false">
                             <label for="bosoninter-toggle" class="tog tog-bosoninter"><span class="tog-thumb"></span></label></div></div>
                     </div>
                     <div class="panel-section">
-                        <h2 class="group-label">Simulation</h2>
+                        <h2 class="group-label" data-i18n="group.simulation">Simulation</h2>
                         <div class="control-group">
-                            <label><span>Collision Mode <button class="info-trigger" data-info="collision" aria-label="Collision modes info">?</button></span></label>
+                            <label><span><span data-i18n="sim.collision">Collision Mode</span> <button class="info-trigger" data-info="collision" aria-label="Collision modes info" data-i18n-aria="sim.collisionAria">?</button></span></label>
                             <div class="mode-toggles" id="collision-toggles">
-                                <button class="mode-btn active" data-collision="pass">Pass</button>
-                                <button class="mode-btn" data-collision="merge">Merge</button>
-                                <button class="mode-btn" data-collision="bounce">Bounce</button>
+                                <button class="mode-btn active" data-collision="pass" data-i18n="sim.collision.pass">Pass</button>
+                                <button class="mode-btn" data-collision="merge" data-i18n="sim.collision.merge">Merge</button>
+                                <button class="mode-btn" data-collision="bounce" data-i18n="sim.collision.bounce">Bounce</button>
                             </div>
                         </div>
                         <div class="control-group" id="friction-group" style="display:none">
-                            <label>Bounce Friction <span class="slider-value" id="frictionValue">0.40</span></label>
+                            <label><span data-i18n="sim.bounceFriction">Bounce Friction</span> <span class="slider-value" id="frictionValue">0.40</span></label>
                             <input type="range" id="frictionInput" min="0" max="1" step="0.01" value="0.4">
                         </div>
                         <div class="control-group">
-                            <label><span>Boundary Mode <button class="info-trigger" data-info="boundary" aria-label="Boundary modes info">?</button></span></label>
+                            <label><span><span data-i18n="sim.boundary">Boundary Mode</span> <button class="info-trigger" data-info="boundary" aria-label="Boundary modes info" data-i18n-aria="sim.boundaryAria">?</button></span></label>
                             <div class="mode-toggles" id="boundary-toggles">
-                                <button class="mode-btn active" data-boundary="despawn">Despawn</button>
-                                <button class="mode-btn" data-boundary="loop">Loop</button>
-                                <button class="mode-btn" data-boundary="bounce">Bounce</button>
+                                <button class="mode-btn active" data-boundary="despawn" data-i18n="sim.boundary.despawn">Despawn</button>
+                                <button class="mode-btn" data-boundary="loop" data-i18n="sim.boundary.loop">Loop</button>
+                                <button class="mode-btn" data-boundary="bounce" data-i18n="sim.boundary.bounce">Bounce</button>
                             </div>
                         </div>
                         <div class="control-group" id="topology-group" style="display:none">
-                            <label><span>Topology <button class="info-trigger" data-info="topology" aria-label="Topology info">?</button></span></label>
+                            <label><span><span data-i18n="sim.topology">Topology</span> <button class="info-trigger" data-info="topology" aria-label="Topology info" data-i18n-aria="sim.topologyAria">?</button></span></label>
                             <div class="mode-toggles" id="topology-toggles">
-                                <button class="mode-btn active" data-topology="torus">Torus</button>
-                                <button class="mode-btn" data-topology="klein">Klein</button>
-                                <button class="mode-btn" data-topology="rp2">RP²</button>
+                                <button class="mode-btn active" data-topology="torus" data-i18n="sim.topology.torus">Torus</button>
+                                <button class="mode-btn" data-topology="klein" data-i18n="sim.topology.klein">Klein</button>
+                                <button class="mode-btn" data-topology="rp2" data-i18n="sim.topology.rp2">RP²</button>
                             </div>
                         </div>
                         <div class="control-group" style="display:none">
-                            <label class="checkbox-label"><span>Disintegration <button class="info-trigger" data-info="disintegration" aria-label="Disintegration info">?</button></span> <input type="checkbox" id="disintegration-toggle"></label>
+                            <label class="checkbox-label"><span><span data-i18n="sim.disintegration">Disintegration</span> <button class="info-trigger" data-info="disintegration" aria-label="Disintegration info" data-i18n-aria="sim.disintegrationAria">?</button></span> <input type="checkbox" id="disintegration-toggle"></label>
                         </div>
                         <div class="control-group">
-                            <label class="checkbox-label"><span>Expansion <button class="info-trigger" data-info="expansion" aria-label="Expansion info">?</button></span> <input type="checkbox" id="expansion-toggle"></label>
+                            <label class="checkbox-label"><span><span data-i18n="sim.expansion">Expansion</span> <button class="info-trigger" data-info="expansion" aria-label="Expansion info" data-i18n-aria="sim.expansionAria">?</button></span> <input type="checkbox" id="expansion-toggle"></label>
                         </div>
                         <div class="control-group" id="hubble-group" style="display:none">
-                            <label>Hubble H <span class="slider-value" id="hubbleValue">0.001</span></label>
+                            <label><span data-i18n="sim.hubble">Hubble H</span> <span class="slider-value" id="hubbleValue">0.001</span></label>
                             <input type="range" id="hubbleInput" min="0.0001" max="0.01" step="0.0001" value="0.001">
                         </div>
                     </div>
                     <div class="panel-section">
-                        <h2 class="group-label">External Fields <button class="info-trigger" data-info="external" aria-label="External fields info">?</button></h2>
+                        <h2 class="group-label"><span data-i18n="group.external">External Fields</span> <button class="info-trigger" data-info="external" aria-label="External fields info" data-i18n-aria="ext.aria">?</button></h2>
                         <div class="control-group">
-                            <label>Gravity |g| <span class="slider-value" id="extGravityValue">0.00</span></label>
+                            <label><span data-i18n="ext.gravity">Gravity |g|</span> <span class="slider-value" id="extGravityValue">0.00</span></label>
                             <input type="range" id="extGravityInput" min="0" max="1" step="0.01" value="0">
                         </div>
                         <div class="control-group" id="extGravityAngleGroup" style="display:none">
-                            <label>g direction <span class="slider-value" id="extGravityAngleValue">90°</span></label>
+                            <label><span data-i18n="ext.gravityDir">g direction</span> <span class="slider-value" id="extGravityAngleValue">90°</span></label>
                             <input type="range" id="extGravityAngleInput" min="0" max="360" step="1" value="90">
                         </div>
                         <div class="control-group">
-                            <label>Electric |E| <span class="slider-value" id="extElectricValue">0.00</span></label>
+                            <label><span data-i18n="ext.electric">Electric |E|</span> <span class="slider-value" id="extElectricValue">0.00</span></label>
                             <input type="range" id="extElectricInput" min="0" max="1" step="0.01" value="0">
                         </div>
                         <div class="control-group" id="extElectricAngleGroup" style="display:none">
-                            <label>E direction <span class="slider-value" id="extElectricAngleValue">0°</span></label>
+                            <label><span data-i18n="ext.electricDir">E direction</span> <span class="slider-value" id="extElectricAngleValue">0°</span></label>
                             <input type="range" id="extElectricAngleInput" min="0" max="360" step="1" value="0">
                         </div>
                         <div class="control-group">
-                            <label>Magnetic B<sub>z</sub> <span class="slider-value" id="extBzValue">0.00</span></label>
+                            <label><span>Magnetic B<sub>z</sub></span> <span class="slider-value" id="extBzValue">0.00</span></label>
                             <input type="range" id="extBzInput" min="-1" max="1" step="0.01" value="0">
                         </div>
                     </div>
@@ -477,40 +484,40 @@
                 <!-- ── Stats ── -->
                 <div class="tab-panel" id="tab-stats" role="tabpanel">
                     <div class="panel-section" aria-live="polite">
-                        <h2 class="group-label">Energy <button class="info-trigger" data-info="energy" aria-label="Energy info">?</button></h2>
-                        <div class="stat-row"><span class="stat-label">Total Energy</span><span class="stat-value" id="totalE">0</span></div>
-                        <div class="stat-row stat-sub"><span class="stat-label">Linear KE</span><span class="stat-value" id="linearKE">0</span></div>
-                        <div class="stat-row stat-sub"><span class="stat-label">Angular KE</span><span class="stat-value" id="spinKE">0</span></div>
-                        <div class="stat-row stat-sub"><span class="stat-label">Potential</span><span class="stat-value" id="potentialE">0</span></div>
-                        <div class="stat-row stat-sub"><span class="stat-label">Field</span><span class="stat-value" id="fieldE">0</span></div>
-                        <div class="stat-row stat-sub"><span class="stat-label">Radiated</span><span class="stat-value" id="radiatedE">0</span></div>
-                        <div class="stat-row stat-sub"><span class="stat-label">Drift</span><span class="stat-value" id="energyDrift">+0.00%</span></div>
-                        <div class="stat-row"><span class="stat-label">Mass (mc²)</span><span class="stat-value" id="massE">0</span></div>
+                        <h2 class="group-label"><span data-i18n="group.energy">Energy</span> <button class="info-trigger" data-info="energy" aria-label="Energy info" data-i18n-aria="stats.energyAria">?</button></h2>
+                        <div class="stat-row"><span class="stat-label" data-i18n="stats.totalEnergy">Total Energy</span><span class="stat-value" id="totalE">0</span></div>
+                        <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.linearKE">Linear KE</span><span class="stat-value" id="linearKE">0</span></div>
+                        <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.angularKE">Angular KE</span><span class="stat-value" id="spinKE">0</span></div>
+                        <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.potential">Potential</span><span class="stat-value" id="potentialE">0</span></div>
+                        <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.field">Field</span><span class="stat-value" id="fieldE">0</span></div>
+                        <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.radiated">Radiated</span><span class="stat-value" id="radiatedE">0</span></div>
+                        <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.drift">Drift</span><span class="stat-value" id="energyDrift">+0.00%</span></div>
+                        <div class="stat-row"><span class="stat-label" data-i18n="stats.massE">Mass (mc²)</span><span class="stat-value" id="massE">0</span></div>
                     </div>
                     <div class="panel-section" aria-live="polite">
-                        <h2 class="group-label">Conserved Quantities <button class="info-trigger" data-info="conserved" aria-label="Conserved quantities info">?</button></h2>
-                        <div class="stat-row"><span class="stat-label">Momentum</span><span class="stat-value" id="momentum">0</span></div>
-                        <div class="stat-row stat-sub"><span class="stat-label">Particle</span><span class="stat-value" id="particleMom">0</span></div>
-                        <div class="stat-row stat-sub"><span class="stat-label">Field</span><span class="stat-value" id="fieldMom">0</span></div>
-                        <div class="stat-row stat-sub"><span class="stat-label">Radiated</span><span class="stat-value" id="radiatedMom">0</span></div>
-                        <div class="stat-row stat-sub"><span class="stat-label">Drift</span><span class="stat-value" id="momentumDrift">+0.00%</span></div>
-                        <div class="stat-row"><span class="stat-label">Angular Mom.</span><span class="stat-value" id="angularMomentum">0</span></div>
-                        <div class="stat-row stat-sub"><span class="stat-label">Orbital</span><span class="stat-value" id="orbitalAngMom">0</span></div>
-                        <div class="stat-row stat-sub"><span class="stat-label">Spin</span><span class="stat-value" id="spinAngMom">0</span></div>
-                        <div class="stat-row stat-sub"><span class="stat-label">Drift</span><span class="stat-value" id="angMomDrift">+0.00%</span></div>
+                        <h2 class="group-label"><span data-i18n="group.conserved">Conserved Quantities</span> <button class="info-trigger" data-info="conserved" aria-label="Conserved quantities info" data-i18n-aria="stats.conservedAria">?</button></h2>
+                        <div class="stat-row"><span class="stat-label" data-i18n="stats.momentum">Momentum</span><span class="stat-value" id="momentum">0</span></div>
+                        <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.particleMom">Particle</span><span class="stat-value" id="particleMom">0</span></div>
+                        <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.fieldMom">Field</span><span class="stat-value" id="fieldMom">0</span></div>
+                        <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.radiatedMom">Radiated</span><span class="stat-value" id="radiatedMom">0</span></div>
+                        <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.drift">Drift</span><span class="stat-value" id="momentumDrift">+0.00%</span></div>
+                        <div class="stat-row"><span class="stat-label" data-i18n="stats.angularMom">Angular Mom.</span><span class="stat-value" id="angularMomentum">0</span></div>
+                        <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.orbital">Orbital</span><span class="stat-value" id="orbitalAngMom">0</span></div>
+                        <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.spin">Spin</span><span class="stat-value" id="spinAngMom">0</span></div>
+                        <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.drift">Drift</span><span class="stat-value" id="angMomDrift">+0.00%</span></div>
                     </div>
                 </div>
                 <!-- ── Particle ── -->
                 <div class="tab-panel" id="tab-particle" role="tabpanel">
                     <div class="panel-section" id="selected-particle-section">
-                        <h2 class="group-label">Details</h2>
-                        <p class="panel-hint" id="particle-hint">Select a particle to view details</p>
+                        <h2 class="group-label" data-i18n="group.details">Details</h2>
+                        <p class="panel-hint" id="particle-hint" data-i18n="particle.hint">Select a particle to view details</p>
                         <div id="particle-details" hidden>
-                            <div class="stat-row"><span class="stat-label">Mass</span><span class="stat-value" id="sel-mass">—</span></div>
-                            <div class="stat-row"><span class="stat-label">Charge</span><span class="stat-value" id="sel-charge">—</span></div>
-                            <div class="stat-row"><span class="stat-label">Spin</span><span class="stat-value" id="sel-spin">—</span></div>
-                            <div class="stat-row"><span class="stat-label">Speed</span><span class="stat-value" id="sel-speed">—</span></div>
-                            <div class="stat-row"><span class="stat-label">γ (gamma)</span><span class="stat-value" id="sel-gamma">—</span></div>
+                            <div class="stat-row"><span class="stat-label" data-i18n="particle.mass">Mass</span><span class="stat-value" id="sel-mass">—</span></div>
+                            <div class="stat-row"><span class="stat-label" data-i18n="particle.charge">Charge</span><span class="stat-value" id="sel-charge">—</span></div>
+                            <div class="stat-row"><span class="stat-label" data-i18n="particle.spin">Spin</span><span class="stat-value" id="sel-spin">—</span></div>
+                            <div class="stat-row"><span class="stat-label" data-i18n="particle.speed">Speed</span><span class="stat-value" id="sel-speed">—</span></div>
+                            <div class="stat-row"><span class="stat-label" data-i18n="particle.gamma">γ (gamma)</span><span class="stat-value" id="sel-gamma">—</span></div>
                             <div id="force-breakdown" class="stat-group" style="margin-top: 8px">
                                 <div class="stat-row"><span class="stat-label">F</span><span class="stat-value" id="sel-force">—</span></div>
                                 <div class="stat-row stat-sub" id="fb-gravity" hidden><span class="stat-label">F<sub>G</sub> = m₁m₂/r²</span><span class="stat-value" id="fb-gravity-val">0</span></div>
@@ -528,11 +535,11 @@
                         </div>
                     </div>
                     <div class="panel-section" id="phase-plot-section" hidden>
-                        <h2 class="group-label">Phase Space</h2>
+                        <h2 class="group-label" data-i18n="group.phaseSpace">Phase Space</h2>
                         <div id="phase-plot-container"></div>
                     </div>
                     <div class="panel-section" id="eff-pot-section" hidden>
-                        <h2 class="group-label">Effective Potential</h2>
+                        <h2 class="group-label" data-i18n="group.effPotential">Effective Potential</h2>
                         <div id="eff-pot-container"></div>
                     </div>
                 </div>
@@ -541,52 +548,52 @@
     </aside>
 
     <div id="sim-controls" class="sim-controls glass">
-        <button id="zoom-in-btn" class="tool-btn" title="Zoom in" aria-label="Zoom in" data-icon="plus" data-icon-size="16"></button>
+        <button id="zoom-in-btn" class="tool-btn" title="Zoom in" aria-label="Zoom in" data-i18n-title="controls.zoomIn" data-i18n-aria="controls.zoomIn" data-icon="plus" data-icon-size="16"></button>
         <span id="zoom-level" class="zoom-level">100%</span>
-        <button id="zoom-out-btn" class="tool-btn" title="Zoom out" aria-label="Zoom out" data-icon="minus" data-icon-size="16"></button>
+        <button id="zoom-out-btn" class="tool-btn" title="Zoom out" aria-label="Zoom out" data-i18n-title="controls.zoomOut" data-i18n-aria="controls.zoomOut" data-icon="minus" data-icon-size="16"></button>
         <div class="ctrl-sep"></div>
-        <button id="zoom-reset-btn" class="tool-btn" title="Reset zoom" aria-label="Reset zoom" data-icon="fitView" data-icon-size="16"></button>
+        <button id="zoom-reset-btn" class="tool-btn" title="Reset zoom" aria-label="Reset zoom" data-i18n-title="controls.zoomReset" data-i18n-aria="controls.zoomReset" data-icon="fitView" data-icon-size="16"></button>
     </div>
 
     <div id="hint-bar" class="sim-bar glass">
-        <p>Left Click to Spawn · Right Click to Remove · Scroll to Zoom</p>
+        <p data-i18n="hint.desktop">Left Click to Spawn · Right Click to Remove · Scroll to Zoom</p>
     </div>
 
     <div id="reference-overlay" class="sim-overlay" hidden>
         <div class="sim-overlay-panel glass">
             <div class="stats-header">
-                <h2 id="reference-title" class="stats-title">Reference</h2>
-                <button id="reference-close" class="tool-btn" aria-label="Close reference" data-icon="close" data-icon-size="16"></button>
+                <h2 id="reference-title" class="stats-title" data-i18n="controls.referenceTitle">Reference</h2>
+                <button id="reference-close" class="tool-btn" aria-label="Close reference" data-i18n-aria="controls.referenceClose" data-icon="close" data-icon-size="16"></button>
             </div>
             <div id="reference-body" class="sim-overlay-body scrollbar-thin"></div>
         </div>
     </div>
 
     <details class="edu-content">
-      <summary>About this simulation</summary>
+      <summary data-i18n="edu.summary">About this simulation</summary>
       <article>
-        <h2>What is Geon?</h2>
-        <p>Geon is a real-time N-body simulator that models how particles move under gravity, electromagnetism, and relativistic effects. It computes pairwise forces between all particles using a Barnes-Hut tree for O(N&thinsp;log&thinsp;N) scaling, then advances trajectories with a Boris integrator that preserves phase-space volume under strong magnetic fields.</p>
-        <h3>Physics</h3>
-        <p>Eleven force types are available: Newtonian gravity, gravitomagnetism (frame-dragging), Coulomb electrostatics, the magnetic Lorentz force, Yukawa interaction, Higgs field coupling, axion field coupling, cosmological expansion via Hubble flow, first post-Newtonian corrections from general relativity, spin-orbit coupling, and radiation reaction. Forces can be toggled independently so students can isolate individual effects.</p>
-        <h3>Scalar Fields</h3>
-        <p>Two scalar fields &mdash; Higgs and axion &mdash; live on a PQS grid with C&sup2; interpolation. The Higgs field modulates particle mass through its local vacuum expectation value, while the axion field couples to charge. Both evolve via St&ouml;rmer-Verlet integration and exert gradient forces on particles.</p>
-        <h3>Presets</h3>
-        <p>Fifteen curated presets demonstrate specific phenomena: Keplerian orbits, electromagnetic confinement, Rutherford scattering, Higgs potential wells, axion halos, Hubble expansion, gravitational wave inspiral, and more. Each preset configures initial conditions and force parameters to illustrate one concept clearly.</p>
-    <h3>Gravitomagnetism and Frame-Dragging</h3>
-    <p>Gravitomagnetism is the gravitational analogue of the magnetic force. In Geon, rotating or co-moving masses generate a gravitomagnetic field that produces velocity-dependent forces on nearby particles, mimicking the frame-dragging effect predicted by general relativity. This can be seen in the Gravitomagnetic preset, where orbiting masses drag the surrounding space and alter nearby trajectories.</p>
-    <h3>Black Hole Physics</h3>
-    <p>In black hole mode, particles become Kerr-Newman black holes characterized by mass, charge, and spin. Hawking radiation causes evaporation at a rate determined by the Kerr-Newman temperature &mdash; smaller black holes radiate faster, leading to runaway evaporation. Charged black holes also undergo Schwinger discharge: the intense electric field near the horizon tears electron-positron pairs from the vacuum, with one lepton escaping and the other falling back in. Each event reduces the black hole's charge by one quantized unit, driving it toward neutrality. Spinning black holes with the axion field enabled exhibit superradiance: when the horizon angular velocity exceeds the axion mass, the field extracts rotational energy and grows a scalar cloud around the black hole, spinning it down until the superradiance condition fails. All charges in the simulation are quantized in units of the boson charge, ensuring discrete conservation across emission, decay, and pair production.</p>
-    <h3>Boris Integrator</h3>
-    <p>Geon uses the Boris algorithm to integrate particle trajectories. The Boris integrator preserves phase-space volume under strong magnetic fields, preventing artificial energy drift that plagues simpler methods like Euler integration. It splits the force application into electric half-kicks and a magnetic rotation, ensuring stable cyclotron orbits at any timestep.</p>
-    <h3>Accessibility</h3>
-    <p>Geon supports keyboard navigation for all controls, high-contrast mode via the theme toggle, and ARIA labels on all toolbar buttons and interactive elements. Simulation parameters are adjustable via labeled sliders and toggles. Known hazards: flashing particle trails and continuous motion simulation. Users sensitive to motion or flashing content should use presets with lower particle counts.</p>
+        <h2 data-i18n="edu.h.what">What is Geon?</h2>
+        <p data-i18n="edu.p.what">Geon is a real-time N-body simulator that models how particles move under gravity, electromagnetism, and relativistic effects. It computes pairwise forces between all particles using a Barnes-Hut tree for O(N log N) scaling, then advances trajectories with a Boris integrator that preserves phase-space volume under strong magnetic fields.</p>
+        <h3 data-i18n="edu.h.physics">Physics</h3>
+        <p data-i18n="edu.p.physics">Eleven force types are available: Newtonian gravity, gravitomagnetism (frame-dragging), Coulomb electrostatics, the magnetic Lorentz force, Yukawa interaction, Higgs field coupling, axion field coupling, cosmological expansion via Hubble flow, first post-Newtonian corrections from general relativity, spin-orbit coupling, and radiation reaction. Forces can be toggled independently so students can isolate individual effects.</p>
+        <h3 data-i18n="edu.h.fields">Scalar Fields</h3>
+        <p data-i18n="edu.p.fields">Two scalar fields — Higgs and axion — live on a PQS grid with C² interpolation. The Higgs field modulates particle mass through its local vacuum expectation value, while the axion field couples to charge. Both evolve via Störmer-Verlet integration and exert gradient forces on particles.</p>
+        <h3 data-i18n="edu.h.presets">Presets</h3>
+        <p data-i18n="edu.p.presets">Fifteen curated presets demonstrate specific phenomena: Keplerian orbits, electromagnetic confinement, Rutherford scattering, Higgs potential wells, axion halos, Hubble expansion, gravitational wave inspiral, and more. Each preset configures initial conditions and force parameters to illustrate one concept clearly.</p>
+    <h3 data-i18n="edu.h.gm">Gravitomagnetism and Frame-Dragging</h3>
+    <p data-i18n="edu.p.gm">Gravitomagnetism is the gravitational analogue of the magnetic force. In Geon, rotating or co-moving masses generate a gravitomagnetic field that produces velocity-dependent forces on nearby particles, mimicking the frame-dragging effect predicted by general relativity. This can be seen in the Gravitomagnetic preset, where orbiting masses drag the surrounding space and alter nearby trajectories.</p>
+    <h3 data-i18n="edu.h.bh">Black Hole Physics</h3>
+    <p data-i18n="edu.p.bh">In black hole mode, particles become Kerr-Newman black holes characterized by mass, charge, and spin. Hawking radiation causes evaporation at a rate determined by the Kerr-Newman temperature — smaller black holes radiate faster, leading to runaway evaporation. Charged black holes also undergo Schwinger discharge: the intense electric field near the horizon tears electron-positron pairs from the vacuum, with one lepton escaping and the other falling back in. Each event reduces the black hole's charge by one quantized unit, driving it toward neutrality. Spinning black holes with the axion field enabled exhibit superradiance: when the horizon angular velocity exceeds the axion mass, the field extracts rotational energy and grows a scalar cloud around the black hole, spinning it down until the superradiance condition fails. All charges in the simulation are quantized in units of the boson charge, ensuring discrete conservation across emission, decay, and pair production.</p>
+    <h3 data-i18n="edu.h.boris">Boris Integrator</h3>
+    <p data-i18n="edu.p.boris">Geon uses the Boris algorithm to integrate particle trajectories. The Boris integrator preserves phase-space volume under strong magnetic fields, preventing artificial energy drift that plagues simpler methods like Euler integration. It splits the force application into electric half-kicks and a magnetic rotation, ensuring stable cyclotron orbits at any timestep.</p>
+    <h3 data-i18n="edu.h.access">Accessibility</h3>
+    <p data-i18n="edu.p.access">Geon supports keyboard navigation for all controls, high-contrast mode via the theme toggle, and ARIA labels on all toolbar buttons and interactive elements. Simulation parameters are adjustable via labeled sliders and toggles. Known hazards: flashing particle trails and continuous motion simulation. Users sensitive to motion or flashing content should use presets with lower particle counts.</p>
     <p><em>See also: <a href="/cyano">Cyano</a> for cellular energy simulations, <a href="/shoals">Shoals</a> for financial dynamics.</em></p>
-<h3>Learning Outcomes</h3>
-<p>After using Geon, students should be able to: explain how gravitational and electromagnetic forces produce qualitatively different orbital dynamics; describe the role of the Barnes-Hut algorithm in reducing force computation from O(N²) to O(N log N); identify how relativistic corrections (1PN, gravitomagnetism) modify Newtonian predictions at high velocities; distinguish between conservative and dissipative forces in phase-space evolution; describe how Hawking radiation and Schwinger discharge govern black hole evaporation and charge neutralization; and explain how superradiance transfers angular momentum from a spinning black hole to a scalar field.</p>
-<h3>Prerequisites</h3>
-<p>Familiarity with Newton's laws of motion and basic vector calculus. No prior knowledge of relativity or particle physics is required — the presets are designed to introduce each concept incrementally.</p>
-<h3>References</h3>
+<h3 data-i18n="edu.h.outcomes">Learning Outcomes</h3>
+<p data-i18n="edu.p.outcomes">After using Geon, students should be able to: explain how gravitational and electromagnetic forces produce qualitatively different orbital dynamics; describe the role of the Barnes-Hut algorithm in reducing force computation from O(N²) to O(N log N); identify how relativistic corrections (1PN, gravitomagnetism) modify Newtonian predictions at high velocities; distinguish between conservative and dissipative forces in phase-space evolution; describe how Hawking radiation and Schwinger discharge govern black hole evaporation and charge neutralization; and explain how superradiance transfers angular momentum from a spinning black hole to a scalar field.</p>
+<h3 data-i18n="edu.h.prereq">Prerequisites</h3>
+<p data-i18n="edu.p.prereq">Familiarity with Newton's laws of motion and basic vector calculus. No prior knowledge of relativity or particle physics is required — the presets are designed to introduce each concept incrementally.</p>
+<h3 data-i18n="edu.h.refs">References</h3>
 <p>J. Barnes and P. Hut, <a href="https://doi.org/10.1038/324446a0" target="_blank" rel="noopener">"A hierarchical O(N log N) force-calculation algorithm"</a> (1986). J. P. Boris, "Relativistic plasma simulation — optimization of a hybrid code" (1970). L. Verlet, <a href="https://doi.org/10.1103/PhysRev.159.98" target="_blank" rel="noopener">"Computer experiments on classical fluids"</a> (1967). J. Schwinger, <a href="https://doi.org/10.1103/PhysRev.82.664" target="_blank" rel="noopener">"On gauge invariance and vacuum polarization"</a> (1951).</p>
       </article>
     </details>

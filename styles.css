@@ -58,6 +58,23 @@
     vertical-align: baseline;
 }
 
+/* ─── Language Toggle Button ─── */
+/* Globe icon + 2-letter target-language label, mirrors .speed-btn pattern. */
+.lang-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 44px;
+    padding-right: 6px;
+}
+
+.lang-btn .lang-label {
+    font-family: var(--font-mono);
+    font-size: var(--font-sm);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
 
 /* ═══════════════════════════════════════════════
    Control Panel — Overrides
