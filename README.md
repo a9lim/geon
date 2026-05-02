@@ -29,7 +29,7 @@ Interactive particle physics simulator that runs entirely in the browser. You ca
 ### Relativistic Corrections
 
 - **1PN (post-Newtonian)**: Einstein-Infeld-Hoffmann for gravity, Darwin for EM, Bazanski for gravity-EM cross-terms, scalar Breit for Yukawa
-- **Signal delay**: finite-speed force propagation solving for the delayed position on the past light cone, with history buffers (256 snapshots, stride 64)
+- **Signal delay**: toy finite-speed force propagation using delayed source positions and a scalar aberration factor, with history buffers (256 snapshots, stride 64)
 
 ### Scalar Fields
 
@@ -50,7 +50,7 @@ Both fields evolve via Stormer-Verlet KDK integration, interact with particles a
 
 ### Black Holes
 
-- **Kerr-Newman horizons**: mass, spin, and charge determine horizon radius with cosmic censorship
+- **Kerr-Newman horizons**: mass, spin, and charge determine the sub-extremal horizon radius; super-extremal toy inputs are clamped to an effective radius for stable rendering
 - **Ergosphere visualization**: rendered as a distinct region around spinning black holes
 - **Hawking radiation**: thermal emission with inverse-mass-squared rate, evaporating small black holes
 - **Schwinger discharge**: vacuum pair production at charged black hole horizons 

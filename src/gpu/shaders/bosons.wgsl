@@ -25,6 +25,53 @@
 @group(3) @binding(0) var<storage, read_write> pions: array<Pion>;
 @group(3) @binding(1) var<storage, read_write> piCount: atomic<u32>;
 
+fn absorptionRadius(m: f32, q: f32, angW: f32) -> f32 {
+    let bodyR = pow(m, 1.0 / 3.0);
+    let bodyRSq = bodyR * bodyR;
+    var angVel = angW;
+    if ((u.toggles0 & RELATIVITY_BIT) != 0u) {
+        let sr = angW * bodyR;
+        angVel = angW / sqrt(1.0 + sr * sr);
+    }
+
+    if ((u.toggles0 & BLACK_HOLE_BIT) == 0u) {
+        return bodyR;
+    }
+    let a = INERTIA_K * bodyRSq * abs(angVel);
+    let disc = m * m - a * a - q * q;
+    return select(m, m + sqrt(max(0.0, disc)), disc >= 0.0);
+}
+
+fn absorbFourMomentum(j: u32, energy: f32, px: f32, py: f32, charge: f32) -> bool {
+    var p = particles[j];
+    if (p.mass <= EPSILON || energy <= EPSILON) { return false; }
+
+    let wSq0 = p.velWX * p.velWX + p.velWY * p.velWY;
+    let e0 = p.mass * sqrt(1.0 + wSq0);
+    let px0 = p.mass * p.velWX;
+    let py0 = p.mass * p.velWY;
+    let e1 = e0 + energy;
+    let px1 = px0 + px;
+    let py1 = py0 + py;
+    let mSq = e1 * e1 - px1 * px1 - py1 * py1;
+    if (!(mSq > EPSILON)) { return false; }
+
+    let newMass = sqrt(mSq);
+    if (newMass != newMass || newMass <= MIN_MASS) { return false; }
+
+    p.baseMass = p.baseMass * (newMass / p.mass);
+    p.mass = newMass;
+    p.charge += charge;
+    p.velWX = px1 / newMass;
+    p.velWY = py1 / newMass;
+    particles[j] = p;
+
+    var aux = particleAux[j];
+    aux.radius = absorptionRadius(newMass, p.charge, p.angW);
+    particleAux[j] = aux;
+    return true;
+}
+
 // Photon drift: move at c=1, apply gravitational lensing via pairwise fallback
 @compute @workgroup_size(64)
 fn updatePhotons(@builtin(global_invocation_id) gid: vec3u) {
@@ -147,7 +194,7 @@ fn updatePions(@builtin(global_invocation_id) gid: vec3u) {
     pions[i] = pi;
 }
 
-// Photon absorption: transfer momentum to nearby particles.
+// Photon absorption: transfer four-momentum to nearby particles.
 // Single-threaded to avoid data races: multiple bosons targeting the same
 // particle would race on non-atomic f32 velocity/charge writes.
 @compute @workgroup_size(1)
@@ -179,18 +226,16 @@ fn absorbPhotons(@builtin(global_invocation_id) gid: vec3u) {
             let distSq = dx * dx + dy * dy;
             let rSq = auxJ.radius * auxJ.radius;
             if (distSq < rSq) {
-                // Absorb: transfer momentum to proper velocity
-                let invTM = select(0.0, 1.0 / pj.mass, pj.mass > EPSILON);
-                particles[j].velWX += phEnergy * phVelX * invTM;
-                particles[j].velWY += phEnergy * phVelY * invTM;
-                photons[i].flags &= ~1u; // mark dead
-                break;
+                if (absorbFourMomentum(j, phEnergy, phEnergy * phVelX, phEnergy * phVelY, 0.0)) {
+                    photons[i].flags &= ~1u; // mark dead
+                    break;
+                }
             }
         }
     }
 }
 
-// Pion absorption: transfer momentum + charge to nearby particles.
+// Pion absorption: transfer four-momentum + charge to nearby particles.
 // Single-threaded to avoid data races: multiple bosons targeting the same
 // particle would race on non-atomic f32 velocity/charge writes.
 @compute @workgroup_size(1)
@@ -209,12 +254,12 @@ fn absorbPions(@builtin(global_invocation_id) gid: vec3u) {
         let piEmitterId = pi.emitterId;
         let piWX = pi.wX;
         let piWY = pi.wY;
-        let piEnergy = pi.energy;
         let piCharge = pi.charge;
 
-        // Precompute pion velocity direction
         let gamma = sqrt(1.0 + piWX * piWX + piWY * piWY);
-        let invG = 1.0 / gamma;
+        let piEnergy = pi.mass * gamma;
+        let piPx = pi.mass * piWX;
+        let piPy = pi.mass * piWY;
 
         for (var j = 0u; j < aliveN; j++) {
             let pj = particles[j];
@@ -225,14 +270,10 @@ fn absorbPions(@builtin(global_invocation_id) gid: vec3u) {
             let dx = piX - pj.posX;
             let dy = piY - pj.posY;
             if (dx * dx + dy * dy < auxJ.radius * auxJ.radius) {
-                // Transfer momentum
-                let invTM = select(0.0, 1.0 / pj.mass, pj.mass > EPSILON);
-                particles[j].velWX += piEnergy * (piWX * invG) * invTM;
-                particles[j].velWY += piEnergy * (piWY * invG) * invTM;
-                // Transfer charge
-                particles[j].charge += piCharge;
-                pions[i].flags &= ~1u;
-                break;
+                if (absorbFourMomentum(j, piEnergy, piPx, piPy, piCharge)) {
+                    pions[i].flags &= ~1u;
+                    break;
+                }
             }
         }
     }

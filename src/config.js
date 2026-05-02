@@ -163,7 +163,7 @@ export function spawnOffset(radius) {
     return Math.max(radius * SPAWN_OFFSET_MULTIPLIER, SPAWN_OFFSET_FLOOR);
 }
 
-/** Kerr-Newman event horizon radius: r+ = M + sqrt(M² - a² - Q²). */
+/** Kerr-Newman radius for sub-extremal parameters; super-extremal inputs clamp to M as a toy-model effective radius. */
 export function kerrNewmanRadius(M, radiusSq, angVel, charge) {
     const a = INERTIA_K * radiusSq * Math.abs(angVel);
     const disc = M * M - a * a - charge * charge;

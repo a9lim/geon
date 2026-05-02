@@ -2,7 +2,7 @@
 // FALLBACK ONLY: PE is accumulated inline in pairForce() via _peAccum during simulation.
 // This module is used only for preset-load recomputation when the force loop hasn't run yet.
 // Mirrors force calculation structure (BH tree or pairwise) for consistent PE.
-// When signal delay is active, uses retarded source positions at leaf/pairwise level.
+// When signal delay is active, uses delayed source positions at leaf/pairwise level.
 
 import { INERTIA_K, MAG_MOMENT_K, YUKAWA_COUPLING, EPSILON, TORUS } from './config.js';
 import { getDelayedState } from './signal-delay.js';

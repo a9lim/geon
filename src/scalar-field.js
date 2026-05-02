@@ -179,6 +179,50 @@ export default class ScalarField {
         }
     }
 
+    /** Add a local fieldDot impulse whose immediate kinetic-energy increase is `energy`. */
+    _depositEnergyImpulsePQS(x, y, energy, invCellW, invCellH, bcMode, topoConst) {
+        if (energy <= EPSILON || invCellW <= EPSILON || invCellH <= EPSILON) return 0;
+        this._pqsCoords(x, y, invCellW, invCellH);
+        const { ix, iy } = this._pqs;
+        const wx = this._wx;
+        const wy = this._wy;
+        const GRID = this._grid;
+        const fieldDot = this.fieldDot;
+        const cellArea = 1 / (invCellW * invCellH);
+
+        let linear = 0;
+        let quad = 0;
+        for (let jy = 0; jy < 4; jy++) {
+            const wyj = wy[jy];
+            for (let jx = 0; jx < 4; jx++) {
+                const idx = this._nb(ix + jx - 1, iy + jy - 1, bcMode, topoConst);
+                if (idx < 0) continue;
+                const w = wx[jx] * wyj;
+                linear += fieldDot[idx] * w;
+                quad += w * w;
+            }
+        }
+
+        const B = cellArea * linear;
+        const C = cellArea * quad;
+        if (C <= EPSILON) return 0;
+        const disc = B * B + 2 * C * energy;
+        const amp = (-B + Math.sqrt(Math.max(0, disc))) / C;
+        if (!Number.isFinite(amp) || amp <= 0) return 0;
+
+        for (let jy = 0; jy < 4; jy++) {
+            const wyj = wy[jy];
+            for (let jx = 0; jx < 4; jx++) {
+                const idx = this._nb(ix + jx - 1, iy + jy - 1, bcMode, topoConst);
+                if (idx < 0) continue;
+                fieldDot[idx] += amp * wx[jx] * wyj;
+            }
+        }
+
+        const actual = B * amp + 0.5 * C * amp * amp;
+        return Number.isFinite(actual) ? Math.min(energy, Math.max(0, actual)) : 0;
+    }
+
     /** Compute discrete Laplacian with boundary conditions. */
     _computeLaplacian(bcMode, topoConst, invCellWSq, invCellHSq, vacValue) {
         const field = this.field;

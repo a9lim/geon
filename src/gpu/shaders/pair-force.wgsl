@@ -3,9 +3,9 @@
 // then each thread accumulates forces from all sources onto its particle.
 //
 // Ports CPU pairForce() from forces.js. Signal delay: when relativity is on,
-// each source uses retarded position/velocity from history via getDelayedStateGPU().
+// each source uses delayed position/velocity from history via getDelayedStateGPU().
 // Dead/retired particles exert forces via signal delay fade-out (scanned after tile loop).
-// Aberration factor (1 - n_hat . v_source)^{-3} applied with retarded velocity.
+// Toy scalar aberration factor (1 - n_hat . v_source)^{-3} applied with delayed velocity.
 //
 // No Barnes-Hut (Phase 3). All force types gated by toggle bits.
 //
@@ -115,7 +115,7 @@ fn accumulatePairForce(
     let invR3 = invR * invRSq;
     let invR5 = invR3 * invRSq;
 
-    // Lienard-Wiechert aberration: (1 - n_hat . v_source)^{-3}
+    // Toy signal-delay aberration: not a full moving-source field reconstruction.
     var aberr: f32 = 1.0;
     if (src.useAberration) {
         let nDotV = -(rx * src.velX + ry * src.velY) * invR;
@@ -365,7 +365,7 @@ fn makeDelayedSource(
     src.velY = delayed.vy;
     src.mass = sMass;
     src.charge = sCharge;
-    // Recompute dipole moments from retarded angw
+    // Recompute dipole moments from delayed angular proper velocity
     let retAngwSq = delayed.angw * delayed.angw;
     let sAngVel = delayed.angw / sqrt(1.0 + retAngwSq * bodyRadSq);
     src.angVel = sAngVel;

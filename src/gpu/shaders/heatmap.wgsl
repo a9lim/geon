@@ -119,7 +119,7 @@ fn computeHeatmap(@builtin(global_invocation_id) gid: vec3<u32>) {
         var srcX = p.posX;
         var srcY = p.posY;
 
-        // Signal delay: solve for retarded position
+        // Signal delay: solve for delayed source position
         if (useDelay) {
             let ret = getDelayedStateGPU(i, wx, wy, hu.simTime,
                 isPeriodic, hu.domainW, hu.domainH,

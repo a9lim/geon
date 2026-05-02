@@ -7,6 +7,7 @@
 // Struct definition (ParticleState) provided by shared-structs.wgsl.
 
 @group(0) @binding(0) var<storage, read_write> particles: array<ParticleState>;
+@group(0) @binding(1) var<storage, read_write> particleAux: array<ParticleAux>;
 
 @group(1) @binding(0) var<storage, read_write> atomicGrid: array<atomic<i32>>;  // GRID_SQ
 @group(1) @binding(1) var<storage, read_write> targetGrid: array<f32>;          // GRID_SQ (f32 output)
@@ -57,6 +58,40 @@ fn atomicDeposit(pqs: PQSResult, value: f32, bcMode: u32, topoMode: u32) {
             }
         }
     }
+}
+
+fn pqsEnergyCoeffs(pqs: PQSResult, cellArea: f32, bcMode: u32, topoMode: u32) -> vec2<f32> {
+    let ix = pqs.ix;
+    let iy = pqs.iy;
+    var linear: f32 = 0.0;
+    var quad: f32 = 0.0;
+
+    if (isInterior(ix, iy)) {
+        for (var jy = 0u; jy < 4u; jy++) {
+            let wyj = pqs.wy[jy];
+            let row = u32(iy + i32(jy) - 1) * GRID + u32(ix - 1);
+            for (var jx = 0u; jx < 4u; jx++) {
+                let w = pqs.wx[jx] * wyj;
+                let idx = row + jx;
+                linear += targetGrid[idx] * w;
+                quad += w * w;
+            }
+        }
+    } else {
+        for (var jy = 0u; jy < 4u; jy++) {
+            let wyj = pqs.wy[jy];
+            for (var jx = 0u; jx < 4u; jx++) {
+                let idx = nbIndex(ix + i32(jx) - 1, iy + i32(jy) - 1, bcMode, topoMode);
+                if (idx >= 0) {
+                    let w = pqs.wx[jx] * wyj;
+                    linear += targetGrid[idx] * w;
+                    quad += w * w;
+                }
+            }
+        }
+    }
+
+    return vec2<f32>(cellArea * linear, cellArea * quad);
 }
 
 // ─── Higgs Source Deposit ───
@@ -119,9 +154,10 @@ fn depositAxionSource(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 // ─── Superradiant Instability ───
 // Spinning BH pumps axion field. One thread per particle.
-// Γ = C · (M·μ_a)² · max(Ω_H - μ_a, 0) · (1 + φ²). Deposits into atomicGrid.
+// Γ = C · (M·μ_a)² · max(Ω_H - μ_a, 0) · (1 + φ²).
+// Deposits a normalized fieldDot impulse whose immediate field energy gain is dE.
 // (1 + φ²) gives exponential cloud growth (stimulated) with vacuum seed (spontaneous).
-// Back-reaction: BH loses mass dM = dE and angular momentum dJ = dE/Ω_H (first law).
+// Back-reaction: BH loses mass dM = dE and angular momentum dJ = dE/μ_a.
 @compute @workgroup_size(256)
 fn depositSuperradiance(@builtin(global_invocation_id) gid: vec3<u32>) {
     let pid = gid.x;
@@ -148,30 +184,66 @@ fn depositSuperradiance(@builtin(global_invocation_id) gid: vec3<u32>) {
     let omegaH = a / sigma;
 
     let muA = uniforms.axionMass;
+    if (muA <= EPSILON) { return; }
     if (omegaH <= muA) { return; }
 
     let alphaG = M * muA;
     // Stimulated amplification: φ² from field-forces shader stored in axYukMod.w
     let phiSq = axYukMod[pid].w;
     let rate = alphaG * alphaG * (omegaH - muA) * (1.0 + phiSq);
-    let dE = rate * uniforms.dt;
+
+    let I_bh = INERTIA_K * bodyRSq * M;
+    if (I_bh < EPSILON) { return; }
+    let maxByMass = max(0.0, M - MIN_MASS);
+    let maxBySpin = abs(angw) * I_bh * muA;
+    let dE = min(rate * uniforms.dt, min(maxByMass, maxBySpin));
     if (dE < EPSILON) { return; }
 
-    // Deposit into atomic grid via PQS
     let cellW = uniforms.domainW / f32(GRID);
     let cellH = uniforms.domainH / f32(GRID);
     if (cellW < EPSILON || cellH < EPSILON) { return; }
     let pqs = pqsWeights(p.posX, p.posY, 1.0 / cellW, 1.0 / cellH);
-    atomicDeposit(pqs, dE, uniforms.boundaryMode, uniforms.topologyMode);
+
+    let coeff = pqsEnergyCoeffs(pqs, cellW * cellH, uniforms.boundaryMode, uniforms.topologyMode);
+    let B = coeff.x;
+    let C = coeff.y;
+    if (C <= EPSILON) { return; }
+    let amp = (-B + sqrt(max(0.0, B * B + 2.0 * C * dE))) / C;
+    if (amp <= EPSILON || amp != amp) { return; }
+
+    let acceptedE = min(dE, max(0.0, B * amp + 0.5 * C * amp * amp));
+    if (acceptedE < EPSILON) { return; }
+
+    atomicDeposit(pqs, amp, uniforms.boundaryMode, uniforms.topologyMode);
 
     // Back-reaction: BH loses mass and angular momentum
     // dJ = (m/ω)·dE ≈ dE/μ_a for the dominant m=1 mode (ω ≈ μ_a).
-    let I_bh = INERTIA_K * bodyRSq * M;
-    if (I_bh < EPSILON) { return; }
-    let dJ = dE / muA;
-    particles[pid].mass = M - dE;
+    let dJ = acceptedE / muA;
+    let newM = M - acceptedE;
     let signW = select(-1.0, 1.0, angw > 0.0);
-    particles[pid].angW = angw - signW * dJ / I_bh;
+    let newAngW = angw - signW * dJ / I_bh;
+    var p2 = p;
+    p2.mass = newM;
+    p2.baseMass = p2.baseMass * (newM / M);
+    p2.angW = newAngW;
+    particles[pid] = p2;
+
+    let newBodyR = pow(newM, 1.0 / 3.0);
+    let newBodyRSq = newBodyR * newBodyR;
+    var newAngVel = newAngW;
+    if (uniforms.relativityEnabled != 0u) {
+        let sr = newAngW * newBodyR;
+        newAngVel = newAngW / sqrt(1.0 + sr * sr);
+    }
+    var activeR = newBodyR;
+    if (uniforms.blackHoleEnabled != 0u) {
+        let newA = INERTIA_K * newBodyRSq * abs(newAngVel);
+        let newDisc = newM * newM - newA * newA - p2.charge * p2.charge;
+        activeR = select(newM, newM + sqrt(max(0.0, newDisc)), newDisc >= 0.0);
+    }
+    var aux = particleAux[pid];
+    aux.radius = activeR;
+    particleAux[pid] = aux;
 }
 
 // ─── Thermal KE Deposit (Higgs phase transitions) ───
@@ -206,4 +278,12 @@ fn finalizeDeposit(@builtin(global_invocation_id) gid: vec3<u32>) {
     let idx = gid.y * GRID + gid.x;
     if (gid.x >= GRID || gid.y >= GRID) { return; }
     targetGrid[idx] = f32(atomicExchange(&atomicGrid[idx], 0)) * INV_FP_SCALE;
+}
+
+// ─── Finalize Add: atomic i32 → f32 delta, add to target, then clear atomic grid ───
+@compute @workgroup_size(8, 8)
+fn finalizeDepositAdd(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let idx = gid.y * GRID + gid.x;
+    if (gid.x >= GRID || gid.y >= GRID) { return; }
+    targetGrid[idx] += f32(atomicExchange(&atomicGrid[idx], 0)) * INV_FP_SCALE;
 }

@@ -175,7 +175,8 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
     const invR3 = invR * invRSq;          // 1 / r_eff³
     const invR5 = invR3 * invRSq;          // 1 / r_eff⁵ (needed by gravity jerk + dipole forces)
 
-    // Liénard-Wiechert aberration factor (1 - n̂·v_source)^{-3}
+    // Toy signal-delay aberration factor. This is an illustrative scalar correction,
+    // not a full moving-source Lienard-Wiechert/GR field reconstruction.
     // n̂ = unit vector from source to observer = (-rx, -ry) / r
     // nDotV = (-rx*svx - ry*svy) * invR
     // P4: Pre-multiply aberration into invR3/invR5 to avoid per-force-type * aberr
@@ -613,7 +614,7 @@ export function compute1PN(particles, SOFTENING_SQ_VAL, periodic, domW, domH, ha
  * Iterative Barnes-Hut tree walk. Uses aggregate multipole data for distant
  * nodes (size/d < theta), individual particles for nearby leaves.
  * Signal delay is applied at leaf level (individual particles); distant
- * nodes use current-time aggregates (retarded correction is negligible at
+ * nodes use current-time aggregates (signal-delay correction is negligible at
  * distances where the BH approximation kicks in).
  */
 // Pre-allocated stack for iterative tree walk (avoids recursion overhead)

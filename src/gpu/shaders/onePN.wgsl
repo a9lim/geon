@@ -16,7 +16,7 @@
 // Shared structs (ParticleState, ParticleDerived, AllForces, etc.) provided by shared-structs.wgsl.
 // Topology helpers (fullMinImageP) provided by shared-topology.wgsl.
 // Signal delay (getDelayedStateGPU, DelayedState) provided by signal-delay-common.wgsl.
-// Signal delay: when relativity is on, uses retarded positions/velocities for all 1PN terms.
+// Signal delay: when relativity is on, uses delayed positions/velocities for all 1PN terms.
 // No aberration — 1PN is already O(v²/c²). Dead particles excluded from 1PN.
 
 const NONE: i32 = -1;
@@ -168,7 +168,7 @@ fn compute1PN(@builtin(global_invocation_id) gid: vec3u) {
         var svx: f32; var svy: f32;
 
         if (signalDelayed) {
-            // Signal delay: use retarded position/velocity from history
+            // Signal delay: use delayed position/velocity from history
             // No aberration — 1PN is already O(v²/c²)
             let delayed = getDelayedStateGPU(
                 j, px, py, u.simTime,

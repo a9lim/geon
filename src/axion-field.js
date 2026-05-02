@@ -210,13 +210,15 @@ export default class AxionField extends ScalarField {
     }
 
     /** Superradiant instability: spinning BH pumps axion field.
-     *  Rate: Γ = C · (M·μ_a)² · max(Ω_H - μ_a, 0) · (1 + φ²), deposits into _source via PQS.
+     *  Rate: Γ = C · (M·μ_a)² · max(Ω_H - μ_a, 0) · (1 + φ²).
+     *  Deposits a normalized fieldDot impulse whose immediate field energy gain is dE.
      *  The (1 + φ²) factor gives exponential cloud growth (stimulated) with a vacuum seed
      *  (spontaneous), analogous to stimulated emission: Γ_total = A(1 + n).
      *  Back-reaction: BH loses mass dM = dE and angular momentum dJ = dE/μ_a (m=1 mode).
      */
     _depositSuperradiance(particles, invCellW, invCellH, bcMode, topoConst, dt) {
         const muA = this.mass;
+        if (muA <= EPSILON) return;
         for (let i = 0; i < particles.length; i++) {
             const p = particles[i];
             p.torqueSuperradiance = 0;
@@ -238,29 +240,38 @@ export default class AxionField extends ScalarField {
             // Sample local field amplitude for stimulated amplification
             const phiLocal = this.interpolate(p.pos.x, p.pos.y, invCellW, invCellH, bcMode, topoConst);
             const rate = alphaG * alphaG * (omegaH - muA) * (1 + phiLocal * phiLocal);
-            const dE = rate * dt;
-            if (dE < EPSILON) continue;
-
-            // Deposit into source array (positive = excite field)
-            this._depositPQS(this._source, p.pos.x, p.pos.y, dE, invCellW, invCellH, bcMode, topoConst);
-
-            // Back-reaction: BH loses mass and angular momentum
-            // dJ = (m/ω)·dE ≈ dE/μ_a for the dominant m=1 mode (ω ≈ μ_a).
-            // Entropy production: TdS = dE(Ω_H/μ_a − 1) > 0 (area theorem satisfied).
             const I = INERTIA_K * bodyRSq * M;
             if (I < EPSILON) continue;
-            const dJ = dE / muA;
             const signW = Math.sign(p.angw);
-            p.mass -= dE;
+            const maxByMass = Math.max(0, M - MIN_MASS);
+            const maxBySpin = Math.abs(p.angw) * I * muA;
+            const dE = Math.min(rate * dt, maxByMass, maxBySpin);
+            if (dE < EPSILON) continue;
+
+            const acceptedE = this._depositEnergyImpulsePQS(
+                p.pos.x, p.pos.y, dE, invCellW, invCellH, bcMode, topoConst
+            );
+            if (acceptedE < EPSILON) continue;
+
+            // Back-reaction: BH loses mass and angular momentum.
+            // dJ = (m/ω)·dE ≈ dE/μ_a for the dominant m=1 mode (ω ≈ μ_a).
+            // Entropy production: TdS = dE(Ω_H/μ_a − 1) > 0 (area theorem satisfied).
+            const dJ = acceptedE / muA;
+            const preMass = p.mass;
+            p.mass -= acceptedE;
+            if (preMass > EPSILON) p.baseMass *= p.mass / preMass;
             p.angw -= signW * dJ / I;
             // Recompute derived state after mass/spin change
             const newBodyRSq = Math.cbrt(p.mass) ** 2;
             p.bodyRadiusSq = newBodyRSq;
             const absAngw = Math.abs(p.angw);
             p.angVel = p.angw / Math.sqrt(1 + absAngw * absAngw * newBodyRSq);
+            p.radius = kerrNewmanRadius(p.mass, newBodyRSq, p.angVel, p.charge);
+            p.radiusSq = p.radius * p.radius;
+            p.invMass = 1 / p.mass;
 
             // Record effective torque for display (same units as other torques: τ = dJ/dt)
-            p.torqueSuperradiance = -signW * rate / muA;
+            p.torqueSuperradiance = -signW * acceptedE / (dt * muA);
         }
     }
 

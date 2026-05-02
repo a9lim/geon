@@ -72,7 +72,7 @@ Enable/disable cascade and slider group visibility use shared `_forms.bindDeps()
 
 ### Kerr-Newman Horizons
 
-`kerrNewmanRadius(M, radiusSq, angVel, charge)` in `config.js`: `r₊ = M + √(M² - a² - Q²)`. Super-extremal case (`a² + Q² > M²`) clamps to the extremal radius `r₊ = M` — cosmic censorship, no naked singularities. Same logic in `cache-derived.wgsl` and `radiation.wgsl` (3 sites).
+`kerrNewmanRadius(M, radiusSq, angVel, charge)` in `config.js`: sub-extremal `r₊ = M + √(M² - a² - Q²)`. Super-extremal toy inputs (`a² + Q² > M²`) clamp to `r₊ = M` as an effective radius for stable rendering/evolution; this is not a physical naked-singularity or cosmic-censorship model. Same clamp logic appears in `cache-derived.wgsl`, `radiation.wgsl`, and `field-deposit.wgsl`.
 
 ### Schwinger Discharge
 
@@ -80,7 +80,7 @@ Vacuum pair production at BH horizons. Rate: `Γ = (e²Q²)/(π²Σ) × exp(-πE
 
 ### Superradiance
 
-Axion field amplification by spinning BHs. Rate: `Γ = (M·μ_a)² · max(Ω_H - μ_a, 0) · (1 + φ²)`, where `Ω_H = a/Σ` is horizon angular velocity and `φ` is the local axion field amplitude. Phenomenological α² scaling (real rate ∝ α⁸, too steep for interactive sim). The `(1 + φ²)` factor gives exponential cloud growth (stimulated amplification) from a constant vacuum seed (spontaneous), analogous to stimulated emission `Γ = A(1+n)`. Back-reaction: BH loses mass `dM = dE` and angular momentum `dJ = dE/μ_a` (m=1 mode at frequency ω ≈ μ_a; entropy production `TdS = dE(Ω_H/μ_a − 1) > 0`). Natural saturation when `Ω_H ≤ μ_a`. No accumulator (continuous deposit, not discrete event). Deposits into axion `_source` array via PQS at BH position. Requires BH + Axion. CPU: `axion-field.js` `_depositSuperradiance()` samples field via `interpolate()`. GPU: `field-deposit.wgsl` `depositSuperradiance` reads `φ²` from `axYukMod[pid].w` (set by `field-forces.wgsl` `applyAxionForces` at pass 5c, consumed at pass 15). GPU deposit pipeline has a 3-group layout (group 2 = axYukMod read-only) separate from the 2-group layout used by other deposit entry points. Torque display: `torqueSuperradiance` (CPU) / `f5.z` (GPU), rendered as indigo arc at offset 1.0 (second ring from center; contact torque is innermost at 0.5).
+Axion field amplification by spinning BHs. Rate: `Γ = (M·μ_a)² · max(Ω_H - μ_a, 0) · (1 + φ²)`, where `Ω_H = a/Σ` is horizon angular velocity and `φ` is the local axion field amplitude. Phenomenological α² scaling (real rate ∝ α⁸, too steep for interactive sim). The `(1 + φ²)` factor gives exponential cloud growth (stimulated amplification) from a constant vacuum seed (spontaneous), analogous to stimulated emission `Γ = A(1+n)`. Back-reaction: BH loses mass `dM = dE` and angular momentum `dJ = dE/μ_a` (m=1 mode at frequency ω ≈ μ_a; entropy production `TdS = dE(Ω_H/μ_a − 1) > 0`). Natural saturation when `Ω_H ≤ μ_a`. No accumulator (continuous deposit, not discrete event). Deposits an energy-normalized PQS impulse into axion `fieldDot`: the immediate field kinetic-energy increase equals the accepted `dE`, then the same `dE` is removed from BH mass/spin. Requires BH + Axion. CPU: `axion-field.js` `_depositSuperradiance()` samples field via `interpolate()` and normalizes against local `fieldDot`. GPU: `field-deposit.wgsl` `depositSuperradiance` reads `φ²` from `axYukMod[pid].w` (set by `field-forces.wgsl` `applyAxionForces` at pass 5c, consumed at pass 15) and adds the normalized impulse with `finalizeDepositAdd`. GPU deposit pipeline has a 3-group layout (group 2 = axYukMod read-only) separate from the 2-group layout used by other deposit entry points. Torque display: `torqueSuperradiance` (CPU) / `f5.z` (GPU), rendered as indigo arc at offset 1.0 (second ring from center; contact torque is innermost at 0.5).
 
 ### Kugelblitz Collapse
 
@@ -174,6 +174,7 @@ UI toggle hidden via `style="display:none"` — still activatable via presets (R
 - 1PN does NOT obey Newton's 3rd law — velocity-Verlet corrected
 - `compute1PN()` zeroes `force1PN` before accumulating
 - Self-absorption permanently blocked by `emitterId` for both photons and pions
+- Photon/pion absorption adds full lab-frame four-momentum: target invariant mass/internal energy changes along with proper velocity; charged pions also transfer charge
 - Leptons on GPU share pion buffer — distinguished by `Pion.kind` field (0=pion, 1=lepton)
 - GPU pion decay probability scaled by `1-(1-p)^N` to match CPU's per-tick rate
 - World coordinates: `sim.domainW/H` (viewport / WORLD_SCALE), not pixels

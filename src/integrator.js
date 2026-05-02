@@ -134,6 +134,46 @@ export default class Physics {
         this._disintResult = { fragments: this._disintFragments, transfers: this._disintTransfers };
     }
 
+    /** Absorb a boson's lab-frame four-momentum into a massive particle. */
+    _absorbFourMomentum(target, energy, px, py, charge = 0) {
+        if (target.mass <= EPSILON || energy <= EPSILON) return false;
+        const wSq0 = target.w.x * target.w.x + target.w.y * target.w.y;
+        const e0 = target.mass * Math.sqrt(1 + wSq0);
+        const px0 = target.mass * target.w.x;
+        const py0 = target.mass * target.w.y;
+        const e1 = e0 + energy;
+        const px1 = px0 + px;
+        const py1 = py0 + py;
+        const mSq = e1 * e1 - px1 * px1 - py1 * py1;
+        if (!(mSq > EPSILON)) return false;
+
+        const preMass = target.mass;
+        const newMass = Math.sqrt(mSq);
+        if (!Number.isFinite(newMass) || newMass <= MIN_MASS) return false;
+
+        target.mass = newMass;
+        if (preMass > EPSILON) target.baseMass *= newMass / preMass;
+        target.charge += charge;
+        target.w.x = px1 / newMass;
+        target.w.y = py1 / newMass;
+        const invG = this.relativityEnabled
+            ? 1 / Math.sqrt(1 + target.w.x * target.w.x + target.w.y * target.w.y)
+            : 1;
+        target.vel.x = target.w.x * invG;
+        target.vel.y = target.w.y * invG;
+
+        const bodyR = Math.cbrt(newMass);
+        target.bodyRadiusSq = bodyR * bodyR;
+        target.angVel = this.relativityEnabled ? angwToAngVel(target.angw, bodyR) : target.angw;
+        target.radius = this.blackHoleEnabled
+            ? kerrNewmanRadius(newMass, target.bodyRadiusSq, target.angVel, target.charge)
+            : bodyR;
+        target.radiusSq = target.radius * target.radius;
+        target.invMass = 1 / newMass;
+        target.color = target.getColor();
+        return true;
+    }
+
     /** Copy current toggle booleans into reusable object (once per frame). */
     _syncToggles() {
         this._toggles.gravityEnabled = this.gravityEnabled;
@@ -1433,21 +1473,22 @@ export default class Physics {
                         const dx = ph.pos.x - target.pos.x;
                         const dy = ph.pos.y - target.pos.y;
                         if (dx * dx + dy * dy < target.radiusSq) {
-                            const impulse = ph.energy;
-                            const invTM = target.mass > EPSILON ? 1 / target.mass : 0;
-                            target.w.x += impulse * ph.vel.x * invTM;
-                            target.w.y += impulse * ph.vel.y * invTM;
-                            this.sim.totalRadiated -= ph.energy;
-                            this.sim.totalRadiatedPx -= ph.energy * ph.vel.x;
-                            this.sim.totalRadiatedPy -= ph.energy * ph.vel.y;
-                            ph.alive = false;
-                            break;
+                            const energy = ph.energy;
+                            const px = energy * ph.vel.x;
+                            const py = energy * ph.vel.y;
+                            if (this._absorbFourMomentum(target, energy, px, py)) {
+                                this.sim.totalRadiated -= energy;
+                                this.sim.totalRadiatedPx -= px;
+                                this.sim.totalRadiatedPy -= py;
+                                ph.alive = false;
+                                break;
+                            }
                         }
                     }
                 }
             }
 
-            // Pion absorption: transfer momentum + charge to absorbing particle
+            // Pion absorption: transfer full four-momentum + charge to absorbing particle
             if (this.yukawaEnabled && this.sim && this.sim.pions.length > 0) {
                 const softening = this.blackHoleEnabled ? BH_SOFTENING : SOFTENING;
                 const pions = this.sim.pions;
@@ -1464,16 +1505,17 @@ export default class Physics {
                         const dx = pn.pos.x - target.pos.x;
                         const dy = pn.pos.y - target.pos.y;
                         if (dx * dx + dy * dy < target.radiusSq) {
-                            const invTM = target.mass > EPSILON ? 1 / target.mass : 0;
-                            target.w.x += pn.energy * pn.vel.x * invTM;
-                            target.w.y += pn.energy * pn.vel.y * invTM;
-                            target.charge += pn.charge;
-                            if (Math.abs(pn.charge) > EPSILON) target.updateColor();
-                            this.sim.totalRadiated -= pn.energy;
-                            this.sim.totalRadiatedPx -= pn.energy * pn.vel.x;
-                            this.sim.totalRadiatedPy -= pn.energy * pn.vel.y;
-                            pn.alive = false;
-                            break;
+                            const gamma = Math.sqrt(1 + pn.w.x * pn.w.x + pn.w.y * pn.w.y);
+                            const energy = pn.mass * gamma;
+                            const px = pn.mass * pn.w.x;
+                            const py = pn.mass * pn.w.y;
+                            if (this._absorbFourMomentum(target, energy, px, py, pn.charge)) {
+                                this.sim.totalRadiated -= energy;
+                                this.sim.totalRadiatedPx -= px;
+                                this.sim.totalRadiatedPy -= py;
+                                pn.alive = false;
+                                break;
+                            }
                         }
                     }
                 }

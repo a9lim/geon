@@ -2236,12 +2236,13 @@ export default class GPUPhysics {
         const b = this.buffers;
         const dep = this._fieldDeposit;
 
-        // Group 0: packed particle state
+        // Group 0: packed particle state + aux metadata
         const g0 = this.device.createBindGroup({
             label: `fieldDeposit_g0_${which}`,
             layout: dep.bindGroupLayouts[0],
             entries: [
                 { binding: 0, resource: { buffer: b.particleState } },
+                { binding: 1, resource: { buffer: b.particleAux } },
             ],
         });
 
@@ -2270,6 +2271,17 @@ export default class GPUPhysics {
             ],
         });
 
+        // Group 1 for superradiance fieldDot impulse (axion only)
+        const g1FieldDot = this.device.createBindGroup({
+            label: `fieldDeposit_g1_fieldDot_${which}`,
+            layout: dep.bindGroupLayouts[1],
+            entries: [
+                { binding: 0, resource: { buffer: this._atomicGrid } },
+                { binding: 1, resource: { buffer: fb.fieldDot } },
+                { binding: 2, resource: { buffer: uBuf } },
+            ],
+        });
+
         // Group 2: axYukMod (read-only, for superradiance stimulated amplification)
         const g2 = this.device.createBindGroup({
             label: `fieldDeposit_g2_${which}`,
@@ -2279,7 +2291,7 @@ export default class GPUPhysics {
             ],
         });
 
-        this._fieldDepositBGs[which] = { g0, g1Source, g1Thermal, g2 };
+        this._fieldDepositBGs[which] = { g0, g1Source, g1Thermal, g1FieldDot, g2 };
     }
 
     /**
@@ -2653,17 +2665,6 @@ export default class GPUPhysics {
             p.end();
         }
 
-        // Superradiance: spinning BH deposits into axion field (axion only, requires BH)
-        if (which === 'axion' && this._blackHoleEnabled && this.aliveCount > 0) {
-            const p = encoder.beginComputePass({ label: 'depositSuperradiance' });
-            p.setPipeline(dep.depositSuperradiance);
-            p.setBindGroup(0, depBGs.g0);
-            p.setBindGroup(1, depBGs.g1Source);
-            p.setBindGroup(2, depBGs.g2);
-            p.dispatchWorkgroups(particleWG);
-            p.end();
-        }
-
         // Step 2: Finalize source (atomic i32 → f32, clears atomic grid)
         {
             const p = encoder.beginComputePass({ label: `finalizeSource_${which}` });
@@ -2672,6 +2673,24 @@ export default class GPUPhysics {
             p.setBindGroup(1, depBGs.g1Source);
             p.dispatchWorkgroups(gridWG, gridWG);
             p.end();
+        }
+
+        // Superradiance: spinning BH deposits an energy-normalized axion fieldDot impulse
+        if (which === 'axion' && this._blackHoleEnabled && this.aliveCount > 0) {
+            const p = encoder.beginComputePass({ label: 'depositSuperradiance' });
+            p.setPipeline(dep.depositSuperradiance);
+            p.setBindGroup(0, depBGs.g0);
+            p.setBindGroup(1, depBGs.g1FieldDot);
+            p.setBindGroup(2, depBGs.g2);
+            p.dispatchWorkgroups(particleWG);
+            p.end();
+
+            const f = encoder.beginComputePass({ label: 'finalizeSuperradiance' });
+            f.setPipeline(dep.finalizeDepositAdd);
+            f.setBindGroup(0, depBGs.g0);
+            f.setBindGroup(1, depBGs.g1FieldDot);
+            f.dispatchWorkgroups(gridWG, gridWG);
+            f.end();
         }
 
         // Step 3: Higgs thermal deposition (Higgs only)

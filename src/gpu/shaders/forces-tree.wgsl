@@ -75,7 +75,7 @@ fn accumulateForce(
     let invR3 = invR * invRSq;
     let invR5 = invR3 * invRSq;
 
-    // Lienard-Wiechert aberration: (1 - n_hat dot v_source)^{-3}
+    // Toy signal-delay aberration: not a full moving-source field reconstruction.
     var aberr: f32 = 1.0;
     if (useAberration) {
         let nDotV = -(rx * svx + ry * svy) * invR;
@@ -483,7 +483,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
             let sAYM = axYukMod_in[sIdx];
 
-            // Signal delay: use retarded positions/velocities for leaf particles
+            // Signal delay: use delayed positions/velocities for leaf particles
             if (hasSignalDelay && !isGhost) {
                 // Non-ghost leaf: signal delay from own history
                 let delayed = getDelayedStateGPU(
@@ -492,7 +492,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     uniforms.topologyMode, false
                 );
                 if (!delayed.valid) { continue; }
-                // Recompute dipoles from retarded angw (bodyRSq cached in derived)
+                // Recompute dipoles from delayed angular proper velocity (bodyRSq cached in derived)
                 let bodyRadSq = derived_in[sIdx].bodyRSq;
                 let retAngwSq = delayed.angw * delayed.angw;
                 let sAngVelRet = delayed.angw / sqrt(1.0 + retAngwSq * bodyRadSq);
@@ -524,10 +524,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 // Periodic shift: ghostPos - originalCurrentPos
                 let shiftX = sPs.posX - origPs.posX;
                 let shiftY = sPs.posY - origPs.posY;
-                // Retarded ghost position
+                // Delayed ghost position
                 let gsx = delayed.x + shiftX;
                 let gsy = delayed.y + shiftY;
-                // Recompute dipoles from retarded angw (bodyRSq cached in derived)
+                // Recompute dipoles from delayed angular proper velocity (bodyRSq cached in derived)
                 let bodyRadSq = derived_in[sIdx].bodyRSq;
                 let retAngwSq = delayed.angw * delayed.angw;
                 let sAngVelRet = delayed.angw / sqrt(1.0 + retAngwSq * bodyRadSq);
@@ -583,7 +583,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 1.0, 1.0, 1.0, // axMod/yukMod/higgsMod = 1 for aggregate
                 pRi5,
                 &localJerk,
-                false, // no aberration on aggregate nodes — velocities are not retarded
+                false, // no aberration on aggregate nodes — velocities are not delayed
                 _gravOn, _coulOn, _magOn, _gmOn, _yukOn, _onePNOn, _higgsOn, _radOn, _needAxMod,
             );
         } else if (!isLeaf) {

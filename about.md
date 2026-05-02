@@ -16,7 +16,7 @@ Fifteen curated presets demonstrate specific physical phenomena: Keplerian orbit
 
 ## Black Hole Physics
 
-In black hole mode, particles become Kerr-Newman black holes with event horizons determined by mass, charge, and spin. Hawking radiation follows Stefan-Boltzmann scaling from the Kerr-Newman temperature — smaller black holes are hotter and evaporate faster, ending in a photon burst. Charged black holes also undergo Schwinger discharge: the electric field at the horizon exceeds the critical threshold and tears electron-positron pairs from the vacuum. The same-sign lepton escapes while the opposite-sign partner falls back in, reducing the black hole's charge by one quantized unit per event. This drives charged black holes toward neutrality, enforcing cosmic censorship through pair production. Spinning black holes with the axion field enabled exhibit superradiance: when the horizon angular velocity exceeds the axion mass, the field extracts rotational energy and grows a scalar cloud around the black hole. The black hole spins down until the superradiance condition fails, providing a natural saturation mechanism.
+In black hole mode, particles use a Kerr-Newman-inspired effective radius determined by mass, charge, and spin. Sub-extremal parameters use the usual outer-horizon formula; super-extremal toy inputs are clamped to an effective radius rather than modeled as physical naked singularities. Hawking radiation follows Stefan-Boltzmann scaling from the Kerr-Newman temperature — smaller black holes are hotter and evaporate faster, ending in a photon burst. Charged black holes also undergo Schwinger discharge: the electric field near the effective horizon exceeds the critical threshold and tears electron-positron pairs from the vacuum. The same-sign lepton escapes while the opposite-sign partner falls back in, reducing the black hole's charge by one quantized unit per event. Spinning black holes with the axion field enabled exhibit superradiance: when the horizon angular velocity exceeds the axion mass, the field extracts rotational energy and grows a scalar cloud around the black hole. The black hole spins down until the superradiance condition fails, providing a natural saturation mechanism.
 
 ## Charge Quantization
 
@@ -36,7 +36,7 @@ Six boundary conditions: open (particles escape), reflective (elastic walls), to
 
 ## Signal Delay
 
-Optional signal delay mode computes forces using the light-cone distance rather than instantaneous position, simulating relativistic causality. Requires maintaining a circular history buffer of past particle states. When enabled, each force evaluation interpolates the emitting particle's historical position at the retarded time, producing visible propagation delays at speeds near c.
+Optional signal delay mode computes forces from delayed source positions rather than instantaneous positions, giving a toy finite-speed propagation effect. It uses a circular history buffer and a scalar aberration factor, so it is useful for visible near-c delays but is not a full moving-source field solution.
 
 ## Accessibility
 

@@ -460,6 +460,7 @@ fn schwingerDischarge(@builtin(global_invocation_id) gid: vec3u) {
     let angvel = angw / sqrt(1.0 + angw * angw * bodyRSq);
     let a = INERTIA_K * bodyRSq * abs(angvel);
     let disc = M * M - a * a - Q * Q;
+    // Clamp super-extremal inputs to M as a toy effective radius for discharge.
     let rPlus = select(M, M + sqrt(max(0.0, disc)), disc >= 0.0);
     let rPlusSq = rPlus * rPlus;
     let sigma = rPlusSq + a * a; // KN horizon area factor

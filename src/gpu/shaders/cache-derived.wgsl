@@ -43,12 +43,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let magMom = MAG_MOMENT_K * q * angVel * bodyRSq;
     let angMom = INERTIA_K * m * angVel * bodyRSq;
 
-    // Compute effective radius: body radius normally, Kerr-Newman horizon in BH mode
+    // Compute effective radius: body radius normally, Kerr-Newman-inspired radius in BH mode
     let bhOn = hasToggle0(BLACK_HOLE_BIT);
     var activeR = bodyR;
     var activeRSq = bodyRSq;
     if (bhOn) {
-        // kerrNewmanRadius: r+ = M + sqrt(M² - a² - Q²)
+        // kerrNewmanRadius: sub-extremal r+ = M + sqrt(M² - a² - Q²);
+        // super-extremal inputs clamp to M as a toy effective radius.
         let a = INERTIA_K * bodyRSq * abs(angVel);
         let disc = m * m - a * a - q * q;
         activeR = select(m, m + sqrt(max(0.0, disc)), disc >= 0.0);

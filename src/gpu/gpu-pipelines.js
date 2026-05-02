@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 74;
+const SHADER_VERSION = 75;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -1024,6 +1024,7 @@ export async function createFieldDepositPipelines(device, wgslConstants = '') {
         label: 'fieldDeposit_group0',
         entries: [
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleState (rw for encoder compat)
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleAux (rw for radius updates)
         ],
     });
 
@@ -1048,7 +1049,7 @@ export async function createFieldDepositPipelines(device, wgslConstants = '') {
     });
     const srLayout = device.createPipelineLayout({ bindGroupLayouts: [group0Layout, group1Layout, group2Layout] });
 
-    const baseEntryPoints = ['depositHiggsSource', 'depositAxionSource', 'depositThermal', 'finalizeDeposit'];
+    const baseEntryPoints = ['depositHiggsSource', 'depositAxionSource', 'depositThermal', 'finalizeDeposit', 'finalizeDepositAdd'];
     const pipelines = {};
     for (const entry of baseEntryPoints) {
         pipelines[entry] = device.createComputePipeline({
