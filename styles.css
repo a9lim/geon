@@ -59,21 +59,26 @@
 }
 
 /* ─── Language Toggle Button ─── */
-/* Globe icon + 2-letter target-language label, mirrors .speed-btn pattern. */
+/* Text-pill: label shows the destination language in its own script
+   (日本語 in EN, EN in JA). Mirrors root-site .lang-toggle. */
 .lang-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    min-width: 44px;
-    padding-right: 6px;
-}
-
-.lang-btn .lang-label {
+    width: auto;
+    min-width: 36px;
+    padding: 0 8px;
     font-family: var(--font-mono);
     font-size: var(--font-sm);
     font-weight: 600;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.02em;
 }
+
+.lang-btn .lang-label {
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    letter-spacing: inherit;
+}
+
+.lang-btn:hover { color: var(--text); }
 
 
 /* ═══════════════════════════════════════════════

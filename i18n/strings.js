@@ -43,6 +43,10 @@ const UI_EN = {
     'topbar.lang': 'Language',
     'topbar.langTitleEN': 'Switch to Japanese (日本語)',
     'topbar.langTitleJA': 'Switch to English',
+    // Single dynamic title that describes the destination in the current lang.
+    // Mirrors root-site nav.langToggle. Replaces the per-direction Title keys.
+    'topbar.langToggle': 'Switch to Japanese (日本語)',
+    'toast.translated.ja': '(◕‿◕) この文章は Claude が翻訳しました',
     'topbar.settings': 'Settings',
     'topbar.about': 'About',
     'topbar.menu': 'Settings',
@@ -386,6 +390,8 @@ const UI_JA = {
     'topbar.lang': '言語',
     'topbar.langTitleEN': '日本語に切り替える',
     'topbar.langTitleJA': 'Switch to English',
+    'topbar.langToggle': '英語に切り替え (English)',
+    'toast.translated.ja': '(◕‿◕) この文章は Claude が翻訳しました',
     'topbar.settings': '設定',
     'topbar.about': '概要',
     'topbar.menu': '設定',

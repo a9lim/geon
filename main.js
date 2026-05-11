@@ -439,9 +439,10 @@ class Simulation {
     }
 
     /**
-     * Wire the EN/JA toggle button. Updates label + title to reflect the
-     * *target* language (showing "JA" while in EN means "click to switch to JA").
-     * Persistence and DOM re-translation are handled inside _i18n.setLang.
+     * Wire the EN/JA toggle button. Label shows the *destination* language in
+     * its own script — "日本語" while in EN (click to swap to JA), "EN" while
+     * in JA. Mirrors the root-site pattern. Persistence and DOM re-translation
+     * are handled inside _i18n.setLang.
      */
     _wireLangButton() {
         const btn = document.getElementById('lang-btn');
@@ -449,14 +450,26 @@ class Simulation {
         const label = btn.querySelector('.lang-label');
         const sync = () => {
             const cur = getI18nLang();
-            const target = cur === 'ja' ? 'en' : 'ja';
-            if (label) label.textContent = target.toUpperCase();
-            btn.title = tI18n(cur === 'ja' ? 'topbar.langTitleJA' : 'topbar.langTitleEN');
-            btn.setAttribute('aria-label', tI18n('topbar.lang'));
+            if (label) label.textContent = cur === 'ja' ? 'EN' : '日本語';
+            // Single dynamic title key: each language's dict describes the
+            // destination from its own perspective. Falls back to per-direction
+            // keys for back-compat if topbar.langToggle isn't defined yet.
+            const dynTitle = tI18n('topbar.langToggle', null);
+            btn.title = dynTitle != null && dynTitle !== 'topbar.langToggle'
+                ? dynTitle
+                : tI18n(cur === 'ja' ? 'topbar.langTitleJA' : 'topbar.langTitleEN');
+            btn.setAttribute('aria-label', btn.title);
         };
         btn.addEventListener('click', () => {
             const cur = getI18nLang();
-            setI18nLang(cur === 'ja' ? 'en' : 'ja');
+            const next = cur === 'ja' ? 'en' : 'ja';
+            setI18nLang(next);
+            // User-initiated swap to JA → disclose that this text is a
+            // Claude-drafted translation. Toast only fires here (not on
+            // initial-load detection), matching root-site behaviour.
+            if (next === 'ja' && typeof showToast === 'function') {
+                showToast(tI18n('toast.translated.ja'), 3500);
+            }
             if (typeof _haptics !== 'undefined') _haptics.trigger('light');
         });
         onI18nChange(sync);
