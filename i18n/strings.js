@@ -10,7 +10,7 @@ import { REFERENCE_STRINGS } from './strings-reference.js';
 
 const UI_EN = {
     // ── document <head> ──
-    'meta.title': 'Geon — Interactive Particle Physics Simulator | a9l.im',
+    'meta.title': 'Geon | a9l.im',
     'meta.description': 'Explore how gravity, electromagnetism, and relativistic effects shape particle motion. An interactive N-body simulator with 11 forces, scalar fields, and 15 educational presets — running in real time in your browser with WebGPU.',
     'meta.ogTitle': 'Geon — Interactive Particle Physics Simulator',
     'meta.ogDescription': 'Explore how gravity, electromagnetism, and relativistic effects shape particle motion. An interactive N-body simulator with 15 educational presets, running in real time in your browser.',
@@ -357,7 +357,7 @@ const UI_EN = {
 
 const UI_JA = {
     // ── document <head> ──
-    'meta.title': 'Geon — インタラクティブ粒子物理シミュレータ | a9l.im',
+    'meta.title': 'Geon | a9l.im',
     'meta.description': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。11種の力、スカラー場、15の教育用プリセットを備えたインタラクティブな多体シミュレータ。WebGPUによりブラウザ上でリアルタイム動作。',
     'meta.ogTitle': 'Geon — インタラクティブ粒子物理シミュレータ',
     'meta.ogDescription': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。15の教育用プリセットを備えたインタラクティブな多体シミュレータ、ブラウザ上でリアルタイム動作。',
