@@ -1,6 +1,7 @@
 // ─── Field Excitations ───
 // Deposit Gaussian wave packets from collision events into fieldDot.
-// Amplitude = MERGE_EXCITATION_SCALE * sqrt(energy), σ = FIELD_EXCITATION_SIGMA cells.
+// The amplitude is solved so the immediate field kinetic-energy increase
+// equals the event energy, including the current local fieldDot cross term.
 
 // Excitation events are written to a small append buffer by the collision resolve pass.
 struct ExcitationEvent {
@@ -15,12 +16,9 @@ struct ExcitationEvent {
 @group(0) @binding(2) var<uniform> uniforms: FieldUniforms;
 @group(0) @binding(3) var<storage, read> eventCount: array<u32>;  // [0] = count
 
-// One thread per grid cell. Iterates over all excitation events.
-@compute @workgroup_size(8, 8)
+@compute @workgroup_size(1)
 fn depositExcitations(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let ix = gid.x;
-    let iy = gid.y;
-    if (ix >= GRID || iy >= GRID) { return; }
+    if (gid.x != 0u || gid.y != 0u) { return; }
 
     let nEvents = eventCount[0];
     if (nEvents == 0u) { return; }
@@ -32,8 +30,8 @@ fn depositExcitations(@builtin(global_invocation_id) gid: vec3<u32>) {
     let sigma = FIELD_EXCITATION_SIGMA;
     let sigmaSq = sigma * sigma;
     let cutoffSq = 9.0 * sigmaSq;  // 3σ cutoff
-    let idx = iy * GRID + ix;
-    var total: f32 = 0.0;
+    let cellArea = cellW * cellH;
+    let last = i32(GRID) - 1;
 
     for (var e = 0u; e < nEvents; e++) {
         let evt = events[e];
@@ -41,16 +39,42 @@ fn depositExcitations(@builtin(global_invocation_id) gid: vec3<u32>) {
 
         let gxEvt = evt.x / cellW;
         let gyEvt = evt.y / cellH;
-        let amplitude = min(MERGE_EXCITATION_SCALE * sqrt(evt.energy), EXCITATION_MAX_AMPLITUDE);
+        let range = i32(ceil(3.0 * sigma));
+        let ix0 = max(0, i32(floor(gxEvt)) - range);
+        let ix1 = min(last, i32(floor(gxEvt)) + range);
+        let iy0 = max(0, i32(floor(gyEvt)) - range);
+        let iy1 = min(last, i32(floor(gyEvt)) + range);
 
-        let dx = f32(ix) - gxEvt;
-        let dy = f32(iy) - gyEvt;
-        let rSq = dx * dx + dy * dy;
+        var linear: f32 = 0.0;
+        var quad: f32 = 0.0;
+        for (var iy = iy0; iy <= iy1; iy++) {
+            let dy = f32(iy) - gyEvt;
+            for (var ix = ix0; ix <= ix1; ix++) {
+                let dx = f32(ix) - gxEvt;
+                let rSq = dx * dx + dy * dy;
+                if (rSq > cutoffSq) { continue; }
+                let w = exp(-rSq / (2.0 * sigmaSq));
+                let idx = u32(iy) * GRID + u32(ix);
+                linear += fieldDot[idx] * w;
+                quad += w * w;
+            }
+        }
 
-        if (rSq <= cutoffSq) {
-            total += amplitude * exp(-rSq / (2.0 * sigmaSq));
+        let B = cellArea * linear;
+        let C = cellArea * quad;
+        if (C <= EPSILON) { continue; }
+        let amp = (-B + sqrt(max(0.0, B * B + 2.0 * C * evt.energy))) / C;
+        if (amp <= 0.0 || amp != amp) { continue; }
+
+        for (var iy = iy0; iy <= iy1; iy++) {
+            let dy = f32(iy) - gyEvt;
+            for (var ix = ix0; ix <= ix1; ix++) {
+                let dx = f32(ix) - gxEvt;
+                let rSq = dx * dx + dy * dy;
+                if (rSq > cutoffSq) { continue; }
+                let idx = u32(iy) * GRID + u32(ix);
+                fieldDot[idx] += amp * exp(-rSq / (2.0 * sigmaSq));
+            }
         }
     }
-
-    fieldDot[idx] += total;
 }

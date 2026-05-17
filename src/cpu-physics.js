@@ -9,9 +9,7 @@ import {
     PION_DECAY_PROB, CHARGED_PION_DECAY_PROB,
     PHYSICS_DT, MIN_MASS,
     SOFTENING_SQ, BH_SOFTENING_SQ, MAX_SPEED_RATIO, SPAWN_COUNT,
-    spawnOffset, SPAWN_OFFSET_FLOOR, PAIR_PROD_MIN_ENERGY,
-    PAIR_PROD_RADIUS, PAIR_PROD_PROB, PAIR_PROD_MAX_PARTICLES,
-    PAIR_PROD_MIN_AGE, HEATMAP_INTERVAL_MASK, SIDEBAR_THROTTLE_MASK,
+    spawnOffset, HEATMAP_INTERVAL_MASK, SIDEBAR_THROTTLE_MASK,
     MAX_PARTICLES, BOSON_CHARGE, ELECTRON_MASS, MAX_LEPTONS,
 } from './config.js';
 import MasslessBoson from './massless-boson.js';
@@ -116,8 +114,6 @@ export default class CPUPhysics {
         }
         sim.photons.length = pLen;
 
-        this._handlePairProduction(sim, pLen);
-
         let piLen = sim.pions.length;
         for (let i = piLen - 1; i >= 0; i--) {
             const pn = sim.pions[i];
@@ -144,39 +140,6 @@ export default class CPUPhysics {
             }
         }
         sim.leptons.length = lLen;
-    }
-
-    _handlePairProduction(sim, pLen) {
-        const canPairProduce = sim.particles.length < PAIR_PROD_MAX_PARTICLES &&
-            !sim.physics.blackHoleEnabled;
-        for (let i = canPairProduce ? pLen - 1 : -1; i >= 0; i--) {
-            const ph = sim.photons[i];
-            if (ph.energy < PAIR_PROD_MIN_ENERGY || ph.lifetime < PAIR_PROD_MIN_AGE) continue;
-            let nearBody = false;
-            for (let j = 0; j < sim.particles.length; j++) {
-                const p = sim.particles[j];
-                const dx = ph.pos.x - p.pos.x, dy = ph.pos.y - p.pos.y;
-                if (dx * dx + dy * dy < PAIR_PROD_RADIUS * PAIR_PROD_RADIUS * p.mass) {
-                    nearBody = true;
-                    break;
-                }
-            }
-            if (!nearBody || Math.random() > PAIR_PROD_PROB) continue;
-
-            const pairMass = ph.energy * 0.5;
-            const offset = SPAWN_OFFSET_FLOOR;
-            const px = -ph.vel.y, py = ph.vel.x;
-            sim.addParticle(ph.pos.x + px * offset, ph.pos.y + py * offset,
-                ph.vel.x * 0.1, ph.vel.y * 0.1,
-                { mass: pairMass, charge: 0, antimatter: false, skipBaseline: true });
-            sim.addParticle(ph.pos.x - px * offset, ph.pos.y - py * offset,
-                ph.vel.x * 0.1, ph.vel.y * 0.1,
-                { mass: pairMass, charge: 0, antimatter: true, skipBaseline: true });
-            ph.alive = false;
-            MasslessBoson.release(ph);
-            sim.photons[i] = sim.photons[--pLen];
-        }
-        sim.photons.length = pLen;
     }
 
     _handleDisintegration(sim) {

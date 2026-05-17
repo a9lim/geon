@@ -21,7 +21,7 @@ export function computeEnergies(particles, physics, sim) {
     for (let i = 0; i < n; i++) {
         const p = particles[i];
         const pm = p.mass;
-        const rSq = p.radiusSq;
+        const rSq = p.bodyRadiusSq;
         if (relOn) {
             // Use w²/(γ+1) instead of (γ−1) to avoid catastrophic cancellation when |w|≪1
             const wSq = p.w.x * p.w.x + p.w.y * p.w.y;
@@ -57,7 +57,7 @@ export function computeEnergies(particles, physics, sim) {
             const dx = p.pos.x - comX;
             const dy = p.pos.y - comY;
             orbitalAngMom += dx * (p.mass * p.w.y) - dy * (p.mass * p.w.x);
-            spinAngMom += INERTIA_K * p.mass * p.radiusSq * p.angw;
+            spinAngMom += INERTIA_K * p.mass * p.bodyRadiusSq * p.angw;
         }
     }
 

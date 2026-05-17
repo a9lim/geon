@@ -141,7 +141,7 @@ fn applyHiggsForces(@builtin(global_invocation_id) gid: vec3<u32>) {
     let bodyRSq = bodyR * bodyR;
     var d = derived[pid];
     d.invMass = select(0.0, 1.0 / newMass, newMass > EPSILON);
-    d.radiusSq = bodyRSq;
+    d.bodyRSq = bodyRSq;
 
     // Recompute coordinate velocity from scaled proper velocity
     let wSq = p.velWX * p.velWX + p.velWY * p.velWY;
@@ -161,6 +161,13 @@ fn applyHiggsForces(@builtin(global_invocation_id) gid: vec3<u32>) {
     } else {
         d.angVel = p.angW;
     }
+    var activeR = bodyR;
+    if (uniforms.blackHoleEnabled != 0u) {
+        let a = INERTIA_K * bodyRSq * abs(d.angVel);
+        let disc = newMass * newMass - a * a - p.charge * p.charge;
+        activeR = select(newMass, newMass + sqrt(max(0.0, disc)), disc >= 0.0);
+    }
+    d.radiusSq = activeR * activeR;
 
     // Recompute cached dipole moments
     d.magMoment = MAG_MOMENT_K * p.charge * d.angVel * bodyRSq;

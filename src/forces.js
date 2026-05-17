@@ -16,6 +16,7 @@ let _accumulatePE = true;
 
 // P10: Precomputed per-frame flags (set in computeAllForces)
 let _needAxMod = false;
+let _needYukMod = false;
 // P2: Yukawa cutoff squared — pairs beyond this skip Math.exp
 let _yukawaCutoffSq = Infinity;
 
@@ -77,6 +78,7 @@ export function computeAllForces(particles, toggles, pool, root, barnesHutEnable
 
     // P10: Precompute axion modulation flag (constant per frame)
     _needAxMod = (toggles.coulombEnabled || toggles.magneticEnabled) && toggles.axionEnabled;
+    _needYukMod = toggles.yukawaEnabled && toggles.axionEnabled;
     // P2: Yukawa cutoff distance: exp(-mu*r) < 0.002 when mu*r > 6
     // When Higgs enabled, muEff can be as small as yukawaMu * HIGGS_MASS_FLOOR — widen cutoff
     const muMin = toggles.higgsEnabled ? toggles.yukawaMu * HIGGS_MASS_FLOOR : toggles.yukawaMu;
@@ -389,7 +391,7 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
         const mu = toggles.higgsEnabled ? toggles.yukawaMu * Math.sqrt(p.higgsMod * sHiggsMod) : toggles.yukawaMu;
         const r = 1 / invR;
         const expMuR = Math.exp(-mu * r);
-        const yukModPair = _needAxMod ? Math.sqrt(p.yukMod * sYukMod) : 1;
+        const yukModPair = _needYukMod ? Math.sqrt(p.yukMod * sYukMod) : 1;
         const ym = yukModPair;
         const fDir = YUKAWA_COUPLING * ym * p.mass * sMass * expMuR * (invRSq + mu * invR) * (signalDelayed ? invR * aberr : invR);
         out.x += rx * fDir;

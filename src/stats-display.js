@@ -46,7 +46,7 @@ export default class StatsDisplay {
         const totalPx = e.px + e.fieldPx + sim.totalRadiatedPx;
         const totalPy = e.py + e.fieldPy + sim.totalRadiatedPy;
         const pMag = Math.sqrt(totalPx * totalPx + totalPy * totalPy);
-        const total = e.linearKE + e.spinKE + e.pe + e.fieldEnergy + e.higgsFieldEnergy + e.axionFieldEnergy + sim.totalRadiated;
+        const total = e.totalMass + e.linearKE + e.spinKE + e.pe + e.fieldEnergy + e.higgsFieldEnergy + e.axionFieldEnergy + sim.totalRadiated;
 
         if (this.initialEnergy === null && particles.length > 0) {
             this.initialEnergy = total;
@@ -90,7 +90,7 @@ export default class StatsDisplay {
         const angMom = e.orbitalAngMom + e.spinAngMom;
         const pe = e.pe + e.pfiEnergy;
         const allFieldE = e.fieldEnergy + e.higgsFieldEnergy + e.axionFieldEnergy;
-        const total = e.linearKE + e.spinKE + pe + allFieldE + sim.totalRadiated;
+        const total = e.totalMass + e.linearKE + e.spinKE + pe + allFieldE + sim.totalRadiated;
 
         const totalFieldPx = e.fieldPx + e.scalarFieldMomX;
         const totalFieldPy = e.fieldPy + e.scalarFieldMomY;

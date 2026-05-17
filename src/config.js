@@ -84,14 +84,12 @@ export const DEFAULT_PION_MASS = 0.15;       // mediator mass (inverse range), ~
 export const SCALAR_GRID = 64;
 export const SCALAR_FIELD_MAX = 2;           // field value clamp
 export const FIELD_EXCITATION_SIGMA = 2;     // Gaussian width in grid cells (merge wave packets)
-export const MERGE_EXCITATION_SCALE = 0.5;   // amplitude = scale * sqrt(keLost)
 
 export const DEFAULT_HIGGS_MASS = 0.50;      // m_H (oscillation frequency), ~m_H/v_EW
 export const HIGGS_COUPLING = 1;             // g (source = g·baseMass, force = g·baseMass·∇φ)
 export const HIGGS_MASS_FLOOR = 0.05;        // min |φ| for mass: m ≥ 0.05·baseMass (caps accel at 20×)
 export const HIGGS_MASS_MAX_DELTA = 8;       // max mass change per unit time (prevents resonant throb)
 export const SELFGRAV_PHI_MAX = 0.25;        // clamp |Φ| to keep weak-field approx valid (1+4Φ>0 requires Φ>-0.25)
-export const EXCITATION_MAX_AMPLITUDE = 1.0; // cap merge wave-packet amplitude (prevents field shatter)
 
 export const DEFAULT_AXION_MASS = 0.05;      // m_a (oscillation frequency)
 export const AXION_COUPLING = 0.05;          // g in L = -(1+g·a)F²/4
@@ -108,13 +106,6 @@ export const ROCHE_TRANSFER_RATE = 0.01;
 // ── Kugelblitz Collapse ──
 export const MIN_KUGELBLITZ_ENERGY = 0.2;    // minimum total boson energy for collapse (4 × MIN_MASS)
 export const MIN_KUGELBLITZ_COUNT = 4;       // minimum boson count in collapsing node
-
-// ── Pair Production ──
-export const PAIR_PROD_MIN_ENERGY = 0.5;       // minimum photon energy for pair production
-export const PAIR_PROD_RADIUS = 8;           // proximity to massive body
-export const PAIR_PROD_PROB = 0.005;         // probability per substep
-export const PAIR_PROD_MAX_PARTICLES = 32;
-export const PAIR_PROD_MIN_AGE = 64;         // photon age before eligible
 
 // ── Signal Delay ──
 export const HISTORY_SIZE = 256;

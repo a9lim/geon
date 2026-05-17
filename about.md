@@ -20,7 +20,7 @@ In black hole mode, particles use a Kerr-Newman-inspired effective radius determ
 
 ## Charge Quantization
 
-All charges are quantized in units of the boson charge (default 0.1). Particle charges are rounded to the nearest multiple on creation, and all transfer processes — pion emission, lepton pair production, Schwinger discharge, disintegration — conserve charge in discrete steps. This ensures exact charge conservation and prevents continuous drift.
+All charges are quantized in units of the boson charge (default 0.1). Particle charges are rounded to the nearest multiple on creation, and all transfer processes — pion emission, Schwinger discharge, disintegration — conserve charge in discrete steps. This ensures exact charge conservation and prevents continuous drift.
 
 ## Educational Use
 

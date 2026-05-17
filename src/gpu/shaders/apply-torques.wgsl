@@ -3,7 +3,7 @@
 // Updates angVel in packed ParticleDerived struct.
 // Reads angW and mass from packed ParticleState struct.
 // Torque = I * dw/dt => dw = torque * dt / I
-// I = INERTIA_K * m * r^2
+// I = INERTIA_K * m * bodyR^2
 //
 // NOTE: angW is written directly back to ParticleState.angW.
 
@@ -31,7 +31,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (torque == 0.0) { return; }
 
     let m = particles[idx].mass;
-    let rSq = derived[idx].radiusSq;  // horizon radius in BH mode, body radius otherwise
+    let rSq = derived[idx].bodyRSq;
     let I = INERTIA_K * m * rSq;
     if (I < EPSILON) { return; }
 

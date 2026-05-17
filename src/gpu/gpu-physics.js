@@ -3,7 +3,7 @@
  *
  * Phase 2+3+4+5: Full force computation, Boris integrator, tree build, collisions,
  * dead GC, radiation, 1PN VV, boson lifecycle, boson gravity, signal delay history,
- * scalar fields, heatmap, expansion, disintegration, pair production.
+ * scalar fields, heatmap, expansion, disintegration.
  *
  * Dispatch sequence per substep:
  *   1. resetForces (DMA clear)
@@ -25,7 +25,6 @@
  *  19. fieldExcitations       (Phase 5 — merge KE → wave packets)
  *  20. disintegrationCheck    (Phase 5 — tidal + Roche)
  *  21. bosonUpdate            (Phase 4 — photon/pion drift, absorption, decay)
- *  22. pairProduction         (Phase 5 — photon → particle pair)
  *  24. boundary
  *
  * Post-substep (once per frame):
@@ -34,8 +33,8 @@
  *  - deadParticleGC           (Phase 3)
  *  - recordHistory            (Phase 4 — every HISTORY_STRIDE frames)
  */
-import { createParticleBuffers, createUniformBuffer, writeFrameUniforms, writeSubstepUniforms, createFieldBuffers, createAtomicGridBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createPairProductionBuffers, createKugelblitzBuffers, createTrailBuffers, FIELD_GRID_RES, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
-import { fetchShader, createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldSelfGravPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createPairProductionPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline } from './gpu-pipelines.js';
+import { createParticleBuffers, createUniformBuffer, writeFrameUniforms, writeSubstepUniforms, createFieldBuffers, createAtomicGridBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createKugelblitzBuffers, createTrailBuffers, FIELD_GRID_RES, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
+import { fetchShader, createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createMergePhotonPipeline, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldSelfGravPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createBosonDispatchArgsPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline } from './gpu-pipelines.js';
 import { buildWGSLConstants, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT, GRAVITOMAG_BIT, ONE_PN_BIT, RELATIVITY_BIT, SPIN_ORBIT_BIT, RADIATION_BIT, BLACK_HOLE_BIT, DISINTEGRATION_BIT, EXPANSION_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BARNES_HUT_BIT, BOSON_INTER_BIT, FIELD_GRAV_BIT_T1, HERTZ_BOUNCE_BIT_T1, HIST_META_STRIDE } from './gpu-constants.js';
 import { createGPUDispatchPlan, updateGPUDispatchPlan } from './pass-graph.js';
 import {
@@ -52,6 +51,10 @@ import { fft2d } from '../fft.js';
 
 const MAX_PARTICLES = GPU_MAX_PARTICLES;
 const PION_POOL_CAP = GPU_MAX_PIONS + GPU_MAX_LEPTONS;
+const BOSON_ARGS_PHOTON = 0;
+const BOSON_ARGS_PION = 12;
+const BOSON_ARGS_TOTAL = 24;
+const BOSON_ARGS_NODES = 36;
 
 // Pack palette slate hex to ABGR u32 for WebGPU color buffers
 const _sN = parseInt(window._PALETTE.extended.slate.slice(1), 16);
@@ -73,9 +76,6 @@ const _fieldUniformU32 = new Uint32Array(_fieldUniformData);
 const _disintUniformData = new ArrayBuffer(48);
 const _disintUniformF32 = new Float32Array(_disintUniformData);
 const _disintUniformU32 = new Uint32Array(_disintUniformData);
-const _pairProdUniformData = new ArrayBuffer(48);
-const _pairProdUniformF32 = new Float32Array(_pairProdUniformData);
-const _pairProdUniformU32 = new Uint32Array(_pairProdUniformData);
 const _heatmapUniformData = new ArrayBuffer(96);
 const _heatmapUniformF32 = new Float32Array(_heatmapUniformData);
 const _heatmapUniformU32 = new Uint32Array(_heatmapUniformData);
@@ -232,6 +232,8 @@ export default class GPUPhysics {
         // Phase 3: Collision detection/resolution
         this._collisionPipelines = null;
         this._collisionBindGroups = null;
+        this._mergePhotonPipeline = null;
+        this._mergePhotonBindGroup = null;
         this._mergeResultsPending = false;
         this._pendingMergeEvents = [];
         this._disintResultsPending = false;
@@ -294,7 +296,7 @@ export default class GPUPhysics {
         this._heatmapBuffers = null;
         this._excitationBuffers = null;
         this._disintBuffers = null;
-        this._pairProdBuffers = null;
+        this._bosonDispatchArgs = null;
         this._higgsEnabled = false;
         this._axionEnabled = false;
         this._expansionEnabled = false;
@@ -319,7 +321,7 @@ export default class GPUPhysics {
         this._heatmapPipelines = null;
         this._expansionPipeline = null;
         this._disintPipeline = null;
-        this._pairProdPipeline = null;
+        this._bosonDispatchArgsPipeline = null;
 
         // Phase 5: Bind groups (lazy-created per field)
         this._fieldDepositBGs = {};
@@ -334,14 +336,13 @@ export default class GPUPhysics {
         this._heatmapBlurBGs = {};
         this._expansionBG = null;
         this._disintBGs = null;
-        this._pairProdBGs = null;
+        this._bosonDispatchArgsBG = null;
 
         // Phase 5: FieldUniforms buffer (shared)
         this._fieldUniformBuffer = null;
         this._heatmapUniformBuffer = null;
         this._expansionUniformBuffer = null;
         this._disintUniformBuffer = null;
-        this._pairProdUniformBuffer = null;
 
         // (sgInvR table removed — computed inline in field-selfgrav.wgsl)
 
@@ -440,13 +441,14 @@ export default class GPUPhysics {
         });
 
         // --- All pipelines: fetch shaders in parallel ---
-        const [phase2, ghostGen, treeBuild, treeForce, collisionPipelines, deadGC, phase4, updateColors, trailRecord, hitTest, computeStats] =
+        const [phase2, ghostGen, treeBuild, treeForce, collisionPipelines, mergePhotons, deadGC, phase4, updateColors, trailRecord, hitTest, computeStats] =
             await Promise.all([
                 createPhase2Pipelines(this.device, wgslConstants),
                 createGhostGenPipeline(this.device, wgslConstants),
                 createTreeBuildPipelines(this.device, wgslConstants),
                 createTreeForcePipeline(this.device, wgslConstants),
                 createCollisionPipelines(this.device, wgslConstants),
+                createMergePhotonPipeline(this.device, wgslConstants),
                 createDeadGCPipeline(this.device, wgslConstants),
                 createPhase4Pipelines(this.device, wgslConstants),
                 createUpdateColorsPipeline(this.device, wgslConstants),
@@ -474,6 +476,8 @@ export default class GPUPhysics {
         // --- Collision ---
         this._collisionPipelines = collisionPipelines;
         this._createCollisionBindGroups(this._collisionPipelines.bindGroupLayouts);
+        this._mergePhotonPipeline = mergePhotons.pipeline;
+        this._createMergePhotonBindGroup(mergePhotons.bindGroupLayout);
 
         // --- Dead GC ---
         this._deadGCPipeline = deadGC.pipeline;
@@ -940,6 +944,20 @@ export default class GPUPhysics {
         });
     }
 
+    _createMergePhotonBindGroup(layout) {
+        const b = this.buffers;
+        this._mergePhotonBindGroup = this.device.createBindGroup({
+            label: 'mergePhotons_g0',
+            layout,
+            entries: [
+                { binding: 0, resource: { buffer: b.mergeResultBuffer } },
+                { binding: 1, resource: { buffer: b.mergeResultCounter } },
+                { binding: 2, resource: { buffer: b.photonPool } },
+                { binding: 3, resource: { buffer: b.phCount } },
+            ],
+        });
+    }
+
     /**
      * Create bind group for dead particle GC pipeline.
      */
@@ -1274,30 +1292,31 @@ export default class GPUPhysics {
         // Pion/lepton passes needed for Yukawa pions OR Schwinger leptons.
         const hasPhotons = plan.photonUpdate;
         const hasPions   = plan.pionUpdate;
+        const useIndirect = this._writeBosonDispatchArgs(encoder);
 
         if (hasPhotons) {
             // updatePhotons: drift + lensing
-            const phWG = Math.ceil(GPU_MAX_PHOTONS / 64);
             const passPhotons = encoder.beginComputePass({ label: 'updatePhotons' });
             passPhotons.setPipeline(phUpdatePipeline);
             passPhotons.setBindGroup(0, bgs.bosG0);
             passPhotons.setBindGroup(1, g1);
             passPhotons.setBindGroup(2, bgs.bosG2);
             passPhotons.setBindGroup(3, bgs.bosG3);
-            passPhotons.dispatchWorkgroups(phWG);
+            if (useIndirect) passPhotons.dispatchWorkgroupsIndirect(this._bosonDispatchArgs, BOSON_ARGS_PHOTON);
+            else passPhotons.dispatchWorkgroups(Math.ceil(GPU_MAX_PHOTONS / 64));
             passPhotons.end();
         }
 
         if (hasPions) {
             // updatePions: drift with proper velocity
-            const piWG = Math.ceil(PION_POOL_CAP / 64);
             const passPions = encoder.beginComputePass({ label: 'updatePions' });
             passPions.setPipeline(piUpdatePipeline);
             passPions.setBindGroup(0, bgs.bosG0);
             passPions.setBindGroup(1, g1);
             passPions.setBindGroup(2, bgs.bosG2);
             passPions.setBindGroup(3, bgs.bosG3);
-            passPions.dispatchWorkgroups(piWG);
+            if (useIndirect) passPions.dispatchWorkgroupsIndirect(this._bosonDispatchArgs, BOSON_ARGS_PION);
+            else passPions.dispatchWorkgroups(Math.ceil(PION_POOL_CAP / 64));
             passPions.end();
         }
 
@@ -1335,14 +1354,15 @@ export default class GPUPhysics {
         if (!this._yukawaEnabled) return;
         const p4 = this._phase4;
         const bgs = this._phase4BindGroups;
-        const piWG = Math.ceil(PION_POOL_CAP / 64);
+        const useIndirect = this._writeBosonDispatchArgs(encoder);
         const passDecay = encoder.beginComputePass({ label: 'decayPions' });
         passDecay.setPipeline(p4.decayPions.pipeline);
         passDecay.setBindGroup(0, bgs.bosG0);
         passDecay.setBindGroup(1, bgs.bosG1);
         passDecay.setBindGroup(2, bgs.bosG2);
         passDecay.setBindGroup(3, bgs.bosG3);
-        passDecay.dispatchWorkgroups(piWG);
+        if (useIndirect) passDecay.dispatchWorkgroupsIndirect(this._bosonDispatchArgs, BOSON_ARGS_PION);
+        else passDecay.dispatchWorkgroups(Math.ceil(PION_POOL_CAP / 64));
         passDecay.end();
     }
 
@@ -1385,6 +1405,7 @@ export default class GPUPhysics {
         encoder.copyBufferToBuffer(this._bosonRootSrc, 0, b.bosonTreeNodes, 0, 80);
 
         const totalBosons = GPU_MAX_PHOTONS + PION_POOL_CAP;
+        const useIndirect = this._writeBosonDispatchArgs(encoder);
         const bosonWG = Math.ceil(totalBosons / 64);
 
         // insertBosonsIntoTree
@@ -1394,7 +1415,8 @@ export default class GPUPhysics {
         passInsert.setBindGroup(1, bgs.btG1);
         passInsert.setBindGroup(2, bgs.btG2);
         passInsert.setBindGroup(3, bgs.btG3);
-        passInsert.dispatchWorkgroups(bosonWG);
+        if (useIndirect) passInsert.dispatchWorkgroupsIndirect(this._bosonDispatchArgs, BOSON_ARGS_TOTAL);
+        else passInsert.dispatchWorkgroups(bosonWG);
         passInsert.end();
 
         // computeBosonAggregates (one thread per boson, bottom-up leaf->root walk)
@@ -1404,7 +1426,8 @@ export default class GPUPhysics {
         passAgg.setBindGroup(1, bgs.btG1);
         passAgg.setBindGroup(2, bgs.btG2);
         passAgg.setBindGroup(3, bgs.btG3);
-        passAgg.dispatchWorkgroups(bosonWG);
+        if (useIndirect) passAgg.dispatchWorkgroupsIndirect(this._bosonDispatchArgs, BOSON_ARGS_TOTAL);
+        else passAgg.dispatchWorkgroups(bosonWG);
         passAgg.end();
 
         // computeBosonGravity: particle <- boson gravity (only when gravity enabled)
@@ -1428,20 +1451,21 @@ export default class GPUPhysics {
             passBosonBoson.setBindGroup(1, bgs.btG1);
             passBosonBoson.setBindGroup(2, bgs.btG2);
             passBosonBoson.setBindGroup(3, bgs.btG3);
-            passBosonBoson.dispatchWorkgroups(bosonWG);
+            if (useIndirect) passBosonBoson.dispatchWorkgroupsIndirect(this._bosonDispatchArgs, BOSON_ARGS_TOTAL);
+            else passBosonBoson.dispatchWorkgroups(bosonWG);
             passBosonBoson.end();
         }
 
         // applyPionPionCoulomb: pion <-> pion Coulomb via boson tree (only when Coulomb enabled)
         if (this._coulombEnabled) {
-            const pionWG = Math.ceil(PION_POOL_CAP / 64);
             const passPiCoulomb = encoder.beginComputePass({ label: 'applyPionPionCoulomb' });
             passPiCoulomb.setPipeline(p4.applyPionPionCoulomb.pipeline);
             passPiCoulomb.setBindGroup(0, bgs.btG0);
             passPiCoulomb.setBindGroup(1, bgs.btG1);
             passPiCoulomb.setBindGroup(2, bgs.btG2);
             passPiCoulomb.setBindGroup(3, bgs.btG3);
-            passPiCoulomb.dispatchWorkgroups(pionWG);
+            if (useIndirect) passPiCoulomb.dispatchWorkgroupsIndirect(this._bosonDispatchArgs, BOSON_ARGS_PION);
+            else passPiCoulomb.dispatchWorkgroups(Math.ceil(PION_POOL_CAP / 64));
             passPiCoulomb.end();
         }
 
@@ -1449,29 +1473,28 @@ export default class GPUPhysics {
         {
             // Reset pion claim buffer (must use copyBufferToBuffer within encoder, not queue.writeBuffer)
             encoder.clearBuffer(b.pionClaims);
-            const pionWG = Math.ceil(PION_POOL_CAP / 64);
             const passAnnihilate = encoder.beginComputePass({ label: 'annihilatePions' });
             passAnnihilate.setPipeline(p4.annihilatePions.pipeline);
             passAnnihilate.setBindGroup(0, bgs.btG0);
             passAnnihilate.setBindGroup(1, bgs.btG1);
             passAnnihilate.setBindGroup(2, bgs.btG2);
             passAnnihilate.setBindGroup(3, bgs.btG3);
-            passAnnihilate.dispatchWorkgroups(pionWG);
+            if (useIndirect) passAnnihilate.dispatchWorkgroupsIndirect(this._bosonDispatchArgs, BOSON_ARGS_PION);
+            else passAnnihilate.dispatchWorkgroups(Math.ceil(PION_POOL_CAP / 64));
             passAnnihilate.end();
         }
 
         // Kugelblitz: boson energy density exceeds hoop conjecture → massive particle
         if (this._gravityEnabled && p4.checkKugelblitz && this._kbBuffers && bgs.kbG3) {
             encoder.clearBuffer(this._kbBuffers.counter, 0, 4);
-            // Upper bound on tree nodes: each boson can create ~5 nodes during subdivision
-            const nodeWG = Math.ceil(totalBosons * 6 / 64);
             const passKB = encoder.beginComputePass({ label: 'checkKugelblitz' });
             passKB.setPipeline(p4.checkKugelblitz.pipeline);
             passKB.setBindGroup(0, bgs.btG0);
             passKB.setBindGroup(1, bgs.btG1);
             passKB.setBindGroup(2, bgs.btG2);
             passKB.setBindGroup(3, bgs.kbG3);
-            passKB.dispatchWorkgroups(nodeWG);
+            if (useIndirect) passKB.dispatchWorkgroupsIndirect(this._bosonDispatchArgs, BOSON_ARGS_NODES);
+            else passKB.dispatchWorkgroups(Math.ceil(totalBosons * 6 / 64));
             passKB.end();
         }
     }
@@ -1553,6 +1576,14 @@ export default class GPUPhysics {
             passResolve.setBindGroup(2, this._collisionBG2);
             passResolve.dispatchWorkgroups(resolveWG);
             passResolve.end();
+
+            if (this._mergePhotonPipeline && this._mergePhotonBindGroup) {
+                const passPhotons = encoder.beginComputePass({ label: 'mergePhotons' });
+                passPhotons.setPipeline(this._mergePhotonPipeline);
+                passPhotons.setBindGroup(0, this._mergePhotonBindGroup);
+                passPhotons.dispatchWorkgroups(resolveWG);
+                passPhotons.end();
+            }
         } else if (isBounce) {
             const passResolve = encoder.beginComputePass({ label: 'resolveBouncePairwise' });
             passResolve.setPipeline(this._collisionPipelines.resolveBouncePairwise);
@@ -1566,7 +1597,7 @@ export default class GPUPhysics {
 
     /**
      * Non-blocking readback of merge results for post-processing by JS.
-     * Returns pending merge events (annihilation photon bursts, field excitations).
+     * Returns pending merge events for field excitations and debugging.
      * Uses 1-frame latency like other readbacks.
      */
     async _readbackMergeResults() {
@@ -1586,7 +1617,9 @@ export default class GPUPhysics {
 
             const mergeCount = countData[0];
             if (mergeCount > 0) {
-                const readBytes = Math.min(mergeCount, this.buffers.maxParticles) * 16;
+                const eventStride = 8;
+                const readCount = Math.min(mergeCount, this.buffers.maxParticles);
+                const readBytes = readCount * eventStride * 4;
                 const encoder2 = this.device.createCommandEncoder();
                 encoder2.copyBufferToBuffer(b.mergeResultBuffer, 0, b.mergeResultStaging, 0, readBytes);
                 this.device.queue.submit([encoder2.finish()]);
@@ -1595,14 +1628,17 @@ export default class GPUPhysics {
                 const resultData = new Float32Array(b.mergeResultStaging.getMappedRange(0, readBytes).slice(0));
                 b.mergeResultStaging.unmap();
 
-                // Parse merge events: each is vec4(x, y, energy, type)
+                // Parse merge events: two vec4s, {x,y,energy,type} + {px,py,pad,pad}
                 const events = [];
-                for (let i = 0; i < mergeCount; i++) {
+                for (let i = 0; i < readCount; i++) {
+                    const base = i * eventStride;
                     events.push({
-                        x: resultData[i * 4],
-                        y: resultData[i * 4 + 1],
-                        energy: resultData[i * 4 + 2],
-                        type: resultData[i * 4 + 3] < 0.5 ? 'annihilation' : 'merge',
+                        x: resultData[base],
+                        y: resultData[base + 1],
+                        energy: resultData[base + 2],
+                        type: resultData[base + 3] < 0.5 ? 'annihilation' : 'merge',
+                        px: resultData[base + 4],
+                        py: resultData[base + 5],
                     });
                 }
                 this._pendingMergeEvents = events;
@@ -1617,8 +1653,8 @@ export default class GPUPhysics {
     }
 
     /**
-     * Consume pending merge events (call from main loop for photon bursts, field excitations).
-     * @returns {Array} Array of { x, y, energy, type } events
+     * Consume pending merge events.
+     * @returns {Array} Array of { x, y, energy, px, py, type } events
      */
     consumeMergeEvents() {
         const events = this._pendingMergeEvents;
@@ -1723,11 +1759,11 @@ export default class GPUPhysics {
             const eventCount = countData[0];
             if (eventCount > 0) {
                 const encoder2 = this.device.createCommandEncoder();
-                encoder2.copyBufferToBuffer(kb.events, 0, kb.staging, 0, 32);
+                encoder2.copyBufferToBuffer(kb.events, 0, kb.staging, 0, 48);
                 this.device.queue.submit([encoder2.finish()]);
 
                 await kb.staging.mapAsync(GPUMapMode.READ);
-                const f32 = new Float32Array(kb.staging.getMappedRange(0, 32).slice(0));
+                const f32 = new Float32Array(kb.staging.getMappedRange(0, 48).slice(0));
                 kb.staging.unmap();
 
                 this._pendingKugelblitzEvents = [{
@@ -1735,6 +1771,7 @@ export default class GPUPhysics {
                     px: f32[2], py: f32[3],
                     energy: f32[4], charge: f32[5],
                     angL: f32[6], count: f32[7],
+                    radiatedEnergy: f32[8], radiatedPx: f32[9], radiatedPy: f32[10],
                 }];
             } else {
                 this._pendingKugelblitzEvents = [];
@@ -2173,7 +2210,7 @@ export default class GPUPhysics {
         const wgslConstants = buildWGSLConstants();
 
         // Initialize all Phase 5 pipelines in parallel
-        const [deposit, evolve, forces, particleGrav, selfGrav, fft, excitation, heatmap, expansion, disint, pairProd] =
+        const [deposit, evolve, forces, particleGrav, selfGrav, fft, excitation, heatmap, expansion, disint, bosonDispatchArgs] =
             await Promise.all([
                 createFieldDepositPipelines(this.device, wgslConstants),
                 createFieldEvolvePipelines(this.device, wgslConstants),
@@ -2185,7 +2222,7 @@ export default class GPUPhysics {
                 createHeatmapPipelines(this.device, wgslConstants),
                 createExpansionPipeline(this.device, wgslConstants),
                 createDisintegrationPipeline(this.device, wgslConstants),
-                createPairProductionPipeline(this.device, wgslConstants),
+                createBosonDispatchArgsPipeline(this.device, wgslConstants),
             ]);
 
         this._fieldDeposit = deposit;
@@ -2198,7 +2235,7 @@ export default class GPUPhysics {
         this._heatmapPipelines = heatmap;
         this._expansionPipeline = expansion;
         this._disintPipeline = disint;
-        this._pairProdPipeline = pairProd;
+        this._bosonDispatchArgsPipeline = bosonDispatchArgs;
         this._phase5Ready = true;
     }
 
@@ -2933,22 +2970,24 @@ export default class GPUPhysics {
             this._excitationBuffers = createExcitationBuffers(this.device);
         }
 
-        // Upload excitation events from pending merge events
+        // Upload compacted excitation events from pending merge/annihilation events.
         const maxEvents = 64;
-        const eventCount = Math.min(mergeCount, maxEvents);
-        for (let i = 0; i < eventCount; i++) {
+        let eventCount = 0;
+        for (let i = 0; i < mergeCount && eventCount < maxEvents; i++) {
             const me = this._pendingMergeEvents[i];
-            if (me.type !== 'merge') continue;
-            _excitationEventData[i * 4] = me.x;
-            _excitationEventData[i * 4 + 1] = me.y;
-            _excitationEventData[i * 4 + 2] = me.energy;
-            _excitationEventData[i * 4 + 3] = 0; // padding
+            if (me.energy <= 0) continue;
+            const base = eventCount * 4;
+            _excitationEventData[base] = me.x;
+            _excitationEventData[base + 1] = me.y;
+            _excitationEventData[base + 2] = me.energy;
+            _excitationEventData[base + 3] = 0; // padding
+            eventCount++;
         }
+        if (eventCount === 0) return;
         this.device.queue.writeBuffer(this._excitationBuffers.events, 0, _excitationEventData, 0, eventCount * 4);
         _excitationCountData[0] = eventCount;
         this.device.queue.writeBuffer(this._excitationBuffers.counter, 0, _excitationCountData);
 
-        const gridWG = Math.ceil(FIELD_GRID_RES / 8);
         const exc = this._fieldExcitation;
 
         const dispatchForField = (which) => {
@@ -2972,7 +3011,7 @@ export default class GPUPhysics {
             const p = encoder.beginComputePass({ label: `depositExcitations_${which}` });
             p.setPipeline(exc.pipeline);
             p.setBindGroup(0, this._fieldExcitationBGs[which]);
-            p.dispatchWorkgroups(gridWG, gridWG);
+            p.dispatchWorkgroups(1);
             p.end();
         };
 
@@ -3091,77 +3130,37 @@ export default class GPUPhysics {
         p.end();
     }
 
-    /**
-     * Dispatch pair production check (Pass 22).
-     */
-    _dispatchPairProduction(encoder) {
-        if (this._blackHoleEnabled) return;
-        if (!this._pairProdPipeline) return;
-
-        if (!this._pairProdBuffers) {
-            this._pairProdBuffers = createPairProductionBuffers(this.device);
-        }
-
-        if (!this._pairProdUniformBuffer) {
-            this._pairProdUniformBuffer = this.device.createBuffer({
-                label: 'pairProdUniforms',
-                size: 48, // 12 floats/u32
-                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    _ensureBosonDispatchArgs() {
+        if (!this._bosonDispatchArgs) {
+            this._bosonDispatchArgs = this.device.createBuffer({
+                label: 'boson-dispatch-args',
+                size: 48, // four indirect dispatch records, 3 × u32 each
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.INDIRECT,
             });
         }
-
-        // Write PairProdUniforms (pre-allocated buffers, no per-frame GC)
-        _pairProdUniformF32[0] = 0.5;     // minEnergy
-        _pairProdUniformF32[1] = 8.0;     // proximity
-        _pairProdUniformF32[2] = 0.005;   // probability
-        _pairProdUniformF32[3] = 64.0;    // minAge (time units, matches CPU PAIR_PROD_MIN_AGE)
-        _pairProdUniformU32[4] = 32;      // maxParticles (PAIR_PROD_MAX_PARTICLES)
-        _pairProdUniformU32[5] = this.aliveCount;
-        _pairProdUniformU32[6] = GPU_MAX_PHOTONS;
-        _pairProdUniformU32[7] = this._blackHoleEnabled ? 1 : 0;
-        _pairProdUniformF32[8] = this.simTime;
-        this.device.queue.writeBuffer(this._pairProdUniformBuffer, 0, _pairProdUniformData);
-
-        // Reset pair counter
-        encoder.clearBuffer(this._pairProdBuffers.counter, 0, 4);
-
-        if (!this._pairProdBGs) {
+        if (!this._bosonDispatchArgsBG && this._bosonDispatchArgsPipeline) {
             const b = this.buffers;
-            const g0 = this.device.createBindGroup({
-                label: 'pairProd_g0',
-                layout: this._pairProdPipeline.bindGroupLayouts[0],
+            this._bosonDispatchArgsBG = this.device.createBindGroup({
+                label: 'bosonDispatchArgs_g0',
+                layout: this._bosonDispatchArgsPipeline.bindGroupLayout,
                 entries: [
-                    { binding: 0, resource: { buffer: b.photonPool } },
-                    { binding: 1, resource: { buffer: b.phCount } },
+                    { binding: 0, resource: { buffer: b.phCount } },
+                    { binding: 1, resource: { buffer: b.piCount } },
+                    { binding: 2, resource: { buffer: this._bosonDispatchArgs } },
                 ],
             });
-            const g1 = this.device.createBindGroup({
-                label: 'pairProd_g1',
-                layout: this._pairProdPipeline.bindGroupLayouts[1],
-                entries: [
-                    { binding: 0, resource: { buffer: b.particleState } },
-                ],
-            });
-            const g2 = this.device.createBindGroup({
-                label: 'pairProd_g2',
-                layout: this._pairProdPipeline.bindGroupLayouts[2],
-                entries: [
-                    { binding: 0, resource: { buffer: this._pairProdBuffers.events } },
-                    { binding: 1, resource: { buffer: this._pairProdBuffers.counter } },
-                    { binding: 2, resource: { buffer: this._pairProdUniformBuffer } },
-                ],
-            });
-            this._pairProdBGs = [g0, g1, g2];
         }
+        return this._bosonDispatchArgs && this._bosonDispatchArgsBG;
+    }
 
-        const workgroups = Math.ceil(GPU_MAX_PHOTONS / 256);
-        const p = encoder.beginComputePass({ label: 'pairProduction' });
-        p.setPipeline(this._pairProdPipeline.pipeline);
-        p.setBindGroup(0, this._pairProdBGs[0]);
-        p.setBindGroup(1, this._pairProdBGs[1]);
-        p.setBindGroup(2, this._pairProdBGs[2]);
-        p.dispatchWorkgroups(workgroups);
-        p.end();
+    _writeBosonDispatchArgs(encoder) {
+        if (!this._bosonDispatchArgsPipeline || !this._ensureBosonDispatchArgs()) return false;
+        const pass = encoder.beginComputePass({ label: 'buildBosonDispatchArgs' });
+        pass.setPipeline(this._bosonDispatchArgsPipeline.pipeline);
+        pass.setBindGroup(0, this._bosonDispatchArgsBG);
+        pass.dispatchWorkgroups(1);
+        pass.end();
+        return true;
     }
 
     /**
@@ -3515,7 +3514,7 @@ export default class GPUPhysics {
         // Readback ghost count for next frame (non-blocking)
         this._readbackGhostCount();
 
-        // Readback merge results for photon bursts / field excitations (non-blocking)
+        // Readback merge results for field excitations/debugging (non-blocking)
         this._readbackMergeResults();
 
         // Readback disintegration events for fragment spawning (non-blocking)
@@ -3692,9 +3691,6 @@ export default class GPUPhysics {
 
         // Pass 21: boson update (photon/pion drift, absorption, decay)
         this._dispatchBosonUpdate(encoder, plan);
-
-        // Pass 22: pair production
-        if (plan.pairProduction) this._dispatchPairProduction(encoder);
 
         // Pass 24: boundary
         const passBoundary = encoder.beginComputePass({ label: 'boundary' });
@@ -4363,12 +4359,11 @@ export default class GPUPhysics {
         _dObj(this._heatmapBuffers);
         _d(this._heatmapUniformBuffer);
 
-        // Excitation, disintegration, pair production
+        // Excitation and disintegration
         _dObj(this._excitationBuffers);
         _dObj(this._disintBuffers);
         _d(this._disintUniformBuffer);
-        _dObj(this._pairProdBuffers);
-        _d(this._pairProdUniformBuffer);
+        _d(this._bosonDispatchArgs);
 
         // Trails
         _dObj(this._trailBuffers);
@@ -4399,7 +4394,8 @@ export default class GPUPhysics {
         this._excitationBuffers = null;
         this._disintBuffers = null;
         this._disintBGs = null;
-        this._pairProdBuffers = null;
+        this._bosonDispatchArgs = null;
+        this._bosonDispatchArgsBG = null;
         this._trailBuffers = null;
         this._fieldUniformBuffer = null;
         this._higgsUniformBuffer = null;
@@ -4409,7 +4405,6 @@ export default class GPUPhysics {
         this._heatmapUniformBuffer = null;
         this._expansionUniformBuffer = null;
         this._disintUniformBuffer = null;
-        this._pairProdUniformBuffer = null;
         this._fftParamsBuffer = null;
         this._colorUniformBuffer = null;
         this._hitUniformBuffer = null;

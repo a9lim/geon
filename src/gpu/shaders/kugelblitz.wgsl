@@ -101,6 +101,9 @@ fn checkKugelblitz(@builtin(global_invocation_id) gid: vec3u) {
     var totalPx: f32 = 0.0;
     var totalPy: f32 = 0.0;
     var totalCharge: f32 = 0.0;
+    var radiatedEnergy: f32 = 0.0;
+    var radiatedPx: f32 = 0.0;
+    var radiatedPy: f32 = 0.0;
     var comX: f32 = 0.0;
     var comY: f32 = 0.0;
     var bosonCount: f32 = 0.0;
@@ -136,6 +139,9 @@ fn checkKugelblitz(@builtin(global_invocation_id) gid: vec3u) {
                     comY += photons[ui].posY * e;
                     totalPx += e * photons[ui].velX;
                     totalPy += e * photons[ui].velY;
+                    radiatedEnergy += e;
+                    radiatedPx += e * photons[ui].velX;
+                    radiatedPy += e * photons[ui].velY;
                     bosonCount += 1.0;
                 }
             } else {
@@ -150,6 +156,12 @@ fn checkKugelblitz(@builtin(global_invocation_id) gid: vec3u) {
                     totalPx += pions[pi].mass * wx;
                     totalPy += pions[pi].mass * wy;
                     totalCharge += pions[pi].charge;
+                    if (pions[pi].kind == 0u) {
+                        let re = pions[pi].energy;
+                        radiatedEnergy += re;
+                        radiatedPx += re * pions[pi].wX / gamma;
+                        radiatedPy += re * pions[pi].wY / gamma;
+                    }
                     bosonCount += 1.0;
                 }
             }
@@ -157,6 +169,9 @@ fn checkKugelblitz(@builtin(global_invocation_id) gid: vec3u) {
     }
 
     if (totalEnergy < MIN_KUGELBLITZ_ENERGY) { return; }
+    let pSq = totalPx * totalPx + totalPy * totalPy;
+    if (totalEnergy * totalEnergy - pSq <= EPSILON * EPSILON) { return; }
+    if (pSq >= totalEnergy * totalEnergy * MAX_SPEED_RATIO * MAX_SPEED_RATIO) { return; }
 
     // COM position
     let invE = 1.0 / totalEnergy;
@@ -208,7 +223,7 @@ fn checkKugelblitz(@builtin(global_invocation_id) gid: vec3u) {
         }
     }
 
-    // Write event: x, y, px, py, energy, charge, angL, count
+    // Write event: x, y, px, py, energy, charge, angL, count, radiated bookkeeping.
     kbEvents[0] = comX;
     kbEvents[1] = comY;
     kbEvents[2] = totalPx;
@@ -217,4 +232,8 @@ fn checkKugelblitz(@builtin(global_invocation_id) gid: vec3u) {
     kbEvents[5] = totalCharge;
     kbEvents[6] = totalAngL;
     kbEvents[7] = bosonCount;
+    kbEvents[8] = radiatedEnergy;
+    kbEvents[9] = radiatedPx;
+    kbEvents[10] = radiatedPy;
+    kbEvents[11] = 0.0;
 }

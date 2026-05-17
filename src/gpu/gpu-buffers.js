@@ -30,6 +30,7 @@ const PARTICLE_AUX_SIZE = 20;   // 5 × 4 bytes
 const RADIATION_STATE_SIZE = 48; // 12 × 4 bytes (accumulators + display + quadrupole scratch)
 const PHOTON_SIZE = 32;          // 8 × 4 bytes
 const PION_SIZE = 48;            // 12 × 4 bytes
+const MERGE_RESULT_SIZE = 32;    // 2 × vec4: x,y,energy,type + px,py,pad,pad
 const DERIVED_SIZE = 32;         // 8 × f32 (ParticleDerived)
 const VEC2_SIZE = 8;             // 2 × f32
 const VEC4_SIZE = 16;            // 4 × f32
@@ -188,7 +189,7 @@ export function createParticleBuffers(device, maxParticles) {
 
     const mergeResultBuffer = device.createBuffer({
         label: 'mergeResults',
-        size: 16 * maxParticles,
+        size: MERGE_RESULT_SIZE * maxParticles,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
 
@@ -212,7 +213,7 @@ export function createParticleBuffers(device, maxParticles) {
 
     const mergeResultStaging = device.createBuffer({
         label: 'mergeResultStaging',
-        size: 16 * maxParticles,
+        size: MERGE_RESULT_SIZE * maxParticles,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
 
@@ -473,33 +474,17 @@ export function createDisintegrationBuffers(device, maxEvents = 64) {
 }
 
 /**
- * Allocate pair production event buffers.
- * @param {GPUDevice} device
- * @param {number} maxEvents - max events per frame (default 32)
- */
-export function createPairProductionBuffers(device, maxEvents = 32) {
-    const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
-    return {
-        events: device.createBuffer({ label: 'pairprod-events', size: maxEvents * 32, usage }), // PairEvent = 32 bytes
-        counter: device.createBuffer({ label: 'pairprod-counter', size: 4, usage }),
-        staging: device.createBuffer({ label: 'pairprod-staging', size: maxEvents * 32,
-            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }),
-        counterStaging: device.createBuffer({ label: 'pairprod-count-staging', size: 4,
-            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }),
-    };
-}
-
-/**
  * Allocate kugelblitz collapse event buffers.
- * KugelblitzEvent = 32 bytes (8 × f32): x, y, px, py, energy, charge, angL, count.
+ * KugelblitzEvent = 48 bytes (12 × f32):
+ * x, y, px, py, energy, charge, angL, count, radiatedE, radiatedPx, radiatedPy, pad.
  * Max 1 event per substep.
  */
 export function createKugelblitzBuffers(device) {
     const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
     return {
-        events: device.createBuffer({ label: 'kugelblitz-events', size: 32, usage }),
+        events: device.createBuffer({ label: 'kugelblitz-events', size: 48, usage }),
         counter: device.createBuffer({ label: 'kugelblitz-counter', size: 4, usage }),
-        staging: device.createBuffer({ label: 'kugelblitz-staging', size: 32,
+        staging: device.createBuffer({ label: 'kugelblitz-staging', size: 48,
             usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }),
         counterStaging: device.createBuffer({ label: 'kugelblitz-count-staging', size: 4,
             usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }),

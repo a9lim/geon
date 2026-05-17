@@ -49,7 +49,7 @@ export default class GPUBackend {
 
     addParticle(sim, p, spawn) {
         const idx = this.physics.addParticle({
-            x: spawn.x, y: spawn.y, vx: spawn.vx, vy: spawn.vy,
+            x: spawn.x, y: spawn.y, vx: p.w.x, vy: p.w.y,
             mass: p.mass, charge: p.charge, angw: p.angw,
             antimatter: p.antimatter,
         });
@@ -282,28 +282,32 @@ export default class GPUBackend {
         for (let i = 0; i < kbEvents.length; i++) {
             const evt = kbEvents[i];
             if (evt.energy < EPSILON) continue;
-            const mass = evt.energy;
             const pMag = Math.sqrt(evt.px * evt.px + evt.py * evt.py);
+            const mSq = evt.energy * evt.energy - pMag * pMag;
+            if (mSq <= EPSILON * EPSILON) continue;
+            const mass = Math.sqrt(mSq);
             let vx = 0, vy = 0;
             if (pMag > EPSILON) {
-                const speed = Math.min(pMag / mass, MAX_SPEED_RATIO);
+                const speed = Math.min(pMag / evt.energy, MAX_SPEED_RATIO);
                 vx = evt.px / pMag * speed;
                 vy = evt.py / pMag * speed;
             }
-            const radius = Math.cbrt(mass);
-            const inertia = INERTIA_K * mass * radius * radius;
+            const bodyRadius = Math.cbrt(mass);
+            const inertia = INERTIA_K * mass * bodyRadius * bodyRadius;
             const angw = inertia > EPSILON ? evt.angL / inertia : 0;
             sim.addParticle(evt.x, evt.y, vx, vy, {
-                mass, baseMass: mass, charge: evt.charge, spin: 0, skipBaseline: true,
+                mass, baseMass: mass, charge: evt.charge, angw, skipBaseline: true,
             });
             const spawned = sim.particles[sim.particles.length - 1];
             if (spawned) {
                 spawned.angw = angw;
                 spawned.angVel = sim.physics.relativityEnabled
-                    ? angwToAngVel(angw, spawned.radius)
+                    ? angwToAngVel(angw, bodyRadius)
                     : angw;
             }
-            sim.totalRadiated -= mass;
+            sim.totalRadiated -= evt.radiatedEnergy ?? evt.energy;
+            sim.totalRadiatedPx -= evt.radiatedPx ?? evt.px;
+            sim.totalRadiatedPy -= evt.radiatedPy ?? evt.py;
             if (sim.totalRadiated < 0) sim.totalRadiated = 0;
         }
     }

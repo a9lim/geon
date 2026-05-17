@@ -6,7 +6,7 @@
 // Constants provided by generated wgslConstants block.
 // Shader-specific constants:
 const NONE: i32 = -1;
-const MAX_STACK: u32 = 48u;
+const MAX_STACK: u32 = 128u;
 
 // Node layout accessors from shared-tree-nodes.wgsl (prepended)
 

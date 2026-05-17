@@ -54,7 +54,6 @@ Both fields evolve via Stormer-Verlet KDK integration, interact with particles a
 - **Ergosphere visualization**: rendered as a distinct region around spinning black holes
 - **Hawking radiation**: thermal emission with inverse-mass-squared rate, evaporating small black holes
 - **Schwinger discharge**: vacuum pair production at charged black hole horizons 
-- **Pair production**: high-energy photon conversion to particle-antiparticle pairs
 - **Superradiance**: axion field amplification extracting rotational energy from spinning black holes, with natural saturation when horizon angular velocity drops below axion mass
 
 ### Topology and Boundary Conditions

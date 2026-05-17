@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 76;
+const SHADER_VERSION = 78;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -396,6 +396,30 @@ export async function createCollisionPipelines(device, wgslConstants = '') {
     });
 
     return { detectCollisions, resolveCollisions, resolveBouncePairwise, bindGroupLayouts };
+}
+
+export async function createMergePhotonPipeline(device, wgslConstants = '') {
+    const prefix = await getSharedPrefix(wgslConstants);
+    const code = await fetchShader('merge-photons.wgsl', prefix);
+    const module = device.createShaderModule({ label: 'mergePhotons', code });
+
+    const bindGroupLayout = device.createBindGroupLayout({
+        label: 'mergePhotons_group0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // mergeResults
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // mergeCounter
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // photonPool
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // phCount
+        ],
+    });
+
+    const pipeline = device.createComputePipeline({
+        label: 'mergePhotons',
+        layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+        compute: { module, entryPoint: 'main' },
+    });
+
+    return { pipeline, bindGroupLayout };
 }
 
 /**
@@ -1516,50 +1540,28 @@ export async function createDisintegrationPipeline(device, wgslConstants = '') {
     return { pipeline, bindGroupLayouts };
 }
 
-/**
- * Create pair production compute pipeline (Phase 5).
- * Bind groups:
- *   Group 0: photonPool (ro) + phCount (ro) = 2 (was 7 separate)
- *   Group 1: particleState (ro) = 1 (was 4 separate)
- *   Group 2: pairEvents + pairCounter + PairProdUniforms = 3
- */
-export async function createPairProductionPipeline(device, wgslConstants = '') {
+/** Create compute pipeline for active boson indirect dispatch sizing. */
+export async function createBosonDispatchArgsPipeline(device, wgslConstants = '') {
     const prefix = await getSharedPrefix(wgslConstants);
-    const code = await fetchShader('pair-production.wgsl', prefix);
-    const module = device.createShaderModule({ label: 'pairProduction', code });
+    const code = await fetchShader('dispatch-args.wgsl', prefix);
+    const module = device.createShaderModule({ label: 'bosonDispatchArgs', code });
 
-    const group0Layout = device.createBindGroupLayout({
-        label: 'pairProd_g0',
+    const bindGroupLayout = device.createBindGroupLayout({
+        label: 'bosonDispatchArgs_g0',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // photonPool (rw for encoder compat)
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // phCount (rw for encoder compat)
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
         ],
     });
 
-    const group1Layout = device.createBindGroupLayout({
-        label: 'pairProd_g1',
-        entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleState (rw for encoder compat)
-        ],
-    });
-
-    const group2Layout = device.createBindGroupLayout({
-        label: 'pairProd_g2',
-        entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-        ],
-    });
-
-    const bindGroupLayouts = [group0Layout, group1Layout, group2Layout];
     const pipeline = device.createComputePipeline({
-        label: 'checkPairProduction',
-        layout: device.createPipelineLayout({ bindGroupLayouts }),
-        compute: { module, entryPoint: 'checkPairProduction' },
+        label: 'buildBosonDispatchArgs',
+        layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+        compute: { module, entryPoint: 'buildBosonDispatchArgs' },
     });
 
-    return { pipeline, bindGroupLayouts };
+    return { pipeline, bindGroupLayout };
 }
 
 /**

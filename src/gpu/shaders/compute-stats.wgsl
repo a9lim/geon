@@ -109,13 +109,13 @@ fn statsKEMom(@builtin(local_invocation_id) lid: vec3u) {
                 let wSq = p.velWX * p.velWX + p.velWY * p.velWY;
                 let gamma = sqrt(1.0 + wSq);
                 localLinearKE += wSq / (gamma + 1.0) * m;
-                let srSq = p.angW * p.angW * d.radiusSq;
+                let srSq = p.angW * p.angW * d.bodyRSq;
                 let gammaRot = sqrt(1.0 + srSq);
                 localSpinKE += INERTIA_K * m * srSq / (gammaRot + 1.0);
             } else {
                 let vSq = d.velX * d.velX + d.velY * d.velY;
                 localLinearKE += 0.5 * m * vSq;
-                localSpinKE += 0.5 * INERTIA_K * m * d.radiusSq * d.angVel * d.angVel;
+                localSpinKE += 0.5 * INERTIA_K * m * d.bodyRSq * d.angVel * d.angVel;
             }
             localPx += m * p.velWX;
             localPy += m * p.velWY;
@@ -184,7 +184,7 @@ fn statsKEMom(@builtin(local_invocation_id) lid: vec3u) {
             let d = derived[i];
             let m = p.mass;
             localOrbAngMom += (p.posX - comXF) * (m * p.velWY) - (p.posY - comYF) * (m * p.velWX);
-            localSpinAngMom += INERTIA_K * m * d.radiusSq * p.angW;
+            localSpinAngMom += INERTIA_K * m * d.bodyRSq * p.angW;
         }
         i += KE_WG;
     }

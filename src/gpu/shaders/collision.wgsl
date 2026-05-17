@@ -13,6 +13,11 @@ const MAX_STACK: u32 = 48u;
 const MERGE_ANNIHILATION: u32 = 0u;
 const MERGE_INELASTIC: u32 = 1u;
 
+struct MergeResult {
+    p0: vec4<f32>, // x, y, energy, type
+    p1: vec4<f32>, // px, py, pad, pad
+};
+
 // Struct definitions (ParticleState, ParticleAux, AllForces, SimUniforms) and
 // fullMinImageP() provided by prepended shared includes.
 
@@ -33,7 +38,7 @@ const MERGE_INELASTIC: u32 = 1u;
 // Group 2: collision pairs + counters + merge results
 @group(2) @binding(0) var<storage, read_write> collisionPairs: array<u32>;
 @group(2) @binding(1) var<storage, read_write> pairCounter: atomic<u32>;
-@group(2) @binding(2) var<storage, read_write> mergeResults: array<vec4<f32>>;
+@group(2) @binding(2) var<storage, read_write> mergeResults: array<MergeResult>;
 @group(2) @binding(3) var<storage, read_write> mergeCounter: atomic<u32>;
 
 // ─── detectCollisions ───
@@ -195,10 +200,13 @@ fn resolveCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
         let fraction1 = annihilated / ps1.mass;
         let fraction2 = annihilated / ps2.mass;
         let keAnn = fraction1 * particleKE(ps1) + fraction2 * particleKE(ps2);
+        let annPx = (ps1.velWX + ps2.velWX) * annihilated;
+        let annPy = (ps1.velWY + ps2.velWY) * annihilated;
 
-        // Store merge event for photon burst emission (handled by JS readback)
+        // Store event for photon emission and field-excitation readback.
         let slot = atomicAdd(&mergeCounter, 1u);
-        mergeResults[slot] = vec4<f32>(cx, cy, 2.0 * annihilated + keAnn, f32(MERGE_ANNIHILATION));
+        mergeResults[slot].p0 = vec4<f32>(cx, cy, 2.0 * annihilated + keAnn, f32(MERGE_ANNIHILATION));
+        mergeResults[slot].p1 = vec4<f32>(annPx, annPy, 0.0, 0.0);
 
         ps1.mass -= annihilated;
         ps2.mass -= annihilated;
@@ -219,14 +227,14 @@ fn resolveCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
             ps1.flags = (ps1.flags & ~FLAG_ALIVE) | FLAG_RETIRED;
             aux1.deathTime = uniforms.simTime;
             aux1.deathMass = annihilated; // full pre-annihilation mass (was all consumed)
-            let sr1 = ps1.angW * aux1.radius;
+            let sr1 = ps1.angW * pow(ps1.mass, 1.0 / 3.0);
             aux1.deathAngVel = select(ps1.angW, ps1.angW / sqrt(1.0 + sr1 * sr1), relOn);
         }
         if (ps2.mass <= EPSILON) {
             ps2.flags = (ps2.flags & ~FLAG_ALIVE) | FLAG_RETIRED;
             aux2.deathTime = uniforms.simTime;
             aux2.deathMass = annihilated; // full pre-annihilation mass (was all consumed)
-            let sr2 = ps2.angW * aux2.radius;
+            let sr2 = ps2.angW * pow(ps2.mass, 1.0 / 3.0);
             aux2.deathAngVel = select(ps2.angW, ps2.angW / sqrt(1.0 + sr2 * sr2), relOn);
         }
 
@@ -258,15 +266,15 @@ fn resolveCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
         let dy2 = p2miY - newY;
         let Lorb = dx1 * (ps1.mass * ps1.velWY) - dy1 * (ps1.mass * ps1.velWX)
                  + dx2 * (ps2.mass * ps2.velWY) - dy2 * (ps2.mass * ps2.velWX);
-        let r1 = aux1.radius;
-        let r2 = aux2.radius;
-        let Lspin = INERTIA_K * ps1.mass * r1 * r1 * ps1.angW
-                   + INERTIA_K * ps2.mass * r2 * r2 * ps2.angW;
+        let bodyR1Sq = pow(ps1.mass, 2.0 / 3.0);
+        let bodyR2Sq = pow(ps2.mass, 2.0 / 3.0);
+        let Lspin = INERTIA_K * ps1.mass * bodyR1Sq * ps1.angW
+                   + INERTIA_K * ps2.mass * bodyR2Sq * ps2.angW;
 
         // Retire p2 — save death metadata before zeroing mass
         aux2.deathTime = uniforms.simTime;
         aux2.deathMass = ps2.mass;
-        let sr2 = ps2.angW * r2;
+        let sr2 = ps2.angW * sqrt(bodyR2Sq);
         aux2.deathAngVel = select(ps2.angW, ps2.angW / sqrt(1.0 + sr2 * sr2), relOn);
 
         // Write new merged particle to idx1's slot (fresh identity, both parents die)
@@ -313,7 +321,8 @@ fn resolveCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
         let keLost = max(0.0, keBefore - keAfter);
         if (keLost > 0.0) {
             let slot = atomicAdd(&mergeCounter, 1u);
-            mergeResults[slot] = vec4<f32>(newX, newY, keLost, f32(MERGE_INELASTIC));
+            mergeResults[slot].p0 = vec4<f32>(newX, newY, keLost, f32(MERGE_INELASTIC));
+            mergeResults[slot].p1 = vec4<f32>(0.0, 0.0, 0.0, 0.0);
         }
     }
 }

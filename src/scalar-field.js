@@ -3,7 +3,7 @@
 // PQS (cubic B-spline, order 3) particle-grid coupling: 4×4 stencil,
 // C² interpolation, C² continuous gradients (PQS-interpolated grid gradients).
 
-import { EPSILON, FIELD_EXCITATION_SIGMA, MERGE_EXCITATION_SCALE, EXCITATION_MAX_AMPLITUDE, BOUND_BOUNCE, BOUND_LOOP, TORUS, KLEIN, RP2 } from './config.js';
+import { EPSILON, FIELD_EXCITATION_SIGMA, BOUND_BOUNCE, BOUND_LOOP, TORUS, KLEIN, RP2 } from './config.js';
 import { minImage } from './topology.js';
 import { fft2d } from './fft.js';
 
@@ -458,25 +458,46 @@ export default class ScalarField {
         return this._iwgResult;
     }
 
-    /** Deposit a Gaussian wave packet (field excitation / boson) at world (x,y).
-     *  Energy goes into fieldDot so it propagates via the wave equation. */
+    /** Deposit a Gaussian wave packet whose immediate field kinetic-energy gain is `energy`. */
     depositExcitation(x, y, energy, domainW, domainH) {
         const GRID = this._grid;
         const cellW = domainW / GRID;
         const cellH = domainH / GRID;
-        if (cellW < EPSILON || cellH < EPSILON) return;
+        if (energy <= EPSILON || cellW < EPSILON || cellH < EPSILON) return 0;
 
         const gx = x / cellW;
         const gy = y / cellH;
         const sigma = FIELD_EXCITATION_SIGMA;
         const sigmaSq = sigma * sigma;
-        const amplitude = Math.min(MERGE_EXCITATION_SCALE * Math.sqrt(energy), EXCITATION_MAX_AMPLITUDE);
         const range = Math.ceil(3 * sigma);
 
         const ixMin = Math.max(0, Math.floor(gx) - range);
         const ixMax = Math.min(GRID - 1, Math.floor(gx) + range);
         const iyMin = Math.max(0, Math.floor(gy) - range);
         const iyMax = Math.min(GRID - 1, Math.floor(gy) + range);
+        const cellArea = cellW * cellH;
+
+        let linear = 0;
+        let quad = 0;
+        for (let iy = iyMin; iy <= iyMax; iy++) {
+            const dy = iy - gy;
+            for (let ix = ixMin; ix <= ixMax; ix++) {
+                const dx = ix - gx;
+                const rSq = dx * dx + dy * dy;
+                if (rSq > 9 * sigmaSq) continue;
+                const w = Math.exp(-rSq / (2 * sigmaSq));
+                const idx = iy * GRID + ix;
+                linear += this.fieldDot[idx] * w;
+                quad += w * w;
+            }
+        }
+
+        const B = cellArea * linear;
+        const C = cellArea * quad;
+        if (C <= EPSILON) return 0;
+        const disc = B * B + 2 * C * energy;
+        const amplitude = (-B + Math.sqrt(Math.max(0, disc))) / C;
+        if (!Number.isFinite(amplitude) || amplitude <= 0) return 0;
 
         for (let iy = iyMin; iy <= iyMax; iy++) {
             const dy = iy - gy;
@@ -487,6 +508,8 @@ export default class ScalarField {
                 this.fieldDot[iy * GRID + ix] += amplitude * Math.exp(-rSq / (2 * sigmaSq));
             }
         }
+        const actual = B * amplitude + 0.5 * C * amplitude * amplitude;
+        return Number.isFinite(actual) ? Math.min(energy, Math.max(0, actual)) : 0;
     }
 
     /** Shared field energy: KE + gradient + potential, integrated over grid.

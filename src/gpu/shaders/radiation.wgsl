@@ -190,7 +190,7 @@ fn hawkingRadiation(@builtin(global_invocation_id) gid: vec3u) {
     var power: f32 = 0.0;
     if (disc > EPSILON) {
         let rPlus = M + sqrt(disc);
-        let denom = max(2.0 * M * rPlus, EPSILON);
+        let denom = max(rPlus * rPlus + a * a, EPSILON);
         let kappa = sqrt(disc) / denom;
         let T = kappa / TWO_PI;
         let A = 4.0 * PI * (rPlus * rPlus + a * a);
@@ -289,6 +289,7 @@ fn hawkingRadiation(@builtin(global_invocation_id) gid: vec3u) {
     var drd = derived[i];
     drd.invMass = select(0.0, 1.0 / newM, newM > EPSILON);
     drd.radiusSq = newRadius * newRadius;
+    drd.bodyRSq = newBodyRSq;
     derived[i] = drd;
     particleAux[i].radius = newRadius;
 

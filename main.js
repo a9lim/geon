@@ -10,7 +10,7 @@ import EffectivePotentialPlot from './src/effective-potential.js';
 import StatsDisplay from './src/stats-display.js';
 import { setupUI } from './src/ui.js';
 import { init as initI18n, setLang as setI18nLang, getLang as getI18nLang, t as tI18n, onChange as onI18nChange } from './src/i18n.js';
-import { TWO_PI, WORLD_SCALE, ZOOM_MIN, ZOOM_MAX, WHEEL_ZOOM_IN, DEFAULT_SPEED_SCALE, DEFAULT_SPEED_INDEX, SPAWN_MIN_ENERGY, PHYSICS_DT, MAX_SUBSTEPS, MAX_PHOTONS, MAX_FRAME_DT, ACCUMULATOR_CAP, COL_PASS, BOUND_DESPAWN, TORUS, STATS_THROTTLE_MASK, MAX_PARTICLES, BOSON_CHARGE, MAX_SPEED_RATIO, spawnOffset } from './src/config.js';
+import { TWO_PI, WORLD_SCALE, ZOOM_MIN, ZOOM_MAX, WHEEL_ZOOM_IN, DEFAULT_SPEED_SCALE, DEFAULT_SPEED_INDEX, SPAWN_MIN_ENERGY, PHYSICS_DT, MAX_SUBSTEPS, MAX_PHOTONS, MAX_FRAME_DT, ACCUMULATOR_CAP, COL_PASS, BOUND_DESPAWN, TORUS, STATS_THROTTLE_MASK, MAX_PARTICLES, BOSON_CHARGE, MAX_SPEED_RATIO, EPSILON, spawnOffset, kerrNewmanRadius } from './src/config.js';
 import MasslessBoson from './src/massless-boson.js';
 import Pion from './src/pion.js';
 import Lepton from './src/lepton.js';
@@ -515,17 +515,30 @@ class Simulation {
         p.baseMass = options.baseMass ?? p.mass;
         p.charge = Math.round((options.charge ?? 0) / BOSON_CHARGE) * BOSON_CHARGE;
         p.antimatter = this.physics.blackHoleEnabled ? false : (options.antimatter ?? false);
+        p.radius = Math.cbrt(p.mass);
+        p.radiusSq = p.radius * p.radius;
+        p.bodyRadiusSq = p.radiusSq;
+        p.invMass = 1 / p.mass;
 
         p.creationTime = this.physics.simTime;
         p.updateColor();
 
-        // Spin is surface velocity as fraction of c; convert to angular celerity
-        let sv = options.spin ?? 0;
-        sv = Math.max(-MAX_SPEED_RATIO, Math.min(MAX_SPEED_RATIO, sv));
-        const absSV = Math.abs(sv);
-        p.angw = absSV > 0 ? Math.sign(sv) * absSV / (p.radius * Math.sqrt(1 - absSV * absSV)) : 0;
+        // Spin is surface velocity by default; internal callers can pass angw directly.
+        if (options.angw !== undefined) {
+            p.angw = options.angw;
+        } else {
+            let sv = options.spin ?? 0;
+            sv = Math.max(-MAX_SPEED_RATIO, Math.min(MAX_SPEED_RATIO, sv));
+            const absSV = Math.abs(sv);
+            p.angw = absSV > 0 ? Math.sign(sv) * absSV / (Math.cbrt(p.mass) * Math.sqrt(1 - absSV * absSV)) : 0;
+        }
         setVelocity(p, vx, vy);
-        p.angVel = this.physics.relativityEnabled ? angwToAngVel(p.angw, p.radius) : p.angw;
+        p.angVel = this.physics.relativityEnabled ? angwToAngVel(p.angw, Math.sqrt(p.bodyRadiusSq)) : p.angw;
+        if (this.physics.blackHoleEnabled) {
+            p.radius = kerrNewmanRadius(p.mass, p.bodyRadiusSq, p.angVel, p.charge);
+            p.radiusSq = p.radius * p.radius;
+            p.updateColor();
+        }
 
         if (!backend.addParticle(this, p, { x, y, vx, vy })) return;
 
@@ -571,14 +584,66 @@ class Simulation {
         for (let j = 0; j < n; j++) {
             const angle = Math.random() * TWO_PI;
             const cosA = Math.cos(angle), sinA = Math.sin(angle);
-            this.photons.push(MasslessBoson.acquire(
-                x + cosA * offset, y + sinA * offset,
-                cosA, sinA, ePerPh, emitterId
-            ));
-            this.totalRadiatedPx += ePerPh * cosA;
-            this.totalRadiatedPy += ePerPh * sinA;
+            this._emitPhoton(x, y, cosA, sinA, ePerPh, offset, emitterId);
         }
+    }
+
+    _emitPhoton(x, y, dirX, dirY, energy, offset, emitterId) {
+        this.photons.push(MasslessBoson.acquire(
+            x + dirX * offset, y + dirY * offset,
+            dirX, dirY, energy, emitterId
+        ));
         this.totalRadiated += energy;
+        this.totalRadiatedPx += energy * dirX;
+        this.totalRadiatedPy += energy * dirY;
+    }
+
+    emitPhotonBurstWithMomentum(x, y, energy, px, py, radius, emitterId) {
+        if (energy <= EPSILON) return;
+        const available = MAX_PHOTONS - this.photons.length;
+        if (available <= 0) return;
+
+        const offset = spawnOffset(radius);
+        if (available === 1) {
+            const pMag = Math.sqrt(px * px + py * py);
+            let dirX, dirY;
+            if (pMag > EPSILON) {
+                dirX = px / pMag;
+                dirY = py / pMag;
+            } else {
+                const angle = Math.random() * TWO_PI;
+                dirX = Math.cos(angle);
+                dirY = Math.sin(angle);
+            }
+            this._emitPhoton(x, y, dirX, dirY, energy, offset, emitterId);
+            return;
+        }
+
+        let betaX = px / energy;
+        let betaY = py / energy;
+        let betaSq = betaX * betaX + betaY * betaY;
+        if (betaSq > 1) {
+            const invBeta = 1 / Math.sqrt(betaSq);
+            betaX *= invBeta;
+            betaY *= invBeta;
+            betaSq = 1;
+        }
+
+        let perpX, perpY;
+        if (betaSq > EPSILON) {
+            const invBeta = 1 / Math.sqrt(betaSq);
+            perpX = -betaY * invBeta;
+            perpY = betaX * invBeta;
+        } else {
+            const angle = Math.random() * TWO_PI;
+            perpX = Math.cos(angle);
+            perpY = Math.sin(angle);
+        }
+
+        const spread = Math.sqrt(Math.max(0, 1 - betaSq));
+        const ePh = 0.5 * energy;
+        this._emitPhoton(x, y, betaX + spread * perpX, betaY + spread * perpY, ePh, offset, emitterId);
+        this._emitPhoton(x, y, betaX - spread * perpX, betaY - spread * perpY, ePh, offset, emitterId);
     }
 
     markDirty() { this._dirty = true; }

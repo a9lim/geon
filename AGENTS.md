@@ -39,6 +39,8 @@ Backend switching should go through `sim.useGPUBackend()` / `sim.useCPUBackend()
 
 c = G = ħ = 1. All velocities are fractions of c. Both linear (`p.w` = γv) and rotational (`p.angw`) state use proper velocity. When relativity off: `vel = w` identity.
 
+`p.bodyRadiusSq` is always the intrinsic body radius squared (`∛mass²`) and is the source of spin inertia/magnetic moment/angular momentum. In black-hole mode, `p.radiusSq` is the effective Kerr-Newman horizon radius squared and must not be used for spin inertia. Energy stats include rest mass (`totalMass`) plus kinetic, spin, field, potential, and radiated terms.
+
 ### Boris Integrator (per substep)
 
 Half-kick → Boris rotation (Bz + Bgz + extBz) → half-kick → spin-orbit/radiation/pion emission → drift → 1PN velocity-Verlet correction → scalar field evolution (Störmer-Verlet KDK) → quadtree rebuild + collisions → external/scalar field forces
@@ -78,7 +80,7 @@ Enable/disable cascade and slider group visibility use shared `_forms.bindDeps()
 
 ### Schwinger Discharge
 
-Vacuum pair production at BH horizons. Rate: `Γ = (e²Q²)/(π²Σ) × exp(-πE_cr Σ/|Q|)`, `Σ = r₊² + a²` (KN area factor), `e = BOSON_CHARGE`, `E_cr = m_e²/e`. Threshold `0.5·E_cr`. Lepton KE from horizon potential: `eΦ_H - m_e` where `Φ_H = |Q|r₊/Σ`. Per event: BH loses `BOSON_CHARGE` charge and `ELECTRON_MASS` mass (KE not subtracted — prevents runaway). Same-sign lepton escapes, opposite falls back. Requires BH + Coulomb + Radiation. Accumulates rate per substep; emits at 1. CPU: `integrator.js` (after Hawking). GPU: `radiation.wgsl` `schwingerDischarge`, leptons share pion pool (`kind=1u`).
+Schwinger discharge at BH horizons. Rate: `Γ = (e²Q²)/(π²Σ) × exp(-πE_cr Σ/|Q|)`, `Σ = r₊² + a²` (KN area factor), `e = BOSON_CHARGE`, `E_cr = m_e²/e`. Threshold `0.5·E_cr`. Lepton KE from horizon potential: `eΦ_H - m_e` where `Φ_H = |Q|r₊/Σ`. Per event: BH loses `BOSON_CHARGE` charge and `ELECTRON_MASS` mass (KE not subtracted — prevents runaway). Same-sign lepton escapes, opposite falls back. Requires BH + Coulomb + Radiation. Accumulates rate per substep; emits at 1. CPU: `integrator.js` (after Hawking). GPU: `radiation.wgsl` `schwingerDischarge`, leptons share pion pool (`kind=1u`). Generic high-energy photon-to-particle conversion was intentionally removed; do not reintroduce it under a new name.
 
 ### Superradiance
 
@@ -86,7 +88,11 @@ Axion field amplification by spinning BHs. Rate: `Γ = (M·μ_a)² · max(Ω_H -
 
 ### Kugelblitz Collapse
 
-Boson energy exceeding the hoop conjecture threshold (E > r/2, natural units) condenses into a massive particle. Detection walks the boson BH tree after aggregation: `totalMass[node]` (= total source energy) vs full node extent / 2. Smallest qualifying node collapses first. Collects all bosons in subtree, computes COM/momentum/charge/angular momentum, spawns particle via `addParticle()`. Guards: CPU uses `MIN_KUGELBLITZ_COUNT` (4) + `MIN_KUGELBLITZ_ENERGY` (0.2); GPU skips count check (GPU `N_PARTICLE_COUNT` is a visitor-flag protocol value, not subtree count) and uses energy + size only. Max 1 per substep. Requires Gravity + Boson Interaction (no separate toggle). CPU: `integrator.js` `_checkKugelblitz()`, node size = `bw * 2` (full extent from half-extents). GPU: `kugelblitz.wgsl` `checkKugelblitz`, node size = `maxX - minX` (full extent), event readback to CPU for particle spawn. `totalCount` array on `QuadTreePool` (computed in `calculateBosonDistribution`) tracks boson count per node for CPU path.
+Boson energy exceeding the hoop conjecture threshold (E > r/2, natural units) condenses into a massive particle. Detection walks the boson BH tree after aggregation: `totalMass[node]` (= total source energy) vs full node extent / 2. Smallest qualifying node collapses first. Collects all bosons in subtree, computes COM/momentum/charge/angular momentum, then spawns a particle from the invariant mass `sqrt(E² - |P|²)` and velocity `P/E`. Near-null clusters are rejected rather than becoming superluminal massive particles. Radiation bookkeeping subtracts only consumed previously-radiated photons/pions from `totalRadiated` and radiated momentum. Guards: CPU uses `MIN_KUGELBLITZ_COUNT` (4) + `MIN_KUGELBLITZ_ENERGY` (0.2); GPU skips count check (GPU `N_PARTICLE_COUNT` is a visitor-flag protocol value, not subtree count) and uses energy + size only. Max 1 per substep. Requires Gravity + Boson Interaction (no separate toggle). CPU: `integrator.js` `_checkKugelblitz()`, node size = `bw * 2` (full extent from half-extents). GPU: `kugelblitz.wgsl` `checkKugelblitz`, node size = `maxX - minX` (full extent), 48-byte event readback to CPU for particle spawn. `totalCount` array on `QuadTreePool` (computed in `calculateBosonDistribution`) tracks boson count per node for CPU path.
+
+### Annihilation
+
+Matter/antimatter particle annihilation emits two photons with exact lab-frame energy and momentum conservation. CPU carries collision event `{energy, px, py}` through `collisions.js` and emits via `sim.emitPhotonBurstWithMomentum()`. GPU collision events are 32-byte `MergeResult` records (`p0 = x,y,energy,type`, `p1 = px,py,pad,pad`); `merge-photons.wgsl` runs immediately after `resolveCollisions` and appends the two photons on-device. Field excitations consume the same merge-event readback and include both merge and annihilation event energies.
 
 ### Quantized Boson Charge
 
@@ -101,6 +107,8 @@ When Higgs enabled, Yukawa range parameter μ_eff = `yukawaMu · √(higgsMod_i 
 PQS (cubic B-spline) grid: 64×64 (CPU), 128×128 (GPU). 4×4 stencil. C² interpolation and gradients. Field arrays: `field`/`fieldDot` (not `phi`/`phiDot`). Clamp: SCALAR_FIELD_MAX = 2.
 
 Self-gravity via FFT convolution with Green's function. `computeSelfGravity(domainW, domainH, softeningSq, bcMode, topoConst)` — callers pass boundary mode directly, not a boolean. Called twice per KDK for O(dt²) accuracy.
+
+Merge/annihilation scalar excitations are energy-normalized impulses into `fieldDot`: CPU `depositExcitation()` and GPU `field-excitation.wgsl` solve the local amplitude from the current `fieldDot` cross term so the immediate kinetic-energy increase equals the event energy. Do not restore the old `scale * sqrt(energy)` cap model.
 
 ## GPU
 
@@ -121,7 +129,9 @@ All shaders prepended with `wgslConstants + shared-structs.wgsl + shared-topolog
 
 ### GPU Pass Graph
 
-`gpu/pass-graph.js` derives per-frame dispatch booleans from current toggles and alive counts. Use it to skip whole inactive pass families (spin-orbit, torque application, radiation subpasses, boson update/interaction, pair production, kugelblitz readback) without scattering ad hoc toggle checks through the frame loop. Keep the plan conservative: if existing photons/pions/leptons/bosons may still need cleanup or absorption, keep their update passes alive even when the creation toggle is off.
+`gpu/pass-graph.js` derives per-frame dispatch booleans from current toggles and alive counts. Use it to skip whole inactive pass families (spin-orbit, torque application, radiation subpasses, boson update/interaction, kugelblitz readback) without scattering ad hoc toggle checks through the frame loop. Keep the plan conservative: if existing photons/pions/leptons/bosons may still need cleanup or absorption, keep their update passes alive even when the creation toggle is off.
+
+Boson pool pass sizes are generated by `dispatch-args.wgsl` into an indirect-dispatch buffer (photons, pions/leptons, total bosons, boson-tree nodes). Use indirect dispatch for pool-sized boson passes when available; keep the explicit max-capacity fallback for portability.
 
 ### GPU Tree Build
 
@@ -134,6 +144,7 @@ All shaders prepended with `wgslConstants + shared-structs.wgsl + shared-topolog
 - `queue.writeBuffer()` executes at queue time (before encoder starts), NOT inline with compute passes. Use `encoder.copyBufferToBuffer` for resets between dispatches within the same command buffer
 - `_phase5Ready` flag guards field dispatches until async pipeline creation completes
 - Async readback methods use try/catch/finally to clear pending flags on device loss
+- Merge events are 32 bytes. If their layout changes, update `MERGE_RESULT_SIZE`, `collision.wgsl`, `merge-photons.wgsl`, readback parsing, and field-excitation upload together.
 
 ### Disintegration (Hidden)
 
@@ -157,6 +168,7 @@ UI toggle hidden via `style="display:none"` — still activatable via presets (R
 - Bounce (Hertz) is always quadtree-accelerated when BH on, O(n²) when off — do not early-return when `root < 0`
 - `magMoment`/`angMomentum` cached per particle at start of `computeAllForces()` using `bodyRadiusSq` (intrinsic body radius, not horizon radius in BH mode)
 - Dead particles in GPU tree use `deathMass`/`deathAngVel` from `ParticleAux` for leaf data; CPU dead-particle path remains pairwise
+- Generic photon pair production is gone by design. Schwinger discharge is the only remaining lepton-creation mechanism and is tied to BH + Coulomb + Radiation.
 
 ### WGSL
 

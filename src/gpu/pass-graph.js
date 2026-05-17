@@ -21,7 +21,6 @@ export function createGPUDispatchPlan() {
         photonUpdate: false,
         pionUpdate: false,
         bosonInteraction: false,
-        pairProduction: false,
         kugelblitzReadback: false,
     };
 }
@@ -50,7 +49,6 @@ export function updateGPUDispatchPlan(gpu, plan = createGPUDispatchPlan()) {
     // interaction follows the explicit interaction toggle until active pool
     // counters are available to the scheduler.
     plan.bosonInteraction = gpu._bosonInterEnabled;
-    plan.pairProduction = !gpu._blackHoleEnabled;
     plan.kugelblitzReadback = gpu._bosonInterEnabled && gpu._gravityEnabled && !!gpu._kbBuffers;
 
     return plan;

@@ -231,7 +231,7 @@ const REF_EN = {
 <p>where $e$ is the elementary charge, $E_{\\text{cr}} = m_e^2/e$ is the critical Schwinger field, and $\\Sigma$ is the Kerr-Newman horizon area factor that encodes spin corrections. The exponential suppression means the rate is negligible until $E \\approx E_{\\text{cr}}$ (threshold at $0.5\\,E_{\\text{cr}}$).</p>
 <p>The escaping lepton carries kinetic energy derived from the horizon electrostatic potential:</p>
 <p>$$\\text{KE} = e\\,\\Phi_H - m_e, \\qquad \\Phi_H = \\frac{|Q|\\,r_+}{r_+^2 + a^2}$$</p>
-<p>Each discharge event reduces the black hole's charge by one elementary unit and its mass by $m_e$. The same-sign lepton escapes; the opposite-sign partner falls back in. Over many events, this drives a charged black hole toward neutrality — enforcing cosmic censorship through pair production rather than naked singularity formation.</p>
+<p>Each discharge event reduces the black hole's charge by one elementary unit and its mass by $m_e$. The same-sign lepton escapes; the opposite-sign partner falls back in. Over many events, this drives a charged black hole toward neutrality through Schwinger discharge rather than naked singularity formation.</p>
 `,
 
     'ref.kugelblitz.title': 'Kugelblitz Collapse',
@@ -561,7 +561,7 @@ const REF_EN = {
 <p>The charge slider sets the electric charge of newly placed particles. Charge determines the strength of Coulomb and magnetic interactions, and is one of the three quantities (mass, charge, spin) that fully characterize a black hole.</p>
 
 <h3>Quantization</h3>
-<p>All charges are quantized in units of the <b>boson charge</b> $e$ (default 0.1). Particle charges are rounded to the nearest multiple of $e$ on creation. Every charge-transfer process — pion emission, lepton pair production, Schwinger discharge, disintegration — conserves charge in discrete $\\pm e$ increments.</p>
+<p>All charges are quantized in units of the <b>boson charge</b> $e$ (default 0.1). Particle charges are rounded to the nearest multiple of $e$ on creation. Every charge-transfer process — pion emission, Schwinger discharge, disintegration — conserves charge in discrete $\\pm e$ increments.</p>
 
 <h3>Consequences</h3>
 <p>Quantization means a black hole cannot shed an arbitrary fraction of its charge. Schwinger discharge removes exactly $e$ per event, so a BH with charge $Q$ requires $|Q|/e$ discharge events to reach neutrality. Pion emission similarly transfers $\\pm e$ or $0$ (neutral pion). This discreteness prevents continuous charge drift and makes conservation exact up to floating-point precision.</p>

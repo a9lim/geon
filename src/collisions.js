@@ -124,8 +124,8 @@ function resolveMerge(p1, p2, miDx, miDy) {
     const dx2 = p2miX - newX, dy2 = p2miY - newY;
     const Lorb = dx1 * (p1.mass * p1.w.y) - dy1 * (p1.mass * p1.w.x)
         + dx2 * (p2.mass * p2.w.y) - dy2 * (p2.mass * p2.w.x);
-    const Lspin = INERTIA_K * p1.mass * p1.radius * p1.radius * p1.angw
-        + INERTIA_K * p2.mass * p2.radius * p2.radius * p2.angw;
+    const Lspin = INERTIA_K * p1.mass * p1.bodyRadiusSq * p1.angw
+        + INERTIA_K * p2.mass * p2.bodyRadiusSq * p2.angw;
 
     const newRadius = Math.cbrt(totalMass);
     const newI = INERTIA_K * totalMass * newRadius * newRadius;
@@ -155,4 +155,3 @@ function resolveMerge(p1, p2, miDx, miDy) {
         ke,
     };
 }
-

@@ -218,7 +218,7 @@ export default class Physics {
         if (this._ghostCount < this._ghostPool.length) {
             g = this._ghostPool[this._ghostCount];
         } else {
-            g = { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, w: { x: 0, y: 0, magSq() { return this.x * this.x + this.y * this.y; } }, mass: 0, charge: 0, angVel: 0, angw: 0, magMoment: 0, angMomentum: 0, radius: 0, radiusSq: 0, invMass: 0, id: -1, isGhost: true, original: null };
+            g = { pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, w: { x: 0, y: 0, magSq() { return this.x * this.x + this.y * this.y; } }, mass: 0, charge: 0, angVel: 0, angw: 0, magMoment: 0, angMomentum: 0, radius: 0, radiusSq: 0, bodyRadiusSq: 0, invMass: 0, id: -1, isGhost: true, original: null };
             this._ghostPool.push(g);
         }
         g.pos.x = sx; g.pos.y = sy;
@@ -229,9 +229,9 @@ export default class Physics {
         g.mass = p.mass; g.charge = p.charge;
         g.angVel = (flipVx || flipVy) ? -p.angVel : p.angVel;
         g.angw = (flipVx || flipVy) ? -p.angw : p.angw;
-        g.radius = p.radius; g.radiusSq = p.radiusSq; g.invMass = p.invMass; g.id = -1;
-        g.magMoment = MAG_MOMENT_K * g.charge * g.angVel * g.radiusSq;
-        g.angMomentum = INERTIA_K * g.mass * g.angVel * g.radiusSq;
+        g.radius = p.radius; g.radiusSq = p.radiusSq; g.bodyRadiusSq = p.bodyRadiusSq; g.invMass = p.invMass; g.id = -1;
+        g.magMoment = MAG_MOMENT_K * g.charge * g.angVel * g.bodyRadiusSq;
+        g.angMomentum = INERTIA_K * g.mass * g.angVel * g.bodyRadiusSq;
         g.original = p;
         this._ghostCount++;
         return g;
@@ -487,6 +487,7 @@ export default class Physics {
         const pions = this.sim.pions;
         const leptons = this.sim.leptons;
         let totalEnergy = 0, totalPx = 0, totalPy = 0, totalCharge = 0, totalAngL = 0;
+        let radiatedEnergy = 0, radiatedPx = 0, radiatedPy = 0;
         let comX = 0, comY = 0;
 
         // Walk subtree of bestIdx, collecting leaf points
@@ -513,17 +514,32 @@ export default class Physics {
                         // Photon: momentum = energy × velocity direction
                         totalPx += e * b.vel.x;
                         totalPy += e * b.vel.y;
+                        radiatedEnergy += e;
+                        radiatedPx += e * b.vel.x;
+                        radiatedPy += e * b.vel.y;
                     } else {
                         // Pion/lepton: momentum = mass × proper velocity
                         totalPx += b.mass * b.w.x;
                         totalPy += b.mass * b.w.y;
                         totalCharge += b.charge;
+                        if (b._kind === 1) {
+                            const re = b.energy;
+                            radiatedEnergy += re;
+                            radiatedPx += re * b.vel.x;
+                            radiatedPy += re * b.vel.y;
+                        }
                     }
                 }
             }
         }
 
         if (totalEnergy < MIN_KUGELBLITZ_ENERGY) return;
+        const pSq = totalPx * totalPx + totalPy * totalPy;
+        const mSq = totalEnergy * totalEnergy - pSq;
+        if (mSq <= MIN_MASS * MIN_MASS) return;
+        const mass = Math.sqrt(mSq);
+        const speedSq = pSq / (totalEnergy * totalEnergy);
+        if (speedSq >= MAX_SPEED_RATIO * MAX_SPEED_RATIO) return;
 
         // COM position
         comX /= totalEnergy;
@@ -557,35 +573,35 @@ export default class Physics {
             }
         }
 
-        // Spawn particle at COM
-        const mass = totalEnergy;
-        const pSq = totalPx * totalPx + totalPy * totalPy;
+        // Spawn particle at COM from the conserved four-momentum.
         const pMag = Math.sqrt(pSq);
-        // Velocity from momentum: v = p / E, capped at MAX_SPEED_RATIO
         let vx = 0, vy = 0;
         if (pMag > EPSILON) {
-            const speed = Math.min(pMag / mass, MAX_SPEED_RATIO);
+            const speed = pMag / totalEnergy;
             vx = totalPx / pMag * speed;
             vy = totalPy / pMag * speed;
         }
-        const radius = Math.cbrt(mass);
-        const I = INERTIA_K * mass * radius * radius;
+        const bodyRadius = Math.cbrt(mass);
+        const bodyRadiusSq = bodyRadius * bodyRadius;
+        const I = INERTIA_K * mass * bodyRadiusSq;
         const angw = I > EPSILON ? totalAngL / I : 0;
 
         this.sim.addParticle(comX, comY, vx, vy, {
             mass,
             baseMass: mass,
             charge: totalCharge,
-            spin: 0,
+            angw,
             skipBaseline: true,
         });
         // Set angular velocity directly (addParticle uses spin → angw conversion)
         const spawned = this.sim.particles[this.sim.particles.length - 1];
         spawned.angw = angw;
-        spawned.angVel = this.relativityEnabled ? angwToAngVel(angw, spawned.radius) : angw;
+        spawned.angVel = this.relativityEnabled ? angwToAngVel(angw, bodyRadius) : angw;
 
         // Radiation returning to mass
-        this.sim.totalRadiated -= totalEnergy;
+        this.sim.totalRadiated -= radiatedEnergy;
+        this.sim.totalRadiatedPx -= radiatedPx;
+        this.sim.totalRadiatedPy -= radiatedPy;
         if (this.sim.totalRadiated < 0) this.sim.totalRadiated = 0;
     }
 
@@ -789,7 +805,7 @@ export default class Physics {
         // First frame: bootstrap initial forces + B fields
         if (!this._forcesInit && n > 0) {
             for (const p of particles) {
-                p.angVel = relOn ? angwToAngVel(p.angw, p.radius) : p.angw;
+                p.angVel = relOn ? angwToAngVel(p.angw, Math.sqrt(p.bodyRadiusSq)) : p.angw;
             }
             resetForces(particles);
             this._syncAxionField(particles, width, height, boundaryMode);
@@ -1009,11 +1025,11 @@ export default class Physics {
                         if (hasGrav) torque += p._tidalTorque;
                         torque += p._contactTorque;
                         if (torque !== 0) {
-                            const I = INERTIA_K * p.mass * p.radiusSq;
+                            const I = INERTIA_K * p.mass * p.bodyRadiusSq;
                             if (I >= EPSILON) { // avoid division by near-zero moment of inertia
                                 p.angw += torque * dtSub / I;
                                 if (p.angw !== p.angw) p.angw = 0; // NaN guard
-                                const sr = p.angw * p.radius;
+                                const sr = p.angw * Math.sqrt(p.bodyRadiusSq);
                                 p.angVel = relOn ? p.angw / Math.sqrt(1 + sr * sr) : p.angw;
                             }
                         }
@@ -1137,7 +1153,7 @@ export default class Physics {
                     let power;
                     if (disc > EPSILON) {
                         const rPlus = M + Math.sqrt(disc);
-                        const kappa = Math.sqrt(disc) / (2 * M * rPlus);
+                        const kappa = Math.sqrt(disc) / (rPlus * rPlus + a * a);
                         const T = kappa / TWO_PI;
                         const A = 4 * PI * (rPlus * rPlus + a * a);
                         const sigma = PI * PI / 60;
@@ -1312,7 +1328,7 @@ export default class Physics {
                 const invG = relOn ? 1 / Math.sqrt(1 + p.w.x * p.w.x + p.w.y * p.w.y) : 1;
                 p.vel.x = p.w.x * invG;
                 p.vel.y = p.w.y * invG;
-                p.angVel = relOn ? angwToAngVel(p.angw, p.radius) : p.angw;
+                p.angVel = relOn ? angwToAngVel(p.angw, Math.sqrt(p.bodyRadiusSq)) : p.angw;
                 p.pos.x += p.vel.x * dtSub;
                 p.pos.y += p.vel.y * dtSub;
             }
@@ -1415,7 +1431,7 @@ export default class Physics {
                         const p = particles[particles.length - 1];
                         p.w.set(s.wx, s.wy);
                         p.angw = s.angw;
-                        p.angVel = this.relativityEnabled ? angwToAngVel(p.angw, p.radius) : p.angw;
+                        p.angVel = this.relativityEnabled ? angwToAngVel(p.angw, Math.sqrt(p.bodyRadiusSq)) : p.angw;
                         const wSq = s.wx * s.wx + s.wy * s.wy;
                         const invG = this.relativityEnabled ? 1 / Math.sqrt(1 + wSq) : 1;
                         p.vel.x = s.wx * invG;
@@ -1428,7 +1444,7 @@ export default class Physics {
                 if (annihilations.length > 0 && this.sim) {
                     for (let ai = 0; ai < annihilations.length; ai++) {
                         const ann = annihilations[ai];
-                        this.sim.emitPhotonBurst(ann.x, ann.y, ann.energy, 0, -1);
+                        this.sim.emitPhotonBurstWithMomentum(ann.x, ann.y, ann.energy, ann.px, ann.py, 0, -1);
                     }
                 }
                 // Field excitations from merges and annihilations (Higgs/Axion boson emission)
@@ -1898,9 +1914,10 @@ export default class Physics {
             const p = particles[pi];
             if (p.mass < MIN_MASS * SPAWN_COUNT) continue;
 
-            const rSq = p.radiusSq;
+            const rSq = p.bodyRadiusSq;
             const selfGravity = p.mass / rSq;
-            const centrifugal = p.angVel * p.angVel * p.radius;
+            const bodyRadius = Math.sqrt(rSq);
+            const centrifugal = p.angVel * p.angVel * bodyRadius;
             const coulombSelf = (p.charge * p.charge) / (4 * rSq);
 
             if (centrifugal + coulombSelf > selfGravity) {
