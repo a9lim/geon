@@ -32,7 +32,7 @@ WebGPU compute shaders handle force summation in parallel. Falls back to Canvas 
 
 ## Topology Modes
 
-Six boundary conditions: open (particles escape), reflective (elastic walls), toroidal (wrap-around), Klein bottle (orientation-reversing wrap), projective plane (RP2), and spherical. Toroidal boundaries require minimum-image convention for force calculation to avoid double-counting.
+Boundary handling has three modes: open/despawn, reflective bounce, and loop. Loop mode can use three topologies: torus, Klein bottle, and RP2. Toroidal boundaries use minimum-image convention for force calculation to avoid double-counting.
 
 ## Signal Delay
 
@@ -44,4 +44,4 @@ Geon supports keyboard navigation for all controls, high-contrast mode via the t
 
 ## GPU and CPU Backends
 
-WebGPU compute shaders handle pairwise force summation with Barnes-Hut tree acceleration when available. The GPU backend supports up to 512 particles with 4096 photons, compared to 128 particles on CPU. Falls back to a Web Worker pool with SharedArrayBuffer on devices without WebGPU. The Canvas 2D renderer is a final fallback for legacy browsers. Backend selection is automatic but can be forced to CPU via a query parameter. Scalar field evolution (Higgs, axion) uses a 128x128 grid on GPU and 64x64 on CPU, with cubic B-spline interpolation for C2 continuity.
+WebGPU compute shaders handle pairwise force summation with Barnes-Hut tree acceleration when available. The GPU backend supports up to 512 particles with 4096 photons, compared to 128 particles on CPU. Devices without WebGPU use the CPU integrator and Canvas 2D renderer. Backend selection is automatic but can be forced to CPU via a query parameter. Scalar field evolution (Higgs, axion) uses a 128x128 grid on GPU and 64x64 on CPU, with cubic B-spline interpolation for C2 continuity.

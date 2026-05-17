@@ -1,10 +1,9 @@
 // ─── UI Setup ───
 // Wires all panel controls, toggles, presets, shortcuts, and info tips to the sim.
 import { loadPreset, PRESETS, PRESET_ORDER } from './presets.js';
-import { PHYSICS_DT, WORLD_SCALE, SCALAR_GRID, GPU_SCALAR_GRID, COL_MERGE, COL_BOUNCE, BOUND_DESPAWN, BOUND_BOUNCE, BOUND_LOOP, SPEED_OPTIONS, colFromString, boundFromString, topoFromString } from './config.js';
+import { WORLD_SCALE, SCALAR_GRID, GPU_SCALAR_GRID, COL_MERGE, COL_BOUNCE, BOUND_DESPAWN, BOUND_BOUNCE, BOUND_LOOP, SPEED_OPTIONS, colFromString, boundFromString, topoFromString } from './config.js';
 import { REFERENCE } from './reference.js';
-import { BACKEND_CPU, BACKEND_GPU } from './backend-interface.js';
-import Particle from './particle.js';
+import { BACKEND_GPU } from './backend-interface.js';
 import { quickSave, quickLoad, downloadState, uploadState } from './save-load.js';
 
 const HINT_FADE_DELAY = 5000;
@@ -323,49 +322,13 @@ export function setupUI(sim) {
     gpuToggle.addEventListener('change', async () => {
         const on = gpuToggle.checked;
         gpuToggle.setAttribute('aria-checked', String(on));
-        const gpuCanvas = document.getElementById('gpuCanvas');
         if (on && sim._gpuReady) {
-            sim.backend = BACKEND_GPU;
-            if (gpuCanvas) gpuCanvas.style.display = '';
-            // Clear stale CPU canvas underneath
-            sim.ctx.clearRect(0, 0, sim.width, sim.height);
-            // Sync current state to GPU (C3: persistent proxy, no Object.create)
-            sim._gpuPhysics.setToggles(_buildGPUToggles(sim));
-            _syncModesToGPU();
-            // Re-sync all particles to GPU
-            sim._gpuPhysics.reset();
-            for (const p of sim.particles) {
-                p._gpuIdx = sim._gpuPhysics.addParticle({
-                    x: p.pos.x, y: p.pos.y,
-                    vx: p.w.x, vy: p.w.y,
-                    mass: p.mass, charge: p.charge,
-                    angw: p.angw, antimatter: p.antimatter,
-                });
-            }
+            sim.useGPUBackend();
         } else {
             // Read back current GPU particle state before switching to CPU
-            if (sim._gpuReady && sim._gpuPhysics) {
+            if (sim._gpuReady && sim._gpuBackend) {
                 try {
-                    const gpuState = await sim._gpuPhysics.serialize(sim);
-                    // Rebuild CPU particle array from GPU readback
-                    sim.particles.length = 0;
-                    for (const pd of gpuState.particles) {
-                        const p = new Particle(pd.x, pd.y, pd.mass, pd.charge);
-                        p.baseMass = pd.baseMass;
-                        p.antimatter = pd.antimatter;
-                        p.w.set(pd.wx, pd.wy);
-                        p.angw = pd.angw;
-                        // Derive coordinate velocity from proper velocity
-                        const wSq = pd.wx * pd.wx + pd.wy * pd.wy;
-                        const gamma = Math.sqrt(1 + wSq);
-                        p.vel.set(pd.wx / gamma, pd.wy / gamma);
-                        p.angVel = sim.physics.relativityEnabled
-                            ? pd.angw / Math.sqrt(1 + pd.angw * pd.angw * p.radius * p.radius)
-                            : pd.angw;
-                        p.creationTime = sim.physics.simTime;
-                        p.updateColor();
-                        sim.particles.push(p);
-                    }
+                    await sim._gpuBackend.snapshotToCPU(sim);
                     // Read back scalar field data (GPU 128×128 → CPU 64×64)
                     const fieldData = await sim._gpuPhysics.readbackFieldData();
                     const ratio = GPU_SCALAR_GRID / SCALAR_GRID; // 2
@@ -403,8 +366,7 @@ export function setupUI(sim) {
                     console.warn('[physsim] GPU readback failed, CPU state may be stale:', e);
                 }
             }
-            sim.backend = BACKEND_CPU;
-            if (gpuCanvas) gpuCanvas.style.display = 'none';
+            sim.useCPUBackend();
         }
         const gpuInd = document.getElementById('gpu-indicator');
         if (gpuInd) gpuInd.hidden = sim.backend !== BACKEND_GPU;
@@ -557,11 +519,7 @@ export function setupUI(sim) {
     // ─── Step button ───
     const stepSim = () => {
         if (!sim.running) {
-            if (sim.backend === BACKEND_GPU && sim._gpuPhysics) {
-                sim._gpuPhysics.update(PHYSICS_DT);
-            } else {
-                sim.physics.update(sim.particles, PHYSICS_DT, sim.collisionMode, sim.boundaryMode, sim.topology, sim.domainW, sim.domainH, 0, 0);
-            }
+            sim.runtimeBackend.stepOnce(sim);
             sim._dirty = true;
         }
     };

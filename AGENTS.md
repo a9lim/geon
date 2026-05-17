@@ -21,15 +21,17 @@ Interactive particle physics simulator. Boris integrator, BH tree acceleration, 
 
 ## Architecture
 
-**`main.js`** (~990 lines): Simulation class, fixed-timestep loop (PHYSICS_DT = 1/128), backend selection (CPU/GPU), `window.sim` for debugging.
+**`main.js`** (~640 lines): Simulation shell, input/UI/state ownership, backend selection (CPU/GPU), and `window.sim` for debugging. The frame loop is intentionally backend-agnostic: it accrues fixed timestep debt, then delegates stepping, input polling, and rendering through `sim.runtimeBackend`.
 
-**Two interchangeable backends** via `selectBackend()`:
-- **CPU**: `CPUPhysics` (wraps integrator.js) + `CanvasRenderer` (wraps renderer.js)
-- **GPU**: `GPUPhysics` (WebGPU compute) + `GPURenderer` (WebGPU instanced rendering, dual light/dark pipelines)
+**Two interchangeable runtime backends**:
+- **CPU**: `CPUPhysics` owns CPU stepping, boson lifecycles, dead-particle cleanup, and Canvas rendering over `integrator.js` / `renderer.js`.
+- **GPU**: `GPUBackend` owns GPU canvas/device lifecycle, CPU↔GPU snapshots, GPU auto-save recovery, event readback handling, `GPUPhysics` compute, and `GPURenderer` instanced rendering.
 
 Falls back to CPU on WebGPU unavailability or device loss. Force CPU via `?cpu=1`.
 
-**Key modules**: `integrator.js` (Boris substep loop, all physics), `forces.js` (pairForce, BH tree walk, 1PN), `scalar-field.js` (PQS grid base), `higgs-field.js` / `axion-field.js` (field subclasses), `quadtree.js` (SoA flat typed arrays, pool-based), `ui.js` (toggle deps via shared `_forms.bindDeps`, mode locking, GPU sync), `presets.js` (19 scenarios).
+Backend switching should go through `sim.useGPUBackend()` / `sim.useCPUBackend()`. Single-step and main-loop stepping should go through `sim.runtimeBackend.stepOnce(sim)` / `sim.runtimeBackend.step(sim)` rather than branching directly on `sim.backend` in UI or loop code.
+
+**Key modules**: `integrator.js` (Boris substep loop, all physics), `forces.js` (pairForce, BH tree walk, 1PN), `scalar-field.js` (PQS grid base), `higgs-field.js` / `axion-field.js` (field subclasses), `quadtree.js` (SoA flat typed arrays, pool-based), `physics-contract.js` (shared toggle/parameter/save-load contract), `ui.js` (toggle deps via shared `_forms.bindDeps`, mode locking, backend switching), `presets.js` (19 scenarios).
 
 ## Physics
 
@@ -117,6 +119,10 @@ All shaders prepended with `wgslConstants + shared-structs.wgsl + shared-topolog
 
 `SHADER_VERSION` in gpu-pipelines.js must be bumped after shader edits to invalidate browser cache.
 
+### GPU Pass Graph
+
+`gpu/pass-graph.js` derives per-frame dispatch booleans from current toggles and alive counts. Use it to skip whole inactive pass families (spin-orbit, torque application, radiation subpasses, boson update/interaction, pair production, kugelblitz readback) without scattering ad hoc toggle checks through the frame loop. Keep the plan conservative: if existing photons/pions/leptons/bosons may still need cleanup or absorption, keep their update passes alive even when the creation toggle is off.
+
 ### GPU Tree Build
 
 4 dispatches (computeBounds, initRoot, insertParticles, computeAggregates). Lock-free CAS insertion. Visitor-flag bottom-up aggregation. Tree resets use `encoder.copyBufferToBuffer` (not `queue.writeBuffer`) because the tree may be built twice per substep; queue-level operations would execute before the encoder starts.
@@ -124,6 +130,7 @@ All shaders prepended with `wgslConstants + shared-structs.wgsl + shared-topolog
 ### GPU ↔ CPU Sync
 
 - `addParticle()` must initialize ALL per-particle buffers. `axYukMod` defaults to `(1.0, 1.0, 1.0, 0.0)` not `(0, 0, 0, 0)`
+- Save/load parity goes through `physics-contract.js`. When adding a new toggle or scalar parameter, update the shared contract plus the GPU backing slot mapping, then verify CPU and GPU serialize/deserialize it.
 - `queue.writeBuffer()` executes at queue time (before encoder starts), NOT inline with compute passes. Use `encoder.copyBufferToBuffer` for resets between dispatches within the same command buffer
 - `_phase5Ready` flag guards field dispatches until async pipeline creation completes
 - Async readback methods use try/catch/finally to clear pending flags on device loss
@@ -133,9 +140,9 @@ All shaders prepended with `wgslConstants + shared-structs.wgsl + shared-topolog
 UI toggle hidden via `style="display:none"` — still activatable via presets (Roche limit preset). Two mechanisms: tidal fragmentation (parent → SPAWN_COUNT children) and Roche lobe overflow (Eggleton 1983 mass transfer). Known bugs:
 
 - **Charge cascade**: fragments inherit parent's charge/SPAWN_COUNT, but if Coulomb self-repulsion caused the breakup, fragments still exceed the threshold and cascade into dust. Needs a cooldown, charge redistribution fix, or minimum fragment mass floor.
-- **GPU Roche**: source particle charge is not subtracted (only mass via `patchMass`). Minor charge non-conservation.
 - **GPU readback latency**: disintegration events have 1-frame latency (same as merge events). Parent state in `DisintEvent` is snapshot from detection frame; by readback time, particle has evolved further.
 - `DisintEvent` struct is 48 bytes (12 fields). GPU uses `atomicAdd` on event counter, capped at `MAX_DISINT_EVENTS` (64).
+- GPU Roche transfer stores the emitted packet charge in `DisintEvent.charge` and the source's post-transfer charge in the final event slot, exposed to JS as `sourceCharge`; `GPUPhysics.patchMassCharge()` applies both mass and charge conservation on readback.
 
 ## Gotchas
 

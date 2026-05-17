@@ -37,7 +37,7 @@ struct DisintEvent {
     mass: f32,            // parent mass
     charge: f32,          // fragment: parent charge, transfer: proportional charge
     angW: f32,            // parent angW
-    radius: f32,          // parent radius
+    radius: f32,          // fragment: parent radius, transfer: source charge after transfer
 };
 
 // Group 0: particleState + particleAux + derived (read_write for encoder compat)
@@ -238,7 +238,9 @@ fn checkDisintegration(@builtin(global_invocation_id) gid: vec3<u32>) {
                         evt.spawnVX = p.velWX + (-l1y) * escapeV * 0.5;
                         evt.spawnVY = p.velWY + l1x * escapeV * 0.5;
                         evt.mass = m;
-                        evt.charge = round(dM * q / (m * BOSON_CHARGE)) * BOSON_CHARGE;  // quantized charge transfer
+                        let dq = round(dM * q / (m * BOSON_CHARGE)) * BOSON_CHARGE;  // quantized charge transfer
+                        evt.charge = dq;
+                        evt.radius = q - dq;
                         events[slot] = evt;
                     }
                 }

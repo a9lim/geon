@@ -2,6 +2,7 @@ import Particle from './particle.js';
 import { angwToAngVel } from './relativity.js';
 import { DEFAULT_SPEED_SCALE, SPEED_OPTIONS, DEFAULT_SPEED_INDEX, MAX_PARTICLES, COL_NAMES, BOUND_NAMES, TOPO_NAMES, colFromString, boundFromString, topoFromString } from './config.js';
 import { BACKEND_GPU } from './backend-interface.js';
+import { PARAMETER_KEYS, TOGGLE_KEYS } from './physics-contract.js';
 
 // Maps physics flag names to UI toggle element IDs (same order as presets.js TOGGLE_ORDER)
 const TOGGLE_SYNC = [
@@ -105,24 +106,10 @@ function _cpuSaveState(sim) {
         camera: { x: sim.camera.x, y: sim.camera.y, zoom: sim.camera.zoom },
     };
     const ph = sim.physics;
-    for (const key of ['gravityEnabled', 'bosonInterEnabled',
-        'coulombEnabled', 'magneticEnabled',
-        'gravitomagEnabled', 'relativityEnabled', 'barnesHutEnabled',
-        'radiationEnabled', 'blackHoleEnabled', 'disintegrationEnabled',
-        'spinOrbitEnabled',
-        'onePNEnabled', 'yukawaEnabled', 'axionEnabled',
-        'expansionEnabled', 'higgsEnabled']) {
+    for (const key of TOGGLE_KEYS) {
         state.toggles[key] = ph[key];
     }
-    state.yukawaMu = ph.yukawaMu;
-    state.axionMass = ph.axionMass;
-    state.hubbleParam = ph.hubbleParam;
-    state.higgsMass = ph.higgsMass;
-    state.extGravity = ph.extGravity;
-    state.extGravityAngle = ph.extGravityAngle;
-    state.extElectric = ph.extElectric;
-    state.extElectricAngle = ph.extElectricAngle;
-    state.extBz = ph.extBz;
+    for (const key of PARAMETER_KEYS) state[key] = ph[key];
     return state;
 }
 
@@ -149,15 +136,9 @@ export function loadState(state, sim) {
                     if (key in ph) ph[key] = val;
                 }
             }
-            if (state.yukawaMu != null) ph.yukawaMu = state.yukawaMu;
-            if (state.axionMass != null) ph.axionMass = state.axionMass;
-            if (state.hubbleParam != null) ph.hubbleParam = state.hubbleParam;
-            if (state.higgsMass !== undefined) ph.higgsMass = state.higgsMass;
-            if (state.extGravity !== undefined) ph.extGravity = state.extGravity;
-            if (state.extGravityAngle !== undefined) ph.extGravityAngle = state.extGravityAngle;
-            if (state.extElectric !== undefined) ph.extElectric = state.extElectric;
-            if (state.extElectricAngle !== undefined) ph.extElectricAngle = state.extElectricAngle;
-            if (state.extBz !== undefined) ph.extBz = state.extBz;
+            for (const key of PARAMETER_KEYS) {
+                if (state[key] !== undefined && state[key] !== null) ph[key] = state[key];
+            }
             if (state.settings && state.settings.friction != null) ph.bounceFriction = state.settings.friction;
 
             _restoreSettings(state, sim);
@@ -209,15 +190,9 @@ function _cpuLoadState(state, sim) {
     for (const [key, val] of Object.entries(state.toggles)) {
         if (key in ph) ph[key] = val;
     }
-    if (state.yukawaMu != null) ph.yukawaMu = state.yukawaMu;
-    if (state.axionMass != null) ph.axionMass = state.axionMass;
-    if (state.hubbleParam != null) ph.hubbleParam = state.hubbleParam;
-    if (state.higgsMass !== undefined) ph.higgsMass = state.higgsMass;
-    if (state.extGravity !== undefined) ph.extGravity = state.extGravity;
-    if (state.extGravityAngle !== undefined) ph.extGravityAngle = state.extGravityAngle;
-    if (state.extElectric !== undefined) ph.extElectric = state.extElectric;
-    if (state.extElectricAngle !== undefined) ph.extElectricAngle = state.extElectricAngle;
-    if (state.extBz !== undefined) ph.extBz = state.extBz;
+    for (const key of PARAMETER_KEYS) {
+        if (state[key] !== undefined && state[key] !== null) ph[key] = state[key];
+    }
 
     _restoreSettings(state, sim);
     if (state.settings && state.settings.friction != null) ph.bounceFriction = state.settings.friction;

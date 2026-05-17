@@ -37,6 +37,7 @@
 import { createParticleBuffers, createUniformBuffer, writeFrameUniforms, writeSubstepUniforms, createFieldBuffers, createAtomicGridBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createPairProductionBuffers, createKugelblitzBuffers, createTrailBuffers, FIELD_GRID_RES, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
 import { fetchShader, createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldSelfGravPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createPairProductionPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline } from './gpu-pipelines.js';
 import { buildWGSLConstants, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT, GRAVITOMAG_BIT, ONE_PN_BIT, RELATIVITY_BIT, SPIN_ORBIT_BIT, RADIATION_BIT, BLACK_HOLE_BIT, DISINTEGRATION_BIT, EXPANSION_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BARNES_HUT_BIT, BOSON_INTER_BIT, FIELD_GRAV_BIT_T1, HERTZ_BOUNCE_BIT_T1, HIST_META_STRIDE } from './gpu-constants.js';
+import { createGPUDispatchPlan, updateGPUDispatchPlan } from './pass-graph.js';
 import {
     HISTORY_STRIDE, GPU_MAX_PHOTONS, GPU_MAX_PIONS, GPU_MAX_LEPTONS,
     GPU_MAX_PARTICLES, GPU_HEATMAP_GRID, HEATMAP_INTERVAL_MASK, PHYSICS_DT,
@@ -46,6 +47,7 @@ import {
     HIGGS_MASS_FLOOR, HIGGS_MASS_MAX_DELTA,
     TIDAL_STRENGTH, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, MIN_MASS, SPAWN_COUNT, BOSON_CHARGE,
 } from '../config.js';
+import { GPU_PARAMETER_SLOTS } from '../physics-contract.js';
 import { fft2d } from '../fft.js';
 
 const MAX_PARTICLES = GPU_MAX_PARTICLES;
@@ -100,6 +102,7 @@ const _retiredFlagU32 = new Uint32Array([2]);         // FLAG_RETIRED for remove
 const _deathMetaData = new ArrayBuffer(12);           // deathTime(f32), deathMass(f32), deathAngVel(f32)
 const _deathMetaF32 = new Float32Array(_deathMetaData);
 const _patchMassData = new Float32Array(2);           // mass + baseMass patch
+const _patchScalarData = new Float32Array(1);
 
 // Pre-allocated hitTest uniform data (avoids per-call allocation)
 const _hitUniformData = new ArrayBuffer(16);
@@ -282,6 +285,7 @@ export default class GPUPhysics {
         this._collisionMode = 0;
         this._axionCoupling = 0.05;
         this._higgsCoupling = 1.0;
+        this._dispatchPlan = createGPUDispatchPlan();
 
         // Phase 5: Scalar field buffers (lazy-allocated on first toggle-on)
         this._higgsBuffers = null;
@@ -1097,25 +1101,27 @@ export default class GPUPhysics {
      * Dispatch radiation reaction passes (Phase 4, Pass 11).
      * Runs after Boris half-kick 2 and torques, before drift.
      */
-    _dispatchRadiation(encoder) {
-        if (!this._radiationEnabled) return;
+    _dispatchRadiation(encoder, plan = updateGPUDispatchPlan(this, this._dispatchPlan)) {
+        if (!plan.radiation) return;
 
         const workgroups = Math.ceil(this.aliveCount / 64);
         const bgs = this._phase4BindGroups;
         const p4 = this._phase4;
 
         // Larmor radiation (requires Coulomb + Radiation)
-        const passLarmor = encoder.beginComputePass({ label: 'larmorRadiation' });
-        passLarmor.setPipeline(p4.larmorRadiation.pipeline);
-        passLarmor.setBindGroup(0, bgs.radG0);
-        passLarmor.setBindGroup(1, bgs.radG1);
-        passLarmor.setBindGroup(2, bgs.radG2);
-        passLarmor.setBindGroup(3, bgs.radG3);
-        passLarmor.dispatchWorkgroups(workgroups);
-        passLarmor.end();
+        if (plan.larmorRadiation) {
+            const passLarmor = encoder.beginComputePass({ label: 'larmorRadiation' });
+            passLarmor.setPipeline(p4.larmorRadiation.pipeline);
+            passLarmor.setBindGroup(0, bgs.radG0);
+            passLarmor.setBindGroup(1, bgs.radG1);
+            passLarmor.setBindGroup(2, bgs.radG2);
+            passLarmor.setBindGroup(3, bgs.radG3);
+            passLarmor.dispatchWorkgroups(workgroups);
+            passLarmor.end();
+        }
 
         // Hawking radiation (requires Black Hole + Radiation)
-        if (this._blackHoleEnabled) {
+        if (plan.hawkingRadiation) {
             const passHawking = encoder.beginComputePass({ label: 'hawkingRadiation' });
             passHawking.setPipeline(p4.hawkingRadiation.pipeline);
             passHawking.setBindGroup(0, bgs.radG0);
@@ -1127,7 +1133,7 @@ export default class GPUPhysics {
         }
 
         // Pion emission (requires Yukawa + Radiation)
-        if (this._yukawaEnabled) {
+        if (plan.pionEmission) {
             const passPion = encoder.beginComputePass({ label: 'pionEmission' });
             passPion.setPipeline(p4.pionEmission.pipeline);
             passPion.setBindGroup(0, bgs.radG0);
@@ -1139,7 +1145,7 @@ export default class GPUPhysics {
         }
 
         // Schwinger discharge (requires Black Hole + Coulomb)
-        if (this._blackHoleEnabled && this._coulombEnabled) {
+        if (plan.schwingerDischarge) {
             const passSchwinger = encoder.beginComputePass({ label: 'schwingerDischarge' });
             passSchwinger.setPipeline(p4.schwingerDischarge.pipeline);
             passSchwinger.setBindGroup(0, bgs.radG0);
@@ -1250,10 +1256,9 @@ export default class GPUPhysics {
      * Photon/pion drift, absorption, pion decay.
      * Skipped entirely when radiation and Yukawa are both off (no bosons can exist).
      */
-    _dispatchBosonUpdate(encoder) {
+    _dispatchBosonUpdate(encoder, plan = updateGPUDispatchPlan(this, this._dispatchPlan)) {
         // Pions exist from Yukawa emission; leptons exist from Yukawa (pion decay) or Schwinger (BH+Coulomb)
-        const canHavePions = this._yukawaEnabled || (this._blackHoleEnabled && this._coulombEnabled);
-        if (!this._radiationEnabled && !canHavePions) return;
+        if (!plan.bosonUpdate) return;
         const p4 = this._phase4;
         const bgs = this._phase4BindGroups;
         const useBHTree = this._barnesHutEnabled;
@@ -1267,8 +1272,8 @@ export default class GPUPhysics {
 
         // G12: Skip photon passes when radiation is off (no photons can exist).
         // Pion/lepton passes needed for Yukawa pions OR Schwinger leptons.
-        const hasPhotons = this._radiationEnabled;
-        const hasPions   = canHavePions;
+        const hasPhotons = plan.photonUpdate;
+        const hasPions   = plan.pionUpdate;
 
         if (hasPhotons) {
             // updatePhotons: drift + lensing
@@ -1345,8 +1350,8 @@ export default class GPUPhysics {
      * Dispatch boson interaction passes (Phase 4).
      * Runs once per frame after all substeps: build boson tree, gravity, Coulomb, annihilation.
      */
-    _dispatchBosonInteraction(encoder) {
-        if (!this._bosonInterEnabled) return;
+    _dispatchBosonInteraction(encoder, plan = updateGPUDispatchPlan(this, this._dispatchPlan)) {
+        if (!plan.bosonInteraction) return;
 
         const p4 = this._phase4;
         const bgs = this._phase4BindGroups;
@@ -1671,6 +1676,7 @@ export default class GPUPhysics {
                         charge: f32[base + 9],
                         angW: f32[base + 10],
                         radius: f32[base + 11],
+                        sourceCharge: f32[base + 11],
                     });
                 }
                 this._pendingDisintEvents = events;
@@ -1960,6 +1966,22 @@ export default class GPUPhysics {
         this.device.queue.writeBuffer(this.buffers.particleState, idx * PARTICLE_STATE_SIZE + 16, _patchMassData, 0, 1);
         _patchMassData[0] = newBaseMass;
         this.device.queue.writeBuffer(this.buffers.particleState, idx * PARTICLE_STATE_SIZE + 28, _patchMassData, 0, 1);
+    }
+
+    /**
+     * Patch mass, charge, and baseMass for a live GPU particle.
+     * Used by CPU-side readback handlers that must preserve discrete charge
+     * conservation after a GPU-detected event.
+     * @param {number} idx - GPU buffer index
+     * @param {number} newMass - new mass value
+     * @param {number} newBaseMass - new baseMass value
+     * @param {number} newCharge - new quantized charge value
+     */
+    patchMassCharge(idx, newMass, newBaseMass, newCharge) {
+        if (idx < 0 || idx >= this.aliveCount) return;
+        this.patchMass(idx, newMass, newBaseMass);
+        _patchScalarData[0] = newCharge;
+        this.device.queue.writeBuffer(this.buffers.particleState, idx * PARTICLE_STATE_SIZE + 20, _patchScalarData, 0, 1);
     }
 
     /**
@@ -3410,6 +3432,7 @@ export default class GPUPhysics {
             bhTheta: 0.5,
             frameCount: this._frameCount,
         });
+        updateGPUDispatchPlan(this, this._dispatchPlan);
 
         const commandBuffers = [];
         for (let step = 0; step < numSubsteps; step++) {
@@ -3439,7 +3462,7 @@ export default class GPUPhysics {
             this._dispatchPionDecay(encoder);
 
             // Boson interaction (if enabled): build boson tree + particle<-boson + boson<->boson + pion Coulomb + annihilation
-            this._dispatchBosonInteraction(encoder);
+            this._dispatchBosonInteraction(encoder, this._dispatchPlan);
 
             // Dead particle garbage collection
             this._dispatchDeadGC(encoder);
@@ -3499,7 +3522,7 @@ export default class GPUPhysics {
         this._readbackDisintegrationResults();
 
         // Readback kugelblitz collapse events (non-blocking)
-        if (this._bosonInterEnabled && this._gravityEnabled && this._kbBuffers) {
+        if (this._dispatchPlan.kugelblitzReadback) {
             this._readbackKugelblitzResults();
         }
 
@@ -3520,6 +3543,7 @@ export default class GPUPhysics {
         const workgroups = Math.ceil(this.aliveCount / 64);
         if (workgroups === 0) return; // no particles, skip dispatch
         const p2 = this._phase2;
+        const plan = this._dispatchPlan;
 
         let encoder = this.device.createCommandEncoder({ label: 'physics-substep' });
 
@@ -3606,23 +3630,27 @@ export default class GPUPhysics {
         passFused.end();
 
         // Pass 9: spinOrbit
-        const pass9 = encoder.beginComputePass({ label: 'spinOrbit' });
-        pass9.setPipeline(p2.spinOrbit.pipeline);
-        pass9.setBindGroup(0, this._bg_spinOrbit);
-        pass9.dispatchWorkgroups(workgroups);
-        pass9.end();
+        if (plan.spinOrbit) {
+            const pass9 = encoder.beginComputePass({ label: 'spinOrbit' });
+            pass9.setPipeline(p2.spinOrbit.pipeline);
+            pass9.setBindGroup(0, this._bg_spinOrbit);
+            pass9.dispatchWorkgroups(workgroups);
+            pass9.end();
+        }
 
         // Pass 10: applyTorques
-        const pass10 = encoder.beginComputePass({ label: 'applyTorques' });
-        pass10.setPipeline(p2.applyTorques.pipeline);
-        pass10.setBindGroup(0, this._bg_torques);
-        pass10.dispatchWorkgroups(workgroups);
-        pass10.end();
+        if (plan.applyTorques) {
+            const pass10 = encoder.beginComputePass({ label: 'applyTorques' });
+            pass10.setPipeline(p2.applyTorques.pipeline);
+            pass10.setBindGroup(0, this._bg_torques);
+            pass10.dispatchWorkgroups(workgroups);
+            pass10.end();
+        }
 
         // ── Radiation + drift + advanced passes (same encoder) ──
 
         // Pass 11: radiation reaction (Larmor, Hawking, pion emission) — BEFORE drift
-        this._dispatchRadiation(encoder);
+        this._dispatchRadiation(encoder, plan);
 
         // Pass 12: borisDrift
         const pass12 = encoder.beginComputePass({ label: 'borisDrift' });
@@ -3663,10 +3691,10 @@ export default class GPUPhysics {
         this._dispatchDisintegration(encoder);
 
         // Pass 21: boson update (photon/pion drift, absorption, decay)
-        this._dispatchBosonUpdate(encoder);
+        this._dispatchBosonUpdate(encoder, plan);
 
         // Pass 22: pair production
-        this._dispatchPairProduction(encoder);
+        if (plan.pairProduction) this._dispatchPairProduction(encoder);
 
         // Pass 24: boundary
         const passBoundary = encoder.beginComputePass({ label: 'boundary' });
@@ -3846,10 +3874,9 @@ export default class GPUPhysics {
         state.toggles.bosonInterEnabled = !!(t0 & BOSON_INTER_BIT);
         // field gravity follows gravity (no separate toggle)
 
-        state.yukawaMu = this._yukawaMu;
-        state.higgsMass = this._higgsMass;
-        state.axionMass = this._axionMass;
-        state.hubbleParam = this._hubbleParam;
+        for (const [key, slot] of Object.entries(GPU_PARAMETER_SLOTS)) {
+            state[key] = this[slot];
+        }
 
         return state;
     }
@@ -3980,10 +4007,13 @@ export default class GPUPhysics {
         this.aliveCount = count;
 
         // Restore slider parameters from save state
-        if (state.higgsMass !== undefined) this._higgsMass = state.higgsMass;
-        if (state.axionMass !== undefined) this._axionMass = state.axionMass;
-        if (state.yukawaMu !== undefined) this._yukawaMu = state.yukawaMu;
-        if (state.hubbleParam !== undefined) this._hubbleParam = state.hubbleParam;
+        for (const [key, slot] of Object.entries(GPU_PARAMETER_SLOTS)) {
+            if (state[key] !== undefined && state[key] !== null) this[slot] = state[key];
+        }
+        this._cachedExtGx = (this._extGravity || 0) * Math.cos(this._extGravityAngle || 0);
+        this._cachedExtGy = (this._extGravity || 0) * Math.sin(this._extGravityAngle || 0);
+        this._cachedExtEx = (this._extElectric || 0) * Math.cos(this._extElectricAngle || 0);
+        this._cachedExtEy = (this._extElectric || 0) * Math.sin(this._extElectricAngle || 0);
 
         this.syncUniforms();
         return true;
