@@ -374,26 +374,22 @@ export function setupUI(sim) {
         _haptics.trigger('light');
     });
 
-    // ─── Visual toggles ───
-    document.getElementById('trailsToggle').addEventListener('change', (e) => {
-        sim.renderer.trails = e.target.checked;
+    // ─── Visual toggles ─── (bindToggle fires the 'light' haptic itself)
+    _forms.bindToggle(document.getElementById('trailsToggle'), (v) => {
+        sim.renderer.trails = v;
         sim._dirty = true;
-        _haptics.trigger('light');
     });
-    document.getElementById('velocityToggle').addEventListener('change', (e) => {
-        sim.renderer.showVelocity = e.target.checked;
+    _forms.bindToggle(document.getElementById('velocityToggle'), (v) => {
+        sim.renderer.showVelocity = v;
         sim._dirty = true;
-        _haptics.trigger('light');
     });
-    document.getElementById('forceToggle').addEventListener('change', (e) => {
-        sim.renderer.showForce = e.target.checked;
+    _forms.bindToggle(document.getElementById('forceToggle'), (v) => {
+        sim.renderer.showForce = v;
         sim._dirty = true;
-        _haptics.trigger('light');
     });
-    document.getElementById('forceComponentsToggle').addEventListener('change', (e) => {
-        sim.renderer.showForceComponents = e.target.checked;
+    _forms.bindToggle(document.getElementById('forceComponentsToggle'), (v) => {
+        sim.renderer.showForceComponents = v;
         sim._dirty = true;
-        _haptics.trigger('light');
     });
     const potentialToggle = document.getElementById('potentialToggle');
     const potentialModeBar = document.getElementById('potential-mode-toggles');

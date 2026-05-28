@@ -528,7 +528,7 @@ class Simulation {
             p.angw = options.angw;
         } else {
             let sv = options.spin ?? 0;
-            sv = Math.max(-MAX_SPEED_RATIO, Math.min(MAX_SPEED_RATIO, sv));
+            sv = clamp(sv, -MAX_SPEED_RATIO, MAX_SPEED_RATIO);
             const absSV = Math.abs(sv);
             p.angw = absSV > 0 ? Math.sign(sv) * absSV / (Math.cbrt(p.mass) * Math.sqrt(1 - absSV * absSV)) : 0;
         }
