@@ -28,7 +28,7 @@ struct HeatmapUniforms {
     topologyMode: u32,
     particleCount: u32,
     useTree: u32,   // 1 when BH tree available
-    _pad0: f32,
+    blackHole: u32,
     _pad1: f32,
     _pad2: f32,
     _pad3: f32,
@@ -57,11 +57,27 @@ fn yukawaCutoffSq(mu: f32) -> f32 {
     return cutoff * cutoff;
 }
 
+fn bhSourceRadius(m: f32, charge: f32) -> f32 {
+    if (m <= EPSILON) { return 0.0; }
+    let disc = m * m - charge * charge;
+    return select(m, m + sqrt(max(0.0, disc)), disc >= 0.0);
+}
+
+fn gravityPotential(rawRSq: f32, mass: f32, radius: f32, invR: f32, blackHole: bool) -> f32 {
+    if (blackHole) {
+        let rawR = sqrt(max(rawRSq, EPSILON));
+        let gap = max(rawR - radius, BH_PW_MIN_GAP);
+        return -mass / gap;
+    }
+    return -mass * invR;
+}
+
 // ─── Helper: accumulate potential from a single source position ───
 fn accumulatePotential(
     wx: f32, wy: f32,
     srcX: f32, srcY: f32,
     mass: f32, charge: f32,
+    radius: f32,
     doG: bool, doC: bool, doY: bool,
     softeningSq: f32, yCutSq: f32,
     yukCoupling: f32, yukMu: f32,
@@ -78,10 +94,11 @@ fn accumulatePotential(
         dx = srcX - wx; dy = srcY - wy;
     }
 
-    let rSq = dx * dx + dy * dy + softeningSq;
+    let rawRSq = dx * dx + dy * dy;
+    let rSq = rawRSq + softeningSq;
     let invR = 1.0 / sqrt(rSq);
 
-    if (doG) { *gPhi -= mass * invR; }
+    if (doG) { *gPhi += gravityPotential(rawRSq, mass, radius, invR, hu.blackHole != 0u); }
     if (doC) { *ePhi += charge * invR; }
     if (doY && rSq < yCutSq) {
         let r = 1.0 / invR;
@@ -129,7 +146,7 @@ fn computeHeatmap(@builtin(global_invocation_id) gid: vec3<u32>) {
             srcY = ret.y;
         }
 
-        accumulatePotential(wx, wy, srcX, srcY, p.mass, p.charge,
+        accumulatePotential(wx, wy, srcX, srcY, p.mass, p.charge, particleAux[i].radius,
             doG, doC, doY, hu.softeningSq, yCutSq, hu.yukawaCoupling, hu.yukawaMu,
             isPeriodic, &gPhi, &ePhi, &yPhi);
     }
@@ -147,7 +164,7 @@ fn computeHeatmap(@builtin(global_invocation_id) gid: vec3<u32>) {
             if (!ret.valid) { continue; }
 
             let dAux = particleAux[di];
-            accumulatePotential(wx, wy, ret.x, ret.y, dAux.deathMass, dp.charge,
+            accumulatePotential(wx, wy, ret.x, ret.y, dAux.deathMass, dp.charge, bhSourceRadius(dAux.deathMass, dp.charge),
                 doG, doC, doY, hu.softeningSq, yCutSq, hu.yukawaCoupling, hu.yukawaMu,
                 isPeriodic, &gPhi, &ePhi, &yPhi);
         }
@@ -209,10 +226,11 @@ fn computeHeatmapTree(@builtin(global_invocation_id) gid: vec3<u32>) {
 
             let dx = pj.posX - wx;
             let dy = pj.posY - wy;
-            let rSq = dx * dx + dy * dy + softeningSq;
+            let rawRSq = dx * dx + dy * dy;
+            let rSq = rawRSq + softeningSq;
             let invR = 1.0 / sqrt(rSq);
 
-            if (doG) { gPhi -= pj.mass * invR; }
+            if (doG) { gPhi += gravityPotential(rawRSq, pj.mass, particleAux[j].radius, invR, hu.blackHole != 0u); }
             if (doC) { ePhi += pj.charge * invR; }
             if (doY && rSq < yCutSq) {
                 let r = 1.0 / invR;
@@ -224,7 +242,8 @@ fn computeHeatmapTree(@builtin(global_invocation_id) gid: vec3<u32>) {
             let comY = getComY(nIdx);
             let dx = comX - wx;
             let dy = comY - wy;
-            let distSq = dx * dx + dy * dy + softeningSq;
+            let rawDistSq = dx * dx + dy * dy;
+            let distSq = rawDistSq + softeningSq;
 
             let sizeX = getMaxX(nIdx) - getMinX(nIdx);
             let sizeY = getMaxY(nIdx) - getMinY(nIdx);
@@ -236,7 +255,7 @@ fn computeHeatmapTree(@builtin(global_invocation_id) gid: vec3<u32>) {
                 let aggCharge = getTotalCharge(nIdx);
                 let invR = 1.0 / sqrt(distSq);
 
-                if (doG) { gPhi -= aggMass * invR; }
+                if (doG) { gPhi += gravityPotential(rawDistSq, aggMass, bhSourceRadius(aggMass, aggCharge), invR, hu.blackHole != 0u); }
                 if (doC) { ePhi += aggCharge * invR; }
                 if (doY && distSq < yCutSq) {
                     let r = 1.0 / invR;
@@ -269,7 +288,7 @@ fn computeHeatmapTree(@builtin(global_invocation_id) gid: vec3<u32>) {
             if (!ret.valid) { continue; }
 
             let dAux = particleAux[di];
-            accumulatePotential(wx, wy, ret.x, ret.y, dAux.deathMass, dp.charge,
+            accumulatePotential(wx, wy, ret.x, ret.y, dAux.deathMass, dp.charge, bhSourceRadius(dAux.deathMass, dp.charge),
                 doG, doC, doY, softeningSq, yCutSq, yukCoupling, yukMu,
                 isPeriodic, &gPhi, &ePhi, &yPhi);
         }

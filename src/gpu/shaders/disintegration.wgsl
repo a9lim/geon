@@ -19,11 +19,13 @@ struct DisintUniforms {
     particleCount: u32,
     periodic: u32,
     topologyMode: u32,
-    _pad: f32,
+    features: u32,
 };
 
 const DISINT_FRAGMENT: u32 = 0u;
 const DISINT_TRANSFER: u32 = 1u;
+const DISINT_FEATURE_BREAKUP: u32 = 1u;
+const DISINT_FEATURE_EXTREMAL: u32 = 2u;
 
 struct DisintEvent {
     particleIdx: u32,
@@ -49,18 +51,106 @@ struct DisintEvent {
 @group(1) @binding(1) var<storage, read_write> eventCounter: atomic<u32>;
 @group(1) @binding(2) var<uniform> du: DisintUniforms;
 
+@group(2) @binding(0) var<storage, read_write> pions: array<Pion>;
+@group(2) @binding(1) var<storage, read_write> piCount: atomic<u32>;
+
 @compute @workgroup_size(256)
 fn checkDisintegration(@builtin(global_invocation_id) gid: vec3<u32>) {
     let pid = gid.x;
     if (pid >= du.particleCount) { return; }
+    let breakupOn = (du.features & DISINT_FEATURE_BREAKUP) != 0u;
+    let extremalOn = (du.features & DISINT_FEATURE_EXTREMAL) != 0u;
+    if (!breakupOn && !extremalOn) { return; }
+
     let p = particles[pid];
     let flag = p.flags;
     if ((flag & 1u) == 0u) { return; }
 
     let m = p.mass;
+    if (m <= du.minMass) { return; }
+    let d = derived[pid];
+    let bodyRSq = max(d.bodyRSq, EPSILON);
+
+    if (extremalOn) {
+        let q0 = p.charge;
+        let absQ = abs(q0);
+        if (absQ >= BOSON_CHARGE - EPSILON) {
+            let a = INERTIA_K * bodyRSq * abs(d.angVel);
+            let qLimit = sqrt(max(m * m - a * a, 0.0));
+            let targetAbs = floor((qLimit + EPSILON) / BOSON_CHARGE) * BOSON_CHARGE;
+            if (absQ > targetAbs + EPSILON) {
+                let sign = select(-1.0, 1.0, q0 > 0.0);
+                let netGapPerLepton = max(BOSON_CHARGE - ELECTRON_MASS, BOSON_CHARGE * 0.5);
+                let shedUnits = min(u32(ceil((absQ - targetAbs) / netGapPerLepton)), 64u);
+                var emitted: u32 = 0u;
+                var seed = (pid * 2654435761u) ^ du.particleCount;
+                let offset = max(particleAux[pid].radius * SPAWN_OFFSET_MUL, SPAWN_OFFSET_FLOOR);
+                for (var ci = 0u; ci < 64u; ci++) {
+                    if (ci >= shedUnits) { break; }
+                    let li = atomicAdd(&piCount, 1u);
+                    if (li >= PION_POOL_CAP) {
+                        atomicSub(&piCount, 1u);
+                        break;
+                    }
+                    seed = seed * 747796405u + 2891336453u;
+                    let angle = f32(seed) / 4294967296.0 * TWO_PI;
+                    let cosA = cos(angle);
+                    let sinA = sin(angle);
+                    let speed = min(sqrt(max(ELECTRON_MASS * 3.0 * ELECTRON_MASS, 0.0)) / max(3.0 * ELECTRON_MASS, EPSILON), MAX_SPEED_RATIO);
+                    let gammaL = 1.0 / sqrt(max(1.0 - speed * speed, EPSILON));
+                    var lep: Pion;
+                    lep.posX = p.posX + cosA * offset;
+                    lep.posY = p.posY + sinA * offset;
+                    lep.wX = gammaL * speed * cosA;
+                    lep.wY = gammaL * speed * sinA;
+                    lep.mass = ELECTRON_MASS;
+                    lep.charge = sign * BOSON_CHARGE;
+                    lep.energy = 0.0;
+                    lep.emitterId = particleAux[pid].particleId;
+                    lep.age = 0u;
+                    lep.flags = 1u;
+                    lep.kind = 1u;
+                    lep._pad1 = 0u;
+                    pions[li] = lep;
+                    emitted++;
+                }
+
+                let emittedF = f32(emitted);
+                let massLoss = min(ELECTRON_MASS * emittedF, max(m - du.minMass, 0.0));
+                let newMass = m - massLoss;
+                var newCharge = q0 - sign * BOSON_CHARGE * emittedF;
+
+                particles[pid].mass = newMass;
+                if (m > EPSILON) {
+                    particles[pid].baseMass *= newMass / m;
+                }
+
+                let newBodyRSq = pow(max(newMass, EPSILON), 2.0 / 3.0);
+                let newAngVel = p.angW / sqrt(1.0 + p.angW * p.angW * newBodyRSq);
+                let newA = INERTIA_K * newBodyRSq * abs(newAngVel);
+                let finalTargetAbs = floor((sqrt(max(newMass * newMass - newA * newA, 0.0)) + EPSILON) / BOSON_CHARGE) * BOSON_CHARGE;
+                let targetCharge = sign * finalTargetAbs;
+                if (abs(newCharge) > finalTargetAbs + EPSILON) {
+                    newCharge = targetCharge;
+                }
+                particles[pid].charge = newCharge;
+                let newDisc = newMass * newMass - newA * newA - newCharge * newCharge;
+                let newRadius = select(newMass, newMass + sqrt(max(0.0, newDisc)), newDisc >= 0.0);
+                var nd = d;
+                nd.invMass = select(0.0, 1.0 / newMass, newMass > EPSILON);
+                nd.radiusSq = newRadius * newRadius;
+                nd.bodyRSq = newBodyRSq;
+                nd.angVel = newAngVel;
+                derived[pid] = nd;
+                particleAux[pid].radius = newRadius;
+                return;
+            }
+        }
+    }
+
+    if (!breakupOn) { return; }
     if (m < du.minMass * f32(du.spawnCount)) { return; }
 
-    let d = derived[pid];
     let rSq = max(d.radiusSq, EPSILON);
     let r = max(particleAux[pid].radius, EPSILON);
     let selfGravity = m / rSq;

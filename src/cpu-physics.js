@@ -11,6 +11,7 @@ import {
     SOFTENING_SQ, BH_SOFTENING_SQ, MAX_SPEED_RATIO, SPAWN_COUNT,
     spawnOffset, HEATMAP_INTERVAL_MASK, SIDEBAR_THROTTLE_MASK,
     MAX_PARTICLES, BOSON_CHARGE, ELECTRON_MASS, MAX_LEPTONS,
+    quantizedCensoredBlackHoleCharge,
 } from './config.js';
 import MasslessBoson from './massless-boson.js';
 import Pion from './pion.js';
@@ -66,6 +67,7 @@ export default class CPUPhysics {
                 sim.topology, sim.physics.blackHoleEnabled ? BH_SOFTENING_SQ : SOFTENING_SQ,
                 sim.physics.yukawaEnabled, sim.physics.yukawaMu, sim.deadParticles,
                 sim.physics.gravityEnabled, sim.physics.coulombEnabled,
+                sim.physics.blackHoleEnabled,
             );
         }
         sim.renderer.render(sim.particles, PHYSICS_DT, sim.camera, sim.photons, sim.pions, sim.leptons);
@@ -143,8 +145,12 @@ export default class CPUPhysics {
     }
 
     _handleDisintegration(sim) {
-        const { fragments: toFragment, transfers: rocheTransfers } =
+        const { fragments: toFragment, transfers: rocheTransfers, chargeSheds } =
             sim.physics.checkDisintegration(sim.particles, sim.physics._lastRoot);
+
+        for (let si = 0; si < chargeSheds.length; si++) {
+            this._handleExtremalChargeShed(sim, chargeSheds[si]);
+        }
 
         for (let ti = 0; ti < rocheTransfers.length; ti++) {
             const t = rocheTransfers[ti];
@@ -191,6 +197,39 @@ export default class CPUPhysics {
             }
         }
         sim.particles.length = write;
+    }
+
+    _handleExtremalChargeShed(sim, shed) {
+        const p = shed.source;
+        if (!p || p.mass <= MIN_MASS) return;
+        const sign = shed.charge > 0 ? 1 : -1;
+        const netGapPerLepton = Math.max(BOSON_CHARGE - ELECTRON_MASS, BOSON_CHARGE * 0.5);
+        const units = Math.max(0, Math.ceil(Math.abs(shed.charge) / netGapPerLepton));
+        const off = spawnOffset(p.radius);
+        let emitted = 0;
+        while (emitted < units && sim.leptons.length < MAX_LEPTONS) {
+            const angle = Math.random() * TWO_PI;
+            const cosA = Math.cos(angle), sinA = Math.sin(angle);
+            const speed = Math.min(Math.sqrt(ELECTRON_MASS * 3 * ELECTRON_MASS) / (3 * ELECTRON_MASS), MAX_SPEED_RATIO);
+            const gamma = 1 / Math.sqrt(1 - speed * speed);
+            sim.leptons.push(Lepton.acquire(
+                p.pos.x + cosA * off, p.pos.y + sinA * off,
+                gamma * speed * cosA, gamma * speed * sinA,
+                sign * BOSON_CHARGE, p.id,
+            ));
+            emitted++;
+        }
+        const preMass = p.mass;
+        if (emitted > 0) {
+            p.mass = Math.max(MIN_MASS, p.mass - emitted * ELECTRON_MASS);
+            if (preMass > 0) p.baseMass *= p.mass / preMass;
+        }
+        const bodyRSq = Math.cbrt(p.mass) ** 2;
+        p.charge = quantizedCensoredBlackHoleCharge(
+            p.mass, bodyRSq, p.angVel,
+            p.charge - sign * emitted * BOSON_CHARGE,
+        );
+        p.updateColor();
     }
 
     _handleEvaporation(sim) {

@@ -2,7 +2,7 @@
 // 64x64 offscreen canvas, diverging colormap, 3×3 box blur for smooth display.
 // When Barnes-Hut is enabled, uses tree walk for O(GRID² log N) instead of O(GRID² N).
 
-import { SOFTENING_SQ, BH_THETA, YUKAWA_COUPLING, HEATMAP_GRID, HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA } from './config.js';
+import { SOFTENING_SQ, BH_THETA, YUKAWA_COUPLING, HEATMAP_GRID, HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA, blackHoleRadialTerms } from './config.js';
 import { getDelayedState } from './signal-delay.js';
 import { minImage } from './topology.js';
 
@@ -34,7 +34,13 @@ function fastTanh(x) {
  */
 let _hmStack = new Int32Array(256);
 
-function treePotential(pool, rootIdx, wx, wy, thetaSq, softeningSq, doGravity, doCoulomb, doYukawa, yukawaMu, useDelay, simTime, periodic, domW, domH, halfDomW, halfDomH, topology) {
+function gravityPotential(rawRSq, mass, charge, angVel, angMomentum, blackHoleEnabled, invR) {
+    return blackHoleEnabled
+        ? -mass * blackHoleRadialTerms(rawRSq, mass, charge, angVel, angMomentum).invPotential
+        : -mass * invR;
+}
+
+function treePotential(pool, rootIdx, wx, wy, thetaSq, softeningSq, doGravity, doCoulomb, doYukawa, yukawaMu, useDelay, simTime, periodic, domW, domH, halfDomW, halfDomH, topology, blackHoleEnabled) {
     let stackTop = 0;
     if (_hmStack.length < pool.maxNodes) _hmStack = new Int32Array(pool.maxNodes);
     _hmStack[stackTop++] = rootIdx;
@@ -70,9 +76,10 @@ function treePotential(pool, rootIdx, wx, wy, thetaSq, softeningSq, doGravity, d
                 } else {
                     pdx = p.pos.x - wx; pdy = p.pos.y - wy;
                 }
-                const rSq = pdx * pdx + pdy * pdy + softeningSq;
+                const rawRSq = pdx * pdx + pdy * pdy;
+                const rSq = rawRSq + softeningSq;
                 const invR = 1 / Math.sqrt(rSq);
-                if (doGravity) gP -= p.mass * invR;
+                if (doGravity) gP += gravityPotential(rawRSq, p.mass, p.charge, p.angVel, p.angMomentum, blackHoleEnabled, invR);
                 if (doCoulomb) eP += p.charge * invR;
                 if (doYukawa) {
                     const r = 1 / invR;
@@ -86,7 +93,7 @@ function treePotential(pool, rootIdx, wx, wy, thetaSq, softeningSq, doGravity, d
             // Distant node: use current-time aggregate
             const rSq = dSq + softeningSq;
             const invR = 1 / Math.sqrt(rSq);
-            if (doGravity) _treeOut.g -= pool.totalMass[nodeIdx] * invR;
+            if (doGravity) _treeOut.g += gravityPotential(dSq, pool.totalMass[nodeIdx], pool.totalCharge[nodeIdx], 0, pool.totalAngularMomentum[nodeIdx], blackHoleEnabled, invR);
             if (doCoulomb) _treeOut.e += pool.totalCharge[nodeIdx] * invR;
             if (doYukawa) {
                 const r = 1 / invR;
@@ -128,7 +135,7 @@ export default class Heatmap {
         this._blurTemp = new Float32Array(GRID_SQ);
     }
 
-    update(particles, camera, width, height, pool, root, barnesHutEnabled, relativityEnabled, simTime, periodic, domW, domH, topology, softeningSq = SOFTENING_SQ, yukawaEnabled = false, yukawaMu = 0.2, deadParticles = null, gravityEnabled = true, coulombEnabled = true) {
+    update(particles, camera, width, height, pool, root, barnesHutEnabled, relativityEnabled, simTime, periodic, domW, domH, topology, softeningSq = SOFTENING_SQ, yukawaEnabled = false, yukawaMu = 0.2, deadParticles = null, gravityEnabled = true, coulombEnabled = true, blackHoleEnabled = false) {
         if (!this.enabled) return;
 
         const zoom = camera.zoom;
@@ -159,7 +166,7 @@ export default class Heatmap {
                     _treeOut.g = 0;
                     _treeOut.e = 0;
                     _treeOut.y = 0;
-                    treePotential(pool, root, wx, wy, thetaSq, softeningSq, doGravity, doCoulomb, doYukawa, yukawaMu, useDelay, simTime, periodic, domW, domH, halfDomW, halfDomH, topology);
+                    treePotential(pool, root, wx, wy, thetaSq, softeningSq, doGravity, doCoulomb, doYukawa, yukawaMu, useDelay, simTime, periodic, domW, domH, halfDomW, halfDomH, topology, blackHoleEnabled);
                     gPhi = _treeOut.g;
                     ePhi = _treeOut.e;
                     yPhi = _treeOut.y;
@@ -184,9 +191,10 @@ export default class Heatmap {
                         } else {
                             dx = p.pos.x - wx; dy = p.pos.y - wy;
                         }
-                        const rSq = dx * dx + dy * dy + softeningSq;
+                        const rawRSq = dx * dx + dy * dy;
+                        const rSq = rawRSq + softeningSq;
                         const invR = 1 / Math.sqrt(rSq);
-                        if (doGravity) gPhi -= p.mass * invR;
+                        if (doGravity) gPhi += gravityPotential(rawRSq, p.mass, p.charge, p.angVel, p.angMomentum, blackHoleEnabled, invR);
                         if (doCoulomb) ePhi += p.charge * invR;
                         if (doYukawa && rSq < yukawaCutoffSq) {
                             const r = 1 / invR;
@@ -210,9 +218,10 @@ export default class Heatmap {
                         } else {
                             dx = ret.x - wx; dy = ret.y - wy;
                         }
-                        const rSq = dx * dx + dy * dy + softeningSq;
+                        const rawRSq = dx * dx + dy * dy;
+                        const rSq = rawRSq + softeningSq;
                         const invR = 1 / Math.sqrt(rSq);
-                        if (doGravity) gPhi -= dp._deathMass * invR;
+                        if (doGravity) gPhi += gravityPotential(rawRSq, dp._deathMass, dp.charge, dp._deathAngVel || 0, dp.angMomentum || 0, blackHoleEnabled, invR);
                         if (doCoulomb) ePhi += dp.charge * invR;
                         if (doYukawa && rSq < yukawaCutoffSq) {
                             const r = 1 / invR;

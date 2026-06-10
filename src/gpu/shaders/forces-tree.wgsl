@@ -39,6 +39,26 @@ const MAX_STACK: u32 = 128u;
 
 // Inline the core force accumulation (matches pairForce in forces.js):
 // jerkOut: function-scope pointer for accumulating analytical jerk (radiation)
+fn bhSourceRadius(m: f32, charge: f32, angVel: f32, angMomentum: f32) -> f32 {
+    if (m <= EPSILON) { return 0.0; }
+    let bodyR = pow(m, 1.0 / 3.0);
+    let bodyRSq = bodyR * bodyR;
+    var omega = angVel;
+    if (abs(omega) < EPSILON && abs(angMomentum) > EPSILON) {
+        let denom = INERTIA_K * m * bodyRSq;
+        if (denom > EPSILON) { omega = angMomentum / denom; }
+    }
+    let a = INERTIA_K * bodyRSq * abs(omega);
+    let disc = m * m - a * a - charge * charge;
+    return select(m, m + sqrt(max(0.0, disc)), disc >= 0.0);
+}
+
+fn bhInvPotential(rawRSq: f32, m: f32, charge: f32, angVel: f32, angMomentum: f32) -> f32 {
+    let rawR = sqrt(max(rawRSq, EPSILON));
+    let gap = max(rawR - bhSourceRadius(m, charge, angVel, angMomentum), BH_PW_MIN_GAP);
+    return 1.0 / gap;
+}
+
 fn accumulateForce(
     af: ptr<function, AllForces>,
     px: f32, py: f32,
@@ -56,7 +76,7 @@ fn accumulateForce(
     useAberration: bool,
     // Hoisted toggle booleans (G9: avoids re-reading uniforms.toggles0 per call)
     gravOn: bool, coulOn: bool, magOn: bool, gmOn: bool,
-    yukOn: bool, onePNOn: bool, higgsOn: bool, radOn: bool, needAxMod: bool,
+    yukOn: bool, onePNOn: bool, higgsOn: bool, radOn: bool, bhOn: bool, needAxMod: bool,
 ) {
     let softeningSq = uniforms.softeningSq;
 
@@ -98,7 +118,17 @@ fn accumulateForce(
     // Gravity: +m1*m2/r^2 (attractive)
     if (gravOn) {
         let k = pMass * sMass;
-        let fDir = k * invR3a;
+        var fDir = k * invR3a;
+        var pwJerkFactor = 0.0;
+        if (bhOn) {
+            let rawR = sqrt(max(rawRSq, EPSILON));
+            let invRawR = 1.0 / rawR;
+            let invGap = bhInvPotential(rawRSq, sMass, sCharge, sAngVel, sAngMomentum);
+            let pwForceScale = invRawR * invGap * invGap;
+            let aberrMul = select(1.0, aberr, useAberration);
+            fDir = k * pwForceScale * aberrMul;
+            pwJerkFactor = pwForceScale * (invRawR * invRawR + 2.0 * invRawR * invGap) * aberrMul;
+        }
         let fx = rx * fDir;
         let fy = ry * fDir;
         (*af).f0.x += fx;
@@ -108,7 +138,9 @@ fn accumulateForce(
 
         // Analytical jerk for Larmor radiation
         if (radOn) {
-            let jRadial = -3.0 * rDotVr * k * invRSq * invR3a;
+            let jRadial = select(-3.0 * rDotVr * k * invRSq * invR3a,
+                                 -k * rDotVr * pwJerkFactor,
+                                 bhOn);
             (*jerkOut).x += vrx * fDir + rx * jRadial;
             (*jerkOut).y += vry * fDir + ry * jRadial;
         }
@@ -383,6 +415,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let _onePNOn = (_t0 & ONE_PN_BIT)      != 0u;
     let _higgsOn = (_t0 & HIGGS_BIT)       != 0u;
     let _radOn   = (_t0 & RADIATION_BIT)   != 0u;
+    let _bhOn    = (_t0 & BLACK_HOLE_BIT)  != 0u;
     let _needAxMod = (_coulOn || _magOn) && (_t0 & AXION_BIT) != 0u;
 
     // Local jerk accumulator for radiation analytical jerk
@@ -476,7 +509,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     pRi5,
                     &localJerk,
                     true, // useAberration
-                    _gravOn, _coulOn, _magOn, _gmOn, _yukOn, _onePNOn, _higgsOn, _radOn, _needAxMod,
+                    _gravOn, _coulOn, _magOn, _gmOn, _yukOn, _onePNOn, _higgsOn, _radOn, _bhOn, _needAxMod,
                 );
                 continue;
             }
@@ -510,7 +543,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     pRi5,
                     &localJerk,
                     true, // useAberration
-                    _gravOn, _coulOn, _magOn, _gmOn, _yukOn, _onePNOn, _higgsOn, _radOn, _needAxMod,
+                    _gravOn, _coulOn, _magOn, _gmOn, _yukOn, _onePNOn, _higgsOn, _radOn, _bhOn, _needAxMod,
                 );
             } else if (hasSignalDelay && isGhost) {
                 // Ghost leaf: signal delay from original particle's history + periodic shift
@@ -545,7 +578,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     pRi5,
                     &localJerk,
                     true, // useAberration
-                    _gravOn, _coulOn, _magOn, _gmOn, _yukOn, _onePNOn, _higgsOn, _radOn, _needAxMod,
+                    _gravOn, _coulOn, _magOn, _gmOn, _yukOn, _onePNOn, _higgsOn, _radOn, _bhOn, _needAxMod,
                 );
             } else {
                 // No signal delay: use current positions
@@ -563,7 +596,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     pRi5,
                     &localJerk,
                     false, // no aberration
-                    _gravOn, _coulOn, _magOn, _gmOn, _yukOn, _onePNOn, _higgsOn, _radOn, _needAxMod,
+                    _gravOn, _coulOn, _magOn, _gmOn, _yukOn, _onePNOn, _higgsOn, _radOn, _bhOn, _needAxMod,
                 );
             }
         } else if (!isLeaf && (size * size < thetaSq * dSq)) {
@@ -584,7 +617,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 pRi5,
                 &localJerk,
                 false, // no aberration on aggregate nodes — velocities are not delayed
-                _gravOn, _coulOn, _magOn, _gmOn, _yukOn, _onePNOn, _higgsOn, _radOn, _needAxMod,
+                _gravOn, _coulOn, _magOn, _gmOn, _yukOn, _onePNOn, _higgsOn, _radOn, _bhOn, _needAxMod,
             );
         } else if (!isLeaf) {
             // Push children (only valid ones; NONE = -1 would become garbage u32)

@@ -80,6 +80,26 @@ struct ForceAccum {
     frameDrag: f32, tidal: f32,
 };
 
+fn bhSourceRadius(m: f32, charge: f32, angVel: f32, angMomentum: f32) -> f32 {
+    if (m <= EPSILON) { return 0.0; }
+    let bodyR = pow(m, 1.0 / 3.0);
+    let bodyRSq = bodyR * bodyR;
+    var omega = angVel;
+    if (abs(omega) < EPSILON && abs(angMomentum) > EPSILON) {
+        let denom = INERTIA_K * m * bodyRSq;
+        if (denom > EPSILON) { omega = angMomentum / denom; }
+    }
+    let a = INERTIA_K * bodyRSq * abs(omega);
+    let disc = m * m - a * a - charge * charge;
+    return select(m, m + sqrt(max(0.0, disc)), disc >= 0.0);
+}
+
+fn bhInvPotential(rawRSq: f32, m: f32, charge: f32, angVel: f32, angMomentum: f32) -> f32 {
+    let rawR = sqrt(max(rawRSq, EPSILON));
+    let gap = max(rawR - bhSourceRadius(m, charge, angVel, angMomentum), BH_PW_MIN_GAP);
+    return 1.0 / gap;
+}
+
 // ── Accumulate pairwise forces from one source onto the observer ──
 // Modifies accum in-place. All toggle/config params are module-scope or passed explicitly.
 fn accumulatePairForce(
@@ -92,7 +112,7 @@ fn accumulatePairForce(
     softeningSq: f32,
     yukMu: f32, yukCutoffSq: f32,
     gravOn: bool, coulOn: bool, magOn: bool, gmOn: bool,
-    onePNOn: bool, yukawaOn: bool, higgsOn: bool, radOn: bool,
+    onePNOn: bool, yukawaOn: bool, higgsOn: bool, radOn: bool, bhOn: bool,
     needAxMod: bool, isPeriodic: bool,
     accum: ptr<function, ForceAccum>,
 ) {
@@ -139,14 +159,26 @@ fn accumulatePairForce(
     // -- Gravity --
     if (gravOn) {
         let k = pMass * src.mass;
-        let fDir = k * invR3a;
+        var fDir = k * invR3a;
+        var pwJerkFactor = 0.0;
+        if (bhOn) {
+            let rawR = sqrt(max(rawRSq, EPSILON));
+            let invRawR = 1.0 / rawR;
+            let invGap = bhInvPotential(rawRSq, src.mass, src.charge, src.angVel, src.angMomentum);
+            let pwForceScale = invRawR * invGap * invGap;
+            let aberrMul = select(1.0, aberr, src.useAberration);
+            fDir = k * pwForceScale * aberrMul;
+            pwJerkFactor = pwForceScale * (invRawR * invRawR + 2.0 * invRawR * invGap) * aberrMul;
+        }
         (*accum).gravX += rx * fDir;
         (*accum).gravY += ry * fDir;
         (*accum).totalX += rx * fDir;
         (*accum).totalY += ry * fDir;
 
         if (radOn) {
-            let jRadial = -3.0 * rDotVr * k * invRSq * invR3a;
+            let jRadial = select(-3.0 * rDotVr * k * invRSq * invR3a,
+                                 -k * rDotVr * pwJerkFactor,
+                                 bhOn);
             (*accum).jerkX += vrx * fDir + rx * jRadial;
             (*accum).jerkY += vry * fDir + ry * jRadial;
         }
@@ -443,6 +475,7 @@ fn main(
     let yukawaOn = hasToggle0(YUKAWA_BIT);
     let higgsOn = hasToggle0(HIGGS_BIT);
     let radOn = hasToggle0(RADIATION_BIT);
+    let bhOn = hasToggle0(BLACK_HOLE_BIT);
     let isPeriodic = uniforms.boundaryMode == BOUND_LOOP;
 
     let softeningSq = uniforms.softeningSq;
@@ -555,7 +588,7 @@ fn main(
                     yukMu, yukCutoffSq,
                     gravOn, coulOn, magOn, gmOn,
                     onePNOn, yukawaOn, higgsOn, radOn,
-                    needAxMod, isPeriodic,
+                    bhOn, needAxMod, isPeriodic,
                     &accum,
                 );
             }
@@ -603,10 +636,10 @@ fn main(
                 src, softeningSq,
                 yukMu, yukCutoffSq,
                 gravOn, coulOn, magOn, gmOn,
-                onePNOn, yukawaOn, higgsOn, radOn,
-                needAxMod, isPeriodic,
-                &accum,
-            );
+                    onePNOn, yukawaOn, higgsOn, radOn,
+                    bhOn, needAxMod, isPeriodic,
+                    &accum,
+                );
         }
     }
 

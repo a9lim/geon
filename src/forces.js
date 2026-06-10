@@ -2,7 +2,7 @@
 // Pairwise and Barnes-Hut force accumulation. Separates E-like (position-dependent)
 // from B-like (velocity-dependent) forces for the Boris integrator.
 
-import { BH_THETA_SQ, INERTIA_K, MAG_MOMENT_K, TIDAL_STRENGTH, YUKAWA_COUPLING, HIGGS_MASS_FLOOR, EPSILON, TORUS, BOSON_SOFTENING_SQ, BOSON_MIN_AGE } from './config.js';
+import { BH_THETA_SQ, INERTIA_K, MAG_MOMENT_K, TIDAL_STRENGTH, YUKAWA_COUPLING, HIGGS_MASS_FLOOR, EPSILON, TORUS, BOSON_SOFTENING_SQ, BOSON_MIN_AGE, blackHoleRadialTerms } from './config.js';
 import { getDelayedState } from './signal-delay.js';
 import { minImage } from './topology.js';
 
@@ -207,19 +207,26 @@ export function pairForce(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMome
 
     if (toggles.gravityEnabled) {
         const k = p.mass * sMass;
-        const fDir = k * invR3a;
+        let fDir = k * invR3a;
+        let pwTerms = null;
+        if (toggles.blackHoleEnabled) {
+            pwTerms = blackHoleRadialTerms(rawRSq, sMass, sCharge, sAngVel, sAngMomentum);
+            fDir = k * pwTerms.forceScale * (signalDelayed ? aberr : 1);
+        }
         out.x += rx * fDir;
         out.y += ry * fDir;
         p.forceGravity.x += rx * fDir;
         p.forceGravity.y += ry * fDir;
         // P3: Analytical jerk only when radiation enabled
         if (toggles.radiationEnabled) {
-            const jRadial = -3 * k * rDotVr * invR5a;
+            const jRadial = toggles.blackHoleEnabled
+                ? -k * rDotVr * pwTerms.jerkFactor * (signalDelayed ? aberr : 1)
+                : -3 * k * rDotVr * invR5a;
             p.jerk.x += vrx * fDir + rx * jRadial;
             p.jerk.y += vry * fDir + ry * jRadial;
         }
-        // PE: -m₁m₂/r
-        if (_accumulatePE) _peAccum -= k * invR;
+        // PE: Newtonian -m1m2/r, or Paczynski-Wiita -m1m2/(r-r+).
+        if (_accumulatePE) _peAccum -= k * (toggles.blackHoleEnabled ? pwTerms.invPotential : invR);
     }
 
     // P10: Use precomputed axion modulation flag (set in computeAllForces)

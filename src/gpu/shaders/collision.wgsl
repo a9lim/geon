@@ -65,7 +65,8 @@ fn detectCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
     let py = ps.posY;
     let pAux = particleAux[pIdx];
     let p1Radius = pAux.radius;
-    let searchR = p1Radius * 2.0;
+    let bhOnDetect = (uniforms.toggles0 & BLACK_HOLE_BIT) != 0u;
+    let searchR = select(p1Radius * 2.0, max(uniforms.domainW, uniforms.domainH), bhOnDetect);
     let p1Id = pAux.particleId;
 
     // Stack-based tree query (overlap search)
@@ -142,6 +143,12 @@ fn particleKE(ps: ParticleState) -> f32 {
     return wSq / (sqrt(1.0 + wSq) + 1.0) * ps.mass;
 }
 
+fn kerrNewmanRadiusLocal(m: f32, bodyRSq: f32, angVel: f32, charge: f32) -> f32 {
+    let a = INERTIA_K * bodyRSq * abs(angVel);
+    let disc = m * m - a * a - charge * charge;
+    return select(m, m + sqrt(max(0.0, disc)), disc >= 0.0);
+}
+
 @compute @workgroup_size(64)
 fn resolveCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
     let pairIdx = gid.x;
@@ -188,6 +195,83 @@ fn resolveCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
                                  uniforms.domainW, uniforms.domainH, uniforms.topologyMode);
         dx12 = mi.x;
         dy12 = mi.y;
+    }
+
+    let bhOn = (uniforms.toggles0 & BLACK_HOLE_BIT) != 0u;
+    if (bhOn) {
+        let distSq = dx12 * dx12 + dy12 * dy12;
+        let r1Sq = aux1.radius * aux1.radius;
+        let r2Sq = aux2.radius * aux2.radius;
+        let p1Captures = distSq < r1Sq;
+        let p2Captures = distSq < r2Sq;
+        if (p1Captures || p2Captures) {
+            var capIdx = idx1;
+            var vicIdx = idx2;
+            var cap = ps1;
+            var vic = ps2;
+            var capAux = aux1;
+            var vicAux = aux2;
+            var vicDx = dx12;
+            var vicDy = dy12;
+            if (p2Captures && (!p1Captures || ps2.mass > ps1.mass)) {
+                capIdx = idx2;
+                vicIdx = idx1;
+                cap = ps2;
+                vic = ps1;
+                capAux = aux2;
+                vicAux = aux1;
+                vicDx = -dx12;
+                vicDy = -dy12;
+            }
+
+            let eCap = cap.mass * sqrt(1.0 + cap.velWX * cap.velWX + cap.velWY * cap.velWY);
+            let eVic = vic.mass * sqrt(1.0 + vic.velWX * vic.velWX + vic.velWY * vic.velWY);
+            let pxTot = cap.mass * cap.velWX + vic.mass * vic.velWX;
+            let pyTot = cap.mass * cap.velWY + vic.mass * vic.velWY;
+            let eTot = eCap + eVic;
+            let mSq = eTot * eTot - pxTot * pxTot - pyTot * pyTot;
+            if (mSq > EPSILON) {
+                let newMass = sqrt(mSq);
+                let newWx = pxTot / newMass;
+                let newWy = pyTot / newMass;
+                let capBodyRSq = pow(cap.mass, 2.0 / 3.0);
+                let vicBodyRSq = pow(vic.mass, 2.0 / 3.0);
+                let lOrb = vicDx * (vic.mass * vic.velWY) - vicDy * (vic.mass * vic.velWX);
+                let lSpin = INERTIA_K * cap.mass * capBodyRSq * cap.angW
+                           + INERTIA_K * vic.mass * vicBodyRSq * vic.angW;
+                let newBodyR = pow(newMass, 1.0 / 3.0);
+                let newBodyRSq = newBodyR * newBodyR;
+                let newI = INERTIA_K * newMass * newBodyRSq;
+                let newAngW = select(0.0, (lOrb + lSpin) / newI, newI > EPSILON);
+                let newAngVel = select(newAngW, newAngW / sqrt(1.0 + newAngW * newAngW * newBodyRSq), relOn);
+
+                let vicMass = vic.mass;
+                let vicBodyR = pow(max(vicMass, EPSILON), 1.0 / 3.0);
+                let vicSr = vic.angW * vicBodyR;
+                vicAux.deathTime = uniforms.simTime;
+                vicAux.deathMass = vicMass;
+                vicAux.deathAngVel = select(vic.angW, vic.angW / sqrt(1.0 + vicSr * vicSr), relOn);
+
+                cap.mass = newMass;
+                cap.charge += vic.charge;
+                cap.baseMass += vic.baseMass;
+                cap.velWX = newWx;
+                cap.velWY = newWy;
+                cap.angW = newAngW;
+                cap.flags = (cap.flags | FLAG_ALIVE) & (0xffffffffu ^ FLAG_ANTIMATTER);
+                capAux.radius = kerrNewmanRadiusLocal(newMass, newBodyRSq, newAngVel, cap.charge);
+
+                vic.mass = 0.0;
+                vic.baseMass = 0.0;
+                vic.flags = (vic.flags & ~FLAG_ALIVE) | FLAG_RETIRED;
+
+                particleState[capIdx] = cap;
+                particleAux[capIdx] = capAux;
+                particleState[vicIdx] = vic;
+                particleAux[vicIdx] = vicAux;
+            }
+            return;
+        }
     }
 
     if (isAntimatter1 != isAntimatter2) {
@@ -284,6 +368,7 @@ fn resolveCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (newI > EPSILON) {
             newAngW = (Lorb + Lspin) / newI;
         }
+        let newAngVel = select(newAngW, newAngW / sqrt(1.0 + newAngW * newAngW * newRadius * newRadius), relOn);
 
         var newPs: ParticleState;
         newPs.posX = newX;
@@ -295,12 +380,11 @@ fn resolveCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
         newPs.angW = newAngW;
         newPs.baseMass = ps1.baseMass + ps2.baseMass;
         // Preserve antimatter flag from p1 unless BH mode (no hair); FLAG_REBORN signals history/trail reset
-        let bhOn = (uniforms.toggles0 & 256u) != 0u; // BLACK_HOLE_BIT
         let amFlag = select(ps1.flags & FLAG_ANTIMATTER, 0u, bhOn);
         newPs.flags = FLAG_ALIVE | FLAG_REBORN | amFlag;
 
         // Fresh aux for new particle (unique ID, clean death state)
-        aux1.radius = newRadius;
+        aux1.radius = select(newRadius, kerrNewmanRadiusLocal(totalMass, newRadius * newRadius, newAngVel, newPs.charge), bhOn);
         aux1.particleId = 0x80000000u | (uniforms.frameCount * MAX_PARTICLES + idx1);
         aux1.deathTime = 1e38; // sentinel > 1e30 threshold — alive
         aux1.deathMass = 0.0;

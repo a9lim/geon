@@ -208,7 +208,10 @@ const REF_EN = {
 <h3>Kerr-Newman Horizon</h3>
 <p>The outer event horizon radius:</p>
 <p>$$r_+ = M + \\sqrt{M^2 - a^2 - Q^2}$$</p>
-<p>where $a = J/M$ is the spin parameter. The horizon exists only when $M^2 \\geq a^2 + Q^2$; violations would produce a naked singularity, forbidden by cosmic censorship (the simulation clamps to the extremal radius $r_+ = M$).</p>
+<p>where $a = J/M$ is the spin parameter. The horizon exists only when $M^2 \\geq a^2 + Q^2$. In Geon's toy dynamics, over-extremal inputs shed same-sign leptons in charge quanta until they fit the bound; the radius is clamped to the effective extremal value $r_+ = M$ as a numerical backstop while that correction occurs.</p>
+
+<h3>Pseudo-Potential and Capture</h3>
+<p>For near-horizon orbits, Geon replaces Newtonian black-hole gravity with a Paczynski-Wiita-style radial term, so the force and potential steepen as a particle approaches the horizon. This gives interactive plunge and capture behavior without solving the full Kerr-Newman geodesic equation. When one particle's center crosses another black hole's horizon, the simulator swallows it and transfers lab-frame four-momentum, charge, and spin/angular momentum into the captor.</p>
 
 <h3>Ergosphere</h3>
 <p>The region between the horizon $r_+$ and the static limit:</p>
@@ -223,7 +226,7 @@ const REF_EN = {
 <p>Smaller black holes are hotter and radiate faster, creating a runaway: mass decreases $\\to$ temperature rises $\\to$ radiation intensifies $\\to$ evaporation. The final instant produces a burst of photons.</p>
 
 <h3>Extremal Limit</h3>
-<p>When $M^2 = a^2 + Q^2$, the inner and outer horizons merge, surface gravity vanishes, and the temperature drops to zero — the black hole stops radiating. Extremal black holes are the most compact objects possible for their mass and charge, saturating the cosmic censorship bound.</p>
+<p>When $M^2 = a^2 + Q^2$, the inner and outer horizons merge, surface gravity vanishes, and the temperature drops to zero — the black hole stops radiating. Extremal black holes are the most compact objects possible for their mass and charge, saturating the cosmic censorship bound. If a toy state crosses the bound, Geon emits same-sign leptons in $e$ units until the discrete charge state returns within the allowed region, with a hard clamp protecting the remaining floating-point edge cases.</p>
 
 <h3>Schwinger Discharge</h3>
 <p>A sufficiently charged black hole generates an electric field strong enough to rip electron-positron pairs from the vacuum — the <b>Schwinger effect</b>. The rate per unit time for a Kerr-Newman black hole:</p>
@@ -231,7 +234,7 @@ const REF_EN = {
 <p>where $e$ is the elementary charge, $E_{\\text{cr}} = m_e^2/e$ is the critical Schwinger field, and $\\Sigma$ is the Kerr-Newman horizon area factor that encodes spin corrections. The exponential suppression means the rate is negligible until $E \\approx E_{\\text{cr}}$ (threshold at $0.5\\,E_{\\text{cr}}$).</p>
 <p>The escaping lepton carries kinetic energy derived from the horizon electrostatic potential:</p>
 <p>$$\\text{KE} = e\\,\\Phi_H - m_e, \\qquad \\Phi_H = \\frac{|Q|\\,r_+}{r_+^2 + a^2}$$</p>
-<p>Each discharge event reduces the black hole's charge by one elementary unit and its mass by $m_e$. The same-sign lepton escapes; the opposite-sign partner falls back in. Over many events, this drives a charged black hole toward neutrality through Schwinger discharge rather than naked singularity formation.</p>
+<p>Each discharge event reduces the black hole's charge by one elementary unit and its mass by $m_e$. The same-sign lepton escapes; the opposite-sign partner falls back in. Over many events, this drives a charged black hole toward neutrality. This rate-based discharge is separate from the extremal-bound shedding above, which only activates for already overcharged toy states.</p>
 `,
 
     'ref.kugelblitz.title': 'Kugelblitz Collapse',
@@ -561,10 +564,10 @@ const REF_EN = {
 <p>The charge slider sets the electric charge of newly placed particles. Charge determines the strength of Coulomb and magnetic interactions, and is one of the three quantities (mass, charge, spin) that fully characterize a black hole.</p>
 
 <h3>Quantization</h3>
-<p>All charges are quantized in units of the <b>boson charge</b> $e$ (default 0.1). Particle charges are rounded to the nearest multiple of $e$ on creation. Every charge-transfer process — pion emission, Schwinger discharge, disintegration — conserves charge in discrete $\\pm e$ increments.</p>
+<p>All charges are quantized in units of the <b>boson charge</b> $e$ (default 0.1). Particle charges are rounded to the nearest multiple of $e$ on creation. Every charge-transfer process — pion emission, Schwinger discharge, extremal black-hole shedding, disintegration — conserves charge in discrete $\\pm e$ increments.</p>
 
 <h3>Consequences</h3>
-<p>Quantization means a black hole cannot shed an arbitrary fraction of its charge. Schwinger discharge removes exactly $e$ per event, so a BH with charge $Q$ requires $|Q|/e$ discharge events to reach neutrality. Pion emission similarly transfers $\\pm e$ or $0$ (neutral pion). This discreteness prevents continuous charge drift and makes conservation exact up to floating-point precision.</p>
+<p>Quantization means a black hole cannot shed an arbitrary fraction of its charge. Schwinger discharge removes exactly $e$ per event, so a BH with charge $Q$ requires $|Q|/e$ discharge events to reach neutrality. Extremal censorship sheds enough same-sign lepton quanta to restore $M^2 \\geq a^2 + Q^2$, with the final clamp only acting as a numerical backstop. Pion emission similarly transfers $\\pm e$ or $0$ (neutral pion). This discreteness prevents continuous charge drift and makes conservation exact up to floating-point precision.</p>
 
 <h3>Annihilation</h3>
 <p>Opposite-charge pions ($\\pi^+\\pi^-$) annihilate into photon pairs when they collide. Neutral pions are identified by $|q| < \\epsilon$ rather than exact zero, accommodating floating-point rounding.</p>
@@ -902,7 +905,10 @@ const REF_JA = {
 <h3>カー＝ニューマン地平面</h3>
 <p>外側事象の地平面の半径：</p>
 <p>$$r_+ = M + \\sqrt{M^2 - a^2 - Q^2}$$</p>
-<p>$a = J/M$ はスピンパラメータ。$M^2 \\geq a^2 + Q^2$ のときのみ地平面が存在します。これに違反すると裸の特異点が現れますが、宇宙検閲により禁じられています（シミュレーションは極限半径 $r_+ = M$ にクランプします）。</p>
+<p>$a = J/M$ はスピンパラメータ。$M^2 \\geq a^2 + Q^2$ のときのみ地平面が存在します。Geon の玩具的な力学では、極限を超えた入力は同符号レプトンを電荷量子ごとに放出して境界内へ戻り、その補正中の数値的バックストップとして半径は有効極限値 $r_+ = M$ にクランプされます。</p>
+
+<h3>擬似ポテンシャルと捕獲</h3>
+<p>地平面近傍の軌道では、Geon はニュートン的なBH重力を Paczynski-Wiita 型の動径項へ置き換え、粒子が地平面へ近づくほど力とポテンシャルが急峻になります。完全なカー＝ニューマン測地線を解くのではなく、対話的な落下と捕獲の挙動を与える現象論的モデルです。ある粒子の中心が別のBHの地平面を越えると、シミュレータはそれを吸収し、実験室系の四元運動量、電荷、スピン/軌道角運動量を捕獲側へ移します。</p>
 
 <h3>エルゴ球</h3>
 <p>地平面 $r_+$ と静止限界の間の領域：</p>
@@ -917,7 +923,7 @@ const REF_JA = {
 <p>小さなBHほど高温で放射が速く、暴走を生みます：質量減少 $\\to$ 温度上昇 $\\to$ 放射激化 $\\to$ 蒸発。最後の瞬間に光子バーストを放ちます。</p>
 
 <h3>極限</h3>
-<p>$M^2 = a^2 + Q^2$ のとき、内側と外側の地平面が合体し、表面重力が消え、温度はゼロまで下がります — BHは放射を止めます。極限BHは、質量と電荷に対して可能な最もコンパクトな天体で、宇宙検閲の限界を飽和します。</p>
+<p>$M^2 = a^2 + Q^2$ のとき、内側と外側の地平面が合体し、表面重力が消え、温度はゼロまで下がります — BHは放射を止めます。極限BHは、質量と電荷に対して可能な最もコンパクトな天体で、宇宙検閲の限界を飽和します。玩具状態がこの境界を越えた場合、Geon は同符号レプトンを $e$ 単位で放出し、離散的な電荷状態が許容領域へ戻るまで補正します。ハードクランプは残る浮動小数点の端数を守るためのバックストップです。</p>
 
 <h3>シュウィンガー放電</h3>
 <p>十分に帯電したBHは真空から電子陽電子対を引き剥がせるほど強い電場を生みます — <b>シュウィンガー効果</b>です。カー＝ニューマンBHにおける単位時間あたりのレート：</p>
@@ -925,7 +931,7 @@ const REF_JA = {
 <p>ここで $e$ は素電荷、$E_{\\text{cr}} = m_e^2/e$ は臨界シュウィンガー電場、$\\Sigma$ はスピン補正を含むカー＝ニューマン地平面面積因子。指数抑制により $E \\approx E_{\\text{cr}}$ となるまでレートは無視できます（しきい値は $0.5\\,E_{\\text{cr}}$）。</p>
 <p>脱出するレプトンは地平面の静電ポテンシャルから運動エネルギーを得ます：</p>
 <p>$$\\text{KE} = e\\,\\Phi_H - m_e, \\qquad \\Phi_H = \\frac{|Q|\\,r_+}{r_+^2 + a^2}$$</p>
-<p>各放電事象でBHの電荷は素電荷1単位、質量は $m_e$ 減少します。同符号レプトンは脱出し、反対符号は落下します。多数の事象を経て、帯電BHは中性へ向かい — 裸の特異点ではなく対生成を通じて宇宙検閲が実現されます。</p>
+<p>各放電事象でBHの電荷は素電荷1単位、質量は $m_e$ 減少します。同符号レプトンは脱出し、反対符号は落下します。多数の事象を経て、帯電BHは中性へ向かいます。このレート依存の放電は上記の極限境界シェディングとは別で、後者はすでに過帯電した玩具状態でのみ有効になります。</p>
 `,
 
     'ref.kugelblitz.title': 'クーゲルブリッツ崩壊',
@@ -1255,10 +1261,10 @@ const REF_JA = {
 <p>電荷スライダーは新しく配置する粒子の電荷を設定します。電荷はクーロンと磁気相互作用の強さを決め、BHを完全に特徴づける3量（質量・電荷・スピン）の1つです。</p>
 
 <h3>量子化</h3>
-<p>すべての電荷は<b>ボソン電荷</b> $e$（既定値0.1）の単位で量子化されます。粒子電荷は生成時に最も近い $e$ の整数倍へ丸められます。すべての電荷移動過程 — パイオン放出、レプトン対生成、シュウィンガー放電、分裂 — は離散的な $\\pm e$ 増分で電荷を保存します。</p>
+<p>すべての電荷は<b>ボソン電荷</b> $e$（既定値0.1）の単位で量子化されます。粒子電荷は生成時に最も近い $e$ の整数倍へ丸められます。すべての電荷移動過程 — パイオン放出、レプトン対生成、シュウィンガー放電、極限BHの電荷シェディング、分裂 — は離散的な $\\pm e$ 増分で電荷を保存します。</p>
 
 <h3>帰結</h3>
-<p>量子化は、BHが任意の割合で電荷を放出できないことを意味します。シュウィンガー放電は1事象で正確に $e$ を取り除くので、電荷 $Q$ のBHが中性になるには $|Q|/e$ 回の放電事象が必要です。パイオン放出も同様に $\\pm e$ または $0$（中性パイオン）を移します。この離散性は連続的な電荷ドリフトを防ぎ、保存を浮動小数点精度で厳密にします。</p>
+<p>量子化は、BHが任意の割合で電荷を放出できないことを意味します。シュウィンガー放電は1事象で正確に $e$ を取り除くので、電荷 $Q$ のBHが中性になるには $|Q|/e$ 回の放電事象が必要です。極限検閲では、$M^2 \\geq a^2 + Q^2$ を回復するのに十分な同符号レプトン量子を放出し、最後のクランプは数値的バックストップとしてのみ働きます。パイオン放出も同様に $\\pm e$ または $0$（中性パイオン）を移します。この離散性は連続的な電荷ドリフトを防ぎ、保存を浮動小数点精度で厳密にします。</p>
 
 <h3>対消滅</h3>
 <p>異符号パイオン ($\\pi^+\\pi^-$) は衝突時に光子対へ消滅します。中性パイオンは厳密ゼロではなく $|q| < \\epsilon$ で識別され、浮動小数点丸めに対応します。</p>

@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 78;
+const SHADER_VERSION = 79;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -1506,6 +1506,7 @@ export async function createExpansionPipeline(device, wgslConstants = '') {
  * Bind groups:
  *   Group 0: particleState (ro) + particleAux (ro) + derived (ro) = 3
  *   Group 1: events + eventCounter + DisintUniforms = 3
+ *   Group 2: pionPool + piCount = 2
  */
 export async function createDisintegrationPipeline(device, wgslConstants = '') {
     const prefix = await getSharedPrefix(wgslConstants);
@@ -1530,7 +1531,15 @@ export async function createDisintegrationPipeline(device, wgslConstants = '') {
         ],
     });
 
-    const bindGroupLayouts = [group0Layout, group1Layout];
+    const group2Layout = device.createBindGroupLayout({
+        label: 'disint_g2',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        ],
+    });
+
+    const bindGroupLayouts = [group0Layout, group1Layout, group2Layout];
     const pipeline = device.createComputePipeline({
         label: 'checkDisintegration',
         layout: device.createPipelineLayout({ bindGroupLayouts }),

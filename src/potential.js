@@ -4,7 +4,7 @@
 // Mirrors force calculation structure (BH tree or pairwise) for consistent PE.
 // When signal delay is active, uses delayed source positions at leaf/pairwise level.
 
-import { INERTIA_K, MAG_MOMENT_K, YUKAWA_COUPLING, EPSILON, TORUS } from './config.js';
+import { INERTIA_K, MAG_MOMENT_K, YUKAWA_COUPLING, EPSILON, TORUS, blackHoleRadialTerms } from './config.js';
 import { getDelayedState } from './signal-delay.js';
 import { minImage } from './topology.js';
 
@@ -149,7 +149,8 @@ function pairPE(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMoment, sAngMo
     } else {
         rx = sx - p.pos.x; ry = sy - p.pos.y;
     }
-    const rSq = rx * rx + ry * ry + toggles.softeningSq;
+    const rawRSq = rx * rx + ry * ry;
+    const rSq = rawRSq + toggles.softeningSq;
     const invRSq = 1 / rSq;
     const invR = Math.sqrt(invRSq);
     const pMagMoment = p.magMoment;
@@ -158,7 +159,15 @@ function pairPE(p, sx, sy, svx, svy, sMass, sCharge, sAngVel, sMagMoment, sAngMo
     const yukModPair = toggles.axionEnabled ? Math.sqrt(p.yukMod * sYukMod) : 1;
 
     let pe = 0;
-    if (toggles.gravityEnabled)  pe -= p.mass * sMass * invR;
+    if (toggles.gravityEnabled) {
+        if (toggles.blackHoleEnabled) {
+            const srcInv = blackHoleRadialTerms(rawRSq, sMass, sCharge, sAngVel, sAngMomentum).invPotential;
+            const obsInv = blackHoleRadialTerms(rawRSq, p.mass, p.charge, p.angVel, p.angMomentum).invPotential;
+            pe -= 0.5 * p.mass * sMass * (srcInv + obsInv);
+        } else {
+            pe -= p.mass * sMass * invR;
+        }
+    }
     if (toggles.coulombEnabled)  pe += p.charge * sCharge * invR * axModPair;
     const invR3 = invR * invRSq;
     if (toggles.magneticEnabled) pe += (pMagMoment * sMagMoment) * invR3 * axModPair;

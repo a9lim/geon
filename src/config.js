@@ -45,6 +45,7 @@ export const SOFTENING = 8;
 export const SOFTENING_SQ = SOFTENING * SOFTENING;
 export const BH_SOFTENING = 4;               // reduced softening for black hole mode
 export const BH_SOFTENING_SQ = BH_SOFTENING * BH_SOFTENING;
+export const BH_PW_MIN_GAP = 0.25;           // floor for Paczynski-Wiita horizon gap
 export const BOSON_SOFTENING_SQ = 4;         // photon/pion gravitational lensing
 export const BOSON_MIN_AGE = 4;              // minimum age (substeps) before any absorption
 
@@ -159,4 +160,48 @@ export function kerrNewmanRadius(M, radiusSq, angVel, charge) {
     const a = INERTIA_K * radiusSq * Math.abs(angVel);
     const disc = M * M - a * a - charge * charge;
     return disc >= 0 ? M + Math.sqrt(Math.max(0, disc)) : M;
+}
+
+/** Quantized charge bound for Kerr-Newman black-hole mode. */
+export function blackHoleChargeLimit(M, radiusSq, angVel) {
+    if (!(M > EPSILON)) return 0;
+    const a = INERTIA_K * radiusSq * Math.abs(angVel);
+    return Math.sqrt(Math.max(0, M * M - a * a));
+}
+
+/** Backstop: clamp charge to the largest BOSON_CHARGE quantum within the KN bound. */
+export function quantizedCensoredBlackHoleCharge(M, radiusSq, angVel, charge) {
+    const absQ = Math.abs(charge);
+    if (absQ < EPSILON) return 0;
+    const maxQuantum = Math.floor((blackHoleChargeLimit(M, radiusSq, angVel) + EPSILON) / BOSON_CHARGE) * BOSON_CHARGE;
+    return absQ <= maxQuantum + EPSILON ? charge : Math.sign(charge) * maxQuantum;
+}
+
+/** Source horizon for force/potential helpers, deriving angular velocity from L when needed. */
+export function blackHoleSourceRadius(M, charge = 0, angVel = 0, angMomentum = 0) {
+    if (!(M > EPSILON)) return 0;
+    const bodyRSq = Math.cbrt(M) ** 2;
+    let omega = angVel;
+    if (Math.abs(omega) < EPSILON && Math.abs(angMomentum) > EPSILON) {
+        const denom = INERTIA_K * M * bodyRSq;
+        if (denom > EPSILON) omega = angMomentum / denom;
+    }
+    return kerrNewmanRadius(M, bodyRSq, omega, charge);
+}
+
+/** Paczynski-Wiita gravity terms for a source horizon. */
+export function blackHoleRadialTerms(rawRSq, sourceMass, sourceCharge = 0, sourceAngVel = 0, sourceAngMomentum = 0) {
+    if (!(rawRSq > EPSILON) || !(sourceMass > EPSILON)) {
+        return { invPotential: 1 / BH_PW_MIN_GAP, forceScale: 0, jerkFactor: 0 };
+    }
+    const r = Math.sqrt(rawRSq);
+    const gap = Math.max(r - blackHoleSourceRadius(sourceMass, sourceCharge, sourceAngVel, sourceAngMomentum), BH_PW_MIN_GAP);
+    const invR = 1 / r;
+    const invGap = 1 / gap;
+    const forceScale = invR * invGap * invGap;
+    return {
+        invPotential: invGap,
+        forceScale,
+        jerkFactor: forceScale * (invR * invR + 2 * invR * invGap),
+    };
 }

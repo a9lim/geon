@@ -2,7 +2,7 @@
 // V_eff(r) = V(r) + L²/(2μr²) for selected particle vs most massive body.
 // Draws curve + current-position marker on a sidebar canvas.
 
-import { TWO_PI, SOFTENING_SQ, BH_SOFTENING_SQ, YUKAWA_COUPLING, TORUS } from './config.js';
+import { TWO_PI, SOFTENING_SQ, BH_SOFTENING_SQ, YUKAWA_COUPLING, TORUS, BH_PW_MIN_GAP, blackHoleRadialTerms } from './config.js';
 import { minImage } from './topology.js';
 
 const _PAL = window._PALETTE;
@@ -48,7 +48,7 @@ export default class EffectivePotentialPlot {
         if (!ref) { this._valid = false; return; }
 
         // R12: Build toggle key and check if curve needs recomputation
-        const toggleKey = `${physics.gravityEnabled}${physics.coulombEnabled}${physics.magneticEnabled}${physics.gravitomagEnabled}${physics.yukawaEnabled}`;
+        const toggleKey = `${physics.gravityEnabled}${physics.coulombEnabled}${physics.magneticEnabled}${physics.gravitomagEnabled}${physics.yukawaEnabled}${physics.blackHoleEnabled}${Math.round(ref.mass * 100)}${Math.round(ref.charge * 100)}${Math.round(ref.angVel * 100)}`;
 
         // Relative state (minimum-image for periodic boundaries)
         let dx, dy;
@@ -100,7 +100,9 @@ export default class EffectivePotentialPlot {
         const refL = ref.angMomentum;
 
         // Sample range: 0.5 to 4× current separation (clamped)
-        const rMin = Math.max(Math.sqrt(softSq) * 0.5, r * 0.1);
+        const rMin = physics.blackHoleEnabled
+            ? Math.max(ref.radius + BH_PW_MIN_GAP, 0.1)
+            : Math.max(Math.sqrt(softSq) * 0.5, r * 0.1);
         const rMax = Math.max(r * 4, rMin * 10);
 
         for (let i = 0; i < N_SAMPLES; i++) {
@@ -130,8 +132,14 @@ export default class EffectivePotentialPlot {
         // Centrifugal barrier: L²/(2μr²)
         if (mu > 0) v += (Lz * Lz) / (2 * mu * r * r);
 
-        // Gravitational: -m₁m₂/r
-        if (grav) v -= sel.mass * ref.mass * invR;
+        // Gravitational: Newtonian normally; Paczynski-Wiita in BH mode.
+        if (grav) {
+            if (physics.blackHoleEnabled) {
+                v -= sel.mass * ref.mass * blackHoleRadialTerms(r * r, ref.mass, ref.charge, ref.angVel, ref.angMomentum).invPotential;
+            } else {
+                v -= sel.mass * ref.mass * invR;
+            }
+        }
 
         // Coulomb: +q₁q₂/r (with axion modulation)
         if (coul) v += sel.charge * ref.charge * invR * axMod;

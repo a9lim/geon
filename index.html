@@ -68,7 +68,7 @@
       "@type": ["WebApplication", "LearningResource"],
       "name": "Geon",
       "url": "https://a9l.im/geon",
-      "description": "Interactive relativistic N-body simulator with 11 force types, Boris integration, Barnes-Hut tree acceleration, Kerr-Newman black holes with Hawking radiation, Schwinger discharge, and superradiance, Higgs and axion scalar fields, and WebGPU compute shaders. Educational tool for exploring gravity, electromagnetism, black hole thermodynamics, and cosmological expansion across 15 curated presets.",
+      "description": "Interactive relativistic N-body simulator with 11 force types, Boris integration, Barnes-Hut tree acceleration, Kerr-Newman black holes with pseudo-potential plunge, horizon capture, Hawking radiation, Schwinger discharge, extremal charge shedding, and superradiance, Higgs and axion scalar fields, and WebGPU compute shaders. Educational tool for exploring gravity, electromagnetism, black hole thermodynamics, and cosmological expansion across 15 curated presets.",
       "speakable": {
         "@type": "SpeakableSpecification",
         "cssSelector": ["meta[name='description']"]
@@ -112,8 +112,9 @@
         "Scalar field theory including Higgs and axion coupling",
         "Barnes-Hut tree algorithm for O(N log N) force approximation",
         "Phase-space preservation under magnetic fields",
+        "Black hole horizon capture and pseudo-potential plunge",
         "Hawking radiation and black hole thermodynamics",
-        "Schwinger pair production and charge quantization",
+        "Schwinger pair production, charge quantization, and extremal charge bounds",
         "Superradiant instability and black hole spin-down"
       ],
       "educationalAlignment": [
@@ -122,7 +123,7 @@
         {"@type": "AlignmentObject", "alignmentType": "educationalSubject", "educationalFramework": "APS Guidelines for Undergraduate Physics", "targetName": "Classical Mechanics and Electromagnetism", "targetUrl": "https://www.aps.org/programs/education/undergrad/"}
       ],
       "datePublished": "2026-02-17",
-      "dateModified": "2026-05-17",
+      "dateModified": "2026-06-10",
       "author": {
         "@type": "Person",
         "name": "a9lim",
@@ -227,7 +228,7 @@
           "name": "What is Schwinger discharge in Geon?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Schwinger discharge models vacuum electron-positron pair production near charged black hole horizons. When the electric field exceeds the critical Schwinger threshold, pairs are torn from the vacuum. The same-sign lepton escapes while the opposite-sign partner falls back in, reducing the black hole's charge by one quantized unit per event. This drives charged black holes toward neutrality in the toy model; super-extremal parameters are clamped to an effective radius rather than modeled as physical naked singularities."
+            "text": "Schwinger discharge models vacuum electron-positron pair production near charged black hole horizons. When the electric field exceeds the critical Schwinger threshold, pairs are torn from the vacuum. The same-sign lepton escapes while the opposite-sign partner falls back in, reducing the black hole's charge by one quantized unit per event. Separately, overcharged toy black holes shed same-sign leptons in quantized steps and clamp to the nearest allowed Kerr-Newman charge bound as a numerical backstop."
           }
         },
         {
@@ -582,14 +583,14 @@
     <h3 data-i18n="edu.h.gm">Gravitomagnetism and Frame-Dragging</h3>
     <p data-i18n="edu.p.gm">Gravitomagnetism is the gravitational analogue of the magnetic force. In Geon, rotating or co-moving masses generate a gravitomagnetic field that produces velocity-dependent forces on nearby particles, mimicking the frame-dragging effect predicted by general relativity. This can be seen in the Gravitomagnetic preset, where orbiting masses drag the surrounding space and alter nearby trajectories.</p>
     <h3 data-i18n="edu.h.bh">Black Hole Physics</h3>
-    <p data-i18n="edu.p.bh">In black hole mode, particles use a Kerr-Newman-inspired effective radius characterized by mass, charge, and spin. Sub-extremal parameters use the usual outer-horizon formula; super-extremal toy inputs are clamped rather than modeled as physical naked singularities. Hawking radiation causes evaporation at a rate determined by the Kerr-Newman temperature — smaller black holes radiate faster, leading to runaway evaporation. Charged black holes also undergo Schwinger discharge: the intense electric field near the effective horizon tears electron-positron pairs from the vacuum, with one lepton escaping and the other falling back in. Each event reduces the black hole's charge by one quantized unit, driving it toward neutrality. Spinning black holes with the axion field enabled exhibit superradiance: when the horizon angular velocity exceeds the axion mass, the field extracts rotational energy and grows a scalar cloud around the black hole, spinning it down until the superradiance condition fails. All charges in the simulation are quantized in units of the boson charge, ensuring discrete conservation across emission, decay, and discharge.</p>
+    <p data-i18n="edu.p.bh">In black hole mode, particles use a Kerr-Newman-inspired effective radius characterized by mass, charge, and spin. Sub-extremal parameters use the usual outer-horizon formula; super-extremal toy inputs are clamped rather than modeled as physical naked singularities. Gravity switches to a Paczynski-Wiita-style pseudo-potential, so the effective potential steepens near the horizon and particles are swallowed once their centers cross it. Hawking radiation causes evaporation at a rate determined by the Kerr-Newman temperature — smaller black holes radiate faster, leading to runaway evaporation. Charged black holes also undergo Schwinger discharge: the intense electric field near the effective horizon tears electron-positron pairs from the vacuum, with one lepton escaping and the other falling back in. Each event reduces the black hole's charge by one quantized unit, driving it toward neutrality. Overcharged toy black holes shed same-sign leptons in quantized steps and clamp to the nearest allowed Kerr-Newman charge bound as a numerical backstop. Spinning black holes with the axion field enabled exhibit superradiance: when the horizon angular velocity exceeds the axion mass, the field extracts rotational energy and grows a scalar cloud around the black hole, spinning it down until the superradiance condition fails. All charges in the simulation are quantized in units of the boson charge, ensuring discrete conservation across emission, decay, and discharge.</p>
     <h3 data-i18n="edu.h.boris">Boris Integrator</h3>
     <p data-i18n="edu.p.boris">Geon uses the Boris algorithm to integrate particle trajectories. The Boris integrator preserves phase-space volume under strong magnetic fields, preventing artificial energy drift that plagues simpler methods like Euler integration. It splits the force application into electric half-kicks and a magnetic rotation, ensuring stable cyclotron orbits at any timestep.</p>
     <h3 data-i18n="edu.h.access">Accessibility</h3>
     <p data-i18n="edu.p.access">Geon supports keyboard navigation for all controls, high-contrast mode via the theme toggle, and ARIA labels on all toolbar buttons and interactive elements. Simulation parameters are adjustable via labeled sliders and toggles. Known hazards: flashing particle trails and continuous motion simulation. Users sensitive to motion or flashing content should use presets with lower particle counts.</p>
     <p><em>See also: <a href="/cyano">Cyano</a> for cellular energy simulations, <a href="/shoals">Shoals</a> for financial dynamics.</em></p>
 <h3 data-i18n="edu.h.outcomes">Learning Outcomes</h3>
-<p data-i18n="edu.p.outcomes">After using Geon, students should be able to: explain how gravitational and electromagnetic forces produce qualitatively different orbital dynamics; describe the role of the Barnes-Hut algorithm in reducing force computation from O(N²) to O(N log N); identify how relativistic corrections (1PN, gravitomagnetism) modify Newtonian predictions at high velocities; distinguish between conservative and dissipative forces in phase-space evolution; describe how Hawking radiation and Schwinger discharge govern black hole evaporation and charge neutralization; and explain how superradiance transfers angular momentum from a spinning black hole to a scalar field.</p>
+<p data-i18n="edu.p.outcomes">After using Geon, students should be able to: explain how gravitational and electromagnetic forces produce qualitatively different orbital dynamics; describe the role of the Barnes-Hut algorithm in reducing force computation from O(N²) to O(N log N); identify how relativistic corrections (1PN, gravitomagnetism) modify Newtonian predictions at high velocities; distinguish between conservative and dissipative forces in phase-space evolution; describe how horizon capture, Hawking radiation, Schwinger discharge, and extremal charge shedding govern black hole evolution in the toy model; and explain how superradiance transfers angular momentum from a spinning black hole to a scalar field.</p>
 <h3 data-i18n="edu.h.prereq">Prerequisites</h3>
 <p data-i18n="edu.p.prereq">Familiarity with Newton's laws of motion and basic vector calculus. No prior knowledge of relativity or particle physics is required — the presets are designed to introduce each concept incrementally.</p>
 <h3 data-i18n="edu.h.refs">References</h3>

@@ -26,8 +26,7 @@ export function createGPUDispatchPlan() {
 }
 
 export function updateGPUDispatchPlan(gpu, plan = createGPUDispatchPlan()) {
-    const canHavePions = gpu._yukawaEnabled ||
-        (gpu._blackHoleEnabled && gpu._coulombEnabled);
+    const canHavePions = gpu._yukawaEnabled || gpu._blackHoleEnabled;
     const canHavePhotons = gpu._radiationEnabled;
 
     plan.spinOrbit = gpu._spinOrbitEnabled &&

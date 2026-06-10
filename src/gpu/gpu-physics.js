@@ -55,6 +55,8 @@ const BOSON_ARGS_PHOTON = 0;
 const BOSON_ARGS_PION = 12;
 const BOSON_ARGS_TOTAL = 24;
 const BOSON_ARGS_NODES = 36;
+const DISINT_FEATURE_BREAKUP = 1;
+const DISINT_FEATURE_EXTREMAL = 2;
 
 // Pack palette slate hex to ABGR u32 for WebGPU color buffers
 const _sN = parseInt(window._PALETTE.extended.slate.slice(1), 16);
@@ -2108,7 +2110,7 @@ export default class GPUPhysics {
 
         // Lazily initialize Phase 5 pipelines when any Phase 5 feature is enabled
         const needsPhase5 = physics.higgsEnabled || physics.axionEnabled ||
-            physics.expansionEnabled || physics.disintegrationEnabled || this._heatmapEnabled;
+            physics.expansionEnabled || physics.disintegrationEnabled || physics.blackHoleEnabled || this._heatmapEnabled;
         if (needsPhase5 && !this._fieldDeposit) {
             this._ensurePhase5Pipelines();
         }
@@ -3066,7 +3068,7 @@ export default class GPUPhysics {
      * Dispatch disintegration check (Pass 20).
      */
     _dispatchDisintegration(encoder) {
-        if (!this._disintegrationEnabled || !this._disintPipeline) return;
+        if (!(this._disintegrationEnabled || this._blackHoleEnabled) || !this._disintPipeline) return;
         if (this.aliveCount === 0) return;
 
         if (!this._disintBuffers) {
@@ -3093,6 +3095,9 @@ export default class GPUPhysics {
         _disintUniformU32[8] = this.aliveCount;
         _disintUniformU32[9] = this.boundaryMode === BOUND_LOOP ? 1 : 0;
         _disintUniformU32[10] = this.topologyMode;
+        _disintUniformU32[11] =
+            (this._disintegrationEnabled ? DISINT_FEATURE_BREAKUP : 0) |
+            (this._blackHoleEnabled ? DISINT_FEATURE_EXTREMAL : 0);
         this.device.queue.writeBuffer(this._disintUniformBuffer, 0, _disintUniformData);
 
         // Reset event counter
@@ -3118,7 +3123,15 @@ export default class GPUPhysics {
                     { binding: 2, resource: { buffer: this._disintUniformBuffer } },
                 ],
             });
-            this._disintBGs = [g0, g1];
+            const g2 = this.device.createBindGroup({
+                label: 'disint_g2',
+                layout: this._disintPipeline.bindGroupLayouts[2],
+                entries: [
+                    { binding: 0, resource: { buffer: b.pionPool } },
+                    { binding: 1, resource: { buffer: b.piCount } },
+                ],
+            });
+            this._disintBGs = [g0, g1, g2];
         }
 
         const workgroups = Math.ceil(this.aliveCount / 256);
@@ -3126,6 +3139,7 @@ export default class GPUPhysics {
         p.setPipeline(this._disintPipeline.pipeline);
         p.setBindGroup(0, this._disintBGs[0]);
         p.setBindGroup(1, this._disintBGs[1]);
+        p.setBindGroup(2, this._disintBGs[2]);
         p.dispatchWorkgroups(workgroups);
         p.end();
     }
@@ -3215,6 +3229,7 @@ export default class GPUPhysics {
         _heatmapUniformU32[15] = this.topologyMode;
         _heatmapUniformU32[16] = this.aliveCount;
         _heatmapUniformU32[17] = this._barnesHutEnabled ? 1 : 0; // useTree
+        _heatmapUniformU32[18] = this._blackHoleEnabled ? 1 : 0;
         this.device.queue.writeBuffer(this._heatmapUniformBuffer, 0, _heatmapUniformData);
 
         if (!this._heatmapBGs) {

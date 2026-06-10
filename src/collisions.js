@@ -1,7 +1,7 @@
 // ─── Collision Detection & Resolution ───
 // Quadtree-accelerated overlap detection with merge resolution.
 
-import { INERTIA_K, COL_MERGE, EPSILON, TORUS } from './config.js';
+import { INERTIA_K, COL_MERGE, EPSILON, TORUS, kerrNewmanRadius } from './config.js';
 import { minImage } from './topology.js';
 
 const _miOut = { x: 0, y: 0 };
@@ -21,7 +21,7 @@ function _particleKE(p) {
 
 /** Detect overlaps via quadtree query and resolve as merge.
  *  Returns array of annihilation events [{x, y, energy, px, py}] for photon emission. */
-export function handleCollisions(particles, pool, root, mode, periodic, domW, domH, topology = TORUS) {
+export function handleCollisions(particles, pool, root, mode, periodic, domW, domH, topology = TORUS, blackHoleEnabled = false) {
     const halfDomW = domW * 0.5;
     const halfDomH = domH * 0.5;
     _annihilations.length = 0;
@@ -31,12 +31,20 @@ export function handleCollisions(particles, pool, root, mode, periodic, domW, do
     const annihilations = _annihilations;
     const merges = _merges;
     const spawns = _spawns;
+    let capturedAny = false;
+    let maxRadius = 0;
+    if (blackHoleEnabled) {
+        for (let i = 0; i < particles.length; i++) {
+            if (particles[i].radius > maxRadius) maxRadius = particles[i].radius;
+        }
+    }
 
     for (let ci = 0; ci < particles.length; ci++) {
         const p1 = particles[ci];
         if (p1.mass === 0) continue;
 
-        const candidates = pool.queryReuse(root, p1.pos.x, p1.pos.y, p1.radius * 2, p1.radius * 2);
+        const searchR = blackHoleEnabled ? p1.radius + maxRadius : p1.radius * 2;
+        const candidates = pool.queryReuse(root, p1.pos.x, p1.pos.y, searchR, searchR);
 
         for (let ck = 0; ck < candidates.length; ck++) {
             const p2 = candidates[ck];
@@ -53,6 +61,23 @@ export function handleCollisions(particles, pool, root, mode, periodic, domW, do
             }
             const distSq = dx * dx + dy * dy;
             const minDist = p1.radius + real2.radius;
+
+            if (blackHoleEnabled && mode === COL_MERGE) {
+                const p1Captures = distSq < p1.radiusSq;
+                const p2Captures = distSq < real2.radiusSq;
+                if (p1Captures || p2Captures) {
+                    let captor, victim, victimDx, victimDy;
+                    if (p1Captures && (!p2Captures || p1.mass >= real2.mass)) {
+                        captor = p1; victim = real2; victimDx = dx; victimDy = dy;
+                    } else {
+                        captor = real2; victim = p1; victimDx = -dx; victimDy = -dy;
+                    }
+                    resolveHorizonCapture(captor, victim, victimDx, victimDy);
+                    capturedAny = true;
+                    if (p1.mass === 0) break;
+                    continue;
+                }
+            }
 
             if (distSq < minDist * minDist) {
                 // Annihilation: matter + antimatter -> energy
@@ -93,7 +118,7 @@ export function handleCollisions(particles, pool, root, mode, periodic, domW, do
     }
 
     const removed = _removed;
-    if (mode === COL_MERGE && (annihilations.length > 0 || spawns.length > 0)) {
+    if (mode === COL_MERGE && (annihilations.length > 0 || spawns.length > 0 || capturedAny)) {
         let write = 0;
         for (let read = 0; read < particles.length; read++) {
             if (particles[read].mass !== 0) {
@@ -106,6 +131,51 @@ export function handleCollisions(particles, pool, root, mode, periodic, domW, do
     }
 
     return _collisionResult;
+}
+
+/** Swallow a particle whose center crossed another particle's horizon. */
+function resolveHorizonCapture(captor, victim, victimDx, victimDy) {
+    if (captor === victim || captor.mass <= EPSILON || victim.mass <= EPSILON) return;
+
+    const eCaptor = captor.mass * Math.sqrt(1 + captor.w.x * captor.w.x + captor.w.y * captor.w.y);
+    const eVictim = victim.mass * Math.sqrt(1 + victim.w.x * victim.w.x + victim.w.y * victim.w.y);
+    const px = captor.mass * captor.w.x + victim.mass * victim.w.x;
+    const py = captor.mass * captor.w.y + victim.mass * victim.w.y;
+    const energy = eCaptor + eVictim;
+    const massSq = energy * energy - px * px - py * py;
+    if (!(massSq > EPSILON)) return;
+
+    const newMass = Math.sqrt(massSq);
+    const newWx = px / newMass;
+    const newWy = py / newMass;
+    const lOrb = victimDx * (victim.mass * victim.w.y) - victimDy * (victim.mass * victim.w.x);
+    const lSpin = INERTIA_K * captor.mass * captor.bodyRadiusSq * captor.angw
+        + INERTIA_K * victim.mass * victim.bodyRadiusSq * victim.angw;
+    const newBodyR = Math.cbrt(newMass);
+    const newBodyRSq = newBodyR * newBodyR;
+    const newI = INERTIA_K * newMass * newBodyRSq;
+    const newAngw = newI > EPSILON ? (lOrb + lSpin) / newI : 0;
+
+    victim._deathMass = victim.mass;
+    captor.mass = newMass;
+    captor.baseMass += victim.baseMass;
+    captor.charge += victim.charge;
+    captor.antimatter = false;
+    captor.w.x = newWx;
+    captor.w.y = newWy;
+    const invGamma = 1 / Math.sqrt(1 + newWx * newWx + newWy * newWy);
+    captor.vel.x = newWx * invGamma;
+    captor.vel.y = newWy * invGamma;
+    captor.angw = newAngw;
+    captor.angVel = newAngw / Math.sqrt(1 + newAngw * newAngw * newBodyRSq);
+    captor.bodyRadiusSq = newBodyRSq;
+    captor.radius = kerrNewmanRadius(newMass, newBodyRSq, captor.angVel, captor.charge);
+    captor.radiusSq = captor.radius * captor.radius;
+    captor.invMass = 1 / newMass;
+    captor.updateColor();
+
+    victim.mass = 0;
+    victim.baseMass = 0;
 }
 
 /** Compute merged state from p1+p2, kill both, return spawn data for new particle. */

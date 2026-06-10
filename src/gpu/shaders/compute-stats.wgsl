@@ -60,6 +60,26 @@ struct AxYukMod {
 
 fn toggle(bit: u32) -> bool { return (params.toggles0 & bit) != 0u; }
 
+fn bhSourceRadius(m: f32, charge: f32, angVel: f32, angMomentum: f32) -> f32 {
+    if (m <= EPSILON) { return 0.0; }
+    let bodyR = pow(m, 1.0 / 3.0);
+    let bodyRSq = bodyR * bodyR;
+    var omega = angVel;
+    if (abs(omega) < EPSILON && abs(angMomentum) > EPSILON) {
+        let denom = INERTIA_K * m * bodyRSq;
+        if (denom > EPSILON) { omega = angMomentum / denom; }
+    }
+    let a = INERTIA_K * bodyRSq * abs(omega);
+    let disc = m * m - a * a - charge * charge;
+    return select(m, m + sqrt(max(0.0, disc)), disc >= 0.0);
+}
+
+fn bhInvPotential(rawRSq: f32, m: f32, charge: f32, angVel: f32, angMomentum: f32) -> f32 {
+    let rawR = sqrt(max(rawRSq, EPSILON));
+    let gap = max(rawR - bhSourceRadius(m, charge, angVel, angMomentum), BH_PW_MIN_GAP);
+    return 1.0 / gap;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Entry 1: statsKEMom — Parallel KE, momentum, COM, angular momentum
 // Dispatch (1,1,1) with workgroup_size(64). Each thread processes N/64 particles.
@@ -249,7 +269,8 @@ fn statsPE() {
                                        params.domainW, params.domainH, params.topologyMode);
                 dx = mi.x; dy = mi.y;
             }
-            let rSq = dx * dx + dy * dy + softeningSq;
+            let rawRSq = dx * dx + dy * dy;
+            let rSq = rawRSq + softeningSq;
             let invR = 1.0 / sqrt(rSq);
             let r = rSq * invR; // = sqrt(rSq)
             let invR3 = invR * invR * invR;
@@ -261,7 +282,13 @@ fn statsPE() {
 
             // Gravity PE
             if (gravOn) {
-                pe -= pi.mass * pj.mass * invR;
+                if (bhOn) {
+                    let invPi = bhInvPotential(rawRSq, pi.mass, pi.charge, di.angVel, di.angMomentum);
+                    let invPj = bhInvPotential(rawRSq, pj.mass, pj.charge, dj.angVel, dj.angMomentum);
+                    pe -= 0.5 * pi.mass * pj.mass * (invPi + invPj);
+                } else {
+                    pe -= pi.mass * pj.mass * invR;
+                }
             }
 
             // Coulomb PE

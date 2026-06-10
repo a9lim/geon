@@ -51,6 +51,8 @@ Both fields evolve via Stormer-Verlet KDK integration, interact with particles a
 ### Black Holes
 
 - **Kerr-Newman horizons**: mass, spin, and charge determine the sub-extremal horizon radius; super-extremal toy inputs are clamped to an effective radius for stable rendering
+- **Pseudo-relativistic plunge**: black hole mode uses a Paczynski-Wiita-style gravity well and swallows particles whose centers cross the effective horizon
+- **Extremal censorship**: overcharged toy black holes shed same-sign leptons in quantized charge units, with a hard bound clamp as a numerical backstop
 - **Ergosphere visualization**: rendered as a distinct region around spinning black holes
 - **Hawking radiation**: thermal emission with inverse-mass-squared rate, evaporating small black holes
 - **Schwinger discharge**: vacuum pair production at charged black hole horizons 
@@ -69,7 +71,7 @@ Ghost particles generated for all periodic topologies to handle cross-boundary f
 
 ### Quantized Charge
 
-All charges quantized in units of BOSON_CHARGE (0.1). Emission, absorption, decay, and disintegration transfer charge in discrete quanta. Conservation enforced throughout.
+All charges quantized in units of BOSON_CHARGE (0.1). Emission, absorption, decay, Schwinger discharge, extremal charge shedding, and disintegration transfer charge in discrete quanta. Conservation enforced throughout.
 
 ## Controls
 
@@ -93,7 +95,7 @@ Backend selection is automatic, with a `?cpu=1` query parameter to force CPU. Si
 
 - **Heatmap overlay**: real-time potential field visualization (64×64 on CPU, 128×128 on GPU) with modes for gravity, electric, Yukawa, or combined. Diverging colormaps, box blur smoothing, signal-delay-aware when relativity is on. Barnes-Hut tree-walk accelerated.
 - **Phase space plot**: radial distance vs radial velocity relative to the most massive body. 512-sample ring buffer traces orbital evolution, showing ellipticity and precession.
-- **Effective potential**: V_eff(r) = V(r) + L^2/(2 mu r^2) computed over 0.5x to 4x current separation. Includes centrifugal barrier, potential wells, turning points, and current position marker.
+- **Effective potential**: V_eff(r) = V(r) + L^2/(2 mu r^2) computed over 0.5x to 4x current separation. Includes centrifugal barrier, potential wells, turning points, current position marker, and the black hole pseudo-potential plunge when enabled.
 - **Conservation monitor**: energy, momentum, and angular momentum tracked with drift percentages to diagnose numerical issues.
 
 ## Save & Load

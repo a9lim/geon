@@ -620,7 +620,7 @@ export function setupUI(sim) {
     let _aboutHandle = null;
     const _buildAboutConfig = () => ({
         title: _T('about.title', 'Geon'),
-        lastUpdated: '2026-04-27',
+        lastUpdated: '2026-06-10',
         description: _T('about.description'),
         controls: [
             { label: _T('about.controls.addParticle'),        value: _T('about.controls.addParticleVal') },

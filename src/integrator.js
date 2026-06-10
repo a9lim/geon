@@ -3,7 +3,7 @@
 // B-like (velocity-dependent) forces for exact |v|-preserving rotation.
 
 import QuadTreePool from './quadtree.js';
-import { PI, TWO_PI, SOFTENING, BH_SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, MAX_SPEED_RATIO, TIDAL_STRENGTH, SPAWN_COUNT, SOFTENING_SQ, BH_SOFTENING_SQ, QUADTREE_CAPACITY, BH_THETA, HISTORY_SIZE, HISTORY_MASK, HISTORY_STRIDE, DEFAULT_PION_MASS, DEFAULT_AXION_MASS, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, DEFAULT_HUBBLE, EPSILON, MAX_REJECTION_SAMPLES, ABERRATION_THRESHOLD, spawnOffset, kerrNewmanRadius, MAX_PIONS, YUKAWA_COUPLING, BOSON_MIN_AGE, HIGGS_COUPLING, AXION_COUPLING, DEFAULT_HIGGS_MASS, COL_BOUNCE, COL_MERGE, BOUND_LOOP, BOUND_BOUNCE, BOUND_DESPAWN, TORUS, KLEIN, RP2, BOSON_CHARGE, ELECTRON_MASS, MAX_LEPTONS, MIN_KUGELBLITZ_ENERGY, MIN_KUGELBLITZ_COUNT } from './config.js';
+import { PI, TWO_PI, SOFTENING, BH_SOFTENING, DESPAWN_MARGIN, INERTIA_K, MAG_MOMENT_K, MAX_SUBSTEPS, MIN_MASS, MAX_PHOTONS, MAX_SPEED_RATIO, TIDAL_STRENGTH, SPAWN_COUNT, SOFTENING_SQ, BH_SOFTENING_SQ, QUADTREE_CAPACITY, BH_THETA, HISTORY_SIZE, HISTORY_MASK, HISTORY_STRIDE, DEFAULT_PION_MASS, DEFAULT_AXION_MASS, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, DEFAULT_HUBBLE, EPSILON, MAX_REJECTION_SAMPLES, ABERRATION_THRESHOLD, spawnOffset, kerrNewmanRadius, quantizedCensoredBlackHoleCharge, MAX_PIONS, YUKAWA_COUPLING, BOSON_MIN_AGE, HIGGS_COUPLING, AXION_COUPLING, DEFAULT_HIGGS_MASS, COL_BOUNCE, COL_MERGE, BOUND_LOOP, BOUND_BOUNCE, BOUND_DESPAWN, TORUS, KLEIN, RP2, BOSON_CHARGE, ELECTRON_MASS, MAX_LEPTONS, MIN_KUGELBLITZ_ENERGY, MIN_KUGELBLITZ_COUNT } from './config.js';
 
 // Schwinger pair production: Γ = (e²Q²)/(π²Σ) × exp(-πE_cr Σ/|Q|)
 // where Σ = r₊² + a² (Kerr-Newman horizon area factor)
@@ -120,6 +120,7 @@ export default class Physics {
             yukawaEnabled: false,
             yukawaMu: DEFAULT_PION_MASS,
             axionEnabled: false,
+            blackHoleEnabled: false,
             softeningSq: SOFTENING_SQ,
         };
 
@@ -131,7 +132,8 @@ export default class Physics {
         // Pre-allocated return arrays for checkDisintegration (avoids GC)
         this._disintFragments = [];
         this._disintTransfers = [];
-        this._disintResult = { fragments: this._disintFragments, transfers: this._disintTransfers };
+        this._disintChargeSheds = [];
+        this._disintResult = { fragments: this._disintFragments, transfers: this._disintTransfers, chargeSheds: this._disintChargeSheds };
     }
 
     /** Absorb a boson's lab-frame four-momentum into a massive particle. */
@@ -184,6 +186,7 @@ export default class Physics {
         this._toggles.yukawaEnabled = this.yukawaEnabled;
         this._toggles.yukawaMu = this.yukawaMu;
         this._toggles.axionEnabled = this.axionEnabled;
+        this._toggles.blackHoleEnabled = this.blackHoleEnabled;
         this._toggles.softeningSq = this.blackHoleEnabled ? BH_SOFTENING_SQ : SOFTENING_SQ;
         this._toggles.higgsEnabled = this.higgsEnabled;
         this._toggles.radiationEnabled = this.radiationEnabled;
@@ -1405,7 +1408,7 @@ export default class Physics {
 
             // Step 6: Collisions (bounce uses force-based Hertz repulsion; only merge goes here)
             if (collisionMode === COL_MERGE) {
-                const { annihilations, merges, removed, spawns } = handleCollisions(particles, this.pool, root, collisionMode, this.periodic, this.domainW, this.domainH, this._topologyConst);
+                const { annihilations, merges, removed, spawns } = handleCollisions(particles, this.pool, root, collisionMode, this.periodic, this.domainW, this.domainH, this._topologyConst, this.blackHoleEnabled);
                 // Retire removed particles for signal delay fade-out
                 for (let ri = 0; ri < removed.length; ri++) this._retireParticle(removed[ri]);
                 // Deselect removed particles
@@ -1897,11 +1900,13 @@ export default class Physics {
     }
 
     checkDisintegration(particles, lastRoot) {
-        if (!this.disintegrationEnabled) return this._disintResult;
         this._disintFragments.length = 0;
         this._disintTransfers.length = 0;
+        this._disintChargeSheds.length = 0;
+        if (!this.disintegrationEnabled && !this.blackHoleEnabled) return this._disintResult;
         const fragments = this._disintFragments;
         const transfers = this._disintTransfers;
+        const chargeSheds = this._disintChargeSheds;
         const _periodic = this.periodic;
         const _halfDomW = this.domainW * 0.5, _halfDomH = this.domainH * 0.5;
         const _domW = this.domainW, _domH = this.domainH;
@@ -1912,6 +1917,14 @@ export default class Physics {
 
         for (let pi = 0; pi < particles.length; pi++) {
             const p = particles[pi];
+            if (this.blackHoleEnabled && p.mass > MIN_MASS) {
+                const censoredCharge = quantizedCensoredBlackHoleCharge(p.mass, p.bodyRadiusSq, p.angVel, p.charge);
+                if (Math.abs(p.charge - censoredCharge) >= BOSON_CHARGE - EPSILON) {
+                    chargeSheds.push({ source: p, charge: p.charge - censoredCharge, newCharge: censoredCharge });
+                    continue;
+                }
+            }
+            if (!this.disintegrationEnabled) continue;
             if (p.mass < MIN_MASS * SPAWN_COUNT) continue;
 
             const rSq = p.bodyRadiusSq;
