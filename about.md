@@ -1,3 +1,10 @@
+---
+name: Geon
+title: Geon — Interactive Particle Physics Simulator
+description: Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across fifteen browser presets.
+updated: 2026-07-16
+---
+
 # Geon — Interactive Particle Physics Simulator
 
 Geon is a real-time N-body simulator that models how particles move under gravity, electromagnetism, and relativistic effects. It runs in the browser using WebGPU compute shaders for parallel force calculation.
