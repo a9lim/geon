@@ -55,7 +55,7 @@ Both fields evolve via Stormer-Verlet KDK integration, interact with particles a
 - **Extremal censorship**: overcharged toy black holes shed same-sign leptons in quantized charge units, with a hard bound clamp as a numerical backstop
 - **Ergosphere visualization**: rendered as a distinct region around spinning black holes
 - **Hawking radiation**: thermal emission with inverse-mass-squared rate, evaporating small black holes
-- **Schwinger discharge**: vacuum pair production at charged black hole horizons 
+- **Schwinger discharge**: vacuum pair production at charged black hole horizons
 - **Superradiance**: axion field amplification extracting rotational energy from spinning black holes, with natural saturation when horizon angular velocity drops below axion mass
 
 ### Topology and Boundary Conditions
@@ -109,11 +109,11 @@ cd path/to/a9lim.github.io && python -m http.server
 # -> http://localhost:8000/geon/
 ```
 
-Serve from the repository root, because shared design files load via absolute paths. There's no build step and no dependencies. ES6 modules require HTTP (not `file://`). Force the CPU backend with `?cpu=1`.
+Serve from the repository root, because shared design files load via absolute paths. There is no build or package-install step; reference math loads KaTeX from the configured CDN. ES6 modules require HTTP (not `file://`). Force the CPU backend with `?cpu=1`.
 
 ## Tech
 
-Vanilla JavaScript with no dependencies. 40 ES6 modules (~21,000 lines) and 53 WGSL compute and render shaders (~11,000 lines).
+Vanilla JavaScript organized into CPU-side ES6 modules and WebGPU compute/render shaders. It consumes the portfolio's shared browser modules and CDN-hosted KaTeX, but has no package-install step.
 
 **CPU backend**: Canvas 2D rendering, pairwise or Barnes-Hut O(N log N) force evaluation, up to 128 particles, 1,024 photons, 256 pions, and 256 leptons.
 

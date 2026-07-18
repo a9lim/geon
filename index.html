@@ -85,7 +85,7 @@
         {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q18334", "name": "Particle physics"},
         {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q5979196", "name": "Scalar field theory"},
         {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q28957081", "name": "WebGPU"},
-        {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q1150290", "name": "Gravitomagnetism"},
+        {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q1150290", "name": "Gravitoelectromagnetism"},
         {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q1153833", "name": "Yukawa potential"},
         {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q792548", "name": "Axion"},
         {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q11452", "name": "General relativity"},
@@ -101,8 +101,8 @@
       "keywords": "physics simulator, N-body, relativity, gravity, electromagnetism, Boris integrator, Barnes-Hut, Higgs field, axion, Hawking radiation, Schwinger effect, superradiance, black hole, charge quantization, WebGPU, educational",
       "operatingSystem": "Any (Web Browser)",
       "browserRequirements": "Modern browser with WebGPU or Canvas support",
-      "sameAs": "https://github.com/a9lim/a9lim.github.io",
-      "codeRepository": "https://github.com/a9lim/a9lim.github.io",
+      "sameAs": "https://github.com/a9lim/geon",
+      "codeRepository": "https://github.com/a9lim/geon",
       "license": "https://www.gnu.org/licenses/agpl-3.0.html",
       "interactivityType": "active",
       "teaches": [
@@ -123,7 +123,7 @@
         {"@type": "AlignmentObject", "alignmentType": "educationalSubject", "educationalFramework": "APS Guidelines for Undergraduate Physics", "targetName": "Classical Mechanics and Electromagnetism", "targetUrl": "https://www.aps.org/programs/education/undergrad/"}
       ],
       "datePublished": "2026-02-17",
-      "dateModified": "2026-07-16",
+      "dateModified": "2026-07-17",
       "author": {
         "@type": "Person",
         "name": "a9lim",
@@ -149,8 +149,8 @@
         "priceCurrency": "USD"
       },
       "timeRequired": "PT30M",
-      "accessibilityFeature": ["highContrastDisplay", "readingOrder", "structuralNavigation"],
-      "accessibilityHazard": ["flashing", "motionSimulation"],
+      "accessibilityFeature": ["readingOrder", "structuralNavigation"],
+      "accessibilityHazard": ["motionSimulation"],
       "relatedLink": ["https://a9l.im/cyano", "https://a9l.im/shoals", "https://a9l.im/gerry"]
     }
     </script>
@@ -164,7 +164,7 @@
           "name": "What forces does Geon simulate?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Geon models 11 force types: Newtonian gravity, gravitomagnetism, Coulomb electrostatics, magnetic (Lorentz) force, Yukawa interaction, Higgs field coupling, axion field coupling, cosmological expansion, first post-Newtonian correction, spin-orbit coupling, and radiation reaction."
+            "text": "Geon exposes 11 force and correction families: Newtonian gravity, gravitomagnetism, Coulomb electrostatics, magnetic Lorentz force, Yukawa interaction, Higgs and axion field coupling, cosmological expansion, first post-Newtonian correction, spin-orbit coupling, and radiation reaction."
           }
         },
         {
@@ -172,7 +172,7 @@
           "name": "What is the Boris integrator used in Geon?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "The Boris integrator is a symplectic method that preserves phase-space volume while handling strong magnetic fields without numerical drift. Geon uses it with adaptive substepping to advance particle trajectories under combined gravitational and electromagnetic forces."
+            "text": "The Boris integrator is a phase-space-volume-preserving method built around half-kicks and a magnetic rotation. Geon combines it with adaptive substepping and separate correction passes to advance particle trajectories under the enabled interactions."
           }
         },
         {
@@ -180,7 +180,7 @@
           "name": "Does Geon require WebGPU?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "No. Geon uses WebGPU compute shaders for parallel force calculation when available, but falls back to a Canvas 2D CPU renderer on devices without WebGPU support. Force CPU mode with the ?cpu=1 URL parameter."
+            "text": "No. Geon uses WebGPU compute and instanced rendering when available, then switches to CPU physics and Canvas 2D rendering when WebGPU is unavailable or the device is lost. Force CPU mode with the ?cpu=1 URL parameter."
           }
         },
         {
@@ -196,7 +196,7 @@
           "name": "What are the system requirements for Geon?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Geon runs in any modern browser. For best performance, use a browser with WebGPU support (Chrome 113+, Edge 113+). The simulator falls back to Canvas 2D rendering if WebGPU is unavailable."
+            "text": "Geon needs a modern browser with ES modules and Canvas support. A WebGPU-capable browser enables the larger GPU backend; otherwise the simulator uses its CPU physics and Canvas 2D fallback."
           }
         },
         {
@@ -204,7 +204,7 @@
           "name": "Does Geon collect any personal data?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "No. Geon runs entirely in your browser with no server-side processing, no cookies, and no analytics tracking. All simulation state stays on your device."
+            "text": "Geon's simulation runs in the browser. Quick saves stay in browser local storage and downloaded saves remain user-controlled; the portfolio site may record aggregate page-view metadata separately from simulation state."
           }
         },
         {
@@ -212,7 +212,7 @@
           "name": "Is Geon free and open source?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Yes. Geon is licensed under AGPL-3.0 and the source code is available on GitHub. It is free to use for educational and personal purposes."
+            "text": "Yes. Geon's source is available on GitHub under the GNU Affero General Public License v3.0."
           }
         },
         {
@@ -255,7 +255,7 @@
         {"@type": "HowToStep", "position": 2, "name": "Place particles", "text": "Click or drag on the canvas to spawn particles with the mass, charge, and spin values set in the controls panel."},
         {"@type": "HowToStep", "position": 3, "name": "Toggle forces", "text": "Enable or disable individual forces — gravity, electromagnetism, Yukawa, Higgs, axion — to isolate and study specific physical interactions."},
         {"@type": "HowToStep", "position": 4, "name": "Observe trajectories", "text": "Watch particles interact in real time. Use pause, step, and speed controls to examine dynamics at different timescales."},
-        {"@type": "HowToStep", "position": 5, "name": "Inspect the phase space", "text": "Open the Stats tab to view total energy, momentum, and per-particle properties — verify conservation laws and explore phase-space structure."}
+        {"@type": "HowToStep", "position": 5, "name": "Inspect the readouts", "text": "Use the Stats tab for energy and conserved quantities, then select a particle to open its details, phase-space trace, and effective-potential plot."}
       ]
     }
     </script>
@@ -573,21 +573,21 @@
       <summary data-i18n="edu.summary">About this simulation</summary>
       <article>
         <h2 data-i18n="edu.h.what">What is Geon?</h2>
-        <p data-i18n="edu.p.what">Geon is a real-time N-body simulator that models how particles move under gravity, electromagnetism, and relativistic effects. It computes pairwise forces between all particles using a Barnes-Hut tree for O(N log N) scaling, then advances trajectories with a Boris integrator that preserves phase-space volume under strong magnetic fields.</p>
+        <p data-i18n="edu.p.what">Geon is a real-time N-body simulator for gravity, electromagnetism, scalar fields, and relativistic corrections. Applicable interactions can use a Barnes-Hut tree, while grid fields and correction terms run in dedicated passes. A Boris integrator advances the particle state with adaptive substeps.</p>
         <h3 data-i18n="edu.h.physics">Physics</h3>
-        <p data-i18n="edu.p.physics">Eleven force types are available: Newtonian gravity, gravitomagnetism (frame-dragging), Coulomb electrostatics, the magnetic Lorentz force, Yukawa interaction, Higgs field coupling, axion field coupling, cosmological expansion via Hubble flow, first post-Newtonian corrections from general relativity, spin-orbit coupling, and radiation reaction. Forces can be toggled independently so students can isolate individual effects.</p>
+        <p data-i18n="edu.p.physics">Eleven force and correction families are exposed: Newtonian gravity, gravitomagnetism (frame-dragging), Coulomb electrostatics, the magnetic Lorentz force, Yukawa interaction, Higgs field coupling, axion field coupling, cosmological expansion via Hubble flow, first post-Newtonian corrections, spin-orbit coupling, and radiation reaction. The controls enforce dependencies between coupled mechanisms.</p>
         <h3 data-i18n="edu.h.fields">Scalar Fields</h3>
         <p data-i18n="edu.p.fields">Two scalar fields — Higgs and axion — live on a PQS grid with C² interpolation. The Higgs field modulates particle mass through its local vacuum expectation value, while the axion field couples to charge. Both evolve via Störmer-Verlet integration and exert gradient forces on particles.</p>
         <h3 data-i18n="edu.h.presets">Presets</h3>
-        <p data-i18n="edu.p.presets">Fifteen curated presets demonstrate specific phenomena: Keplerian orbits, electromagnetic confinement, Rutherford scattering, Higgs potential wells, axion halos, Hubble expansion, gravitational wave inspiral, and more. Each preset configures initial conditions and force parameters to illustrate one concept clearly.</p>
+        <p data-i18n="edu.p.presets">Fifteen curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, and cosmological expansion.</p>
     <h3 data-i18n="edu.h.gm">Gravitomagnetism and Frame-Dragging</h3>
-    <p data-i18n="edu.p.gm">Gravitomagnetism is the gravitational analogue of the magnetic force. In Geon, rotating or co-moving masses generate a gravitomagnetic field that produces velocity-dependent forces on nearby particles, mimicking the frame-dragging effect predicted by general relativity. This can be seen in the Gravitomagnetic preset, where orbiting masses drag the surrounding space and alter nearby trajectories.</p>
+    <p data-i18n="edu.p.gm">Gravitomagnetism is the gravitational analogue of the magnetic force. In Geon, rotating or co-moving masses generate a gravitomagnetic contribution that changes nearby trajectories. Enable the Gravitomagnetic control alongside gravity to isolate the toy model's velocity- and spin-dependent effects.</p>
     <h3 data-i18n="edu.h.bh">Black Hole Physics</h3>
     <p data-i18n="edu.p.bh">In black hole mode, particles use a Kerr-Newman-inspired effective radius characterized by mass, charge, and spin. Sub-extremal parameters use the usual outer-horizon formula; super-extremal toy inputs are clamped rather than modeled as physical naked singularities. Gravity switches to a Paczynski-Wiita-style pseudo-potential, so the effective potential steepens near the horizon and particles are swallowed once their centers cross it. Hawking radiation causes evaporation at a rate determined by the Kerr-Newman temperature — smaller black holes radiate faster, leading to runaway evaporation. Charged black holes also undergo Schwinger discharge: the intense electric field near the effective horizon tears electron-positron pairs from the vacuum, with one lepton escaping and the other falling back in. Each event reduces the black hole's charge by one quantized unit, driving it toward neutrality. Overcharged toy black holes shed same-sign leptons in quantized steps and clamp to the nearest allowed Kerr-Newman charge bound as a numerical backstop. Spinning black holes with the axion field enabled exhibit superradiance: when the horizon angular velocity exceeds the axion mass, the field extracts rotational energy and grows a scalar cloud around the black hole, spinning it down until the superradiance condition fails. All charges in the simulation are quantized in units of the boson charge, ensuring discrete conservation across emission, decay, and discharge.</p>
     <h3 data-i18n="edu.h.boris">Boris Integrator</h3>
-    <p data-i18n="edu.p.boris">Geon uses the Boris algorithm to integrate particle trajectories. The Boris integrator preserves phase-space volume under strong magnetic fields, preventing artificial energy drift that plagues simpler methods like Euler integration. It splits the force application into electric half-kicks and a magnetic rotation, ensuring stable cyclotron orbits at any timestep.</p>
+    <p data-i18n="edu.p.boris">Geon uses the Boris algorithm to integrate particle trajectories. It splits non-magnetic force application into half-kicks around a magnetic rotation, preserving phase-space volume for that core update. Adaptive substepping limits the timestep under high acceleration or cyclotron frequency.</p>
     <h3 data-i18n="edu.h.access">Accessibility</h3>
-    <p data-i18n="edu.p.access">Geon supports keyboard navigation for all controls, high-contrast mode via the theme toggle, and ARIA labels on all toolbar buttons and interactive elements. Simulation parameters are adjustable via labeled sliders and toggles. Known hazards: flashing particle trails and continuous motion simulation. Users sensitive to motion or flashing content should use presets with lower particle counts.</p>
+    <p data-i18n="edu.p.access">Geon provides keyboard shortcuts, light and dark themes, labeled controls, and numerical readouts for conserved quantities and selected particles. The canvas contains continuous motion and optional particle trails; users sensitive to motion can pause, single-step, or choose a lower-particle preset.</p>
     <p><em>See also: <a href="/cyano">Cyano</a> for cellular energy simulations, <a href="/shoals">Shoals</a> for financial dynamics.</em></p>
 <h3 data-i18n="edu.h.outcomes">Learning Outcomes</h3>
 <p data-i18n="edu.p.outcomes">After using Geon, students should be able to: explain how gravitational and electromagnetic forces produce qualitatively different orbital dynamics; describe the role of the Barnes-Hut algorithm in reducing force computation from O(N²) to O(N log N); identify how relativistic corrections (1PN, gravitomagnetism) modify Newtonian predictions at high velocities; distinguish between conservative and dissipative forces in phase-space evolution; describe how horizon capture, Hawking radiation, Schwinger discharge, and extremal charge shedding govern black hole evolution in the toy model; and explain how superradiance transfers angular momentum from a spinning black hole to a scalar field.</p>

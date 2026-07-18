@@ -2,7 +2,7 @@
 name: Geon
 title: Geon — Interactive Particle Physics Simulator
 description: Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across fifteen browser presets.
-updated: 2026-07-16
+updated: 2026-07-17
 ---
 
 # Geon — Interactive Particle Physics Simulator
@@ -11,15 +11,15 @@ Geon is a real-time N-body simulator that models how particles move under gravit
 
 ## Forces
 
-Geon simulates 11 force types: Newtonian gravity, gravitomagnetism (frame-dragging), Coulomb electrostatics, magnetic (Lorentz) force, Yukawa interaction, Higgs field coupling, axion field coupling, cosmological expansion (Hubble flow), first post-Newtonian correction, spin-orbit coupling, and radiation reaction. Forces are computed pairwise using Barnes-Hut tree acceleration for O(N log N) scaling.
+Geon exposes 11 force and correction families: Newtonian gravity, gravitomagnetism (frame-dragging), Coulomb electrostatics, magnetic (Lorentz) force, Yukawa interaction, Higgs field coupling, axion field coupling, cosmological expansion (Hubble flow), first post-Newtonian correction, spin-orbit coupling, and radiation reaction. Applicable particle and boson interactions can use Barnes-Hut tree acceleration; scalar fields evolve on grids, and external or correction terms run in their own passes.
 
 ## Integration
 
-Particle trajectories are advanced with a Boris integrator, which preserves phase-space volume and handles strong magnetic fields without drift. Relativistic corrections use the 1PN approximation from general relativity.
+Particle trajectories are advanced with a phase-space-volume-preserving Boris rotation and adaptive substeps. Relativistic corrections use a first post-Newtonian approximation rather than a full general-relativistic geodesic solve.
 
 ## Presets
 
-Fifteen curated presets demonstrate specific physical phenomena: Keplerian orbits, electromagnetic confinement, Rutherford scattering, Higgs potential wells, axion halos, Hubble expansion, gravitational wave inspiral, and more. Each preset sets initial conditions and force parameters to illustrate one concept clearly.
+Fifteen curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, and cosmological expansion. Each preset sets initial conditions and force parameters for one compact demonstration.
 
 ## Black Hole Physics
 
@@ -35,7 +35,7 @@ Designed for undergraduate physics education. Students can toggle individual for
 
 ## Technical Details
 
-WebGPU compute shaders handle force summation in parallel. Falls back to Canvas 2D on devices without WebGPU support. All computation runs client-side with no server dependency.
+WebGPU compute shaders handle simulation and instanced rendering when available. Devices without WebGPU switch to the CPU physics backend and Canvas 2D renderer. Simulation state and stepping remain client-side in either mode.
 
 ## Topology Modes
 
@@ -47,7 +47,7 @@ Optional signal delay mode computes forces from delayed source positions rather 
 
 ## Accessibility
 
-Geon supports keyboard navigation for all controls, high-contrast mode via the theme toggle, and ARIA labels on all interactive elements. Simulation parameters are adjustable via labeled sliders and toggles. Known hazards include flashing particle trails and continuous motion simulation.
+Geon provides keyboard shortcuts, light and dark themes, labeled simulation controls, and numerical readouts for conserved quantities and selected particles. The canvas contains continuous motion and optional particle trails; users sensitive to motion can pause, single-step, or choose a lower-particle preset.
 
 ## GPU and CPU Backends
 
