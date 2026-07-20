@@ -4,22 +4,21 @@ Part of the **a9l.im** portfolio. See root `AGENTS.md` for the shared design sys
 
 ## Rules
 
-- Always prefer shared modules over project-specific reimplementations. Check `shared-*.js` files before adding utility code.
+- Always prefer shared modules over project-specific reimplementations. Check the parent `shared/` directory before adding utility code.
 - Never use the phrase "retarded potential(s)" in code, comments, or user-facing text. Use "signal delay" or "finite-speed force propagation" instead.
 
 ## Running Locally
 
 ```bash
-cd path/to/a9lim.github.io && python -m http.server
+cd path/to/a9lim.github.io && npm run build && python -m http.server --directory dist
 ```
 
-Serve from root — shared files load via absolute paths. There is no build step,
-test runner, or linter. Run `node --check` over the JavaScript modules and
+Build from the parent repository root and serve `dist/` — shared files load via absolute paths. The project itself has no compile step, test runner, or linter. Run `node --check` over the JavaScript modules and
 `git diff --check` after documentation or code changes.
 
 ## Overview
 
-Interactive particle physics simulator. Boris integrator, BH tree acceleration, Higgs/Axion scalar fields, WebGPU compute+render backend with CPU fallback, 15 presets across gravity/EM/exotic/cosmological scenarios. Vanilla ES6 modules with no build or package-install step; KaTeX is loaded from the root site's allowed CDN.
+Interactive particle physics simulator. Boris integrator, BH tree acceleration, Higgs/Axion scalar fields, WebGPU compute+render backend with CPU fallback, 15 presets across gravity/EM/exotic/cosmological scenarios. The project is vanilla ES6 modules; KaTeX is loaded from the root site's allowed CDN.
 
 ## Architecture
 

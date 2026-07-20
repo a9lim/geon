@@ -32,7 +32,7 @@ Extract those (color/canvas belong renderer-side) and the engine runs under Node
 - Kepler two-body period and 1PN precession rate vs analytic values
 - Field-deposit normalization: deposit E, field KE rises by exactly E
 
-**Transpiler as parity oracle:** `shared-wgsl-transpile.js` is in the repo,
+**Transpiler as parity oracle:** `lib/wgsl/transpile.js` is in the repo,
 tested, and unwired. Its highest-value use may be compiling `pair-force.wgsl`,
 `radiation.wgsl`, `field-evolve.wgsl` to JS under Node and diffing against the
 CPU path on identical states. Caveat: the CAS tree build and barrier-in-control-

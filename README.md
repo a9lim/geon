@@ -105,11 +105,11 @@ Quick-save and quick-load (localStorage), download as JSON, or upload via file p
 ## Running Locally
 
 ```bash
-cd path/to/a9lim.github.io && python -m http.server
+cd path/to/a9lim.github.io && npm run build && python -m http.server --directory dist
 # -> http://localhost:8000/geon/
 ```
 
-Serve from the repository root, because shared design files load via absolute paths. There is no build or package-install step; reference math loads KaTeX from the configured CDN. ES6 modules require HTTP (not `file://`). Force the CPU backend with `?cpu=1`.
+Build from the parent repository root and serve `dist/`, because shared design files load via absolute paths. The project itself has no compile or package-install step; the parent staging build assembles shared assets; reference math loads KaTeX from the configured CDN. ES6 modules require HTTP (not `file://`). Force the CPU backend with `?cpu=1`.
 
 ## Tech
 
