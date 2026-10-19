@@ -27,6 +27,9 @@ export default class GPUBackend {
         const renderer = new GPURenderer(gpuCanvas, device, physics.buffers);
         await physics.init();
         await renderer.init();
+        // The theme was synced before this async backend existed; adopt it now
+        // (after init, which creates the light/dark pipeline pairs setTheme swaps).
+        renderer.setTheme(sim.renderer.isLight);
 
         const backend = new GPUBackend(device, gpuCanvas, physics, renderer);
         backend.syncFromCPU(sim);

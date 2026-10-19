@@ -46,10 +46,8 @@
     min-width: 0;
 }
 
-/* GPU indicator — italic serif "on GPU" next to title */
+/* GPU indicator — italic "on GPU" next to the title */
 .gpu-indicator {
-    font-family: var(--font-display);
-    font-variation-settings: var(--fvs-prose);
     font-style: italic;
     font-weight: 400;
     color: var(--ext-green);
@@ -59,6 +57,9 @@
     vertical-align: baseline;
 }
 
+/* Mincho has no italic: keep the Japanese badge upright */
+:lang(ja) .gpu-indicator { font-style: normal; }
+
 /* ─── Language Toggle Button ─── */
 /* Text-pill: label shows the destination language in its own script
    (日本語 in EN, EN in JA). Mirrors root-site .lang-toggle. */
@@ -66,18 +67,15 @@
     width: auto;
     min-width: 36px;
     padding: 0 8px;
-    font-family: var(--font-sans);
-    font-variation-settings: var(--fvs-prose);
+    font-family: var(--font-text);
     font-size: var(--font-sm);
-    font-weight: 600;
-    letter-spacing: 0.02em;
+    font-weight: 500;
 }
 
 .lang-btn .lang-label {
     font-family: inherit;
     font-size: inherit;
     font-weight: inherit;
-    letter-spacing: inherit;
 }
 
 .lang-btn:hover { color: var(--text); }
@@ -179,7 +177,6 @@ label {
     font-size: var(--font-base);
     color: var(--text-muted);
     white-space: nowrap;
-    letter-spacing: 0.02em;
 }
 
 #hint-bar.fade-out {

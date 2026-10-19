@@ -89,7 +89,7 @@ Three tabs with full simulation control:
 - **Stats**: energy breakdown (linear KE, angular KE, potential, field, radiated, mass) with conservation drift %, momentum (particle, field, and radiated) with drift %, angular momentum (orbital and spin) with drift %, 11-component per-particle force breakdown
 - **Particle**: selected particle details, phase space plot (r vs v_r, 512-sample ring buffer), effective potential V_eff(r) curve (200 samples, all active forces)
 
-Backend selection is automatic, with a `?cpu=1` query parameter to force CPU. Sim speed, play or pause, step, reset, save, load, theme, and antimatter mode all live on the top toolbar. Overlays (trails, velocity vectors, acceleration vectors, acceleration components, potential field heatmap) and the Barnes-Hut toggle live in the gear-icon settings dropdown.
+Backend selection is automatic, with a `?cpu=1` query parameter to force CPU. Sim speed, play or pause, step, reset, save, load, theme, and antimatter mode all live on the top toolbar; on phone widths, step, save, load, and theme drop off it to keep the panel toggle on screen. Overlays (trails, velocity vectors, acceleration vectors, acceleration components, potential field heatmap) and the Barnes-Hut toggle live in the gear-icon settings dropdown.
 
 ## Analysis Tools
 

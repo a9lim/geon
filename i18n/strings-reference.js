@@ -6,7 +6,7 @@
 // math expressions stay verbatim across en/ja.
 
 const REF_EN = {
-    'ref.gravity.title': 'Newtonian Gravity',
+    'ref.gravity.title': 'Newtonian gravity',
     'ref.gravity.body': `
 <p>Every massive particle attracts every other massive particle. In natural units ($G = c = 1$), gravity is the simplest long-range force — and the architect of all large-scale structure in the universe.</p>
 
@@ -18,7 +18,7 @@ const REF_EN = {
 <p>$$\\mathbf{F} = +\\frac{m_1 m_2}{r^2}\\,\\hat{r}$$</p>
 <p>Always attractive, with $1/r^2$ falloff — a geometric consequence of flux spreading over spherical surfaces. Plummer softening ($r \\to \\sqrt{r^2 + \\epsilon^2}$, $\\epsilon^2 = 64$) prevents divergence at close approach.</p>
 
-<h3>Potential Energy</h3>
+<h3>Potential energy</h3>
 <p>$$V(r) = -\\frac{m_1 m_2}{r}$$</p>
 <p>Negative and unbounded below. Total energy $E = \\text{KE} + V$ determines the orbit type:</p>
 <ul>
@@ -27,19 +27,19 @@ const REF_EN = {
 <li>$E > 0$: hyperbolic flyby</li>
 </ul>
 
-<h3>Kepler Orbits</h3>
+<h3>Kepler orbits</h3>
 <p>A test particle orbiting mass $M$ follows a conic section. For circular orbits:</p>
 <p>$$v_{\\text{circ}} = \\sqrt{\\frac{M}{r}}, \\qquad T = 2\\pi\\sqrt{\\frac{r^3}{M}}$$</p>
 <p>This is Kepler's third law: the orbital period squared is proportional to the semi-major axis cubed. The "Orbit" spawn mode uses this formula to give new particles exactly circular velocity.</p>
 
-<h3>Escape Velocity</h3>
+<h3>Escape velocity</h3>
 <p>$$v_{\\text{esc}} = \\sqrt{\\frac{2M}{r}} = \\sqrt{2}\\,v_{\\text{circ}}$$</p>
 <p>A particle launched at exactly this speed has zero total energy and will coast to infinity, never returning.</p>
 
-<h3>Two-Body Reduction</h3>
+<h3>Two-body reduction</h3>
 <p>Any two gravitating bodies can be reduced to an equivalent one-body problem using the reduced mass $\\mu = m_1 m_2/(m_1+m_2)$. The relative separation traces a Kepler ellipse. In pairwise mode with gravity only, this simulation conserves energy and angular momentum to machine precision.</p>
 
-<h3>Tidal Locking</h3>
+<h3>Tidal locking</h3>
 <p>Tidal locking synchronizes a body's rotation with its orbital period, so it always shows the same face to its companion. The Moon is tidally locked to Earth.</p>
 <p>$$\\tau = -\\text{TIDAL\\_STRENGTH}\\cdot\\frac{C^2\\,R^5}{r^6}\\,(\\omega_{\\text{spin}}-\\omega_{\\text{orbit}})$$</p>
 <p>where the coupling $C = m_{\\text{other}} + q_1 q_2/m$ combines gravitational and electrostatic tidal fields. The $r^{-6}$ dependence makes tidal torque extremely sensitive to distance — halving the separation increases it 64-fold.</p>
@@ -51,7 +51,7 @@ const REF_EN = {
 <p>Equilibrium is $\\omega_{\\text{spin}} = \\omega_{\\text{orbit}}$: tidal lock. The $C^2$ factor includes gravity-gravity, gravity-EM, EM-gravity, and EM-EM cross-terms. Always active when gravity is on (no separate toggle).</p>
 `,
 
-    'ref.coulomb.title': 'Coulomb Force',
+    'ref.coulomb.title': 'Coulomb force',
     'ref.coulomb.body': `
 <p>The electrostatic interaction between charged particles — the force that governs chemistry, electricity, and the structure of every atom.</p>
 
@@ -62,30 +62,30 @@ const REF_EN = {
 <p>$$\\mathbf{F} = -\\frac{q_1 q_2}{r^2}\\,\\hat{r}$$</p>
 <p>Like charges ($q_1 q_2 > 0$) repel; opposite charges ($q_1 q_2 < 0$) attract. Same $1/r^2$ falloff as gravity, but with two crucial differences: charge comes in two signs, and the coupling can be far stronger.</p>
 
-<h3>Potential Energy</h3>
+<h3>Potential energy</h3>
 <p>$$V(r) = +\\frac{q_1 q_2}{r}$$</p>
 <p>Positive for like charges (repulsive barrier), negative for opposite charges (attractive well). An electron-proton system has $V < 0$ at all distances, forming hydrogen-like bound orbits.</p>
 
-<h3>Classical Bound States</h3>
+<h3>Classical bound states</h3>
 <p>With both gravity and Coulomb active, a massive positive nucleus can bind lighter negative charges in stable orbits. The effective potential has a minimum where gravitational + Coulomb attraction balances centrifugal repulsion. These are not quantum atoms, but they capture the essential orbital mechanics.</p>
 
-<h3>Screening &amp; Neutrality</h3>
+<h3>Screening &amp; neutrality</h3>
 <p>Unlike gravity (which only attracts), opposite charges cancel. A system with equal positive and negative charges appears neutral from far away. This is why electromagnetism doesn't dominate at cosmic scales — gravity does, because mass has only one sign.</p>
 `,
 
-    'ref.magnetic.title': 'Magnetic Interactions',
+    'ref.magnetic.title': 'Magnetic interactions',
     'ref.magnetic.body': `
 <p>Magnetism arises from charges in motion. This simulation models two distinct mechanisms: the Lorentz force from translating charges, and dipole-dipole interactions from spinning charges.</p>
 
-<h3>Lorentz Force</h3>
+<h3>Lorentz force</h3>
 <p>$$\\mathbf{F} = q\\,\\mathbf{v}\\times\\mathbf{B}$$</p>
 <p>Always perpendicular to velocity, so it does no work — only deflects. In a uniform field, charges spiral in cyclotron orbits at radius $r_L = mv_\\perp/(qB)$. The Boris integrator handles this rotation exactly, preserving energy through the magnetic gyration.</p>
 
-<h3>Magnetic Dipole–Dipole Interaction</h3>
+<h3>Magnetic dipole–dipole interaction</h3>
 <p>$$\\mathbf{F}_{\\text{dipole}} = +\\frac{3\\mu_1\\mu_2}{r^4}\\,\\hat{r}$$</p>
 <p>Spinning charges act as magnetic dipoles with moment $\\mu = qr^2\\omega/5$ (uniform sphere). The dipole-dipole force is $1/r^4$ (steeper than $1/r^2$ Coulomb), making it dominant only at close range. Aligned dipoles attract; anti-aligned dipoles repel.</p>
 
-<h3>The Sign Convention</h3>
+<h3>The sign convention</h3>
 <p>The simulation uses a <em>positive</em> sign for the dipole-dipole force. This is the opposite of the standard physics convention but matches the gravitomagnetic case below — both forms of magnetism use the same sign, making the GEM analogy clean.</p>
 `,
 
@@ -93,18 +93,18 @@ const REF_EN = {
     'ref.gravitomag.body': `
 <p>General relativity predicts that mass currents create gravitational analogs of magnetic fields. Just as moving charges produce $\\mathbf{B}$, moving masses produce $\\mathbf{B}_g$ — a phenomenon called <b>gravitomagnetism</b> or <b>frame-dragging</b>.</p>
 
-<h3>Frame-Dragging</h3>
+<h3>Frame-dragging</h3>
 <p>A spinning mass drags the surrounding spacetime around with it, like a stirring spoon in honey. Gyroscopes near the Earth precess slightly due to this effect — confirmed by the Gravity Probe B experiment in 2011.</p>
 
-<h3>Gravitomagnetic Lorentz Force</h3>
+<h3>Gravitomagnetic Lorentz force</h3>
 <p>$$\\mathbf{F} = +4m\\,\\mathbf{v}\\times\\mathbf{B}_g$$</p>
 <p>The factor of 4 comes from the linearized Einstein equations, and is twice the EM Lorentz coefficient. As with the magnetic Lorentz force, this is velocity-dependent and does no work directly.</p>
 
-<h3>Gravitomagnetic Dipole Force</h3>
+<h3>Gravitomagnetic dipole force</h3>
 <p>$$\\mathbf{F} = +\\frac{3L_1 L_2}{r^4}\\,\\hat{r}$$</p>
 <p>where $L = 2m r^2\\omega/5$ is the angular momentum of a spinning sphere. Like spins (co-rotating masses) attract — the opposite of EM dipoles, which repel when co-rotating. This is the GEM "sign flip."</p>
 
-<h3>The GEM Analogy</h3>
+<h3>The GEM analogy</h3>
 <table style="width:100%;border-collapse:collapse;margin:12px 0">
 <tr><th style="text-align:left;padding:4px 8px">Electromagnetism</th><th style="text-align:left;padding:4px 8px">Gravitoelectromagnetism</th></tr>
 <tr><td style="padding:4px 8px">Charge $q$</td><td style="padding:4px 8px">Mass $m$</td></tr>
@@ -114,11 +114,11 @@ const REF_EN = {
 </table>
 `,
 
-    'ref.relativity.title': 'Special Relativity',
+    'ref.relativity.title': 'Special relativity',
     'ref.relativity.body': `
 <p>When particles move at appreciable fractions of $c$, Newtonian mechanics breaks down. Special relativity replaces velocity with proper velocity and prevents particles from ever reaching the speed of light.</p>
 
-<h3>Proper Velocity</h3>
+<h3>Proper velocity</h3>
 <p>$$\\mathbf{w} = \\gamma\\mathbf{v}, \\qquad \\gamma = \\frac{1}{\\sqrt{1-v^2}}$$</p>
 <p>Unlike ordinary velocity $\\mathbf{v}$ (bounded by $c$), proper velocity $\\mathbf{w}$ is unbounded above. The simulation uses proper velocity as its primary state variable.</p>
 
@@ -126,14 +126,14 @@ const REF_EN = {
 <p>$$\\mathbf{v} = \\frac{\\mathbf{w}}{\\sqrt{1+w^2}}, \\qquad \\gamma = \\sqrt{1+w^2}$$</p>
 <p>This guarantees $|\\mathbf{v}| < 1$ for any $\\mathbf{w}$ — particles can be infinitely energetic but never reach light speed.</p>
 
-<h3>Relativistic Energy</h3>
+<h3>Relativistic energy</h3>
 <p>$$E = \\gamma m, \\qquad \\text{KE} = (\\gamma - 1)m$$</p>
 <p>At low speeds, $\\text{KE} \\approx \\frac{1}{2}mv^2$ (Newtonian limit). At high speeds, $\\text{KE} \\to \\infty$ as $v \\to c$ — this is why no finite force can accelerate a particle to light speed.</p>
 
-<h3>Signal Delay</h3>
+<h3>Signal delay</h3>
 <p>With relativity enabled, forces propagate at finite speed: a particle responds to where the source <em>was</em> when its signal was emitted, not where it <em>is</em> now. The simulation searches each particle's history to find the emission event satisfying $|\\mathbf{r}_i(t) - \\mathbf{r}_j(t')| = c(t-t')$. This naturally produces phenomena like aberration and the gravitational/electromagnetic Doppler effect.</p>
 
-<h3>Mass-Energy Equivalence</h3>
+<h3>Mass-energy equivalence</h3>
 <p>The energy of a stationary particle is $E_0 = m$ (with $c=1$). All forms of energy contribute to gravity through the stress-energy tensor — radiated photons gravitate, kinetic energy gravitates, and field energy gravitates. The simulation tracks all these contributions to total energy conservation.</p>
 `,
 
@@ -141,37 +141,37 @@ const REF_EN = {
     'ref.radiation.body': `
 <p>Accelerating charges radiate electromagnetic waves; orbiting masses radiate gravitational waves. Both carry energy and momentum out of the system, causing orbits to decay. Three radiation channels are modeled.</p>
 
-<h3>Larmor Dipole Radiation</h3>
+<h3>Larmor dipole radiation</h3>
 <p>Requires Coulomb. An accelerating charge radiates power:</p>
 <p>$$P = \\frac{2q^2}{3}a^2$$</p>
 <p>The reaction on the emitter is the Landau-Lifshitz force, a physically consistent alternative to the Abraham-Lorentz force that avoids runaway solutions:</p>
 <p>$$\\mathbf{F}_{\\text{rad}} = \\tau\\left[\\frac{\\dot{\\mathbf{F}}}{\\gamma^3} - \\frac{\\mathbf{v}F^2}{m\\gamma^2} + \\frac{\\mathbf{F}(\\mathbf{v}\\cdot\\mathbf{F})}{m\\gamma^4}\\right]$$</p>
 <p>where $\\tau = 2q^2/(3m)$ is the radiation timescale. The force is clamped to 50% of the external force for numerical stability. Emitted photons follow a dipole angular distribution with relativistic aberration beaming.</p>
 
-<h3>EM Quadrupole Radiation</h3>
+<h3>EM quadrupole radiation</h3>
 <p>Requires Coulomb. A system with a time-varying charge quadrupole moment radiates:</p>
 <p>$$P_{\\text{EM}} = \\frac{1}{180}\\left|\\dddot{Q}_{ij}\\right|^2, \\qquad Q_{ij} = \\sum_k q_k\\, x_i^{(k)} x_j^{(k)}$$</p>
 <p>This is the next multipole order above dipole, significant for binary charged systems. Photon emission uses a TT-projected angular pattern via rejection sampling.</p>
 
-<h3>Gravitational Wave Radiation</h3>
+<h3>Gravitational wave radiation</h3>
 <p>Requires Gravity. The mass quadrupole formula — the leading-order source of gravitational waves:</p>
 <p>$$P_{\\text{GW}} = \\frac{1}{5}\\left|\\dddot{I}_{ij}\\right|^2, \\qquad I_{ij} = \\sum_k m_k\\left(x_i^{(k)} x_j^{(k)} - \\frac{\\delta_{ij}}{3}r_k^2\\right)$$</p>
 <p>For a circular binary, this reduces to the Peters formula:</p>
 <p>$$P_{\\text{GW}} = \\frac{32}{5}\\frac{m_1^2 m_2^2(m_1+m_2)}{r^5}$$</p>
 <p>The steep $1/r^5$ dependence means power grows dramatically as the orbit shrinks, creating a runaway inspiral. This is exactly what LIGO detects: the final moments of a billion-year inspiral, as the frequency chirps up to merger.</p>
 
-<h3>Why No Gravitational Dipole?</h3>
+<h3>Why no gravitational dipole?</h3>
 <p>The gravitational dipole moment $\\sum m_i\\mathbf{x}_i$ is the center of mass, which moves at constant velocity by momentum conservation. No time-varying dipole means no dipole radiation — gravitational waves require at least the quadrupole, making them intrinsically weaker than electromagnetic waves.</p>
 
-<h3>Energy Extraction</h3>
+<h3>Energy extraction</h3>
 <p>Radiated energy is extracted from the emitter's kinetic energy by scaling the tangential velocity. Emitted photons (yellow for EM, red for gravitons) carry both energy and momentum, tracked by the simulation for conservation accounting.</p>
 `,
 
-    'ref.onepn.title': '1PN Corrections',
+    'ref.onepn.title': '1PN corrections',
     'ref.onepn.body': `
 <p>First post-Newtonian corrections are $O(v^2/c^2)$ terms that appear when expanding general relativity (or its EM analog) beyond leading order. They capture the first effects of finite light speed on the equations of motion.</p>
 
-<h3>Einstein-Infeld-Hoffmann (EIH) — Gravitational Sector</h3>
+<h3>Einstein-Infeld-Hoffmann (EIH) — gravitational sector</h3>
 <p>Requires Gravitomagnetic. The EIH equations of motion at 1PN produce the famous perihelion precession:</p>
 <p>$$\\Delta\\phi = \\frac{6\\pi M}{a(1-e^2)} \\text{ rad/orbit}$$</p>
 <p>For Mercury, this gives 43 arcseconds per century — the anomaly that led Einstein to general relativity. In this simulation, the precession appears as a slowly rotating ellipse.</p>
@@ -179,38 +179,38 @@ const REF_EN = {
 <p>$$\\mathcal{L}_{\\text{EIH}} = \\frac{m_1 m_2}{2r}\\!\\left[3(v_1^2\\!+\\!v_2^2) - 7\\,\\mathbf{v}_1\\!\\cdot\\!\\mathbf{v}_2 - (\\mathbf{v}_1\\!\\cdot\\!\\hat{r})(\\mathbf{v}_2\\!\\cdot\\!\\hat{r})\\right] + \\frac{m_1 m_2(m_1\\!+\\!m_2)}{2r^2}$$</p>
 <p>The resulting force is decomposed into a gravitomagnetic Lorentz piece (handled by the Boris rotation via $B_{gz}$) and a direct position-and-velocity-dependent remainder accumulated into the 1PN display vector.</p>
 
-<h3>Darwin EM — Electromagnetic Sector</h3>
+<h3>Darwin EM — electromagnetic sector</h3>
 <p>Requires Magnetic. The Darwin Lagrangian for two charges at $O(v^2/c^2)$:</p>
 <p>$$\\mathcal{L}_{\\text{Darwin}} = -\\frac{q_1 q_2}{2r}\\!\\left[(\\mathbf{v}_1 \\!\\cdot\\! \\mathbf{v}_2) + (\\mathbf{v}_1 \\!\\cdot\\! \\hat{r})(\\mathbf{v}_2 \\!\\cdot\\! \\hat{r})\\right]$$</p>
 <p>This adds velocity-dependent corrections beyond Coulomb + Lorentz. It modifies atomic electron orbits and is the classical counterpart to the Breit interaction in quantum mechanics.</p>
 
-<h3>Bazanski Cross-Term — Mixed Gravity-EM Sector</h3>
+<h3>Bazanski cross-term — mixed gravity-EM sector</h3>
 <p>Requires both Gravitomagnetic and Magnetic. A mixed gravity-EM interaction Lagrangian at 1PN:</p>
 <p>$$\\mathcal{L}_{\\text{Baz}} = -\\frac{q_1 q_2(m_1+m_2) - (q_1^2 m_2 + q_2^2 m_1)}{2r^2}$$</p>
 <p>Unlike the EIH and Darwin terms, this Lagrangian has no velocity dependence — it is purely a position-dependent $1/r^2$ potential correction. It vanishes for identical particles (when $q_1 = q_2$ and $m_1 = m_2$) and represents the gravitational correction to electromagnetic self-energy and vice versa.</p>
 
-<h3>Scalar Breit — Yukawa Sector</h3>
+<h3>Scalar Breit — Yukawa sector</h3>
 <p>Requires Yukawa. The $O(v^2/c^2)$ relativistic correction for massive scalar (spin-0) boson exchange, derived from the Breit equation:</p>
 <p>$$\\mathcal{L}_{\\text{Breit}} = \\frac{g^2 m_1 m_2\\,e^{-\\mu r}}{2r}\\left[\\mathbf{v}_1\\!\\cdot\\!\\mathbf{v}_2 + (\\hat{r}\\!\\cdot\\!\\mathbf{v}_1)(\\hat{r}\\!\\cdot\\!\\mathbf{v}_2)(1+\\mu r)\\right]$$</p>
 <p>Because this interaction is bilinear in velocities, the Legendre transform gives $H = L$ — the Hamiltonian and Lagrangian are numerically identical. This is positive (repulsive), weakening the Yukawa attraction for fast-moving particles. The $(1+\\mu r)$ factor on the radial-velocity term comes from the massive propagator. Unlike EM (spin-1) exchange, scalar exchange produces no magnetic-type force — there is no Boris rotation component. All corrections are radial and velocity-dependent, with both radial and tangential force components accumulated into the 1PN display vector.</p>
 
-<h3>Integration Scheme</h3>
+<h3>Integration scheme</h3>
 <p>All four sectors use velocity-Verlet: the 1PN force is computed before and after the drift step, and the average is applied, giving second-order accuracy. This is necessary because 1PN forces depend on both position and velocity.</p>
 `,
 
-    'ref.blackhole.title': 'Black Hole Mode',
+    'ref.blackhole.title': 'Black hole mode',
     'ref.blackhole.body': `
 <p>When enabled, every particle is treated as a Kerr-Newman black hole — a rotating, charged singularity surrounded by an event horizon. This is the most general stationary black hole solution in general relativity.</p>
 
-<h3>The No-Hair Theorem</h3>
+<h3>The no-hair theorem</h3>
 <p>A black hole is completely characterized by just three numbers: mass $M$, angular momentum $J$, and charge $Q$. All other information about the matter that formed it is lost behind the horizon. This theorem is the namesake of this simulation.</p>
 
-<h3>Kerr-Newman Horizon</h3>
+<h3>Kerr-Newman horizon</h3>
 <p>The outer event horizon radius:</p>
 <p>$$r_+ = M + \\sqrt{M^2 - a^2 - Q^2}$$</p>
 <p>where $a = J/M$ is the spin parameter. The horizon exists only when $M^2 \\geq a^2 + Q^2$. In Geon's toy dynamics, over-extremal inputs shed same-sign leptons in charge quanta until they fit the bound; the radius is clamped to the effective extremal value $r_+ = M$ as a numerical backstop while that correction occurs.</p>
 
-<h3>Pseudo-Potential and Capture</h3>
+<h3>Pseudo-potential and capture</h3>
 <p>For near-horizon orbits, Geon replaces Newtonian black-hole gravity with a Paczynski-Wiita-style radial term, so the force and potential steepen as a particle approaches the horizon. This gives interactive plunge and capture behavior without solving the full Kerr-Newman geodesic equation. When one particle's center crosses another black hole's horizon, the simulator swallows it and transfers lab-frame four-momentum, charge, and spin/angular momentum into the captor.</p>
 
 <h3>Ergosphere</h3>
@@ -218,17 +218,17 @@ const REF_EN = {
 <p>$$r_{\\text{ergo}} = M + \\sqrt{M^2 - a^2}$$</p>
 <p>Inside the ergosphere, spacetime is dragged so strongly that nothing can remain stationary — everything must co-rotate with the black hole. The Penrose process can extract rotational energy by exploiting this region, converting spin energy to kinetic energy of escaping particles.</p>
 
-<h3>Hawking Radiation</h3>
+<h3>Hawking radiation</h3>
 <p>Quantum effects near the horizon cause black holes to radiate thermally. The temperature depends on the surface gravity:</p>
 <p>$$\\kappa = \\frac{\\sqrt{M^2 - a^2 - Q^2}}{2M\\,r_+}, \\qquad T = \\frac{\\kappa}{2\\pi}$$</p>
 <p>Radiated power follows the Stefan-Boltzmann law:</p>
 <p>$$P = \\sigma T^4 A, \\qquad \\sigma = \\frac{\\pi^2}{60}, \\qquad A = 4\\pi(r_+^2+a^2)$$</p>
 <p>Smaller black holes are hotter and radiate faster, creating a runaway: mass decreases $\\to$ temperature rises $\\to$ radiation intensifies $\\to$ evaporation. The final instant produces a burst of photons.</p>
 
-<h3>Extremal Limit</h3>
+<h3>Extremal limit</h3>
 <p>When $M^2 = a^2 + Q^2$, the inner and outer horizons merge, surface gravity vanishes, and the temperature drops to zero — the black hole stops radiating. Extremal black holes are the most compact objects possible for their mass and charge, saturating the cosmic censorship bound. If a toy state crosses the bound, Geon emits same-sign leptons in $e$ units until the discrete charge state returns within the allowed region, with a hard clamp protecting the remaining floating-point edge cases.</p>
 
-<h3>Schwinger Discharge</h3>
+<h3>Schwinger discharge</h3>
 <p>A sufficiently charged black hole generates an electric field strong enough to rip electron-positron pairs from the vacuum — the <b>Schwinger effect</b>. The rate per unit time for a Kerr-Newman black hole:</p>
 <p>$$\\Gamma = \\frac{e^2 Q^2}{\\pi^2 \\Sigma}\\,\\exp\\!\\left(-\\frac{\\pi\\, E_{\\text{cr}}\\,\\Sigma}{|Q|}\\right), \\qquad \\Sigma = r_+^2 + a^2$$</p>
 <p>where $e$ is the elementary charge, $E_{\\text{cr}} = m_e^2/e$ is the critical Schwinger field, and $\\Sigma$ is the Kerr-Newman horizon area factor that encodes spin corrections. The exponential suppression means the rate is negligible until $E \\approx E_{\\text{cr}}$ (threshold at $0.5\\,E_{\\text{cr}}$).</p>
@@ -237,16 +237,16 @@ const REF_EN = {
 <p>Each discharge event reduces the black hole's charge by one elementary unit and its mass by $m_e$. The same-sign lepton escapes; the opposite-sign partner falls back in. Over many events, this drives a charged black hole toward neutrality. This rate-based discharge is separate from the extremal-bound shedding above, which only activates for already overcharged toy states.</p>
 `,
 
-    'ref.kugelblitz.title': 'Kugelblitz Collapse',
+    'ref.kugelblitz.title': 'Kugelblitz collapse',
     'ref.kugelblitz.body': `
 <p>A <b>kugelblitz</b> is a concentration of radiation energy so dense that it undergoes gravitational collapse — forming a massive object from pure energy. This is a direct consequence of mass-energy equivalence: photons gravitate, and enough photons in a small enough region can trap themselves.</p>
 
-<h3>Hoop Conjecture</h3>
+<h3>Hoop conjecture</h3>
 <p>The threshold for collapse follows Thorne's hoop conjecture. In natural units ($G = c = 1$), a region of characteristic size $r$ containing total energy $E$ collapses when:</p>
 <p>$$E > \\frac{r}{2}$$</p>
 <p>The simulation detects this by walking the boson Barnes-Hut tree after aggregation. Each tree node stores the total source energy and bounding box size of its boson population. The smallest (deepest) node satisfying the threshold collapses first, preventing the entire boson population from collapsing when only a dense core qualifies.</p>
 
-<h3>Collapse Resolution</h3>
+<h3>Collapse resolution</h3>
 <p>All photons, pions, and leptons within the collapsing tree node are consumed and replaced by a single massive particle at the energy-weighted center of mass. The spawned particle inherits:</p>
 <ul>
 <li><b>Mass</b> = total boson energy (photon energy + relativistic $\\gamma m$ for massive bosons)</li>
@@ -260,29 +260,29 @@ const REF_EN = {
 <p>Kugelblitz collapse is active whenever both <b>Gravity</b> and <b>Boson Interaction</b> are enabled. It requires no separate toggle.</p>
 `,
 
-    'ref.spinorbit.title': 'Spin-Orbit Coupling',
+    'ref.spinorbit.title': 'Spin-orbit coupling',
     'ref.spinorbit.body': `
 <p>Spin-orbit coupling transfers energy and momentum between a particle's translational motion and its intrinsic rotation. This occurs whenever a spinning particle moves through a non-uniform field.</p>
 
-<h3>Stern-Gerlach Force (Electromagnetic)</h3>
+<h3>Stern-Gerlach force (electromagnetic)</h3>
 <p>A magnetic dipole in a non-uniform magnetic field feels a gradient force:</p>
 <p>$$\\mathbf{F} = \\mu\\,\\nabla B_z$$</p>
 <p>In the original 1922 experiment, Stern and Gerlach sent silver atoms through an inhomogeneous magnetic field and observed the beam split into discrete components — the first direct evidence of quantized angular momentum. This simulation shows the classical analog: spinning charged particles deflect toward or away from field concentrations depending on the sign of their spin.</p>
 
-<h3>Mathisson-Papapetrou Force (Gravitational)</h3>
+<h3>Mathisson-Papapetrou force (gravitational)</h3>
 <p>$$\\mathbf{F} = -L\\,\\nabla B_{gz}$$</p>
 <p>The opposite sign (the GEM sign flip) means spinning masses are deflected in the opposite direction from spinning charges in equivalent field geometries. This force produces subtle orbital corrections for spinning bodies around massive objects, such as the geodetic precession of pulsars.</p>
 
-<h3>Spin-Orbit Energy Transfer</h3>
+<h3>Spin-orbit energy transfer</h3>
 <p>Moving through a field gradient transfers energy between orbital kinetic energy and spin:</p>
 <p>$$\\frac{dE}{dt} = -\\mu(\\mathbf{v}\\cdot\\nabla B_z) \\quad \\text{(EM)}, \\qquad \\frac{dE}{dt} = -L(\\mathbf{v}\\cdot\\nabla B_{gz}) \\quad \\text{(GM)}$$</p>
 <p>This can speed up or slow down a particle's spin while adjusting its orbital energy to compensate, conserving total energy.</p>
 
-<h3>Astrophysical Significance</h3>
+<h3>Astrophysical significance</h3>
 <p>Spin-orbit coupling is crucial in binary pulsar systems, where rapidly spinning neutron stars precess due to gravitational spin-orbit effects (geodetic precession). Hulse-Taylor binary pulsar measurements of these effects provided some of the strongest early confirmations of general relativity.</p>
 `,
 
-    'ref.yukawa.title': 'Yukawa Potential',
+    'ref.yukawa.title': 'Yukawa potential',
     'ref.yukawa.body': `
 <p>Proposed by Hideki Yukawa in 1935 to explain the strong nuclear force binding protons and neutrons inside atomic nuclei. His key insight: if the force is mediated by a massive particle, the potential must have an exponential cutoff.</p>
 
@@ -297,7 +297,7 @@ const REF_EN = {
 <p>$$\\mathbf{F} = -g^2 m_1 m_2\\,\\frac{e^{-\\mu r}}{r^2}(1+\\mu r)\\,\\hat{r}$$</p>
 <p>The $(1+\\mu r)$ factor comes from differentiating $e^{-\\mu r}/r$. At short range ($r \\ll 1/\\mu$), the exponential is approximately 1 and the force looks like gravity. At long range ($r \\gg 1/\\mu$), it vanishes exponentially.</p>
 
-<h3>Physical Interpretation</h3>
+<h3>Physical interpretation</h3>
 <p>In quantum field theory, every force is mediated by a virtual particle. The mediator's mass $m$ determines the range through the uncertainty principle: a virtual particle can exist for time $\\Delta t \\sim \\hbar/(mc^2)$, traveling at most $c\\Delta t \\sim \\hbar/(mc) = 1/m$ (in natural units). This is the Compton wavelength.</p>
 <ul>
 <li><b>Massless mediator</b> ($\\mu = 0$): infinite range $\\to$ recovers $1/r$ potential (gravity, Coulomb)</li>
@@ -305,38 +305,38 @@ const REF_EN = {
 </ul>
 <p>The pion, with mass $\\sim 140$ MeV/$c^2$, gives a range of $\\sim 1.4$ fm, matching the observed range of nuclear binding. Yukawa predicted the pion's existence this way — it was discovered experimentally in 1947, earning him the Nobel Prize.</p>
 
-<h3>Scalar Breit Correction</h3>
+<h3>Scalar Breit correction</h3>
 <p>When 1PN corrections are enabled, the Yukawa force receives $O(v^2/c^2)$ relativistic corrections from the Breit equation for massive scalar boson exchange. The correction Lagrangian is:</p>
 <p>$$\\delta\\mathcal{L} = \\frac{g^2 m_1 m_2\\,e^{-\\mu r}}{2r}\\left[\\mathbf{v}_1\\!\\cdot\\!\\mathbf{v}_2 + (\\hat{r}\\!\\cdot\\!\\mathbf{v}_1)(\\hat{r}\\!\\cdot\\!\\mathbf{v}_2)(1+\\mu r)\\right]$$</p>
 <p>Because this is bilinear in velocities, $H = L$ (the Legendre transform preserves the expression). This is positive (repulsive), weakening the attraction for fast-moving particles. Unlike EM or gravity, scalar (spin-0) exchange produces no magnetic-type force — all corrections are radial and velocity-dependent. The $(1+\\mu r)$ factor on the radial-velocity term comes from the massive propagator.</p>
 <p>The resulting force has both radial and tangential components, accumulated into the 1PN display vector. A velocity-Verlet correction ensures accuracy for these velocity-dependent terms.</p>
 
-<h3>Beyond Nuclear Physics</h3>
+<h3>Beyond nuclear physics</h3>
 <p>The Yukawa form appears throughout physics: Debye screening in plasmas, screened Coulomb potentials in metals, and hypothetical fifth forces in modified gravity theories. Any massive scalar or vector boson exchange produces this characteristic exponential envelope.</p>
 `,
 
-    'ref.axion.title': 'Axion-Like Scalar Field',
+    'ref.axion.title': 'Axion-like scalar field',
     'ref.axion.body': `
 <p>The axion is a hypothetical particle originally proposed to solve the strong CP problem in quantum chromodynamics — the puzzle of why the strong force conserves CP symmetry despite having no reason to. It has since become a leading dark matter candidate.</p>
 
-<h3>The Dynamical Field</h3>
+<h3>The dynamical field</h3>
 <p>The axion field $a(\\mathbf{x},t)$ lives on a 64×64 grid (CPU) or 128×128 grid (GPU), governed by the Klein-Gordon equation with a quadratic potential:</p>
 <p>$$\\frac{\\partial^2 a}{\\partial t^2} = \\nabla^2 a - m_a^2\\,a - \\gamma\\dot{a} + \\text{source}$$</p>
 <p>The potential $V(a) = \\frac{1}{2}m_a^2 a^2$ has its minimum at $a=0$ — unlike the Higgs, there is no symmetry breaking. The field oscillates around zero with frequency $m_a$, exactly as cosmological axion dark matter does. Damping $g\\,m_a\\dot{a}$ gives $Q = 1/g$, so the resonant buildup exactly compensates the coupling strength ($g \\cdot Q = 1$). In nature, the axion oscillation is essentially undamped (cosmological damping comes only from Hubble friction $3H\\dot{a}$).</p>
 
-<h3>Scalar Coupling to Electromagnetism</h3>
+<h3>Scalar coupling to electromagnetism</h3>
 <p>The QCD axion's pseudoscalar coupling $a\\,F_{\\mu\\nu}\\tilde{F}^{\\mu\\nu} \\propto a\\,\\mathbf{E}\\cdot\\mathbf{B}$ vanishes identically in 2D, where $\\mathbf{E}$ lies in the plane and $\\mathbf{B}$ is perpendicular. Instead, this simulation uses the <em>scalar</em> coupling to the EM field invariant $F_{\\mu\\nu}F^{\\mu\\nu}$, which is non-zero in 2D and is physically motivated for axion-like particles (ALPs):</p>
 <p>$$\\mathcal{L}_{\\text{int}} = -\\tfrac{1}{4}\\bigl(1 + g\\,a\\bigr)\\,F_{\\mu\\nu}F^{\\mu\\nu}$$</p>
 <p>This makes the fine structure constant position-dependent:</p>
 <p>$$\\alpha_{\\text{eff}}(\\mathbf{x}) = \\alpha\\left(1 + g\\,a(\\mathbf{x})\\right)$$</p>
 <p>All electromagnetic forces — Coulomb, magnetic dipole, Biot-Savart — use the <em>local</em> coupling evaluated at each particle's position. Spatial variation in the field creates regions of stronger and weaker EM interaction.</p>
 
-<h3>Source and Gradient Force (EM)</h3>
+<h3>Source and gradient force (EM)</h3>
 <p>From the $aF^2$ vertex, the axion field equation acquires a source proportional to the local EM field energy. For point charges, the dominant contribution is the Coulomb self-energy ($\\propto q^2$), which is what particles deposit via PQS (cubic B-spline) interpolation. The gradient force arises from the position-dependence of this self-energy in the axion background:</p>
 <p>$$\\text{source}_{\\text{EM}} = g\\,q^2, \\qquad \\mathbf{F}_{\\text{EM}} = +g\\,q^2\\,\\nabla a$$</p>
 <p>The coupling $g = 0.05$ compensates for the field's high quality factor ($Q = 1/g = 20$); in nature, $g \\sim \\alpha/f_a$ is fantastically small.</p>
 
-<h3>Peccei–Quinn Mechanism (Yukawa Coupling)</h3>
+<h3>Peccei–Quinn mechanism (Yukawa coupling)</h3>
 <p>When the Yukawa potential is also enabled, the axion field additionally couples to the strong sector via the Peccei–Quinn mechanism. The interaction Lagrangian is the pseudoscalar analog of the $aF^2$ EM coupling:</p>
 <p>$$\\mathcal{L}_{\\text{PQ}} = \\frac{a}{f_a}\\,\\frac{g_s^2}{32\\pi^2}\\,G_{\\mu\\nu}^a\\tilde{G}^{a\\mu\\nu}$$</p>
 <p>In QCD this couples the axion to the gluon topological charge density $G\\tilde{G}$. In this simulation, the strong sector is modeled by the Yukawa potential, so the coupling acts on the Yukawa interaction strength instead. Unlike the scalar EM coupling (same for matter and antimatter), this is a <em>pseudoscalar</em> coupling that flips sign under CP conjugation — the key signature that distinguishes matter from antimatter:</p>
@@ -345,7 +345,7 @@ const REF_EN = {
 <p>$$g^2_{\\text{eff}} = g^2\\left(1 + ga\\right) \\text{ (matter)}, \\qquad g^2\\left(1 - ga\\right) \\text{ (antimatter)}$$</p>
 <p>At the vacuum $a = 0$, both are identical — CP is conserved. This is the Peccei–Quinn solution to the strong CP problem: the axion field dynamically relaxes to zero, eliminating the CP-violating parameter $\\theta$. When the field is displaced from vacuum (by particle sources, field excitations, or initial conditions), matter and antimatter experience different nuclear binding strengths.</p>
 
-<h3>Detection Experiments</h3>
+<h3>Detection experiments</h3>
 <p>Several major experiments search for axion-photon conversion:</p>
 <ul>
 <li><b>ADMX</b>: a resonant microwave cavity that converts dark matter axions to photons in a strong magnetic field</li>
@@ -353,15 +353,15 @@ const REF_EN = {
 <li><b>CASPEr</b>: looks for oscillating nuclear spin precession driven by axion-nucleon interaction</li>
 </ul>
 
-<h3>Field Visualization</h3>
+<h3>Field visualization</h3>
 <p>The field overlay shows $a > 0$ in indigo and $a < 0$ in yellow, with opacity proportional to field amplitude. Watch how particles source field excitations that propagate outward, oscillating at frequency $m_a$. With Coulomb on, the field modulates local EM coupling. With Yukawa on, the Peccei–Quinn coupling creates CP-violating asymmetry between matter and antimatter.</p>
 `,
 
-    'ref.higgs.title': 'Higgs Scalar Field',
+    'ref.higgs.title': 'Higgs scalar field',
     'ref.higgs.body': `
 <p>The Higgs mechanism is how elementary particles acquire mass. It is the only fundamental scalar field in the Standard Model, confirmed by the discovery of the Higgs boson at CERN in 2012 (mass 125 GeV/$c^2$).</p>
 
-<h3>Mexican Hat Potential</h3>
+<h3>Mexican hat potential</h3>
 <p>$$V(\\phi) = -\\frac{1}{2}\\mu^2\\phi^2 + \\frac{1}{4}\\lambda\\phi^4$$</p>
 <p>This potential has a local maximum at $\\phi = 0$ and a ring of degenerate minima at the vacuum expectation value (VEV):</p>
 <p>$$v = \\frac{\\mu}{\\sqrt{\\lambda}}$$</p>
@@ -372,47 +372,47 @@ const REF_EN = {
 <p>$$\\mathcal{L} = \\frac{1}{2}\\dot{\\phi}^2 - \\frac{1}{2}|\\nabla\\phi|^2 + \\frac{1}{2}\\mu^2\\phi^2 - \\frac{1}{4}\\lambda\\phi^4$$</p>
 <p>Small excitations around the VEV ($\\phi = v + h$) propagate as the Higgs boson, with mass $m_H = \\mu\\sqrt{2}$.</p>
 
-<h3>Mass Generation</h3>
+<h3>Mass generation</h3>
 <p>Particles couple to the field via Yukawa-type terms. Their effective mass depends on the local field value:</p>
 <p>$$m_{\\text{eff}} = m_0\\cdot|\\phi(\\mathbf{x})|$$</p>
 <p>where $m_0$ is the bare coupling strength. When $\\phi = v = 1$ (the vacuum), particles have their full mass. When $\\phi \\to 0$ (symmetry restored), particles become effectively massless — they lose all inertia.</p>
 
-<h3>Gradient Force</h3>
+<h3>Gradient force</h3>
 <p>Particles feel a force toward regions of higher field:</p>
 <p>$$\\mathbf{F} = +g\\,m_0\\,\\nabla\\phi$$</p>
 <p>This is the classical analog of the Higgs mechanism: particles are attracted toward regions of enhanced $\\phi$ sourced by other particles, producing an attractive scalar Yukawa interaction.</p>
 
-<h3>Field Equation</h3>
+<h3>Field equation</h3>
 <p>$$\\ddot{\\phi} = \\nabla^2\\phi + \\mu^2\\phi - \\lambda\\phi^3 + \\rho_{\\text{source}} - 2m_H\\dot{\\phi}$$</p>
 <p>The source term $\\rho$ comes from particle deposition (cubic B-spline interpolation), and the damping term $2m_H\\dot{\\phi}$ provides critical damping. The field is evolved via Störmer-Verlet (kick-drift-kick).</p>
 
-<h3>Electroweak Phase Transition</h3>
+<h3>Electroweak phase transition</h3>
 <p>At high temperatures, thermal corrections modify the effective potential:</p>
 <p>$$\\mu^2_{\\text{eff}} = \\mu^2 - T^2_{\\text{local}}$$</p>
 <p>When $T^2 > \\mu^2$, the minimum at $\\phi = v$ disappears — the only equilibrium is $\\phi = 0$. The symmetry is restored and particles lose their mass. This models the electroweak phase transition that occurred $\\sim 10^{-12}$ seconds after the Big Bang, when the universe cooled below $\\sim 160$ GeV.</p>
 
-<h3>Field Energy</h3>
+<h3>Field energy</h3>
 <p>$$E = \\int\\!\\left(\\frac{1}{2}\\dot{\\phi}^2 + \\frac{1}{2}|\\nabla\\phi|^2 + V(\\phi) - V(v)\\right)dA$$</p>
 <p>The vacuum energy $V(v)$ is subtracted so the ground state carries zero field energy.</p>
 
-<h3>The Mass Slider</h3>
+<h3>The mass slider</h3>
 <p>Controls $m_H$ (range 0.25–0.75). Smaller $m_H$ means a shallower potential well, longer interaction range ($\\sim 1/m_H$), and weaker restoring force — easier to displace from the VEV and trigger phase transitions.</p>
 `,
 
-    'ref.expansion.title': 'Cosmological Expansion',
+    'ref.expansion.title': 'Cosmological expansion',
     'ref.expansion.body': `
 <p>The universe is expanding: distant galaxies recede from us at speeds proportional to their distance. This is Hubble's law, the observational cornerstone of modern cosmology.</p>
 
-<h3>Hubble Flow</h3>
+<h3>Hubble flow</h3>
 <p>$$\\mathbf{v}_H = H\\cdot\\mathbf{r}$$</p>
 <p>where $H$ is the Hubble parameter and $\\mathbf{r}$ is measured from the domain center. Every particle acquires an outward drift proportional to its distance. This is not a force — it is the stretching of space itself.</p>
 
-<h3>Hubble Drag (Cosmological Redshift)</h3>
+<h3>Hubble drag (cosmological redshift)</h3>
 <p>Peculiar velocities (motion relative to the Hubble flow) redshift over time:</p>
 <p>$$\\mathbf{v}_{\\text{pec}} \\to \\mathbf{v}_{\\text{pec}}(1-H\\,dt)$$</p>
 <p>A photon emitted by a distant galaxy arrives with a longer wavelength because space expanded while it was in transit. The same effect decelerates particles that are not bound together.</p>
 
-<h3>Bound vs. Unbound Systems</h3>
+<h3>Bound vs. unbound systems</h3>
 <p>The key physical result: gravitationally bound systems resist expansion. A binary orbit where the binding energy exceeds the Hubble kinetic energy stays together, while unbound particles are swept apart.</p>
 <p>This is exactly how large-scale cosmic structure forms — dense regions collapse under gravity while the expanding background carries diffuse matter apart, creating a cosmic web of galaxies, filaments, and voids.</p>
 
@@ -420,21 +420,21 @@ const REF_EN = {
 <p>This implementation uses a constant $H$ (de Sitter expansion). The real universe has $H(t)$ that evolves with matter, radiation, and dark energy content. The simulation locks boundary mode to "despawn" when expansion is active, since periodic boundaries would conflict with the outward flow.</p>
 `,
 
-    'ref.disintegration.title': 'Disintegration & Roche Limit',
+    'ref.disintegration.title': 'Disintegration & Roche limit',
     'ref.disintegration.body': `
 <p>A body approaching a more massive companion can be torn apart by tidal forces when the differential gravity across its diameter exceeds its own self-gravity. The critical distance at which this occurs is the Roche limit.</p>
 
-<h3>Disintegration Criterion</h3>
+<h3>Disintegration criterion</h3>
 <p>A particle fragments when combined disruptive stresses exceed self-binding:</p>
 <p>$$\\underbrace{\\frac{M_{\\text{other}}\\cdot R}{d^3}}_{\\text{tidal}} + \\underbrace{\\omega^2 R}_{\\text{centrifugal}} + \\underbrace{\\frac{q^2}{4R^2}}_{\\text{Coulomb self-repulsion}} > \\underbrace{\\frac{m}{R^2}}_{\\text{self-gravity}}$$</p>
 <p>Each term represents a different mechanism trying to tear the particle apart, balanced against the gravitational binding that holds it together.</p>
 
-<h3>Roche Lobe Overflow</h3>
+<h3>Roche lobe overflow</h3>
 <p>Before catastrophic disruption, a particle can gradually transfer mass to its companion through the <em>Roche lobe</em> — the teardrop-shaped region around each body where its own gravity dominates. The lobe radius (Eggleton formula):</p>
 <p>$$r_R \\approx 0.462\\,d\\left(\\frac{m}{m+M}\\right)^{1/3}$$</p>
 <p>When a particle's radius exceeds $r_R$, surface material feels a stronger pull toward the companion and flows through the inner Lagrange point (L1) at a rate proportional to the overflow.</p>
 
-<h3>Astrophysical Context</h3>
+<h3>Astrophysical context</h3>
 <p>Roche lobe overflow powers some of the most dramatic phenomena in astrophysics:</p>
 <ul>
 <li><b>Cataclysmic variables</b>: a white dwarf accreting from a red giant companion, sometimes detonating as a Type Ia supernova</li>
@@ -443,19 +443,19 @@ const REF_EN = {
 </ul>
 `,
 
-    'ref.barneshut.title': 'Barnes-Hut Algorithm',
+    'ref.barneshut.title': 'Barnes-Hut algorithm',
     'ref.barneshut.body': `
 <p>Direct computation of all pairwise forces scales as $O(N^2)$ — doubling the particle count quadruples the work. The Barnes-Hut algorithm reduces this to $O(N\\log N)$ using a spatial tree, enabling simulations with hundreds of particles at interactive framerates.</p>
 
-<h3>Quadtree Construction</h3>
+<h3>Quadtree construction</h3>
 <p>The domain is recursively subdivided into four quadrants. Each leaf holds at most 4 particles. Internal nodes store aggregate properties: total mass, total charge, center of mass, total magnetic moment, and total angular momentum.</p>
 
-<h3>Opening Angle Criterion</h3>
+<h3>Opening angle criterion</h3>
 <p>When computing the force on a particle, the tree is walked from the root. At each node:</p>
 <p>$$\\frac{s}{d} < \\theta \\qquad (\\theta = 0.5)$$</p>
 <p>If the cell size $s$ divided by the distance $d$ to the cell's center of mass is less than $\\theta$, the entire group is treated as a single body using its aggregate properties. Otherwise, the node is opened and its children examined.</p>
 
-<h3>Accuracy vs. Performance</h3>
+<h3>Accuracy vs. performance</h3>
 <table style="width:100%;border-collapse:collapse;margin:12px 0">
 <tr><th style="text-align:left;padding:4px 8px">Mode</th><th style="text-align:left;padding:4px 8px">Scaling</th><th style="text-align:left;padding:4px 8px">Conservation</th></tr>
 <tr><td style="padding:4px 8px">Pairwise (off)</td><td style="padding:4px 8px">$O(N^2)$</td><td style="padding:4px 8px">Machine precision</td></tr>
@@ -467,17 +467,17 @@ const REF_EN = {
 <p>The tree uses a flat Structure-of-Arrays layout with pre-allocated typed arrays for zero garbage collection. Nodes are pooled and reset each substep rather than allocated and freed, keeping the per-substep tree rebuild fast and free of GC pauses.</p>
 `,
 
-    'ref.collision.title': 'Collision Modes',
+    'ref.collision.title': 'Collision modes',
     'ref.collision.body': `
 <h3>Pass</h3>
 <p>Particles move through each other freely — no collision detection. Useful for studying pure force dynamics without contact effects, or for maximizing performance with many particles.</p>
 
-<h3>Bounce (Hertz Contact)</h3>
+<h3>Bounce (Hertz contact)</h3>
 <p>Overlapping particles feel a repulsive contact force modeled by Hertz contact mechanics:</p>
 <p>$$F = K\\,\\delta^{3/2}$$</p>
 <p>where $\\delta$ is the overlap depth and $K$ is the stiffness. The 3/2 exponent comes from the elastic deformation of spheres — it produces a stiffer response at deeper overlaps, preventing excessive penetration. Tangential friction transfers angular momentum between spinning particles during contact.</p>
 
-<h3>Merge (Inelastic Collision)</h3>
+<h3>Merge (inelastic collision)</h3>
 <p>Overlapping particles combine into a single particle, conserving:</p>
 <ul>
 <li><b>Mass</b>: $m = m_1 + m_2$</li>
@@ -486,71 +486,71 @@ const REF_EN = {
 <li><b>Angular momentum</b>: $I\\omega = I_1\\omega_1 + I_2\\omega_2 + \\text{orbital}$</li>
 </ul>
 
-<h3>Antimatter Annihilation</h3>
+<h3>Antimatter annihilation</h3>
 <p>When a matter and antimatter particle merge, the lesser mass is annihilated from both, converting rest mass energy $E = 2m_{\\text{annihilated}}$ into a burst of photons.</p>
 `,
 
-    'ref.boundary.title': 'Boundary Modes',
+    'ref.boundary.title': 'Boundary modes',
     'ref.boundary.body': `
 <h3>Despawn</h3>
 <p>Particles are removed when they leave the viewport. Models an open system where particles can escape to infinity. Required when cosmological expansion is active.</p>
 
-<h3>Loop (Periodic Boundaries)</h3>
+<h3>Loop (periodic boundaries)</h3>
 <p>Particles exiting one side re-enter from the opposite side, creating a topologically closed space. Forces use the <em>minimum image convention</em>: each particle interacts with the nearest copy (real or periodic ghost) of every other particle. Three topologies are available when using loop boundaries.</p>
 
-<h3>Bounce (Elastic Walls)</h3>
+<h3>Bounce (elastic walls)</h3>
 <p>Walls exert Hertz contact repulsion on approaching particles:</p>
 <p>$$F = K\\,\\delta^{3/2}$$</p>
 <p>where $\\delta$ is the depth of wall penetration. Tangential friction from wall sliding transfers torque to spinning particles, gradually slowing their rotation. Creates a bounded billiard-like domain.</p>
 `,
 
-    'ref.topology.title': 'Surface Topology',
+    'ref.topology.title': 'Surface topology',
     'ref.topology.body': `
 <p>When boundaries are set to "Loop," the simulation domain becomes a closed 2D surface. The choice of topology determines how the edges are identified — and whether the space is orientable.</p>
 
 <h3>Torus ($T^2$)</h3>
 <p>Both pairs of edges wrap normally: right$\\leftrightarrow$left, top$\\leftrightarrow$bottom. The familiar "Pac-Man" topology. The torus is orientable — a clockwise-spinning particle remains clockwise after wrapping. Forces use the minimum image convention.</p>
 
-<h3>Klein Bottle ($K^2$)</h3>
+<h3>Klein bottle ($K^2$)</h3>
 <p>The x-axis wraps normally, but the y-axis wraps with a reflection: exiting the top re-enters from the bottom with x-coordinate mirrored and horizontal velocity reversed. The Klein bottle is <em>non-orientable</em> — a clockwise-spinning particle becomes counterclockwise after a y-boundary crossing. This surface cannot be embedded in 3D without self-intersection.</p>
 
-<h3>Real Projective Plane ($\\mathbb{RP}^2$)</h3>
+<h3>Real projective plane ($\\mathbb{RP}^2$)</h3>
 <p>Both axes wrap with a perpendicular flip — each crossing reverses the perpendicular velocity component and reflects the perpendicular coordinate. $\\mathbb{RP}^2$ is the most exotic topology: non-orientable, and the only closed 2D surface where <em>every non-contractible</em> loop is orientation-reversing. Force computation requires checking 4 minimum-image candidates.</p>
 `,
 
-    'ref.external.title': 'External Background Fields',
+    'ref.external.title': 'External background fields',
     'ref.external.body': `
 <p>Uniform fields that pervade the entire domain, acting on every particle independently of the particle-particle force toggles.</p>
 
-<h3>Uniform Gravitational Field</h3>
+<h3>Uniform gravitational field</h3>
 <p>$$\\mathbf{F} = m\\mathbf{g}$$</p>
 <p>All particles experience the same acceleration $\\mathbf{g}$ regardless of mass — the equivalence principle in action. Direction is set in degrees (0$^\\circ$ = right, 90$^\\circ$ = down). Models surface gravity, projectile motion, or any uniform gravitational environment.</p>
 
-<h3>Uniform Electric Field</h3>
+<h3>Uniform electric field</h3>
 <p>$$\\mathbf{F} = q\\mathbf{E}$$</p>
 <p>Accelerates particles proportional to their charge. Opposite charges deflect in opposite directions, enabling beam separation and drift velocity experiments. Neutral particles are unaffected.</p>
 
-<h3>Uniform Magnetic Field ($B_z$)</h3>
+<h3>Uniform magnetic field ($B_z$)</h3>
 <p>An out-of-plane magnetic field produces cyclotron motion:</p>
 <p>$$\\omega_c = \\frac{qB}{m}, \\qquad r_L = \\frac{mv_\\perp}{qB}$$</p>
 <p>The Larmor radius $r_L$ grows with mass and speed; heavier or faster particles orbit in larger circles. The Boris integrator handles the rotation exactly, preserving kinetic energy through every gyration.</p>
 
-<h3>$\\mathbf{E}\\times\\mathbf{B}$ Drift</h3>
+<h3>$\\mathbf{E}\\times\\mathbf{B}$ drift</h3>
 <p>Combining electric and magnetic fields produces a drift perpendicular to both: all particles drift at speed $E/B$ regardless of charge or mass. This is a fundamental result of plasma physics, responsible for particle confinement in tokamaks and the dynamics of the magnetosphere.</p>
 `,
 
-    'ref.spin.title': 'Particle Spin',
+    'ref.spin.title': 'Particle spin',
     'ref.spin.body': `
 <p>Each particle rotates as a uniform-density solid sphere with moment of inertia:</p>
 <p>$$I = \\frac{2}{5}mr^2$$</p>
 <p>The spin slider sets the angular celerity $W$ (range $-0.99$ to $+0.99$). Positive values mean clockwise rotation.</p>
 
-<h3>Relativistic Spin</h3>
+<h3>Relativistic spin</h3>
 <p>Angular celerity maps to angular velocity:</p>
 <p>$$\\omega = \\frac{W}{\\sqrt{1+W^2 r^2}}$$</p>
 <p>This guarantees $|\\omega|r < c$, preventing unphysical surface speeds even at extreme spin values. At low spin, $\\omega \\approx W$.</p>
 
-<h3>Derived Quantities</h3>
+<h3>Derived quantities</h3>
 <p>Spin determines two important physical properties:</p>
 <ul>
 <li><b>Magnetic moment</b>: $\\mu = q\\omega r^2/5$ — the source of magnetic dipole interactions</li>
@@ -559,7 +559,7 @@ const REF_EN = {
 <p>Spin evolves dynamically under torques from tidal locking, frame dragging, and spin-orbit energy transfer.</p>
 `,
 
-    'ref.charge.title': 'Charge & Quantization',
+    'ref.charge.title': 'Charge & quantization',
     'ref.charge.body': `
 <p>The charge slider sets the electric charge of newly placed particles. Charge determines the strength of Coulomb and magnetic interactions, and is one of the three quantities (mass, charge, spin) that fully characterize a black hole.</p>
 
@@ -573,7 +573,7 @@ const REF_EN = {
 <p>Opposite-charge pions ($\\pi^+\\pi^-$) annihilate into photon pairs when they collide. Neutral pions are identified by $|q| < \\epsilon$ rather than exact zero, accommodating floating-point rounding.</p>
 `,
 
-    'ref.energy.title': 'Energy Conservation',
+    'ref.energy.title': 'Energy conservation',
     'ref.energy.body': `
 <p>Total energy is tracked as the sum of five components:</p>
 <ul>
@@ -584,7 +584,7 @@ const REF_EN = {
 <li><b>Radiated</b>: cumulative energy carried away by photons and gravitons</li>
 </ul>
 
-<h3>Conservation Quality</h3>
+<h3>Conservation quality</h3>
 <p>Energy is exactly conserved (to machine precision) with gravity + Coulomb only, in pairwise mode. Additional forces affect conservation differently:</p>
 <ul>
 <li><b>Magnetic / GM</b>: velocity-dependent forces carry energy in fields not fully modeled — small drift expected</li>
@@ -596,16 +596,16 @@ const REF_EN = {
 <p>The "Drift" line tracks cumulative numerical error as a percentage of the initial total energy, giving a real-time measure of simulation accuracy.</p>
 `,
 
-    'ref.pion.title': 'Pion Exchange (Yukawa Force Carriers)',
+    'ref.pion.title': 'Pion exchange (Yukawa force carriers)',
     'ref.pion.body': `
 <p>The Yukawa potential was proposed in 1935 by Hideki Yukawa, who predicted that the short-range nuclear force must be mediated by a massive particle — the <b>pion</b>. In this simulation, pions are emitted automatically during Yukawa interactions as massive force carriers, analogous to how photons mediate electromagnetic radiation.</p>
 
-<h3>Emission: Scalar Larmor Radiation</h3>
+<h3>Emission: scalar Larmor radiation</h3>
 <p>A particle accelerating under the Yukawa force radiates pions with power:</p>
 <p>$$P = \\frac{1}{3}\\,g^2 m^2 a^2 = \\frac{1}{3}\\,g^2 F_{\\text{Yuk}}^2$$</p>
 <p>The scalar charge is $Q = gm$ (since the Yukawa coupling is proportional to mass), so $Q^2 a^2 = g^2 m^2 (F/m)^2 = g^2 F^2$. The factor of $\\frac{1}{3}$ comes from integrating the $\\cos^2\\theta$ angular pattern of spin-0 radiation over the sphere — compared to $\\frac{2}{3}$ for the $\\sin^2\\theta$ dipole pattern of spin-1 (EM) Larmor radiation. The ratio $1:2$ reflects the single polarization state of a scalar vs. two for a photon.</p>
 
-<h3>Pion Mass</h3>
+<h3>Pion mass</h3>
 <p>The pion rest mass equals the Yukawa range parameter $\\mu$:</p>
 <p>$$m_\\pi = \\mu, \\qquad V(r) = -g^2 \\frac{e^{-\\mu r}}{r}$$</p>
 <p>This is Yukawa's key insight: the range of the force ($\\sim 1/\\mu$) is inversely proportional to the mediator mass. Heavier pions mean shorter-range forces.</p>
@@ -624,11 +624,11 @@ const REF_EN = {
 </ul>
 <p>Charged pion decay uses exact two-body kinematics: in the rest frame, the electron/positron and photon share the pion rest energy with back-to-back momenta, then both are Lorentz-boosted to the lab frame.</p>
 
-<h3>Radiation Reaction</h3>
+<h3>Radiation reaction</h3>
 <p>When a pion is emitted, the emitting particle's kinetic energy is reduced by the pion's total energy (rest mass + kinetic). This prevents double-counting: the Yukawa force is already computed directly between particles, so the pion emission represents the radiation channel only.</p>
 `,
 
-    'ref.fieldExcitation.title': 'Scalar Field Dynamics',
+    'ref.fieldExcitation.title': 'Scalar field dynamics',
     'ref.fieldExcitation.body': `
 <p>When particles merge, kinetic energy lost in the inelastic collision excites the active scalar fields (Higgs and/or Axion). These excitations propagate as wave packets — the simulation's analog of <b>Higgs bosons</b> and <b>axion particles</b>.</p>
 
@@ -639,20 +639,20 @@ const REF_EN = {
 <p>$$\\dot{\\phi}(\\mathbf{x}) \\mathrel{+}= A \\exp\\!\\left(-\\frac{|\\mathbf{x} - \\mathbf{x}_0|^2}{2\\sigma^2}\\right)$$</p>
 <p>where $A = 0.5\\sqrt{\\Delta E}$ and $\\sigma = 2$ grid cells. The existing Klein-Gordon wave equation then propagates the excitation naturally.</p>
 
-<h3>Higgs Boson Analog</h3>
+<h3>Higgs boson analog</h3>
 <p>When the Higgs field is active, merge energy creates oscillations around the vacuum expectation value $\\langle\\phi\\rangle = 1$. These ripples are the 2D analog of the Higgs boson — excitations of the field that gives particles their mass. The Mexican hat potential:</p>
 <p>$$V(\\phi) = -\\frac{1}{2}\\mu^2\\phi^2 + \\frac{1}{4}\\lambda\\phi^4$$</p>
 <p>determines the oscillation frequency: $\\omega = m_H = \\mu\\sqrt{2}$.</p>
 
-<h3>Axion Particle Analog</h3>
+<h3>Axion particle analog</h3>
 <p>When the Axion field is active, merge energy creates oscillations around the vacuum $\\langle a \\rangle = 0$. These propagating wave packets are the simulation's analog of axion particles — quanta of the axion-like scalar field. The quadratic potential:</p>
 <p>$$V(a) = \\frac{1}{2}m_a^2 a^2$$</p>
 <p>gives simple harmonic oscillation at frequency $\\omega = m_a$.</p>
 
-<h3>Physical Motivation</h3>
+<h3>Physical motivation</h3>
 <p>In quantum field theory, particles <em>are</em> field excitations. The Higgs boson discovered at the LHC in 2012 is a quantum of the Higgs field; axions (if they exist) would be quanta of an axion-like field. This simulation captures the classical wave analog: localized disturbances that propagate, disperse, and interact with particles through the same coupling that governs the background field.</p>
 
-<h3>Higgs Portal Coupling</h3>
+<h3>Higgs portal coupling</h3>
 <p>When both the Higgs and Axion fields are active, they interact through a <b>portal coupling</b>:</p>
 <p>$$V_{\\text{portal}} = \\tfrac{1}{2}\\lambda\\,\\phi^2 a^2$$</p>
 <p>This gauge-invariant quartic interaction is one of the most natural ways for an axion-like particle to couple to the Standard Model Higgs. It produces two effects:</p>
@@ -662,20 +662,20 @@ const REF_EN = {
 </ul>
 <p>The coupling constant $\\lambda = 0.01$ is fixed. The portal energy contributes to total energy conservation.</p>
 
-<h3>Field Gravity</h3>
+<h3>Field gravity</h3>
 <p>When gravity is enabled, the scalar field's energy density gravitates — just as all forms of energy curve spacetime in general relativity.</p>
 
-<h4>Energy Density</h4>
+<h4>Energy density</h4>
 <p>Each grid cell carries energy density from kinetic, gradient, and potential contributions:</p>
 <p>$$\\rho = \\frac{1}{2}\\dot{\\phi}^2 + \\frac{1}{2}|\\nabla\\phi|^2 + V(\\phi)$$</p>
 <p>At vacuum ($\\phi = v$), all three terms vanish — only field excitations gravitate.</p>
 
-<h4>Particle–Field Gravity</h4>
+<h4>Particle–field gravity</h4>
 <p>Each grid cell acts as a point mass $\\rho\\,dA$ that attracts particles via Newtonian gravity:</p>
 <p>$$\\mathbf{F} = m\\sum_j \\frac{\\rho_j\\,dA}{r_j^2}\\,\\hat{r}_j$$</p>
 <p>This is a direct $O(N \\times G^2)$ summation over all grid cells ($G$ = 64 on CPU, 128 on GPU), using the same Plummer softening as particle–particle gravity. Topology-aware for periodic boundaries.</p>
 
-<h4>Field Self-Gravity</h4>
+<h4>Field self-gravity</h4>
 <p>The field's own energy density curves the local geometry, modifying its wave equation. In the weak-field limit ($|\\Phi| \\ll 1$), the Klein-Gordon equation gains GR corrections:</p>
 <p>$$\\ddot{\\phi} = (1 + 4\\Phi)\\,\\nabla^2\\phi + 2\\,\\nabla\\Phi \\cdot \\nabla\\phi - (1 + 2\\Phi)\\,V'(\\phi)$$</p>
 <p>where $\\Phi$ is the Newtonian gravitational potential sourced by $\\rho$. The three correction terms represent:</p>
@@ -687,17 +687,17 @@ const REF_EN = {
 <p>The potential $\\Phi$ is computed via FFT convolution with the Green's function $G(r) = -1/\\sqrt{r^2 + \\varepsilon^2}$ on the full field grid — $O(N^2 \\log N)$ via forward FFT, pointwise multiply in Fourier space, inverse FFT.</p>
 `,
 
-    'ref.conserved.title': 'Conserved Quantities',
+    'ref.conserved.title': 'Conserved quantities',
     'ref.conserved.body': `
-<h3>Linear Momentum</h3>
+<h3>Linear momentum</h3>
 <p>$$\\mathbf{P} = \\sum_i m_i\\mathbf{w}_i + \\mathbf{P}_{\\text{field}} + \\mathbf{P}_{\\text{radiated}}$$</p>
 <p>Conserved by Noether's theorem from translational symmetry of space. Particle momentum uses proper velocity $\\mathbf{w}$ (which reduces to $m\\mathbf{v}$ when relativity is off). Field and radiated contributions are tracked separately.</p>
 
-<h3>Angular Momentum</h3>
+<h3>Angular momentum</h3>
 <p>$$J = \\underbrace{\\sum_i\\mathbf{r}_i \\times m_i\\mathbf{w}_i}_{\\text{orbital}} + \\underbrace{\\sum_i I_i W_i}_{\\text{spin}}$$</p>
 <p>Conserved from rotational symmetry of space. Computed about the center of mass. Tidal locking, frame dragging, and spin-orbit coupling transfer angular momentum between orbital and spin reservoirs, but the total is preserved.</p>
 
-<h3>When Conservation Breaks</h3>
+<h3>When conservation breaks</h3>
 <p>Velocity-dependent forces (magnetic, gravitomagnetic) carry momentum in electromagnetic and gravitomagnetic fields that the simulation doesn't fully track, producing small drift. This is a fundamental limitation of the particle-only approach — a full field theory would restore exact conservation. The drift percentage quantifies this effect.</p>
 `,
 };

@@ -34,6 +34,17 @@ Backend switching should go through `sim.useGPUBackend()` / `sim.useCPUBackend()
 
 **Key modules**: `integrator.js` (Boris substep loop, all physics), `forces.js` (pairForce, BH tree walk, 1PN), `scalar-field.js` (PQS grid base), `higgs-field.js` / `axion-field.js` (field subclasses), `quadtree.js` (SoA flat typed arrays, pool-based), `physics-contract.js` (shared toggle/parameter/save-load contract), `ui.js` (toggle deps via shared `_forms.bindDeps`, mode locking, backend switching), `presets.js` (19 scenarios).
 
+## Visual Layer
+
+Geon runs on the root design system (Newsreader, neutral ground, per-theme oxblood accent); see root `AGENTS.md`.
+
+- **Theme colors**: data hues come from `_PALETTE.extended`; theme-dependent colors (text, accent, canvas) are read per theme from `_PALETTE.light` / `_PALETTE.dark` and picked by the renderer's `isLight` flag. `Renderer.setTheme()` and `GPURenderer.setTheme()` cache them; `ui.js` `syncRendererTheme()` calls both on init and toggle. The GPU backend is created after that first sync, so `GPUBackend.create()` adopts `sim.renderer.isLight` once `renderer.init()` has built the light/dark pipeline pairs.
+- **Ground**: GPU render passes clear to `_PALETTE.{light,dark}.canvas` (equal to `--bg-canvas`); the Canvas 2D path clears to transparent over the CSS ground.
+- **WGSL theme constants**: the generated block in `gpu-constants.js` carries theme pairs (`COLOR_TEXT_LIGHT`/`_DARK`, `COLOR_ACCENT_LIGHT`/`_DARK`); shaders select with the `isDarkMode` uniform.
+- **Canvas text**: `_FONT.text` at 10px or more. Sidebar plot axis labels go through `plot-labels.js`, which draws the variable italic and its subscript as a measured second run (Newsreader has no Unicode subscript letters and no Greek). The plots redraw every frame, so they need no font-load redraw.
+- **Strings**: labels and headings are sentence case in `i18n/strings.js`, `i18n/strings-reference.js`, the `index.html` defaults, and the JS fallbacks; keep proper nouns, units, and acronyms. `src/i18n.js` sets `<html lang>`, so the shared `:lang(ja)` rules keep Japanese labels upright; Japanese inline lists use `・`.
+- **Phone toolbar**: at 440px and below, the shared `.hide-sm` hides step, quick save/load, the theme toggle, and one separator so the panel toggle stays on screen. Those actions stay on desktop and on the keyboard.
+
 ## Physics
 
 ### Units & State

@@ -100,6 +100,8 @@ export default class Renderer {
         this._leptonGlow = _r(_PAL.extended.cyan, 0.6);
         this._dragColor = isLight
             ? _r(_PAL.light.text, 0.4) : _r(_PAL.dark.text, 0.5);
+        this._removeDragColor = isLight
+            ? _r(_PAL.light.textMuted, 0.6) : _r(_PAL.dark.textMuted, 0.7);
     }
 
     render(particles, dt = 0.016, camera, photons, pions, leptons) {
@@ -176,9 +178,7 @@ export default class Renderer {
             ctx.beginPath();
             ctx.moveTo(start.x, start.y);
             ctx.lineTo(end.x, end.y);
-            ctx.strokeStyle = this.input._rightButton
-                ? (isLight ? 'rgba(136,136,136,0.6)' : 'rgba(204,204,204,0.7)')
-                : this._dragColor;
+            ctx.strokeStyle = this.input._rightButton ? this._removeDragColor : this._dragColor;
             ctx.lineWidth = 1 / (camera ? camera.zoom : 1);
             ctx.stroke();
         }
@@ -201,9 +201,7 @@ export default class Renderer {
         ctx.beginPath();
         ctx.moveTo(start.x, start.y);
         ctx.lineTo(end.x, end.y);
-        ctx.strokeStyle = this.input._rightButton
-            ? (this.isLight ? 'rgba(136,136,136,0.6)' : 'rgba(204,204,204,0.7)')
-            : this._dragColor;
+        ctx.strokeStyle = this.input._rightButton ? this._removeDragColor : this._dragColor;
         ctx.lineWidth = 1 / (camera ? camera.zoom : 1);
         ctx.stroke();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -501,7 +499,7 @@ export default class Renderer {
 
     drawForceVectors(ctx, particles, invZoom, isLight) {
         const scale = FORCE_VECTOR_SCALE;
-        const color = isLight ? _PAL.accent : _PAL.accentLight;
+        const color = isLight ? _PAL.light.accent : _PAL.dark.accent;
         // C22: minLen is strictly tighter than threshold (0.5 > 0.1) — only minLen needed
         const minLen = 0.5 * invZoom;
         const headLen = 0.5;
@@ -584,7 +582,7 @@ export default class Renderer {
     }
 
     drawTotalTorqueArc(ctx, particles, invZoom, isLight) {
-        const color = isLight ? _PAL.accent : _PAL.accentLight;
+        const color = isLight ? _PAL.light.accent : _PAL.dark.accent;
         this._drawTorqueArc(ctx, particles, invZoom, color, 3, (p) => p.torqueSpinOrbit + p.torqueFrameDrag + p.torqueTidal + p.torqueContact + p.torqueSuperradiance);
     }
 

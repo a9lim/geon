@@ -88,8 +88,8 @@ export function buildWGSLConstants() {
     // Theme colors
     const textLight = paletteRGB(_PAL.light.text);
     const textDark = paletteRGB(_PAL.dark.text);
-    const accent = paletteRGB(_PAL.accent);
-    const accentLight = paletteRGB(_PAL.accentLight);
+    const lightAccent = paletteRGB(_PAL.light.accent);
+    const darkAccent = paletteRGB(_PAL.dark.accent);
 
     // Spin ring colors: HSL-derived from palette hues (80% sat, 60% lightness)
     const spinCW = window._hsl2rgb(_PAL.spinPos, 0.8, 0.6);
@@ -246,8 +246,8 @@ const COLOR_MAGENTA: vec3f = ${wv3(colors.MAGENTA)};
 // Theme colors
 const COLOR_TEXT_LIGHT: vec3f = ${wv3(textLight)};
 const COLOR_TEXT_DARK: vec3f = ${wv3(textDark)};
-const COLOR_ACCENT: vec3f = ${wv3(accent)};
-const COLOR_ACCENT_LIGHT: vec3f = ${wv3(accentLight)};
+const COLOR_ACCENT_LIGHT: vec3f = ${wv3(lightAccent)};
+const COLOR_ACCENT_DARK: vec3f = ${wv3(darkAccent)};
 
 // Spin ring colors (HSL-derived from palette hues, 80% sat, 60% lightness)
 const COLOR_SPIN_CW: vec3f = ${wv3(spinCW)};

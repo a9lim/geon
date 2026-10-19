@@ -157,14 +157,14 @@ export function setupUI(sim) {
     const settingsBtn = document.getElementById('settings-btn');
     if (settingsBtn) {
         _settings.create(settingsBtn, [
-            { type: 'toggle', label: 'GPU Acceleration', id: 'gpu-toggle', checked: false, disabled: true },
+            { type: 'toggle', label: 'GPU acceleration', id: 'gpu-toggle', checked: false, disabled: true },
             { type: 'toggle', label: 'Barnes-Hut', id: 'barneshut-toggle', checked: false },
             { type: 'toggle', label: 'Trails', id: 'trailsToggle', checked: true },
-            { type: 'toggle', label: 'Velocity Vectors', id: 'velocityToggle', checked: false },
-            { type: 'toggle', label: 'Accel. Vectors', id: 'forceToggle', checked: false },
-            { type: 'toggle', label: 'Accel. Components', id: 'forceComponentsToggle', checked: false },
-            { type: 'toggle', label: 'Potential Field', id: 'potentialToggle', checked: false },
-            { type: 'mode', label: 'Potential Mode', id: 'potential-mode-toggles', dataAttr: 'potential',
+            { type: 'toggle', label: 'Velocity vectors', id: 'velocityToggle', checked: false },
+            { type: 'toggle', label: 'Accel. vectors', id: 'forceToggle', checked: false },
+            { type: 'toggle', label: 'Accel. components', id: 'forceComponentsToggle', checked: false },
+            { type: 'toggle', label: 'Potential field', id: 'potentialToggle', checked: false },
+            { type: 'mode', label: 'Potential mode', id: 'potential-mode-toggles', dataAttr: 'potential',
               buttons: [
                   { value: 'all', label: 'All', active: true },
                   { value: 'gravity', label: 'Grav' },
@@ -559,14 +559,14 @@ export function setupUI(sim) {
     // each time the language changes (initShortcuts captures by value).
     const G_SIM   = () => _T('shortcut.group.simulation', 'Simulation');
     const G_VIEW  = () => _T('shortcut.group.view',       'View');
-    const G_SL    = () => _T('shortcut.group.saveload',   'Save / Load');
+    const G_SL    = () => _T('shortcut.group.saveload',   'Save / load');
     const G_PRES  = () => _T('preset.group.gravity',      'Presets'); // not perfect; see note below
     // Note: presets shown in shortcut help reuse the preset-name strings
     // directly. The "Presets" header is intentionally rendered as the gravity
     // group label so that it shows "重力" in JA — close enough for v1, since
     // the shortcut help groups by preset category.
     const _buildShortcuts = () => [
-        { key: 'Space', label: _T('shortcut.pausePlay',     'Pause / Play'),     group: G_SIM(), action: togglePause },
+        { key: 'Space', label: _T('shortcut.pausePlay',     'Pause / play'),     group: G_SIM(), action: togglePause },
         { key: 'R',     label: _T('shortcut.resetSim',      'Reset simulation'), group: G_SIM(), action: () => document.getElementById('clearBtn').click() },
         { key: '.',     label: _T('shortcut.speedUp',       'Speed up'),         group: G_SIM(), action: cycleSpeed },
         { key: ',',     label: _T('shortcut.slowDown',      'Slow down'),        group: G_SIM(), action: decycleSpeed },
@@ -613,7 +613,7 @@ export function setupUI(sim) {
 
     let _shortcutHandle = null;
     if (typeof initShortcuts === 'function') {
-        _shortcutHandle = initShortcuts(shortcuts, { helpTitle: _T('shortcut.help.title', 'Keyboard Shortcuts') });
+        _shortcutHandle = initShortcuts(shortcuts, { helpTitle: _T('shortcut.help.title', 'Keyboard shortcuts') });
     }
 
     // ─── About panel ───
@@ -697,7 +697,7 @@ export function setupUI(sim) {
             shortcuts = _buildShortcuts();
             if (_shortcutHandle && typeof _shortcutHandle.destroy === 'function' && typeof initShortcuts === 'function') {
                 _shortcutHandle.destroy();
-                _shortcutHandle = initShortcuts(shortcuts, { helpTitle: _T('shortcut.help.title', 'Keyboard Shortcuts') });
+                _shortcutHandle = initShortcuts(shortcuts, { helpTitle: _T('shortcut.help.title', 'Keyboard shortcuts') });
             }
             // About panel: destroy + recreate. _buildAboutConfig closes over
             // `shortcuts` (let-binding), so the new array is picked up here.

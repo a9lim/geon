@@ -39,8 +39,8 @@ const _heatmapRenderU32 = new Uint32Array(_heatmapRenderData);
 const _PAL = window._PALETTE;
 const _bgLight = (() => { const [r,g,b] = paletteRGB(_PAL.light.canvas); return {r,g,b,a:1}; })();
 const _bgDark = (() => { const [r,g,b] = paletteRGB(_PAL.dark.canvas); return {r,g,b,a:1}; })();
-const _accentLight = paletteRGB(_PAL.accent);
-const _accentDark = paletteRGB(_PAL.accentLight);
+const _lightAccent = paletteRGB(_PAL.light.accent);
+const _darkAccent = paletteRGB(_PAL.dark.accent);
 const _textLight = paletteRGB(_PAL.light.text);
 const _textDark = paletteRGB(_PAL.dark.text);
 const _fieldColors = {
@@ -845,7 +845,7 @@ export default class GPURenderer {
                         }
                     }
                 } else if (this.showForce) {
-                    const accentColor = this.isLight ? _accentLight : _accentDark;
+                    const accentColor = this.isLight ? _lightAccent : _darkAccent;
                     arrowDraws.push({ slot: 0, ft: 11, color: accentColor, scale: arrowScale, minMag });
                 }
                 if (this.showVelocity) {
@@ -912,7 +912,7 @@ export default class GPURenderer {
                     // superradiance: type 4, slot 5, indigo (requires axion + BH)
                     if (enabledForces.axion && opts.blackHoleEnabled) torqueDraws.push({ slot: 5, type: 4, color: GPURenderer.TORQUE_COLORS[4] });
                 } else if (this.showForce) {
-                    const accentColor = this.isLight ? _accentLight : _accentDark;
+                    const accentColor = this.isLight ? _lightAccent : _darkAccent;
                     torqueDraws.push({ slot: 4, type: 11, color: accentColor });
                 }
 

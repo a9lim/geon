@@ -18,7 +18,7 @@ export const PRESETS = {
     // ─── Gravity ───
 
     kepler: {
-        name: 'Kepler Orbits',
+        name: 'Kepler orbits',
         desc: 'Classical gravity — Keplerian motion and conservation laws',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
@@ -67,7 +67,7 @@ export const PRESETS = {
     },
 
     inspiral: {
-        name: 'Binary Inspiral',
+        name: 'Binary inspiral',
         desc: 'Gravitational wave emission — quadrupole radiation drains orbital energy',
         // particles carry zero charge so EM forces contribute nothing.
         toggles: {
@@ -94,7 +94,7 @@ export const PRESETS = {
     },
 
     hawking: {
-        name: 'Hawking Evaporation',
+        name: 'Hawking evaporation',
         desc: 'Small black holes radiate and evaporate',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: true,
@@ -172,7 +172,7 @@ export const PRESETS = {
     },
 
     magnetic: {
-        name: 'Magnetic Dipoles',
+        name: 'Magnetic dipoles',
         desc: 'Dipole interactions, Lorentz force, and spin-orbit coupling',
         toggles: {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
@@ -202,7 +202,7 @@ export const PRESETS = {
     // ─── Exotic ───
 
     nucleus: {
-        name: 'Atomic Nucleus',
+        name: 'Atomic nucleus',
         desc: 'Yukawa potential — short-range force binds nucleons like a liquid drop',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
@@ -233,7 +233,7 @@ export const PRESETS = {
     },
 
     axion: {
-        name: 'Axion Field',
+        name: 'Axion field',
         desc: 'Scalar aF² coupling makes EM strength position-dependent',
         toggles: {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
@@ -265,7 +265,7 @@ export const PRESETS = {
     },
 
     higgs: {
-        name: 'Higgs Mechanism',
+        name: 'Higgs mechanism',
         desc: 'Spontaneous symmetry breaking — particles gain mass from the Higgs field',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
@@ -291,7 +291,7 @@ export const PRESETS = {
     },
 
     pionexchange: {
-        name: 'Pion Exchange',
+        name: 'Pion exchange',
         desc: 'Yukawa scattering emits massive pions — watch them carry force between nucleons',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
@@ -318,7 +318,7 @@ export const PRESETS = {
     },
 
     higgsboson: {
-        name: 'Higgs Boson',
+        name: 'Higgs boson',
         desc: 'Particle collisions excite the Higgs field — watch wave packets ripple outward',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
@@ -344,7 +344,7 @@ export const PRESETS = {
     },
 
     axionburst: {
-        name: 'Axion Burst',
+        name: 'Axion burst',
         desc: 'Charged collisions excite the axion field — EM coupling ripples outward',
         toggles: {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
@@ -401,7 +401,7 @@ export const PRESETS = {
     // ─── Cosmological ───
 
     expansion: {
-        name: 'Expanding Universe',
+        name: 'Expanding universe',
         desc: 'Cosmological expansion — Hubble flow vs gravitational binding',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
