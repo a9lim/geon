@@ -34,6 +34,8 @@ Cost: **S** about one session · **M** a few sessions · **L** a milestone ·
 | 2026-10-23 | **Next session:** the internal-clock fix (§5.1). Fix only the GPU copies, since the CPU path is retiring; that part is a recommendation. | §3 |
 | 2026-10-23 | **In scope for 2.0:** the Lorentz-mapped spoke, proper-time clocks, frame switching, the multiscale background grid, and honest cosmology. | §5 |
 | 2026-10-23 | **Wanted but very ambitious:** dust and gas; paintable gas and refractive media; the quantum layer. | §5 |
+| 2026-10-23 | **3D views are parked for 3.0.** That covers the spacetime, inclined and embedding views. 2.0 keeps the 1+1 Minkowski panel. | §6 |
+| 2026-10-23 | **Photons stay planar.** The planar emission surrogate is kept, labelled, with consistent recoil. | §1.2 |
 
 ### Open
 
@@ -48,13 +50,9 @@ Cost: **S** about one session · **M** a few sessions · **L** a milestone ·
    both, or neither. §5.8.
 6. **Liénard–Wiechert fields:** bring them in before frames, so frames are
    honest for EM on day one, or after. §8.1.
-7. **Which 3D view first:** the spacetime view, the inclined ray-traced view,
-   or both. §6.
-8. **The three lengths (ℓ_conf, ℓ_c, ε):** tie them per preset, or keep them
-   independent. §1.2.
-9. **Photon model:** 3D photons with a hidden `z, p_z` and escape
-   bookkeeping (recommended, honest), or today's planar surrogate, labelled.
-   The 3D model means fewer visible photons in a thin slab. §1.2.
+7. **The lengths:** a recommended two-knob scheme (§1.2):
+   - one physical sheet thickness ℓ, made comoving when expansion is on;
+   - a separate numerical softening ε for particle forces.
 
 ## 1. Direction
 
@@ -101,13 +99,30 @@ readings of one model. Geon uses each where it fits, and says which.
 | **FRW background** | cosmology | The slab is a slice of homogeneous 3D FRW. The background closes through `ρ̄ = Σ̄_phys/(a·ℓ_c)` ∝ a⁻³ for matter. | Perturbations live only in the slab (sheet kernel); off-slab perturbations are ignored. A z-independent perturbation would be an infinite column with 3D Poisson gravity `Φ_k = −4πGδρ_k/k²`, which is a different model. |
 
 **Three lengths, never silently identified (Codex):**
-- **ℓ_conf**, the physical confinement thickness of field and quantum
-  profiles;
-- **ℓ_c**, the comoving slab thickness for the FRW background. A fixed ℓ_c
-  means fixed *comoving* grid softening, so the physical softening grows ∝ a;
-- **ε**, the numerical softening of particle forces.
 
-A preset may tie them together, but it has to say so (open decision 8).
+| Length | What it is | Where it acts | How it scales |
+|---|---|---|---|
+| **ℓ_conf** | The physical thickness of the sheet that spread-out things occupy: fields and the quantum particle. | Converts the field's surface density to volume density for its self-gravity. Sets the finite-thickness factor F(kℓ). Adds a transverse energy `~1/ℓ²`, which acts like extra mass. Rescales the Higgs quartic by `∫χ⁴ ~ 1/ℓ`. Decides whether hydrogen looks 2D (thin) or starts crossing to 3D (thick). | Fixed in physical units. |
+| **ℓ_c** | How thick a slab of the universe the simulated slice represents. | Only cosmology. It converts the sim's mean surface density into the volume density Friedmann needs, `ρ̄ = Σ̄_phys/(a·ℓ_c)`, and sets grid gravity's comoving softening. | Fixed in comoving units, so it grows ∝ a physically. |
+| **ε** | Numerical softening, `1/r² → 1/(r² + ε²)`, so close passes don't blow up. | Point-particle forces. For point particles in the symmetry plane, ε is not physical at all. | A numerical knob. It should be small enough not to change results. |
+
+**Why not one length:**
+- They answer different questions, and in an expanding universe they *scale
+  differently*: one is physical, one is comoving, one is numerical.
+- Equating them would let a numerical stability knob silently change physics.
+  This happens today: field self-gravity reuses the particle softening
+  (`toggles.softeningSq` passed into the field update, `src/integrator.js:1382`),
+  so turning on black-hole mode drops it from 8 to 4 and quietly halves the
+  field's implied thickness.
+
+**Recommended scheme (open decision 7): two knobs.**
+- **ℓ, the sheet thickness.** Physical in static presets. Comoving when
+  expansion is on, because the slab is a slice of the universe there and
+  stretches with it. ℓ then *is* ℓ_c, and the physical thickness is `a·ℓ`.
+  Grid gravity (fields, dust) uses ℓ as its softening.
+- **ε, numerical softening** for particle–particle forces only.
+
+The tie is explicit and per mode, which is what Codex asked for.
 
 **Consequences:**
 
@@ -137,15 +152,18 @@ A preset may tie them together, but it has to say so (open decision 8).
     the KG gravity terms with `3Hφ̇`.
 - **Radiation:** 3D rate formulas apply, each within its own approximations
   (area × Stefan–Boltzmann Hawking power is greybody-free).
-  - The honest **photon model** gives each photon a hidden `z, p_z` with
-    `|p_∥| < E`, so in-plane speed is below 1.
-  - It interacts only inside the slab, renders as a projection fading with
-    |z|, and books escaped energy **and momentum**, including transverse
-    recoil on confined emitters.
-  - Today's planar emission, with `|p_∥| = E`, is a surrogate. It is
-    acceptable only when labelled and when its recoil is consistent (open
-    decision 9).
-  - Escaped radiation stays in the cosmological background accounting.
+  - **Decided: photons stay planar.** Emission uses `|p_∥| = E` and an
+    in-plane angular pattern, as a *labelled surrogate* for 3D emission.
+  - Codex's conditions for keeping it honest:
+    - total emitted energy comes from the 3D rate formulas;
+    - in-plane recoil is consistent, so emitter plus photon conserve energy
+      and planar momentum;
+    - `about.md` and the UI say it is a surrogate, which reproduces neither
+      3D recoil statistics, nor 3D angular distribution, nor reabsorption.
+  - The physical alternative is 3D photons with a hidden `z, p_z`, with
+    `|p_∥| < E`, escape bookkeeping and transverse recoil. It is deferred to
+    3.0, where photons are 3D anyway.
+  - In cosmology, radiation energy stays in the background accounting.
 - **Gravitational waves:** use the 3D quadrupole and TT projection, including
   its zz component. In-plane (edge-on) observers of an in-plane circular
   binary see `h_× = 0` and `h_+` at half its face-on amplitude. This also
@@ -319,15 +337,14 @@ A preset may tie them together, but it has to say so (open decision 8).
 | **M0** (next session) | **GPU only; don't fix CPU copies slated for deletion.** The §5.1 clock fix (per-process clocks, emission boosts); the Roche timestep and Eggleton q; the 3+1 KG coefficients (§2.2); seed the browser test page (§7.3) with the pion-beam and moving-BH oracles; fix the README Thomas claim. | none |
 | **M0′** | Retire the CPU path (§4): port the phase plot and effective potential to readback; device-loss recovery; a "requires WebGPU" notice; delete about 8,100 lines; update the docs. Can share a session with M0. | M0 |
 | **M1 — relativity you can see** | The world-line store (§7.2); τ and θ state; the spoke shader; clocks; spoke precession; domain decoupled from viewport (§7.4). | M0′ |
-| **M2 — frames** | The slicer; lab, ZMF, particle and custom frames (view-only); lagged and true-now modes; the scrubber; the grid as lab rulers. | M1 |
-| **M3 — the spacetime view** | The 2+1 view of world-lines, light cones and the current slice (§6.1). It supersedes the 1+1 Minkowski panel. | M2 |
-| **M4 — honest cosmology** | Comoving rewrite, the a(t) selector and self-consistent mode, redshift, Hubble friction, the ledger, horizons; misalignment and Kibble–Zurek presets. | M2 (grid) |
-| **M5 — lensing** | Lens mode on the grid; microlensing probe. | grid |
-| **M6–M7 — dust → gas** | PM dust; SPH gas; sinks and accretion; brush v1. | M4 for structure formation |
-| **M8 — quantum** | Rungs 1–2, then 3, then 4–5. | brush, for walls |
-| **M9 — media** | The refractive layer; Cherenkov; prism. | brush; M8 for the spectroscopy bench |
-| **Parallel options** | Liénard–Wiechert fields (best before or alongside M2); Kerr equatorial (any time after M1); share-by-URL and preset coverage (any time); the inclined ray-traced view (§6.2, after M1, pairs with M6–M7). | — |
-| **3.0** | Genuinely 3D physics. 2.0's symmetry-plane sector is an exact restriction of it; 2.0's slab models are effective reductions that 3.0 generalizes (§6.4). | 2.0 |
+| **M2 — frames** | The slicer; lab, ZMF, particle and custom frames (view-only); lagged and true-now modes; the scrubber; the 1+1 Minkowski panel; the grid as lab rulers. | M1 |
+| **M3 — honest cosmology** | Comoving rewrite, the a(t) selector and self-consistent mode, redshift, Hubble friction, the ledger, horizons; misalignment and Kibble–Zurek presets. | M2 (grid) |
+| **M4 — lensing** | Lens mode on the grid; microlensing probe. | grid |
+| **M5–M6 — dust → gas** | PM dust; SPH gas; sinks and accretion; brush v1. | M3 for structure formation |
+| **M7 — quantum** | Rungs 1–2, then 3, then 4–5. | brush, for walls |
+| **M8 — media** | The refractive layer; Cherenkov; prism. | brush; M7 for the spectroscopy bench |
+| **Parallel options** | Liénard–Wiechert fields (best before or alongside M2); Kerr equatorial (any time after M1); share-by-URL and preset coverage (any time). | — |
+| **3.0** | Genuinely 3D physics plus the 3D views (§6): the spacetime view, the inclined ray-traced view, the embedding diagram, and 3D photons. 2.0's symmetry-plane sector is an exact restriction of it; 2.0's slab models are effective reductions that 3.0 generalizes (§6.4). | 2.0 |
 
 ## 4. Retiring the CPU path (M0′, M)
 
@@ -470,7 +487,7 @@ a9's call: a single spoke replaces the spin arc and arrowhead.
   - A spoke instantaneously perpendicular to v stays straight.
 - The lab rotation rate is `ω₀/γ`, via θ advancing in proper time.
 - Under the 3D convention bodies are spheres. A contracted sphere is an
-  oblate ellipsoid, which is what the inclined view (§6.2) shows.
+  oblate ellipsoid, which 3.0's inclined view (§6.2) would show.
 - **Black holes:** the spoke turns at `Ω_H = a/(r₊² + a²)`. The horizon and
   ergosphere contract the same way (a boosted Kerr–Schild horizon is
   contracted in lab coordinates).
@@ -559,7 +576,10 @@ over one orbit.
   appears after the lag.
 - **Block-universe scrubber:** when paused, scrub observer time and rapidity
   and re-slice. It costs nothing.
-- The spacetime view (§6.1) is this feature's natural companion.
+- **Minkowski panel:** a sidebar plot of world-lines projected onto the boost
+  axis (x_∥ vs t), with the current slice, the light cone and proper-time
+  ticks. Switching frames shears its axes. Label it a 1+1 projection.
+- The full 2+1 spacetime view (§6.1) is parked for 3.0.
 
 **Accelerated observer (Codex) [standard]:**
 - Under constant proper acceleration, the slices pivot about the Rindler
@@ -596,7 +616,7 @@ over one orbit.
 - `E′ = γ(E − v·p)`;
 - round-trip ageing for all three twins.
 
-### 5.5 The background grid (M2/M5, M)
+### 5.5 The background grid (M2/M4, M)
 
 a9's call: a grid rather than stars, because it reads at every scale.
 
@@ -620,8 +640,8 @@ a9's call: a grid rather than stars, because it reads at every scale.
      handling, or by direct sum.
    - Einstein rings and moving caustics.
    - The weak thin-lens formula *cannot* make a black-hole shadow. A
-     `3√3 M` capture disk is an imposed, labelled overlay; the real shadow is
-     §6.2's job.
+     `3√3 M` capture disk is an imposed, labelled overlay. The real shadow
+     needs 3.0's ray-traced view (§6.2).
    - Geon's in-plane photons are deflected separately, by 2× Newtonian
      (`src/massless-boson.js:59-70` today).
 3. **Comoving coordinates (§5.6):** the lattice stretches with a(t) in the
@@ -634,7 +654,7 @@ microlensing light curve. **[standard]** Point lens:
 
 **Oracles:** `θ_E = √(4M·D_eff)`, μ(u), and 1/γ lattice compression.
 
-### 5.6 Honest cosmology (M4, L)
+### 5.6 Honest cosmology (M3, L)
 
 **Under the 3D convention (§1.2):** this is the *FRW-background* reduction.
 The slab is a slice of homogeneous 3D FRW with comoving thickness ℓ_c.
@@ -708,7 +728,7 @@ The slab is a slice of homogeneous 3D FRW with comoving thickness ℓ_c.
 - the sheet dispersion relation `ω² = c_s²k² − 2πGΣ₀|k|·F(kℓ)` in a static
   background, and the expanding-sheet growth equation (§1.2).
 
-### 5.7 Dust and gas (M6–M7, XL)
+### 5.7 Dust and gas (M5–M6, XL)
 
 Wanted, rated very ambitious.
 
@@ -772,7 +792,7 @@ rate; the Chandrasekhar friction time.
 **Staging:** PM dust (L) → SPH gas (L) → sinks, accretion and cooling (M) →
 the brush (§5.9).
 
-### 5.8 The quantum layer (M8, XL, laddered)
+### 5.8 The quantum layer (M7, XL, laddered)
 
 **What it looks like:**
 - A glowing field on its own grid: brightness is `|ψ|²`, hue is `arg ψ`.
@@ -838,9 +858,9 @@ the brush (§5.9).
   branching failure.
 - **Quantum jumps (MCWF):** jump operators **plus** non-Hermitian no-jump
   evolution.
-  - `A = 4ω³|d_fi|²/3` counts 3D photon modes, which the 3D convention now
-    supports. It does **not** justify forcing emitted photons into the plane.
-    Use the §1.2 photon model (open decision 9).
+  - `A = 4ω³|d_fi|²/3` counts 3D photon modes, which the 3D convention
+    supports. Under the decided planar surrogate (§1.2), the emitted photon
+    is in-plane and carries the full ΔE. Label the direction sampling.
   - Include recoil and Doppler.
   - Results: line spectra with a spectrometer panel; resonant absorption; the
     photoelectric effect.
@@ -897,13 +917,16 @@ as compressed grids.
   `n_eff = 1 − 2Φ`. Routing photon gravity through the medium code gives the
   same 4M/b deflection, and Shapiro delay falls out.
 
-## 6. 3D views
+## 6. 3D views (parked for 3.0)
+
+**Decided 2026-10-23: all of this is parked for 3.0.** 2.0 stays a 2D view,
+with the 1+1 Minkowski panel (§5.4) standing in for §6.1.
 
 The 3D convention makes "3D" more than decoration: Geon *is* a slice of a 3D
 world, so a 3D camera is looking at something real. Four options, in rising
 ambition.
 
-### 6.1 The spacetime view, 2+1 (M3, M–L) — recommended first
+### 6.1 The spacetime view, 2+1 (3.0, M–L)
 
 - Render the **block universe**: x and y across, t up.
   - World-lines as lines or tubes coloured by species, with proper-time ticks
@@ -927,12 +950,13 @@ ambition.
   - cosmology (world-lines fanning out in physical coordinates, vertical in
     comoving ones);
   - kugelblitz and annihilation as world-line events.
-- **Cost:** it reuses the world-line store (§7.2) and slicer directly. It's an
-  orbit camera plus instanced lines, cones and planes. It supersedes the
-  planned 1+1 Minkowski panel.
-- It's the most direct picture of the 2.0 thesis.
+- **Cost:** it reuses 2.0's world-line store (§7.2) and slicer directly. It's
+  an orbit camera plus instanced lines, cones and planes. It supersedes 2.0's
+  1+1 Minkowski panel.
+- It's the most direct picture of the 2.0 thesis, which makes it the cheapest
+  3.0 item to pull forward if wanted.
 
-### 6.2 The inclined view: look at the slab from outside (L)
+### 6.2 The inclined view: look at the slab from outside (3.0, L)
 
 - A free 3D camera views the slab at any angle. Under the 3D convention
   bodies are lit spheres, and contraction makes them oblate ellipsoids.
@@ -950,11 +974,10 @@ ambition.
   at their own arrival times) and you get the true light-travel-time image,
   i.e. the light-cone camera (§8.6) in 3D. That's the stretch goal.
 - The grid becomes a backdrop plane behind the slab in the scene.
-- **With the 3D photon model** (open decision 9), escaping radiation is
-  visible leaving the slab. This view is where that model pays off visually,
-  rather than costing visible photons.
+- **With 3D photons**, which come in 3.0 and replace the planar surrogate,
+  escaping radiation is visible leaving the slab.
 
-### 6.3 Embedding diagram (S–M, small)
+### 6.3 Embedding diagram (3.0, S–M)
 
 - **[standard]** Flamm's paraboloid `z = 2√(r_s(r − r_s))` is the exact
   isometric embedding of the exterior Schwarzschild equatorial constant-time
@@ -1085,7 +1108,7 @@ Ordered by how much they strengthen the chosen work.
      - a real Penrose process;
      - an exact lapse for clocks;
      - Kerr V_eff in the panel;
-     - Kerr ray tracing for §6.2.
+     - Kerr ray tracing for 3.0's inclined view (§6.2).
 3. **Make a geon in Geon.**
    - A photon ring on its own null orbit (~4E in toy units), which needs the
      cull exemption. It's unstable, as real geons are, ending in dispersal or
@@ -1104,8 +1127,8 @@ Ordered by how much they strengthen the chosen work.
    - Sources at delayed positions: Doppler colour, D⁴ beaming, head-on
      delayed radial motion `v/(1 − v)`, and transverse
      `v·sinθ/(1 − v·cosθ)` up to γv (Rees 1966).
-   - Paired with §5.3, it explains Terrell–Penrose. §6.2's spacetime ray
-     tracing is its 3D form.
+   - Paired with §5.3, it explains Terrell–Penrose. 3.0's spacetime ray
+     tracing (§6.2) is its 3D form.
 7. **Share-by-URL and preset coverage (S each)** (§2.3): an annihilation
    preset with the correlated-pair visual; superradiance; Schwinger;
    kugelblitz; external fields; Klein/RP².

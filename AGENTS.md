@@ -9,7 +9,7 @@ Part of the **a9l.im** portfolio. See root `AGENTS.md` for the shared design sys
 
 ## Future Plans
 
-`docs/ROADMAP.md` is the single authoritative plans document, covering 2.0 and beyond, open bugs, open decisions and milestones. This file describes Geon as it is; the roadmap describes where it is going. Decided on 2026-10-23: WebGPU-only (the CPU path will be retired) and the 3D convention (the simulation is a 2D slice of a 3D world). Until the CPU retirement lands, the CPU sections below still describe the live code.
+`docs/ROADMAP.md` is the single authoritative plans document, covering 2.0 and beyond, open bugs, open decisions and milestones. This file describes Geon as it is; the roadmap describes where it is going. Decided on 2026-10-23: WebGPU-only (the CPU path will be retired) and the 3D convention (the simulation is a 2D slice of a 3D world), planar photons as a labelled surrogate, and 3D views parked for 3.0. Until the CPU retirement lands, the CPU sections below still describe the live code.
 
 ## Running Locally
 
