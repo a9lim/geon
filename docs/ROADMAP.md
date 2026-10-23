@@ -250,8 +250,8 @@ The tie is explicit and per mode, which is what Codex asked for.
 - **Pool culls pose as physics.** `PHOTON_LIFETIME = 256` and
   `LEPTON_LIFETIME = 512` are pool culls. Leptons are documented as stable.
   Any bound photon structure is destroyed.
-- **The README claims Thomas precession** (`README.md:20`), but no code
-  implements it. Spin has no orientation state at all.
+- **No Thomas precession.** No code implements it, and spin has no
+  orientation state at all.
 
 ### 2.3 Still open from the June audit
 
@@ -345,7 +345,7 @@ Versions set the order. Milestone IDs are stable names, not an order:
 
 | ID | Version | Contents | Gate |
 |---|---|---|---|
-| **M0** (next session) | 1.5 | **GPU only; don't fix CPU copies slated for deletion.** The §5.1 clock fix (per-process clocks, emission boosts); the Roche timestep and Eggleton q; the 3+1 KG coefficients (§2.2); the lengths split (ε for particles, ℓ for field gravity, §1.2); seed the browser test page (§10.3) with the pion-beam and moving-BH oracles; fix the README Thomas claim. | none |
+| **M0** (next session) | 1.5 | **GPU only; don't fix CPU copies slated for deletion.** The §5.1 clock fix (per-process clocks, emission boosts); the Roche timestep and Eggleton q; the 3+1 KG coefficients (§2.2); the lengths split (ε for particles, ℓ for field gravity, §1.2); seed the browser test page (§10.3) with the pion-beam and moving-BH oracles. | none |
 | **M0′** | 1.5 | Retire the CPU path (§4): port the phase plot and effective potential to readback; device-loss recovery; a "requires WebGPU" notice; delete about 8,100 lines; update the docs. Can share a session with M0. | M0 |
 | **M1** | 1.5 | **Relativity you can see.** The world-line store (§10.2); τ and θ state; the spoke shader; clocks; spoke precession; domain decoupled from viewport (§10.4). | M0′ |
 | **M2** | 1.5 | **Frames.** The slicer; lab, ZMF, particle and custom frames (view-only); lagged and true-now modes; the scrubber; the 1+1 Minkowski panel; the grid as lab rulers. | M1 |
@@ -532,8 +532,7 @@ a9's call: a single spoke replaces the spin arc and arrowhead.
 - A non-spinning gyroscope comes back rotated after an orbit. That is a
   holonomy, the same kind of object as `comma`'s pumps, though comma's
   connection is flat and the geodetic one is curved.
-- This makes the README's Thomas claim true and adds Gravity Probe B's two
-  effects.
+- This adds Thomas precession and Gravity Probe B's two effects.
 - In 3.0 (§9.4) spin becomes a vector and these become real spin precession,
   including g − 2.
 

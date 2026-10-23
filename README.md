@@ -1,134 +1,92 @@
 # Geon
 
-Interactive particle physics simulator that runs entirely in the browser. You can spawn particles, toggle a variety of forces on and off, and watch the physics play out in real time. It covers gravity, electromagnetism, nuclear forces, scalar fields, relativistic corrections, black hole mechanics, and more. Everything runs on a WebGPU compute backend with an automatic CPU fallback.
+Geon is a browser sandbox for relativistic many-body physics. You spawn charged,
+spinning particles, switch forces and corrections on and off, and watch orbits precess,
+charges radiate, black holes evaporate, and scalar fields ripple, with live conservation
+readouts to check the numbers.
 
-**[Try it](https://a9l.im/geon)** | Part of the [a9l.im](https://a9l.im) portfolio
+**[Open it](https://a9l.im/geon)** · part of [a9l.im](https://a9l.im)
 
-## Physics
+## What's in it
 
-2D optionally-relativistic N-body dynamics in natural units (c = G = ℏ = 1). Particles store proper velocity (gamma * v), so the speed of light is enforced automatically. Boris integrator with adaptive substepping (up to 32 substeps per frame).
+The simulation is two-dimensional, in natural units (c = G = ħ = 1). Particles carry
+proper velocity, so nothing outruns light, and a Boris integrator with adaptive
+substepping advances them.
 
-### Forces
-
-- **Newtonian gravity**: inverse-square with softening
-- **Coulomb**: electrostatic attraction or repulsion
-- **Magnetic dipole**: spin-dependent B-field interactions
-- **Gravitomagnetic**: frame-dragging (also called the Lense-Thirring effect)
-- **Lorentz**: velocity-dependent magnetic force
-- **Tidal locking**: torque synchronizing spin to orbital frequency
-- **Yukawa**: screened nuclear force with exponential decay (massive pion mediator)
-- **Spin-orbit coupling**: spin-curvature and Thomas precession
-- **External fields**: uniform gravity, electric field, and magnetic Bz
-- **Higgs field gradients**: mass modulation from scalar field coupling
-- **Axion field coupling**: position-dependent electromagnetic coupling (aF^2)
-- **Boson-particle gravity**: photons and pions gravitationally lensed by massive particles
-- **Boson-boson gravity**: mutual gravitational interaction between bosons
-- **Pion-pion Coulomb**: charged pion electrostatic interactions
-- **Cosmological expansion**: Hubble flow with adjustable H parameter
-
-### Relativistic Corrections
-
-- **1PN (post-Newtonian)**: Einstein-Infeld-Hoffmann for gravity, Darwin for EM, Bazanski for gravity-EM cross-terms, scalar Breit for Yukawa
-- **Signal delay**: toy finite-speed force propagation using delayed source positions and a scalar aberration factor, with history buffers (256 snapshots, stride 64)
-
-### Scalar Fields
-
-Two scalar fields on smooth PQS grids (cubic B-spline, 64×64 on CPU, 128×128 on GPU) with self-gravity via FFT convolution:
-
-- **Higgs field**: spontaneous symmetry breaking (Mexican hat potential), mass generation via geometric-mean coupling, field excitation on particle collisions, symmetry restoration at high energy
-- **Axion field**: position-dependent EM coupling constants, superradiant amplification by spinning black holes (stimulated and spontaneous), Peccei-Quinn CP-violation dynamics
-
-Both fields evolve via Stormer-Verlet KDK integration, interact with particles and each other, and produce visible wave dynamics.
-
-### Radiation
-
-- **Larmor dipole**: electromagnetic radiation from accelerating charges
-- **EM quadrupole**: higher-order electromagnetic radiation
-- **Gravitational wave quadrupole**: energy and angular momentum loss from mass quadrupole oscillation
-- **Pion emission**: Yukawa-mediated boson exchange between nuclear-range particles
-- **Photon and pion gravitational lensing**: bosons follow curved trajectories near massive bodies
-
-### Black Holes
-
-- **Kerr-Newman horizons**: mass, spin, and charge determine the sub-extremal horizon radius; super-extremal toy inputs are clamped to an effective radius for stable rendering
-- **Pseudo-relativistic plunge**: black hole mode uses a Paczynski-Wiita-style gravity well and swallows particles whose centers cross the effective horizon
-- **Extremal censorship**: overcharged toy black holes shed same-sign leptons in quantized charge units, with a hard bound clamp as a numerical backstop
-- **Ergosphere visualization**: rendered as a distinct region around spinning black holes
-- **Hawking radiation**: thermal emission with inverse-mass-squared rate, evaporating small black holes
-- **Schwinger discharge**: vacuum pair production at charged black hole horizons
-- **Superradiance**: axion field amplification extracting rotational energy from spinning black holes, with natural saturation when horizon angular velocity drops below axion mass
-
-### Topology and Boundary Conditions
-
-- **Despawn**: particles removed at edges
-- **Bounce**: elastic reflection with friction
-- **Loop**: periodic wrapping (three topologies below)
-  - **Torus (T^2)**: standard periodic boundaries
-  - **Klein bottle**: periodic x, glide-reflected y (non-orientable, velocity and spin both flip)
-  - **Real projective plane (RP^2)**: both axes glide-reflected (non-orientable)
-
-Ghost particles generated for all periodic topologies to handle cross-boundary forces correctly via minimum-image separation.
-
-### Quantized Charge
-
-All charges quantized in units of BOSON_CHARGE (0.1). Emission, absorption, decay, Schwinger discharge, extremal charge shedding, and disintegration transfer charge in discrete quanta. Conservation enforced throughout.
+- **Forces.** Newtonian gravity, Coulomb, magnetic dipole and Lorentz forces,
+  gravitomagnetism (frame dragging), tidal locking, Yukawa (a screened nuclear force
+  with a massive pion mediator), spin-curvature coupling, and uniform external
+  gravitational, electric, and magnetic fields. Forces can be summed pairwise or with a
+  Barnes–Hut tree.
+- **Relativity.** First post-Newtonian corrections (Einstein–Infeld–Hoffmann for
+  gravity, Darwin for electromagnetism, Bažański cross terms, scalar Breit for Yukawa)
+  and signal delay: forces come from where sources were when their signal left, with a
+  scalar aberration factor. This is a toy model of finite-speed propagation, not a full
+  field solution.
+- **Black holes.** Kerr–Newman horizons set by mass, spin, and charge (super-extremal
+  inputs are clamped to an effective radius), a Paczyński–Wiita gravity well that
+  swallows bodies crossing the horizon, ergosphere rendering, Hawking evaporation,
+  Schwinger discharge that sheds charge one lepton at a time, extremal charge shedding,
+  and axion superradiance that spins a hole down until it saturates.
+- **Radiation and bosons.** Larmor radiation with Landau–Lifshitz reaction,
+  electromagnetic and gravitational-wave quadrupole losses, and pion emission. Photons,
+  pions, and leptons are real particles: they carry energy and momentum, other bodies
+  absorb them, and pions decay. With boson interaction on they are lensed by masses,
+  gravitate and repel among themselves, annihilate in opposite-charge pairs, and
+  collapse into a new particle when enough energy gathers in one place (a kugelblitz).
+  Matter meeting antimatter annihilates into photon pairs.
+- **Scalar fields.** A Higgs field with a Mexican-hat potential that sets particle
+  masses, and an axion field that modulates the electromagnetic coupling and, with
+  Yukawa on, couples with opposite sign to matter and antimatter (a Peccei–Quinn toy).
+  Both evolve on a grid, carry self-gravity, and are excited by collisions.
+- **Charge quantization.** Every charge is a multiple of 0.1, and emission, absorption,
+  decay, and discharge move charge in whole units.
+- **Space.** Despawn, bounce, or periodic boundaries; periodic space can be a torus, a
+  Klein bottle, or the real projective plane. Cosmological expansion adds a Hubble flow.
+- **Analysis.** Energy, momentum, and angular-momentum totals with drift percentages; a
+  per-force breakdown for the selected particle; a potential heatmap (gravity,
+  electric, Yukawa, or all); and, on the CPU backend, a phase-space plot and an
+  effective-potential curve for the selected particle against the heaviest body.
+- **Presets.** Fifteen scenarios, from Kepler orbits and binary inspiral through
+  Hawking evaporation, atoms, nuclei, and pion exchange to the Higgs boson, axion
+  bursts, and an expanding universe.
+- **Save and load.** Quick save to the browser, or download and upload the state as
+  JSON (particles, toggles, settings, and camera).
+- **Reference.** The `?` buttons beside controls open short explanations;
+  Shift+click opens a longer reference page with the equations. The interface is in
+  English and Japanese.
 
 ## Controls
 
-**Mouse**: Click to spawn particles. Drag to launch with velocity. Right-click to spawn antimatter (or to select or delete a particle, depending on whether the click hits a particle of matching type). Scroll to zoom, middle-drag to pan. Hover for a particle tooltip (mass, charge, spin, speed).
+- **Mouse.** Click to spawn a particle; drag to launch it. Right-click spawns
+  antimatter. Clicking a particle of the button's kind (left for matter, right for
+  antimatter) selects it; clicking one of the other kind deletes it. Scroll to zoom,
+  middle-drag to pan, hover for a readout.
+- **Touch.** Tap to spawn, drag to launch, pinch with two fingers to zoom and pan. The
+  antimatter button switches taps to antimatter.
+- **Keyboard.** Space pauses, `/` steps, `R` resets, `,` and `.` change speed, `1`–`9`
+  load presets, `X` toggles antimatter mode, `T` the theme, `S` the sidebar. `Ctrl+S` /
+  `Ctrl+L` quick save and load. `?` opens the about panel with the full list.
 
-**Touch**: Tap to spawn. Two-finger pinch to zoom. Drag to pan.
+## Running locally
 
-**Keyboard**: Space to play or pause. X to toggle antimatter mode. `?` for the full shortcut list.
+The project has no build step of its own; it loads the shared design system from
+the parent site by absolute path. From a checkout of
+[a9lim.github.io](https://github.com/a9lim/a9lim.github.io) with submodules:
 
-## Sidebar
+    npm install && npm run build
+    python3 -m http.server --directory dist 8000   # http://localhost:8000/geon/
 
-Three tabs with full simulation control:
+WebGPU is used when the browser supports it; add `?cpu=1` to force the CPU backend.
 
-- **Settings**: preset selector, spawn parameter sliders (mass, charge, spin), force toggles (gravity, gravitomagnetic, Coulomb, magnetic, Yukawa, axion, Higgs) with mass sliders for the Yukawa, Higgs, and axion fields, physics toggles (relativity, 1PN, black hole, spin-orbit, radiation, boson interaction), collision mode (pass, merge, or bounce), boundary mode (despawn, loop, or bounce), topology (torus, Klein, or RP^2), expansion toggle with Hubble parameter, and external field controls (gravity, electric, magnetic Bz)
-- **Stats**: energy breakdown (linear KE, angular KE, potential, field, radiated, mass) with conservation drift %, momentum (particle, field, and radiated) with drift %, angular momentum (orbital and spin) with drift %, 11-component per-particle force breakdown
-- **Particle**: selected particle details, phase space plot (r vs v_r, 512-sample ring buffer), effective potential V_eff(r) curve (200 samples, all active forces)
+## How it's built
 
-Backend selection is automatic, with a `?cpu=1` query parameter to force CPU. Sim speed, play or pause, step, reset, save, load, theme, and antimatter mode all live on the top toolbar; on phone widths, step, save, load, and theme drop off it to keep the panel toggle on screen. Overlays (trails, velocity vectors, acceleration vectors, acceleration components, potential field heatmap) and the Barnes-Hut toggle live in the gear-icon settings dropdown.
-
-## Analysis Tools
-
-- **Heatmap overlay**: real-time potential field visualization (64×64 on CPU, 128×128 on GPU) with modes for gravity, electric, Yukawa, or combined. Diverging colormaps, box blur smoothing, signal-delay-aware when relativity is on. Barnes-Hut tree-walk accelerated.
-- **Phase space plot**: radial distance vs radial velocity relative to the most massive body. 512-sample ring buffer traces orbital evolution, showing ellipticity and precession.
-- **Effective potential**: V_eff(r) = V(r) + L^2/(2 mu r^2) computed over 0.5x to 4x current separation. Includes centrifugal barrier, potential wells, turning points, current position marker, and the black hole pseudo-potential plunge when enabled.
-- **Conservation monitor**: energy, momentum, and angular momentum tracked with drift percentages to diagnose numerical issues.
-
-## Save & Load
-
-Quick-save and quick-load (localStorage), download as JSON, or upload via file picker and drag-drop. Saves particle state, all 16 physics toggles, slider values, collision, boundary, and topology modes, and camera position. GPU state is async-readback compatible with field downsampling (128×128 to 64×64).
-
-## Running Locally
-
-```bash
-cd path/to/a9lim.github.io && npm run build && python -m http.server --directory dist
-# -> http://localhost:8000/geon/
-```
-
-Build from the parent repository root and serve `dist/`, because shared design files load via absolute paths. The project itself has no compile or package-install step; the parent staging build assembles shared assets; reference math loads KaTeX from the configured CDN. ES6 modules require HTTP (not `file://`). Force the CPU backend with `?cpu=1`.
-
-## Tech
-
-Vanilla JavaScript organized into CPU-side ES6 modules and WebGPU compute/render shaders. It consumes the portfolio's shared browser modules and CDN-hosted KaTeX, but has no package-install step.
-
-**CPU backend**: Canvas 2D rendering, pairwise or Barnes-Hut O(N log N) force evaluation, up to 128 particles, 1,024 photons, 256 pions, and 256 leptons.
-
-**GPU backend**: WebGPU compute with instanced rendering (dual pipelines for light and dark themes). 5-phase compute pipeline covering forces, tree build, advanced physics, scalar fields, and boson lifecycle. Up to 512 particles, 4,096 photons, and 1,024 pions (leptons share the pion pool). 128×128 scalar field and heatmap grids. Lock-free CAS tree insertion, visitor-flag bottom-up aggregation, async statistics readback.
-
-**Integrator**: Boris velocity-preserving magnetic rotation with adaptive substepping. Substep size: min(sqrt(softening/a_max), (2 pi / omega_c) / 8). Stormer-Verlet KDK for scalar field evolution. 1PN velocity-Verlet correction pass.
-
-**Memory**: Zero per-frame allocation. Pre-allocated particle pools, typed array buffers, swap-and-pop deletion, circular history buffers for signal delay.
-
-## Sibling Projects
-
-- [Cyano](https://a9l.im/cyano) ([GitHub](https://github.com/a9lim/cyano))
-- [Gerry](https://a9l.im/gerry) ([GitHub](https://github.com/a9lim/gerry))
-- [Scripture](https://a9l.im/scripture) ([GitHub](https://github.com/a9lim/scripture))
-- [Shoals](https://a9l.im/shoals) ([GitHub](https://github.com/a9lim/shoals))
+Vanilla JavaScript modules with two interchangeable backends. The WebGPU backend runs
+the physics as WGSL compute shaders (up to 512 particles, with a lock-free GPU tree and
+128 × 128 field grids) and draws with instanced rendering; the CPU backend runs the
+same physics in JavaScript (up to 128 particles, 64 × 64 grids) and draws with Canvas
+2D. Shared controls, theme, and typography come from the parent site, and KaTeX renders
+the reference pages. [AGENTS.md](AGENTS.md) maps the code.
 
 ## License
 

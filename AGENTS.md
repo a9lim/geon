@@ -1,222 +1,325 @@
-# AGENTS.md
+# Geon
 
-Part of the **a9l.im** portfolio. See root `AGENTS.md` for the shared design system and shared code policy. Sibling projects: `shoals`, `cyano`, `gerry`, `scripture`.
+Geon is a relativistic many-body sandbox at a9l.im/geon: charged, spinning particles
+under gravity, electromagnetism, gravitomagnetism, Yukawa and scalar fields, with black
+holes, radiation, and photon/pion/lepton pools. Vanilla ES modules with two backends,
+WebGPU compute + instanced rendering and a CPU integrator + Canvas 2D; KaTeX from
+jsDelivr renders the reference overlay.
+It is a submodule of the a9l.im repository (`a9lim.github.io`, at `projects/geon`); the
+root `AGENTS.md` covers the shared layer, design system, build, and deployment.
 
-## Rules
+`docs/ROADMAP.md` is the plan of record: versions 1.5–3.0, open decisions, known physics
+bugs, and the decided retirement of the CPU path (WebGPU only). This file describes the
+code as it is; the CPU sections stay accurate until that retirement lands.
 
-- Always prefer shared modules over project-specific reimplementations. Check the parent `shared/` directory before adding utility code.
-- Never use the phrase "retarded potential(s)" in code, comments, or user-facing text. Use "signal delay" or "finite-speed force propagation" instead.
+## Running and checking
 
-## Future Plans
+- Preview from the parent build at `http://localhost:8000/geon/`. `?cpu=1` forces the
+  CPU backend, `?lang=ja` Japanese; `window.sim` is the live `Simulation`.
+- Syntax: `for f in main.js colors.js src/*.js src/gpu/*.js i18n/*.js; do node --check "$f"; done`
+- WGSL compiles only in the browser, so check the console after shader edits.
+  Pipelines are created synchronously, so a compile error shows up as a WebGPU
+  validation error rather than a throw; a missing shader file does throw, and init then
+  logs `[physsim] GPU init failed, falling back to CPU`.
+- There is no test suite yet (`docs/ROADMAP.md` §10.3 plans one).
 
-`docs/ROADMAP.md` is the single authoritative plans document, covering 2.0 and beyond, open bugs, open decisions and milestones. This file describes Geon as it is; the roadmap describes where it is going. Decided on 2026-10-23: WebGPU-only (the CPU path will be retired) and the 3D convention (the simulation is a 2D slice of a 3D world), planar photons as a labelled surrogate, and 3D views parked for 3.0. Until the CPU retirement lands, the CPU sections below still describe the live code.
-
-## Running Locally
-
-```bash
-cd path/to/a9lim.github.io && npm run build && python -m http.server --directory dist
-```
-
-Build from the parent repository root and serve `dist/` — shared files load via absolute paths. The project itself has no compile step, test runner, or linter. Run `node --check` over the JavaScript modules and
-`git diff --check` after documentation or code changes.
-
-## Overview
-
-Interactive particle physics simulator. Boris integrator, BH tree acceleration, Higgs/Axion scalar fields, WebGPU compute+render backend with CPU fallback, 15 presets across gravity/EM/exotic/cosmological scenarios. The project is vanilla ES6 modules; KaTeX is loaded from the root site's allowed CDN.
-
-## Architecture
-
-**`main.js`** (~700 lines): Simulation shell, input/UI/state ownership, backend selection (CPU/GPU), and `window.sim` for debugging. The frame loop is intentionally backend-agnostic: it accrues fixed timestep debt, then delegates stepping, input polling, and rendering through `sim.runtimeBackend`.
-
-**Two interchangeable runtime backends**:
-- **CPU**: `CPUPhysics` owns CPU stepping, boson lifecycles, dead-particle cleanup, and Canvas rendering over `integrator.js` / `renderer.js`.
-- **GPU**: `GPUBackend` owns GPU canvas/device lifecycle, CPU↔GPU snapshots, GPU auto-save recovery, event readback handling, `GPUPhysics` compute, and `GPURenderer` instanced rendering.
-
-Falls back to CPU on WebGPU unavailability or device loss. Force CPU via `?cpu=1`.
-
-Backend switching should go through `sim.useGPUBackend()` / `sim.useCPUBackend()`. Single-step and main-loop stepping should go through `sim.runtimeBackend.stepOnce(sim)` / `sim.runtimeBackend.step(sim)` rather than branching directly on `sim.backend` in UI or loop code.
-
-**Key modules**: `integrator.js` (Boris substep loop, all physics), `forces.js` (pairForce, BH tree walk, 1PN), `scalar-field.js` (PQS grid base), `higgs-field.js` / `axion-field.js` (field subclasses), `quadtree.js` (SoA flat typed arrays, pool-based), `physics-contract.js` (shared toggle/parameter/save-load contract), `ui.js` (toggle deps via shared `_forms.bindDeps`, mode locking, backend switching), `presets.js` (15 scenarios).
-
-## Visual Layer
-
-Geon runs on the root design system (Newsreader, neutral ground, per-theme oxblood accent); see root `AGENTS.md`.
-
-- **Theme colors**: data hues come from `_PALETTE.extended`; theme-dependent colors (text, accent, canvas) are read per theme from `_PALETTE.light` / `_PALETTE.dark` and picked by the renderer's `isLight` flag. `Renderer.setTheme()` and `GPURenderer.setTheme()` cache them; `ui.js` `syncRendererTheme()` calls both on init and toggle. The GPU backend is created after that first sync, so `GPUBackend.create()` adopts `sim.renderer.isLight` once `renderer.init()` has built the light/dark pipeline pairs.
-- **Ground**: GPU render passes clear to `_PALETTE.{light,dark}.canvas` (equal to `--bg-canvas`); the Canvas 2D path clears to transparent over the CSS ground.
-- **WGSL theme constants**: the generated block in `gpu-constants.js` carries theme pairs (`COLOR_TEXT_LIGHT`/`_DARK`, `COLOR_ACCENT_LIGHT`/`_DARK`); shaders select with the `isDarkMode` uniform.
-- **Canvas text**: `_FONT.text` at 10px or more. Sidebar plot axis labels go through `plot-labels.js`, which draws the variable italic and its subscript as a measured second run (Newsreader has no Unicode subscript letters and no Greek). The plots redraw every frame, so they need no font-load redraw.
-- **Strings**: labels and headings are sentence case in `i18n/strings.js`, `i18n/strings-reference.js`, the `index.html` defaults, and the JS fallbacks; keep proper nouns, units, and acronyms. `src/i18n.js` sets `<html lang>`, so the shared `:lang(ja)` rules keep Japanese labels upright; Japanese inline lists use `・`.
-- **Phone toolbar**: at 440px and below, the shared `.hide-sm` hides step, quick save/load, the theme toggle, and one separator so the panel toggle stays on screen. Those actions stay on desktop and on the keyboard.
-
-## Physics
-
-### Units & State
-
-c = G = ħ = 1. All velocities are fractions of c. Both linear (`p.w` = γv) and rotational (`p.angw`) state use proper velocity. When relativity off: `vel = w` identity.
-
-`p.bodyRadiusSq` is always the intrinsic body radius squared (`∛mass²`) and is the source of spin inertia/magnetic moment/angular momentum. In black-hole mode, `p.radiusSq` is the effective Kerr-Newman horizon radius squared and must not be used for spin inertia. Energy stats include rest mass (`totalMass`) plus kinetic, spin, field, potential, and radiated terms.
-
-### Boris Integrator (per substep)
-
-Half-kick → Boris rotation (Bz + Bgz + extBz) → half-kick → spin-orbit/radiation/pion emission → drift → 1PN velocity-Verlet correction → scalar field evolution (Störmer-Verlet KDK) → quadtree rebuild + collisions → external/scalar field forces
-
-Adaptive substepping: `dtSafe = min(√(softening/a_max), (2π/ω_c)/8)`. Max 32 substeps.
-
-### Sign Conventions
-
-All GEM interactions are **attractive** (gravity has one sign of "charge"):
-- GM dipole: `+3L₁L₂/r⁴` (positive = attractive)
-- GM Boris parameter: `+2Bgz` (co-moving masses attract)
-- Angular velocity (y-down canvas): `rx·vy - ry·vx` gives positive for clockwise on screen
-
-### Toggle Dependencies
+## Layout
 
 ```
-Forces:                        Physics:
-  Gravity                        Relativity          [signal delay auto-activates]
-    -> Gravitomagnetic             -> 1PN             [requires Magnetic, GM, or Yukawa]
-    (field gravity auto-on)        -> Black Hole      [+Gravity, locks collision to Merge]
-  Coulomb                        Spin-Orbit           [requires Magnetic or GM]
-    -> Magnetic                  Radiation             [requires Gravity, Coulomb, or Yukawa]
-  Yukawa               [independent]  Boson Interaction [requires BH + (Gravity OR Coulomb)]
-                                         -> Kugelblitz  [auto, requires Gravity]
-  Axion                [requires Coulomb, Yukawa, or BH]
-  Higgs                [independent]
-Disintegration                   [requires Gravity, locks collision to Merge] **HIDDEN**
-Barnes-Hut                       [independent]
-Expansion                        [independent, in Engine tab]
+index.html               page shell, sidebar (Settings / Stats / Particle), JSON-LD
+main.js                  Simulation: state, backend selection, fixed-timestep loop
+colors.js                charge and spin hues added to the shared palette
+i18n/strings.js          UI strings (en, ja); merges strings-reference.js (reference overlay)
+src/config.js            constants, mode enums, Kerr–Newman and Paczyński–Wiita helpers
+src/physics-contract.js  toggle/parameter keys shared by save/load and the GPU slot map
+src/ui.js                controls, toggle dependencies, settings dropdown, shortcuts, about
+src/input.js             spawn, select, delete; GPU hit-test polling
+src/presets.js           15 presets (PRESET_ORDER)
+src/save-load.js         quick save (localStorage), JSON download/upload
+src/stats-display.js     conservation readouts, selected-particle panel
+src/i18n.js, reference.js, backend-interface.js
+src/cpu-physics.js       CPU runtime adapter: ticks, boson lifecycles, evaporation, events
+src/integrator.js        Physics: the toggle store and the CPU Boris substep loop
+src/forces.js            pairForce with inline PE, Barnes–Hut walk, 1PN, boson forces
+src/collisions.js, quadtree.js, topology.js, signal-delay.js, energy.js, potential.js
+src/scalar-field.js      PQS grid base for higgs-field.js and axion-field.js
+src/particle.js, massless-boson.js (photons), pion.js, lepton.js, boson-utils.js
+src/renderer.js, heatmap.js      Canvas 2D rendering and potential heatmap
+src/phase-plot.js, effective-potential.js, plot-labels.js   Particle-tab plots (CPU only)
+src/fft.js, relativity.js, vec2.js
+src/canvas-renderer.js   unused; nothing imports it
+src/gpu/gpu-backend.js   GPU runtime adapter: device lifecycle, CPU↔GPU sync, events, auto-save
+src/gpu/gpu-physics.js   GPUPhysics: buffers, dispatch, readbacks, serialize
+src/gpu/gpu-pipelines.js pipelines, fetchShader, SHADER_VERSION
+src/gpu/gpu-buffers.js   allocation and packed struct sizes
+src/gpu/gpu-constants.js generated WGSL constants and toggle bits
+src/gpu/gpu-renderer.js  instanced rendering, light/dark pipeline pairs
+src/gpu/pass-graph.js    per-frame dispatch plan
+src/gpu/shaders/         54 WGSL files; shared-*.wgsl are prepended includes
 ```
 
-Enable/disable cascade and slider group visibility use shared `_forms.bindDeps()` in `ui.js`. `updateAllDeps()` calls `updateDeps()` (from `bindDeps`) plus sim-specific mode locking (collision/boundary) and GPU sync.
+## How it works
 
-### Kerr-Newman Horizons
+### State and the frame loop
 
-`kerrNewmanRadius(M, radiusSq, angVel, charge)` in `config.js`: sub-extremal `r₊ = M + √(M² - a² - Q²)`. Super-extremal toy inputs (`a² + Q² > M²`) clamp to `r₊ = M` as an effective radius for stable rendering/evolution; this is not a physical naked-singularity model. Same radius clamp logic appears in `cache-derived.wgsl`, `radiation.wgsl`, `field-deposit.wgsl`, `collision.wgsl`, and `disintegration.wgsl`.
+`Simulation` (`main.js`) owns the CPU-side particle and boson arrays, camera, and modes.
+`sim.physics`, the CPU `Physics` from `integrator.js`, is the toggle and parameter store
+in both modes: `ui.js` writes it and copies it into `GPUPhysics.setToggles()` via
+`_buildGPUToggles()`.
 
-In black-hole mode, gravity uses a Paczynski-Wiita pseudo-potential with source horizon radius from `kerrNewmanRadius()`: `Φ = -M / max(r - r₊, BH_PW_MIN_GAP)`. CPU helpers live in `blackHoleRadialTerms()` / `blackHoleSourceRadius()` in `config.js`; GPU copies live in `pair-force.wgsl`, `forces-tree.wgsl`, `compute-stats.wgsl`, and `heatmap.wgsl`. This is phenomenological and interactive, not a full GR geodesic solve. Keep CPU `_peAccum`, `potential.js`, GPU stats, heatmap, and `effective-potential.js` in sync with any force-law change.
+`_loopBody` adds the capped frame time × `speedScale` to `sim.accumulator`, then calls
+`sim.runtimeBackend.step()`, `.pollInput()`, and `.render()` (render only when `_dirty`;
+the loop stops while the tab is hidden). `runtimeBackend` is the `GPUBackend` once
+WebGPU initialized, otherwise `CPUPhysics`; backend switches go through
+`sim.useGPUBackend()` / `sim.useCPUBackend()`, so the loop never branches on
+`sim.backend`. `selectBackend()` falls back to CPU on `?cpu=1`, missing `navigator.gpu`,
+or any adapter, device, or `GPUBackend.create()` failure. On device loss the sim
+switches to CPU and loads the GPU auto-save (every 300 stepped frames). The "GPU
+acceleration" toggle in the settings dropdown switches at runtime; GPU→CPU reads back
+particles, block-averages the 128² fields to 64², and clears bosons.
 
-Horizon capture is active in merge mode under BH mode: if a particle center crosses another particle's effective horizon, the captor swallows it using merge-like four-momentum, charge, and spin bookkeeping. CPU: `collisions.js` `resolveHorizonCapture()`. GPU: `collision.wgsl` `resolveCollisions`. The broadphase query is widened in BH mode so a small center already inside a large horizon is still found.
+`sim.addParticle()` builds a CPU `Particle` and hands it to `backend.addParticle()`. On
+GPU the buffers are authoritative and the CPU array is not kept current; readbacks
+(`snapshotToCPU`, `serialize`, stats, hit tests) bring state back.
 
-Extremal censorship is implemented as quantized same-sign lepton shedding plus a hard clamp backstop. `quantizedCensoredBlackHoleCharge()` gives the largest `BOSON_CHARGE` multiple within `M² >= a² + Q²`. CPU: `integrator.js` `checkDisintegration()` returns `chargeSheds` even when the hidden disintegration toggle is off, and `CPUPhysics._handleExtremalChargeShed()` emits leptons. GPU: `disintegration.wgsl` runs in BH mode using `DISINT_FEATURE_EXTREMAL`, emits leptons into the shared pion pool (`kind=1u`), updates particle mass/charge/radius immediately, and does not require the visible/hidden disintegration toggle.
+### Units and particle state
 
-### Schwinger Discharge
+- c = G = ħ = 1. World units are pixels / `WORLD_SCALE` (16); the domain is the window
+  size / 16, so resizing the window resizes the world.
+- Linear and rotational state are proper velocities (`p.w` = γv, `p.angw`); `vel` and
+  `angVel` derive from them (`relativity.js`) and equal them with relativity off. The
+  spawn spin slider is a surface speed.
+- `p.bodyRadiusSq` = ∛m² is the body radius and the source of moment of inertia,
+  magnetic moment, and angular momentum. In black-hole mode `p.radius` / `p.radiusSq`
+  hold the Kerr–Newman horizon instead.
+- Charges are multiples of `BOSON_CHARGE` (0.1): both backends round in `addParticle()`,
+  pions and leptons carry 0 or ±`BOSON_CHARGE`, and emission, absorption, decay,
+  Schwinger discharge, extremal shedding, and Roche transfer move whole quanta.
+- Energy totals include rest mass plus kinetic, spin, potential, field, and radiated terms.
 
-Schwinger discharge at BH horizons. Rate: `Γ = (e²Q²)/(π²Σ) × exp(-πE_cr Σ/|Q|)`, `Σ = r₊² + a²` (KN area factor), `e = BOSON_CHARGE`, `E_cr = m_e²/e`. Threshold `0.5·E_cr`. Lepton KE from horizon potential: `eΦ_H - m_e` where `Φ_H = |Q|r₊/Σ`. Per event: BH loses `BOSON_CHARGE` charge and `ELECTRON_MASS` mass (KE not subtracted — prevents runaway). Same-sign lepton escapes, opposite falls back. Requires BH + Coulomb + Radiation. Accumulates rate per substep; emits at 1. CPU: `integrator.js` (after Hawking). GPU: `radiation.wgsl` `schwingerDischarge`, leptons share pion pool (`kind=1u`). Generic high-energy photon-to-particle conversion was intentionally removed; do not reintroduce it under a new name.
+### Integrator
 
-### Superradiance
+CPU `Physics.update()` runs once per `PHYSICS_DT` tick with adaptive substeps,
+`dtSafe = min(√(softening/a_max), (2π/ω_c)/8)`, at most 32. A substep: save old 1PN
+force → half-kick → Boris rotation → half-kick → spin-orbit and torques → radiation
+(Landau–Lifshitz, Hawking, Schwinger, pion emission) → drift → expansion → 1PN
+velocity-Verlet correction → Higgs and axion evolution → quadtree rebuild → merge
+collisions → force recompute (pair, external, and field forces, bounce contact, boson
+interaction). Then once per tick: history, quadrupole radiation, display forces,
+boundary.
 
-Axion field amplification by spinning BHs. Rate: `Γ = (M·μ_a)² · max(Ω_H - μ_a, 0) · (1 + φ²)`, where `Ω_H = a/Σ` is horizon angular velocity and `φ` is the local axion field amplitude. Phenomenological α² scaling (real rate ∝ α⁸, too steep for interactive sim). The `(1 + φ²)` factor gives exponential cloud growth (stimulated amplification) from a constant vacuum seed (spontaneous), analogous to stimulated emission `Γ = A(1+n)`. Back-reaction: BH loses mass `dM = dE` and angular momentum `dJ = dE/μ_a` (m=1 mode at frequency ω ≈ μ_a; entropy production `TdS = dE(Ω_H/μ_a − 1) > 0`). Natural saturation when `Ω_H ≤ μ_a`. No accumulator (continuous deposit, not discrete event). Deposits an energy-normalized PQS impulse into axion `fieldDot`: the immediate field kinetic-energy increase equals the accepted `dE`, then the same `dE` is removed from BH mass/spin. Requires BH + Axion. CPU: `axion-field.js` `_depositSuperradiance()` samples field via `interpolate()` and normalizes against local `fieldDot`. GPU: `field-deposit.wgsl` `depositSuperradiance` reads `φ²` from `axYukMod[pid].w` (set by `field-forces.wgsl` `applyAxionForces` at pass 5c, consumed at pass 15) and adds the normalized impulse with `finalizeDepositAdd`. GPU deposit pipeline has a 3-group layout (group 2 = axYukMod read-only) separate from the 2-group layout used by other deposit entry points. Torque display: `torqueSuperradiance` (CPU) / `f5.z` (GPU), rendered as indigo arc at offset 1.0 (second ring from center; contact torque is innermost at 0.5).
+GPU `GPUPhysics.update()` gets the frame's whole tick count (`n·PHYSICS_DT`) and splits
+it into at most 32 substeps from the previous frame's `maxAccel` readback alone (no
+cyclotron limit). `_dispatchSubstep()` lists the order in its pass comments: forces,
+external and field forces come before the fused kick–rotate–kick, and pion decay, boson
+interaction, dead-slot GC, history, and quadrupole run once per frame after the
+substeps.
 
-### Kugelblitz Collapse
+The Boris rotation parameter is `(q/2m)·Bz + 2·Bgz`, scaled by dt/γ. Gravitomagnetism
+uses the GEM sign: a moving mass sources `Bgz = −m(v×r̂)/r²`, and the GM dipole force
+`+3L₁L₂/r⁴` attracts where the EM dipole's `−3μ₁μ₂/r⁴` repels aligned dipoles. In
+`pairForce` the displacement is source − observer, so a positive radial coefficient
+attracts.
 
-Boson energy exceeding the hoop conjecture threshold (E > r/2, natural units) condenses into a massive particle. Detection walks the boson BH tree after aggregation: `totalMass[node]` (= total source energy) vs full node extent / 2. Smallest qualifying node collapses first. Collects all bosons in subtree, computes COM/momentum/charge/angular momentum, then spawns a particle from the invariant mass `sqrt(E² - |P|²)` and velocity `P/E`. Near-null clusters are rejected rather than becoming superluminal massive particles. Radiation bookkeeping subtracts only consumed previously-radiated photons/pions from `totalRadiated` and radiated momentum. Guards: CPU uses `MIN_KUGELBLITZ_COUNT` (4) + `MIN_KUGELBLITZ_ENERGY` (0.2); GPU skips count check (GPU `N_PARTICLE_COUNT` is a visitor-flag protocol value, not subtree count) and uses energy + size only. Max 1 per substep. Requires Gravity + Boson Interaction (no separate toggle). CPU: `integrator.js` `_checkKugelblitz()`, node size = `bw * 2` (full extent from half-extents). GPU: `kugelblitz.wgsl` `checkKugelblitz`, node size = `maxX - minX` (full extent), 48-byte event readback to CPU for particle spawn. `totalCount` array on `QuadTreePool` (computed in `calculateBosonDistribution`) tracks boson count per node for CPU path.
+### Forces and toggles
 
-### Annihilation
+Sixteen toggles (`TOGGLE_KEYS`). Their dependency graph is the declarative
+`_forms.bindDeps()` list in `ui.js`; `updateAllDeps()` adds the mode locks (Black hole
+and the hidden Disintegration force Merge collisions, Expansion forces Despawn). Less
+obvious couplings: Boson interaction needs the Barnes–Hut toggle (settings dropdown);
+signal delay runs whenever Relativity is on; field gravity follows Gravity; kugelblitz
+runs under Boson interaction with Gravity; 1PN's EIH sector runs with Gravitomagnetic
+(not Gravity), Darwin with Magnetic, Bažański with both, scalar Breit with Yukawa.
 
-Matter/antimatter particle annihilation emits two photons with exact lab-frame energy and momentum conservation. CPU carries collision event `{energy, px, py}` through `collisions.js` and emits via `sim.emitPhotonBurstWithMomentum()`. GPU collision events are 32-byte `MergeResult` records (`p0 = x,y,energy,type`, `p1 = px,py,pad,pad`); `merge-photons.wgsl` runs immediately after `resolveCollisions` and appends the two photons on-device. Field excitations consume the same merge-event readback and include both merge and annihilation event energies.
+Barnes–Hut picks tree walk over pairwise forces; the CPU quadtree is rebuilt every
+substep regardless, since collisions, bounce contact, and hit tests query it. With
+Higgs on, the Yukawa range is `yukawaMu·√(higgsMod_i·higgsMod_j)`, `higgsMod =
+max(|φ|, HIGGS_MASS_FLOOR)` cached per particle (GPU `axYukMod.z`).
 
-### Quantized Boson Charge
+Signal delay solves the light-cone condition against a per-particle history ring,
+recorded only with Relativity on (`signal-delay.js`, `signal-delay-common.wgsl`).
+Removed particles keep sourcing forces until their signal has crossed the domain:
+`sim.deadParticles` on CPU, retired slots with death time, mass, and spin in
+`ParticleAux` on GPU.
 
-All charges quantized in units of `BOSON_CHARGE` (config.js, default 0.1). `addParticle()` rounds to nearest multiple (CPU `main.js`, GPU `gpu-physics.js`). Pions/leptons carry `±BOSON_CHARGE` or `0.0`. Conservation maintained: emission/absorption/decay/Schwinger/extremal shedding/disintegration all transfer in `BOSON_CHARGE` quanta. Annihilation uses `abs(charge) < EPSILON` (not exact equality).
+### Black holes
 
-### Higgs Mass Modulation
+- **Horizon.** `kerrNewmanRadius()` (`config.js`): `r₊ = M + √(M² − a² − Q²)`,
+  `a = INERTIA_K·bodyRadiusSq·|ω|`. Super-extremal inputs clamp to `r₊ = M`, an
+  effective radius for stable evolution, not a naked-singularity model. WGSL repeats
+  the clamp in many shaders (grep `disc >= 0.0`).
+- **Gravity.** Paczyński–Wiita, `Φ = −M / max(r − r₊, BH_PW_MIN_GAP)`, with
+  `BH_SOFTENING`: CPU `blackHoleRadialTerms()`; GPU `bhSourceRadius()` copies in
+  `pair-force`, `forces-tree`, `compute-stats`, and `heatmap.wgsl` (the heatmap's
+  ignores spin). Phenomenological, not a geodesic solve.
+- **Capture.** In Merge mode a particle whose centre is inside another's horizon is
+  swallowed with merge bookkeeping: CPU `resolveHorizonCapture()`, GPU
+  `resolveCollisions`, whose broadphase searches the whole domain in black-hole mode so
+  a small body deep inside a large horizon is found.
+- **Extremal censorship.** An over-bound hole sheds same-sign leptons one quantum at a
+  time, with `quantizedCensoredBlackHoleCharge()` as clamp backstop. It runs in
+  black-hole mode whatever the Disintegration toggle says: CPU
+  `checkDisintegration().chargeSheds` → `CPUPhysics._handleExtremalChargeShed()`, GPU
+  `disintegration.wgsl` with `DISINT_FEATURE_EXTREMAL`.
+- **Hawking** (Black hole + Radiation): Kerr–Newman temperature, Stefan–Boltzmann
+  power, none at extremality. Below `MIN_MASS` a hole sheds leftover charge as leptons
+  and ends in a photon burst.
+- **Schwinger** (Black hole + Coulomb + Radiation; rate in the comment above the CPU
+  block in `integrator.js`, GPU `schwingerDischarge` in `radiation.wgsl`): each event
+  emits one same-sign lepton and costs the hole one charge quantum and `ELECTRON_MASS`
+  but not the lepton's kinetic energy; subtracting that too makes the discharge run
+  away.
+- **Superradiance** (Black hole + Axion): the rate scales as α² instead of the real
+  α⁸, which is too steep to see. Accepted dE enters axion `fieldDot` as an
+  energy-normalized impulse and the hole loses `dM = dE`, `dJ = dE/μ_a`, so it
+  saturates at `Ω_H ≤ μ_a`. CPU `AxionField._depositSuperradiance()`; GPU
+  `depositSuperradiance` (`field-deposit.wgsl`) reads φ² from `axYukMod[pid].w`, written
+  earlier in the substep by `applyAxionForces`, and has its own three-group layout.
 
-When Higgs enabled, Yukawa range parameter μ_eff = `yukawaMu · √(higgsMod_i · higgsMod_j)` where `higgsMod = max(|φ(x)|, HIGGS_MASS_FLOOR)` cached per particle. Geometric mean per pair. GPU: `higgsMod` in `axYukMod.z`.
+### Bosons
 
-### Scalar Field Base
+- Pool caps live in `config.js` (CPU 128 particles / 1024 photons / 256 pions /
+  256 leptons; GPU 512 / 4096 / 1024 + 1024). GPU leptons share the pion buffer,
+  told apart by `Pion.kind` (0 pion, 1 lepton).
+- Absorption adds the boson's full four-momentum (`_absorbFourMomentum()`), so the
+  target's invariant mass changes with its proper velocity; charged pions move charge.
+  `emitterId` blocks self-absorption, and nothing is absorbed before `BOSON_MIN_AGE`.
+- Pion decay is a per-tick probability on CPU; the GPU decays once per frame with
+  `1 − (1 − p)^N` for N ticks.
+- Leptons come from Schwinger discharge, extremal shedding, evaporation remnants, and
+  charged-pion decay. Photon → pair conversion is deliberately absent.
+- **Annihilation** (Merge mode, matter meets antimatter) emits two photons conserving
+  lab-frame energy and momentum: CPU events `{energy, px, py}` →
+  `sim.emitPhotonBurstWithMomentum()`; GPU 32-byte `MergeResult`
+  (`p0 = x, y, energy, type`, `p1 = px, py, _, _`) → `merge-photons.wgsl` on-device.
+  Merge and annihilation energies also excite the scalar fields.
+- **Kugelblitz**: a boson-tree node whose energy exceeds half its full extent (hoop
+  conjecture) collapses into a particle of mass `√(E² − |P|²)` and velocity `P/E`;
+  near-null clusters are rejected, and only consumed bosons that were counted as
+  radiated leave the radiated totals. The GPU (`kugelblitz.wgsl`) skips the CPU's
+  `MIN_KUGELBLITZ_COUNT` guard because its `N_PARTICLE_COUNT` node word is a
+  visitor-flag counter, not a subtree count.
 
-PQS (cubic B-spline) grid: 64×64 (CPU), 128×128 (GPU). 4×4 stencil. C² interpolation and gradients. Field arrays: `field`/`fieldDot` (not `phi`/`phiDot`). Clamp: SCALAR_FIELD_MAX = 2.
+### Scalar fields
 
-Self-gravity via FFT convolution with Green's function. `computeSelfGravity(domainW, domainH, softeningSq, bcMode, topoConst)` — callers pass boundary mode directly, not a boolean. Called twice per KDK for O(dt²) accuracy.
+`ScalarField` (`scalar-field.js`) is a PQS (cubic B-spline, 4×4 stencil) grid with C²
+interpolation and gradients, arrays `field` / `fieldDot`, values clamped to
+`±SCALAR_FIELD_MAX`; 64² on CPU, 128² on GPU. Fields step by Störmer–Verlet KDK each
+substep. Self-gravity is an FFT convolution with a softened Green's function;
+`computeSelfGravity(domainW, domainH, softeningSq, bcMode, topoConst)` takes the
+boundary mode, not a periodic flag, and runs twice per KDK (GPU: `field-selfgrav` and
+the Stockham `field-fft.wgsl`, with `fft.js` building the Green's function).
 
-Merge/annihilation scalar excitations are energy-normalized impulses into `fieldDot`: CPU `depositExcitation()` and GPU `field-excitation.wgsl` solve the local amplitude from the current `fieldDot` cross term so the immediate kinetic-energy increase equals the event energy. Do not restore the old `scale * sqrt(energy)` cap model.
+The couplings are documented in the headers of `higgs-field.js` (mass =
+`baseMass·max(|φ|, HIGGS_MASS_FLOOR)`) and `axion-field.js` (`axMod` for EM, a
+Peccei–Quinn `yukMod` that flips sign for antimatter). Merge and annihilation
+excitations enter `fieldDot` as impulses solved against the existing `fieldDot` cross
+term, so field kinetic energy rises by exactly the event energy (CPU
+`depositExcitation()`, GPU `field-excitation.wgsl`).
 
-## GPU
+### GPU backend
 
-### Capacity Limits
+- **Shaders.** `fetchShader()` loads `src/gpu/shaders/<file>?v=${SHADER_VERSION}`;
+  `getSharedPrefix()` prepends `buildWGSLConstants()` (generated from `config.js` and
+  the palette), `shared-structs`, `shared-topology`, and `shared-rng.wgsl`. Tree
+  walkers add `shared-tree-nodes.wgsl`; many shaders also prepend `common.wgsl`.
+- **Buffers.** Packed structs (`shared-structs.wgsl`, sizes in `gpu-buffers.js`) keep
+  each stage within the 10 storage buffers `selectBackend()` requests.
+- **Pass plan.** `pass-graph.js` derives dispatch booleans from toggles only, not alive
+  counts. Pool-sized boson passes use indirect dispatch from `dispatch-args.wgsl`,
+  with a max-capacity fallback.
+- **Tree.** `computeBounds`, `initRoot`, `insertParticles` (lock-free CAS, one body per
+  leaf; the CPU quadtree holds four), `computeAggregates` (bottom-up via visitor flags).
+- **Events.** Merge, disintegration, and kugelblitz events, hit tests, stats,
+  maxAccel, ghost count, and the free-slot stack come back through async `mapAsync`
+  readbacks a frame late; `GPUBackend` spawns fragments, transfers, and kugelblitz
+  particles from them.
+- `_phase5Ready` holds field dispatches until the async field pipelines exist.
 
-| Resource | CPU | GPU |
-|----------|-----|-----|
-| Particles | 128 | 512 |
-| Photons | 1024 | 4096 |
-| Pions | 256 | 1024 |
-| Leptons | 256 | 1024 (shares pion pool, total 2048) |
+### Rendering
 
-### Shader Organization
+The CPU `Renderer` draws on `#simCanvas`, cleared transparent over the CSS ground.
+`GPURenderer` draws on a `#gpuCanvas` behind it, cleared to
+`_PALETTE.{light,dark}.canvas`, with light/dark pipeline pairs that `setTheme()` swaps.
+`syncRendererTheme()` in `ui.js` sets both; `GPUBackend.create()` adopts
+`sim.renderer.isLight` after `renderer.init()` because it is created after the first
+sync. WGSL theme colors are light/dark constant pairs picked by the `isDarkMode`
+uniform. The sidebar plots redraw continuously, so their canvas text needs no
+font-load redraw.
 
-All shaders prepended with `wgslConstants + shared-structs.wgsl + shared-topology.wgsl + shared-rng.wgsl`. Tree-walk shaders add `shared-tree-nodes.wgsl`. `fetchShader()` in `gpu-pipelines.js` is single source of truth.
+## Conventions
 
-`SHADER_VERSION` in gpu-pipelines.js must be bumped after shader edits to invalidate browser cache.
+- **Naming.** Code, comments, and UI text say "signal delay" or "finite-speed force
+  propagation", never "retarded potential(s)" (a9's rule; `docs/ROADMAP.md` §12 adds
+  "light-cone" and "Liénard–Wiechert").
+- **Two implementations.** Every force law, emission process, and conservation rule
+  exists in `src/*.js` and in WGSL. A force-law change touches `forces.js` (force and
+  `_peAccum`), `potential.js`, `heatmap.js`, `effective-potential.js`, and the
+  `pair-force`, `forces-tree`, `onePN`, `compute-stats`, and `heatmap` shaders. ROADMAP
+  milestone M0 deliberately fixes only the GPU copies of code slated for deletion.
+- **Constants.** WGSL constants are generated from `config.js`, but the toggle bits are
+  written twice in `gpu-constants.js` (WGSL string and JS exports), tree node layouts
+  are repeated in `boson-tree` and `kugelblitz.wgsl`, and `GPUPhysics.update()`
+  hardcodes softening as `4 : 8`. JS uniform writers follow WGSL struct member order;
+  the post-substep `dt` is a raw write at byte 0 of `SimUniforms`. Event records are
+  mirrored between shaders and the readback parsers in `gpu-physics.js`: a 32-byte
+  `MergeResult` change also touches `MERGE_RESULT_SIZE`, `collision.wgsl`,
+  `merge-photons.wgsl`, and the field-excitation upload.
+- **Shader cache.** Bump `SHADER_VERSION` after any WGSL edit; the query string is the
+  only cache key.
+- **New toggle or parameter.** Update `physics-contract.js`, `ui.js` (`toggleDefs`,
+  deps), `presets.js` `TOGGLE_MAP`, `save-load.js` `TOGGLE_SYNC`, and
+  `GPUPhysics.setToggles()` with its bit, then check that CPU and GPU saves round-trip it.
+- **Saves.** `version: 1` holds particles, toggles, parameters, modes, speed, friction,
+  and camera; fields and bosons are not saved. The quick-save key `nohair-quicksave`
+  and download name `nohair-state.json` are stored names; renaming them orphans saves.
+- **GPU slots.** `GPUPhysics.addParticle()` initializes every per-particle buffer.
+  `axYukMod` starts at `(1, 1, 1, 0)` because its components are multiplicative
+  modulations (EM coupling, Yukawa coupling, Higgs range factor) that zeros would switch
+  off. The alive sentinel for `deathTime` is `FLT_MAX`
+  (3.4028235e38), not `Infinity`.
+- **Command ordering.** `queue.writeBuffer()` lands at submit, before any of the
+  encoder's passes, so resets between dispatches in one command buffer use
+  `encoder.copyBufferToBuffer()` or `clearBuffer()` (the tree can build twice per
+  substep). Each readback channel's pending flag skips new copies while its staging
+  buffer is mapped and clears in `finally`, so a lost device cannot wedge it.
+- **WGSL.** Merge resolution guards with `mass <= EPSILON`, not `== 0`, because pairs
+  race; NaN guards come before global-memory writes; render pipelines use premultiplied
+  alpha with `srcFactor: 'one'`; entry points sharing a module declare shared bindings
+  `read_write`.
+- **CPU forces.** PE accumulates inside `pairForce()` (`_peAccum`); `potential.js` only
+  recomputes it after preset loads. `computeAllForces()` caches `magMoment` and
+  `angMomentum` from `bodyRadiusSq`, never the horizon. `forceRadiation` is zeroed for
+  every particle before the substep loop because only Larmor sets it. 1PN forces are
+  velocity-dependent and break Newton's third law, hence the velocity-Verlet
+  correction; `compute1PN()` zeroes `force1PN` first.
+- **History stride.** Both backends subtract `HISTORY_STRIDE` from the counter rather
+  than resetting it; the GPU advances it by the frame's tick count.
+- **Topology.** Klein and RP² crossings flip velocity and spin; RP² `wrapPosition()`
+  iterates at most twice for simultaneous x/y crossings; periodic modes add ghost
+  copies so tree forces cross the boundary, and history interpolation wraps through
+  `minImage()`.
+- **Lazy fields.** `sim.higgsField` / `sim.axionField` are `null` until first enabled;
+  use `sim.ensureHiggsField()` / `ensureAxionField()`.
+- **Input.** The antimatter toolbar mode (X) drives touch only; mouse users spawn
+  antimatter with right-click. Click resolution is `InputHandler._resolveClickHit()`;
+  black-hole mode never spawns antimatter.
+- **CSS.** The shared `.mode-toggles` sets `display: flex`, which beats the `hidden`
+  attribute, so those rows are shown and hidden with `style.display`.
+- **URLs.** Geon's own files load by relative URL (`styles.css`, `colors.js`, `main.js`,
+  the shaders), which resolves only under `/geon/` with its trailing slash.
 
-### GPU Pass Graph
+## Open work
 
-`gpu/pass-graph.js` derives per-frame dispatch booleans from current toggles and alive counts. Use it to skip whole inactive pass families (spin-orbit, torque application, radiation subpasses, boson update/interaction, kugelblitz readback) without scattering ad hoc toggle checks through the frame loop. Keep the plan conservative: if existing photons/pions/leptons/bosons may still need cleanup or absorption, keep their update passes alive even when the creation toggle is off.
+`docs/ROADMAP.md` holds the plan: §2.2–2.3 list known physics bugs and audit leftovers,
+§3 the milestones (M0 next; M0′ retires the CPU path). Not tracked there:
 
-Boson pool pass sizes are generated by `dispatch-args.wgsl` into an indirect-dispatch buffer (photons, pions/leptons, total bosons, boson-tree nodes). Use indirect dispatch for pool-sized boson passes when available; keep the explicit max-capacity fallback for portability.
-
-### GPU Tree Build
-
-4 dispatches (computeBounds, initRoot, insertParticles, computeAggregates). Lock-free CAS insertion. Visitor-flag bottom-up aggregation. Tree resets use `encoder.copyBufferToBuffer` (not `queue.writeBuffer`) because the tree may be built twice per substep; queue-level operations would execute before the encoder starts.
-
-### GPU ↔ CPU Sync
-
-- `addParticle()` must initialize ALL per-particle buffers. `axYukMod` defaults to `(1.0, 1.0, 1.0, 0.0)` not `(0, 0, 0, 0)`
-- Save/load parity goes through `physics-contract.js`. When adding a new toggle or scalar parameter, update the shared contract plus the GPU backing slot mapping, then verify CPU and GPU serialize/deserialize it.
-- `queue.writeBuffer()` executes at queue time (before encoder starts), NOT inline with compute passes. Use `encoder.copyBufferToBuffer` for resets between dispatches within the same command buffer
-- `_phase5Ready` flag guards field dispatches until async pipeline creation completes
-- Async readback methods use try/catch/finally to clear pending flags on device loss
-- Merge events are 32 bytes. If their layout changes, update `MERGE_RESULT_SIZE`, `collision.wgsl`, `merge-photons.wgsl`, readback parsing, and field-excitation upload together.
-
-### Disintegration (Hidden)
-
-The UI toggle is hidden by a parent `style="display:none"`, and none of the 15 current presets enables it. Saved/programmatic state can still activate two toggle-controlled mechanisms: tidal fragmentation (parent → SPAWN_COUNT children) and Roche lobe overflow (Eggleton 1983 mass transfer). The same CPU/GPU machinery also carries BH extremal charge shedding in black-hole mode, even when the hidden disintegration toggle is off. Known bugs:
-
-- **Charge cascade**: fragments inherit parent's charge/SPAWN_COUNT, but if Coulomb self-repulsion caused the breakup, fragments still exceed the threshold and cascade into dust. Needs a cooldown, charge redistribution fix, or minimum fragment mass floor.
-- **GPU readback latency**: disintegration events have 1-frame latency (same as merge events). Parent state in `DisintEvent` is snapshot from detection frame; by readback time, particle has evolved further.
-- `DisintEvent` struct is 48 bytes (12 fields). GPU uses `atomicAdd` on event counter, capped at `MAX_DISINT_EVENTS` (64).
-- GPU Roche transfer stores the emitted packet charge in `DisintEvent.charge` and the source's post-transfer charge in the final event slot, exposed to JS as `sourceCharge`; `GPUPhysics.patchMassCharge()` applies both mass and charge conservation on readback.
-
-## Gotchas
-
-### Will Cause Bugs
-
-- `_peAccum` PE is accumulated inline during `pairForce()` — `potential.js` is a fallback only for preset-load recomputation
-- `forceRadiation` cleared for all particles before substep loop
-- History recording strided at HISTORY_STRIDE=64; both CPU and GPU use subtraction (preserves remainder)
-- `.mode-toggles` sets `display: flex` overriding `hidden` — use `style.display`
-- External field trig cached once per frame via `_cacheExternalFields()`
-- Lazy field init: Higgs/Axion fields are `null` until first toggle-on
-- Bounce (Hertz) is always quadtree-accelerated when BH on, O(n²) when off — do not early-return when `root < 0`
-- `magMoment`/`angMomentum` cached per particle at start of `computeAllForces()` using `bodyRadiusSq` (intrinsic body radius, not horizon radius in BH mode)
-- Dead particles in GPU tree use `deathMass`/`deathAngVel` from `ParticleAux` for leaf data; CPU dead-particle path remains pairwise
-- Generic photon pair production is gone by design. Schwinger discharge and BH extremal charge shedding are the only remaining direct lepton-creation mechanisms; Schwinger is tied to BH + Coulomb + Radiation, while extremal shedding is tied to BH mode.
-
-### WGSL
-
-- Explicit parentheses required when mixing `*` with `^` (XOR)
-- Multiple entry points sharing a module need `read_write` access on shared bindings
-- WebGPU disallows binding the same buffer twice in a dispatch
-- Staging buffers must not be copied to while mapped from previous `mapAsync`
-- JS uniform write order must exactly match WGSL struct member order
-- `deathTime` sentinel: `FLT_MAX` (3.4028235e38), not `Infinity`
-- Collision merge: `mass <= EPSILON` guards (not `== 0`) for race conditions
-- Render: premultiplied alpha (`color.rgb * alpha`) with `srcFactor: 'one'`
-- NaN barriers before writing to global memory (not after)
-
-### Topology
-
-- `minImage()` uses `out` parameter for zero-alloc
-- RP² `wrapPosition()` uses iterative wrapping (max 2 passes) for simultaneous x+y out-of-bounds
-- Periodic boundary interpolation in signal delay uses `minImage()` to wrap displacements
-
-### Semantic
-
-- 1PN does NOT obey Newton's 3rd law — velocity-Verlet corrected
-- `compute1PN()` zeroes `force1PN` before accumulating
-- Self-absorption permanently blocked by `emitterId` for both photons and pions
-- Photon/pion absorption adds full lab-frame four-momentum: target invariant mass/internal energy changes along with proper velocity; charged pions also transfer charge
-- Leptons on GPU share pion buffer — distinguished by `Pion.kind` field (0=pion, 1=lepton)
-- GPU pion decay probability scaled by `1-(1-p)^N` to match CPU's per-tick rate
-- World coordinates: `sim.domainW/H` (viewport / WORLD_SCALE), not pixels
-- `_PALETTE`/`_FONT` frozen by colors.js
+- Hidden Disintegration (its control's parent is `display:none`; no preset enables
+  it): fragments split the parent's charge evenly and `addParticle()` rounds each
+  share, so charge survives only when it divides into `SPAWN_COUNT` quanta, and a
+  Coulomb-driven breakup leaves fragments over threshold, cascading into dust.
+- `pass-graph.js` gates photon passes on Radiation, but `merge-photons.wgsl` emits
+  annihilation photons with Radiation off; those photons then never update (found by
+  reading the code, not reproduced).
+- `src/canvas-renderer.js` is dead, and the `torque-render.wgsl` header table swaps the
+  contact (0.5) and superradiance (1.0) arc offsets relative to `getTorqueOffset()`.
