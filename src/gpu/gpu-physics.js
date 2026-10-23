@@ -667,6 +667,54 @@ export default class GPUPhysics {
 
     readFrameState() { return this._frameStateLatest; }
 
+    /** Map `copies` ([buffer, offset, bytes]) into one staging buffer; resolves to an ArrayBuffer. */
+    async _readRanges(copies, label) {
+        const total = copies.reduce((n, c) => n + c[2], 0);
+        if (total === 0) return new ArrayBuffer(0);
+        const staging = this.device.createBuffer({ label, size: total, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+        const enc = this.device.createCommandEncoder({ label });
+        let at = 0;
+        for (const [buf, offset, bytes] of copies) { enc.copyBufferToBuffer(buf, offset, staging, at, bytes); at += bytes; }
+        this.device.queue.submit([enc.finish()]);
+        try {
+            await staging.mapAsync(GPUMapMode.READ);
+            return staging.getMappedRange().slice(0);
+        } finally {
+            if (staging.mapState === 'mapped') staging.unmap();
+            staging.destroy();
+        }
+    }
+
+    /** Every slot's ParticleState and world-line meta: { n, state (ArrayBuffer), meta (Uint32Array) }. */
+    async readSlotsSnapshot() {
+        const n = this.aliveCount;
+        const raw = await this._readRanges([
+            [this.buffers.particleState, 0, n * PARTICLE_STATE_SIZE],
+            [this.buffers.wlMeta, 0, n * WL_META_STRIDE * 4],
+        ], 'slotsSnapshot');
+        return { n, state: raw.slice(0, n * PARTICLE_STATE_SIZE), meta: new Uint32Array(raw, n * PARTICLE_STATE_SIZE) };
+    }
+
+    /**
+     * The world-line rings and meta of `slots`, with the epoch they were read at:
+     * { epoch, meta: Uint32Array[slot meta], rings: Float32Array[WL_LEN·WL_STRIDE] per slot }.
+     */
+    async readWorldLines(slots) {
+        const ringBytes = WORLDLINE_LEN * WL_STRIDE * 4;
+        const metaBytes = WL_META_STRIDE * 4;
+        const copies = [];
+        for (const s of slots) copies.push([this.buffers.wlMeta, s * metaBytes, metaBytes]);
+        for (const s of slots) copies.push([this.buffers.wlData, s * ringBytes, ringBytes]);
+        const epoch = this.timeEpoch;
+        const raw = await this._readRanges(copies, 'worldLines');
+        const k = slots.length;
+        return {
+            epoch,
+            meta: slots.map((_, i) => new Uint32Array(raw, i * metaBytes, WL_META_STRIDE)),
+            rings: slots.map((_, i) => new Float32Array(raw, k * metaBytes + i * ringBytes, WORLDLINE_LEN * WL_STRIDE)),
+        };
+    }
+
     _createPhase2BindGroups() {
         const b = this.buffers;
         const p2 = this._phase2;

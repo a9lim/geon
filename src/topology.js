@@ -12,12 +12,15 @@ function torusWrap(d, full, half) {
 }
 
 /**
- * Minimum-image separation from (ox,oy) to (sx,sy). Writes into out.
+ * Minimum-image separation from (ox,oy) to (sx,sy). Writes into out: x, y, and fx, fy (±1),
+ * −1 where the nearest image is mirrored across that axis by a Klein or RP² glide.
  * Klein/RP^2 need absolute source coords because glide reflections are position-dependent.
  */
 export function minImage(ox, oy, sx, sy, topology, W, H, halfW, halfH, out) {
     let dx = sx - ox;
     let dy = sy - oy;
+    out.fx = 1;
+    out.fy = 1;
 
     if (topology === TORUS) {
         out.x = torusWrap(dx, W, halfW);
@@ -40,7 +43,7 @@ export function minImage(ox, oy, sx, sy, topology, W, H, halfW, halfH, out) {
         _c.x = torusWrap((W - sx) - ox, W, halfW);
         _c.y = torusWrap((sy + H) - oy, doubleH, H);
         let sq = _c.x * _c.x + _c.y * _c.y;
-        if (sq < bestSq) { bestDx = _c.x; bestDy = _c.y; }
+        if (sq < bestSq) { bestDx = _c.x; bestDy = _c.y; out.fx = -1; }
 
         out.x = bestDx;
         out.y = bestDy;
@@ -57,22 +60,25 @@ export function minImage(ox, oy, sx, sy, topology, W, H, halfW, halfH, out) {
     _c.x = (W - sx) - ox;
     _c.y = torusWrap((sy + H) - oy, doubleH, H);
     let sq = _c.x * _c.x + _c.y * _c.y;
-    if (sq < bestSq) { bestDx = _c.x; bestDy = _c.y; bestSq = sq; }
+    let fx = 1, fy = 1;
+    if (sq < bestSq) { bestDx = _c.x; bestDy = _c.y; bestSq = sq; fx = -1; }
 
     // Candidate 2: x-glide  (x,y) ~ (x+W, H-y)
     _c.x = torusWrap((sx + W) - ox, doubleW, W);
     _c.y = (H - sy) - oy;
     sq = _c.x * _c.x + _c.y * _c.y;
-    if (sq < bestSq) { bestDx = _c.x; bestDy = _c.y; bestSq = sq; }
+    if (sq < bestSq) { bestDx = _c.x; bestDy = _c.y; bestSq = sq; fx = 1; fy = -1; }
 
     // Candidate 3: both glides
     _c.x = torusWrap((2 * W - sx) - ox, doubleW, W);
     _c.y = torusWrap((2 * H - sy) - oy, doubleH, H);
     sq = _c.x * _c.x + _c.y * _c.y;
-    if (sq < bestSq) { bestDx = _c.x; bestDy = _c.y; }
+    if (sq < bestSq) { bestDx = _c.x; bestDy = _c.y; fx = -1; fy = -1; }
 
     out.x = bestDx;
     out.y = bestDy;
+    out.fx = fx;
+    out.fy = fy;
 }
 
 /**

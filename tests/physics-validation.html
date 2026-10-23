@@ -710,6 +710,64 @@ cases.push({
     },
 });
 
+// The torus twin (Barrow & Levin 2001): on a torus of length L a traveller at v sees its own
+// earlier image γL behind it, its clock γvL behind, because the identification x ~ x + L holds
+// at equal lab time. Slices the traveller's frame with the torus images (3×3) on.
+cases.push({
+    name: 'Torus twin: in its own frame the traveller’s image is γL away and γvL behind',
+    async run() {
+        const L = 96, v = 0.8, g = 1 / Math.sqrt(1 - v * v);
+        const gp = await makeSim({ on: ['relativityEnabled'], domainW: L, domainH: 32, boundary: BOUND_LOOP });
+        gp.addParticle({ x: 16, y: 13, mass: 1, bornAt: -Infinity });
+        gp.addParticle({ x: 16, y: 19, vx: g * v, mass: 1, bornAt: -Infinity });
+        await run(gp, 100, 0.25);
+        gp.sliceFrame(frameParams({ kind: 2, slot: 1, images: 9, viewHalfW: 1, viewHalfH: 1 }));
+        const views = await readView(gp, 2 * 9);
+        gp.destroy();
+        // Slot 1's images 3, 4, 5 are the copies at −L, 0, +L along x; the earlier one is valid
+        const self = views[9 + 4];
+        const img = [views[9 + 3], views[9 + 5]].find(w => w.valid);
+        const sep = Math.abs(img.x - self.x), lagTau = self.tau - img.tau;
+        const errs = [sep / (g * L) - 1, lagTau / (g * v * L) - 1];
+        const worst = Math.max(...errs.map(Math.abs));
+        return { expected: `γL = ${fmt(g * L, 4)}, γvL = ${fmt(g * v * L, 4)}`,
+                 measured: `${fmt(sep, 4)}, ${fmt(lagTau, 4)}`,
+                 metric: `${fmt(worst * 100, 2)}%`, pass: self.valid && !!img && worst < 2e-3 };
+    },
+});
+
+// The bounce twin: out to a wall at 0.8c and back. On both coasting legs the traveller's clock
+// runs at exactly 1/γ of home's; the soft Hertz-wall turnaround is slower and ages it more, so
+// the round trip lands between 1/γ and 1, younger than home either way.
+cases.push({
+    name: 'Twin paradox: the traveller coasts at 1/γ and comes home younger',
+    async run() {
+        const v = 0.8, g = 1 / Math.sqrt(1 - v * v);
+        const gp = await makeSim({ on: ['relativityEnabled'], domainW: 160, domainH: 40, boundary: 1 });
+        gp.addParticle({ x: 12, y: 17, mass: 1 });
+        gp.addParticle({ x: 12, y: 23, vx: g * v, mass: 1 });
+        let t = 0, prevDx = 0, coastT = 0, coastTau = 0, prev = null, clocks = null;
+        for (let k = 0; k < 4000; k++) {
+            gp.update(0.25);
+            t += 0.25;
+            const [h, tr] = await readParticles(gp);
+            const ck = await readClocks(gp, 2);
+            const w = Math.hypot(tr.wx, tr.wy), speed = w / Math.sqrt(1 + w * w);
+            if (prev && speed > 0.799) { coastT += ck[0].tau - prev[0].tau; coastTau += ck[1].tau - prev[1].tau; }
+            prev = ck;
+            const dx = tr.x - h.x;
+            if (t > 50 && prevDx > 0 && dx <= 0) { clocks = ck; break; }
+            prevDx = dx;
+        }
+        gp.destroy();
+        const coast = coastTau / coastT, trip = clocks[1].tau / clocks[0].tau;
+        return { expected: `coasting 1/γ = ${fmt(1 / g, 4)}; round trip in (1/γ, 1)`,
+                 measured: `coasting ${fmt(coast, 5)} over ${fmt(coastT, 4)}; round trip ${fmt(trip, 4)}`,
+                 metric: `${fmt((coast * g - 1) * 100, 3)}%`,
+                 pass: Math.abs(coast * g - 1) < 2e-3 && trip > 1 / g && trip < 1 };
+    },
+});
+
 // π⁰ beam at γ = 5: survival N/N₀ = exp(−ln2·t/(γT½)) in lab time t.
 cases.push({
     name: 'π⁰ beam at γ = 5 decays on proper time (lab t = γT½, 2γT½)',

@@ -166,8 +166,10 @@ export const PRESETS = {
         spawn(sim) {
             const cx = sim.domainW / 2, cy = sim.domainH / 2;
             // v ≈ 0.80, γ ≈ 5/3: the spoke falls back ≈ 240° per orbit. The nucleus starts
-            // with the opposite momentum, so the pair's centre of mass stays put.
-            const nucM = 30, nucQ = 12, r = 16;
+            // with the opposite momentum, so the pair's centre of mass stays put. It is heavy
+            // because the electron's Liénard–Wiechert field at the centre has a tangential
+            // part, qv/r², which drags a light nucleus round and unravels the orbit.
+            const nucM = 600, nucQ = 12, r = 16;
             const v = _vCircRel(nucQ * 2, r, 1);
             const p = v / Math.sqrt(1 - v * v);
             sim.addParticle(cx, cy, 0, -p / nucM, { mass: nucM, charge: nucQ, spin: 0 });
@@ -195,6 +197,48 @@ export const PRESETS = {
             const p = m * v / Math.sqrt(1 - v * v);
             sim.addParticle(cx, cy, 0, -p / M, { mass: M, charge: 0, spin: 0 });
             sim.addParticle(cx + r, cy, 0, v, { mass: m, charge: 0, spin: 0 });
+        },
+    },
+
+    twinBounce: {
+        name: 'Twin paradox',
+        desc: 'One twin flies to a wall at 0.8c and back, returning younger; on the traveller’s slice the home clock leaps 2vd at the turn',
+        toggles: {
+            gravity: false, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: true, onepn: false, blackhole: false,
+            radiation: false, spinorbit: false, disintegration: false,
+            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
+        },
+        settings: { collision: 'pass', boundary: 'bounce', speed: 16 },
+        visuals: { trails: false, clocks: true, velocity: false, force: false, forceComponents: false, potential: false },
+        domain: [160, 40],
+        spawn(sim) {
+            // Home at rest; the traveller leaves at 0.8c (γ = 5/3), turns at the far wall and
+            // comes back, ageing 0.6 of home's time apart from the turn
+            const y = sim.domainH / 2;
+            sim.addParticle(12, y - 3, 0, 0, { mass: 1, charge: 0, spin: 0 });
+            sim.addParticle(12, y + 3, 0.8, 0, { mass: 1, charge: 0, spin: 0 });
+        },
+    },
+
+    twinTorus: {
+        name: 'Twin on a torus',
+        desc: 'A twin circling a torus at 0.8c meets home every lap, younger each time, with no turnaround: on a torus the lab is the preferred frame',
+        toggles: {
+            gravity: false, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: true, onepn: false, blackhole: false,
+            radiation: false, spinorbit: false, disintegration: false,
+            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
+        },
+        settings: { collision: 'pass', boundary: 'loop', topology: 'torus', speed: 16 },
+        visuals: { trails: false, clocks: true, velocity: false, force: false, forceComponents: false, potential: false },
+        domain: [96, 32],
+        spawn(sim) {
+            // In the traveller's own frame its images sit γL apart and read γvL apart: the torus
+            // identification holds at equal lab time only (Barrow & Levin 2001)
+            const y = sim.domainH / 2;
+            sim.addParticle(16, y - 3, 0, 0, { mass: 1, charge: 0, spin: 0 });
+            sim.addParticle(16, y + 3, 0.8, 0, { mass: 1, charge: 0, spin: 0 });
         },
     },
 
@@ -508,7 +552,7 @@ export const PRESETS = {
 
 export const PRESET_ORDER = [
     'kepler', 'precession', 'inspiral', 'hawking',
-    'wheel', 'thomas', 'geodetic',
+    'wheel', 'thomas', 'geodetic', 'twinBounce', 'twinTorus',
     'atom', 'bremsstrahlung', 'magnetic',
     'nucleus', 'axion', 'pionexchange', 'higgs', 'higgsboson', 'axionburst', 'pecceiQuinn',
     'expansion',

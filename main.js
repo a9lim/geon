@@ -11,6 +11,7 @@ import { loadState, quickSave, quickLoad, downloadState, uploadState } from './s
 import GPUBackend from './src/gpu/gpu-backend.js';
 import Frames from './src/frames.js';
 import FramePanel from './src/frame-panel.js';
+import MinkowskiPanel from './src/minkowski.js';
 
 /**
  * Request a WebGPU device with the limits the simulation needs.
@@ -284,6 +285,7 @@ class Simulation {
 
         setupUI(this);
         this.framePanel = new FramePanel(this);
+        this.minkowski = new MinkowskiPanel(this, document.getElementById('minkowski-container'));
 
         // Re-apply DOM translations after UI setup in case any modules
         // mutated text content during their wiring (e.g. mode-btn label).
@@ -407,6 +409,7 @@ class Simulation {
         // Refresh cached layout dimensions for sidebar plots
         this.phasePlot.cacheSize();
         this.effPotPlot.cacheSize();
+        this.minkowski?.cacheSize();
         // Preserve the top-left world position across resize (a frame keeps its observer centred)
         if (!this.frames.active) {
             this.camera.x += (this.width - oldW) / (2 * this.camera.zoom);

@@ -139,6 +139,7 @@ export default class GPUBackend {
             }
             sim.framePanel?.update();
         }
+        sim.minkowski?.tick();
         this.renderer.frameOn = !!frameParams;
         this.renderer.frameImages = frameParams ? frameParams.images : 1;
 
