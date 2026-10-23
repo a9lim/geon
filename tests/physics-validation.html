@@ -1083,6 +1083,60 @@ cases.push({
     },
 });
 
+cases.push({
+    name: 'Kibble–Zurek: walls left by a Higgs quench thin out as τ_Q^{−1/4}',
+    async run() {
+        // The Higgs mass term ramps through the transition, ε = −1 + t/τ_Q, with a Langevin bath
+        // on its damping. Near the critical point the damping dominates (relaxational dynamics,
+        // z = 2) and mean-field ν = 1/2 freezes domains at ξ̂ ∝ τ_Q^{ν/(1+zν)} = τ_Q^{1/4}. Walls are
+        // counted (sign changes between neighbouring cells, per unit length) once the mean |φ|
+        // first reaches half the current vacuum √ε; four seeds per quench time
+        const N = GPU_SCALAR_GRID, L = 128;
+        const density = async (tau, seed0) => {
+            const gp = await makeSim({ on: ['higgsEnabled'], params: { higgsMass: 0.75 }, domainW: L, domainH: L, boundary: BOUND_LOOP });
+            gp.addParticle({ x: L / 2, y: L / 2, mass: 1e-4, bornAt: -Infinity });
+            let seed = seed0;
+            const rand = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+            gp.setField('higgs', () => 1e-3 * (rand() - 0.5));
+            gp._noiseSeed = seed0 * 977;
+            gp.setHiggsQuench(tau, 1e-4);
+            let walls = NaN;
+            for (let t = 0; t < 3 * tau + 150; t += 2) {
+                await run(gp, 2, 0.25);
+                const eps = gp.higgsQuenchEpsilon;
+                if (eps <= 0) continue;
+                const f = new Float32Array(await readBuffer(gp, gp._higgsBuffers.field, N * N * 4));
+                let mean = 0;
+                for (const v of f) mean += Math.abs(v);
+                if (mean / f.length < 0.5 * Math.sqrt(eps)) continue;
+                let cross = 0;
+                for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+                    const v = f[y * N + x];
+                    if (v * f[y * N + (x + 1) % N] < 0) cross++;
+                    if (v * f[((y + 1) % N) * N + x] < 0) cross++;
+                }
+                walls = cross / (2 * N * L);
+                break;
+            }
+            gp.destroy();
+            return walls;
+        };
+        const mean = async (tau) => {
+            let sum = 0;
+            for (const s of [7, 11, 13, 17]) sum += await density(tau, s);
+            return sum / 4;
+        };
+        const fast = await mean(32), slow = await mean(512);
+        const exponent = Math.log(fast / slow) / Math.log(16);
+        return {
+            expected: `n ∝ τ_Q^{−1/4}: exponent 0.25`,
+            measured: `n = ${fmt(fast)} (τ_Q = 32), ${fmt(slow)} (512): exponent ${fmt(exponent, 3)}`,
+            metric: `${fmt(exponent - 0.25, 2)}`,
+            pass: exponent > 0.15 && exponent < 0.35,
+        };
+    },
+});
+
 // ── Runner ──
 
 /** Run every case, or those whose name contains `filter` (console: runAll('Liénard')). */

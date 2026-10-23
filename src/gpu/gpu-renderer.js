@@ -186,6 +186,7 @@ export default class GPURenderer {
         this.frameBuffers = null;
         this.frameOn = false;
         this.scaleA = 1;          // the grid's rulers are comoving
+        this.higgsVev = 1;        // the Higgs vacuum the overlay measures from (√ε in a quench)
         this.frameImages = 1;
         this.showGrid = true;
         this.periodic = false;
@@ -1276,7 +1277,7 @@ export default class GPURenderer {
         f[6] = this._domainH || 1;
         u[7] = this.isLight ? 1 : 0;
         u[8] = which === 'higgs' ? 0 : 1;
-        f[9] = 0; f[10] = 0; f[11] = 0; // clear padding
+        f[9] = this.higgsVev ?? 1; f[10] = 0; f[11] = 0;
         const [c0, c1] = _fieldColors[which];
         f[12] = c0[0]; f[13] = c0[1]; f[14] = c0[2]; f[15] = 1.0;
         f[16] = c1[0]; f[17] = c1[1]; f[18] = c1[2]; f[19] = 1.0;

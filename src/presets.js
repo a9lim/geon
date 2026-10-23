@@ -580,6 +580,29 @@ export const PRESETS = {
             }
         },
     },
+
+    kibbleZurek: {
+        name: 'Kibble–Zurek walls',
+        desc: 'A Higgs field quenched through its symmetry-breaking transition freezes into ±v domains; a slower quench leaves fewer walls',
+        domain: [128, 128],
+        toggles: {
+            gravity: false, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: false, onepn: false, blackhole: false,
+            radiation: false, spinorbit: false, disintegration: false,
+            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: true,
+        },
+        settings: { collision: 'pass', boundary: 'loop', topology: 'torus', speed: 16, higgsMass: 0.75 },
+        visuals: { trails: false, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            // The symmetric phase, φ ≈ 0, with a Langevin bath; the mass term crosses the
+            // transition 120 time units in
+            const gp = sim._gpuPhysics;
+            gp.setField('higgs', () => 1e-3 * (Math.random() - 0.5));
+            gp.setHiggsQuench(120, 1e-4);
+            // The simulation steps only with a body: one tracer, too light to bias the field
+            sim.addParticle(sim.domainW / 2, sim.domainH / 2, 0, 0, { mass: 1e-3, charge: 0, spin: 0 });
+        },
+    },
 };
 
 export const PRESET_ORDER = [
@@ -587,7 +610,7 @@ export const PRESET_ORDER = [
     'wheel', 'thomas', 'geodetic', 'twinBounce', 'twinTorus',
     'atom', 'bremsstrahlung', 'magnetic',
     'nucleus', 'axion', 'pionexchange', 'higgs', 'higgsboson', 'axionburst', 'pecceiQuinn',
-    'expansion', 'misalignment',
+    'expansion', 'misalignment', 'kibbleZurek',
 ];
 
 // ─── Toggle/Setting Application ───

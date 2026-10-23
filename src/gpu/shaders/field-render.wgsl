@@ -30,7 +30,7 @@ struct FieldRenderUniforms {
     domainH: f32,
     isLight: u32,
     fieldType: u32,  // 0=higgs, 1=axion
-    _pad0: f32,
+    vev: f32,        // the Higgs vacuum, √ε during a quench (1 otherwise)
     _pad1: f32,
     _pad2: f32,
     // Colors (packed as vec4 RGBA floats)
@@ -78,10 +78,17 @@ fn fsFieldOverlay(in: VertexOutput) -> @location(0) vec4<f32> {
     var color: vec3<f32>;
 
     if (renderUniforms.fieldType == 0u) {
-        // Higgs: deviation from VEV=1
-        deviation = val - 1.0;
-        intensity = min(abs(deviation) * 8.0, 1.0);
-        color = select(renderUniforms.color1.rgb, renderUniforms.color0.rgb, deviation < 0.0);
+        // Higgs: deviation from the vacuum +v. The other vacuum, φ < 0 (domains after a quench),
+        // takes the enhanced colour, so ±v domains and the walls between them read apart
+        let v = renderUniforms.vev;
+        if (val >= 0.0) {
+            deviation = val - v;
+            intensity = min(abs(deviation) * 8.0, 1.0);
+            color = select(renderUniforms.color1.rgb, renderUniforms.color0.rgb, deviation < 0.0);
+        } else {
+            intensity = min(-val * 8.0, 1.0);
+            color = renderUniforms.color1.rgb;
+        }
     } else {
         // Axion: deviation from vacuum=0
         deviation = val;

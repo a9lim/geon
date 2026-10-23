@@ -84,7 +84,7 @@ fn higgsHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     let phi = field[idx];
     let lapI = inlineLaplacian(ix, iy, idx, invCWsq, invCHsq);
-    let muSqEff = muSq - thermal[idx];  // Phase transition: KE reduces effective μ²
+    let muSqEff = muSq * uniforms.higgsQuench - thermal[idx];  // Phase transition: KE reduces effective μ²
     let srcTerm = source[idx] * invCellArea * uniforms.invScaleA;
     let fdC = fieldDot[idx];
 
@@ -124,6 +124,14 @@ fn higgsHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
               - mc.z * damp * fdC + viscosity + 4.0 * mc.w * fdC - 3.0 * uniforms.hubble * fdC;
 
     var newFdot = fdC + ddphi * halfDt;
+    // Langevin bath: the fluctuation partner of the damping, ⟨ξ²⟩ = 2γT/(cellArea·dt) per cell
+    if (uniforms.higgsNoise > 0.0 && damp > 0.0) {
+        let h1 = pcgHash((idx * 2654435761u) ^ uniforms.noiseSeed);
+        let u1 = max(f32(h1) / 4294967296.0, 1e-7);
+        let u2 = f32(pcgHash(h1 ^ 0x68E31DA4u)) / 4294967296.0;
+        let gauss = sqrt(-2.0 * log(u1)) * cos(TWO_PI * u2);
+        newFdot += gauss * sqrt(2.0 * damp * uniforms.higgsNoise * halfDt * invCellArea);
+    }
     // NaN/Inf guard: reset fieldDot and field to VEV (matching CPU higgs-field.js:112)
     if (newFdot != newFdot || abs(newFdot) > 1e6) {
         newFdot = 0.0;

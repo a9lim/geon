@@ -342,6 +342,8 @@ export default class GPUPhysics {
         this._hubbleParam = 0.001;
         this._cosmoSchedule = 0;
         this._fieldDamping = 1;
+        this._higgsQuench = null;   // setHiggsQuench()
+        this._noiseSeed = 0;
         this._heatmapEnabled = false;
         this._heatmapMode = 'all';
         this._heatmapFrame = 0;
@@ -2396,6 +2398,10 @@ export default class GPUPhysics {
         f[26] = this.scaleA;
         f[27] = 1 / this.scaleA;
         u[28] = this._fieldDamping ? 1 : 0;
+        const q = this._higgsQuench;
+        f[29] = q ? Math.min(1, Math.max(-1, (this.simTime - q.t0) / q.tau - 1)) : 1;
+        f[30] = q ? q.noise : 0;
+        u[31] = (this._noiseSeed = (this._noiseSeed + 0x9E3779B9) >>> 0);
         this.device.queue.writeBuffer(buf, 0, _fieldUniformData);
     }
 
@@ -4154,6 +4160,7 @@ export default class GPUPhysics {
         this.conformalTime = 0;
         this.timeEpoch = 0;
         this.cosmology.reset();
+        this._higgsQuench = null;
         this.setComovingDomain(this.comovingW, this.comovingH);
         this.ledger = { escapedE: 0, escapedPx: 0, escapedPy: 0, expansionWork: 0 };
         this._peScale = null;
@@ -4242,6 +4249,22 @@ export default class GPUPhysics {
     resetFields() {
         if (this._higgsBuffers) this._initFieldToVacuum('higgs');
         if (this._axionBuffers) this._initFieldToVacuum('axion');
+    }
+
+    /**
+     * Quench the Higgs through its symmetry-breaking transition (the Kibble–Zurek preset): the
+     * mass term becomes ε·μ² with ε = −1 + t/τ_Q, clamped to [−1, 1], so it crosses the critical
+     * point τ_Q after the call; `noise` is the Langevin bath's temperature on the Higgs damping.
+     * tau ≤ 0 ends the quench.
+     */
+    setHiggsQuench(tau, noise = 0) {
+        this._higgsQuench = tau > 0 ? { tau, t0: this.simTime, noise } : null;
+    }
+
+    /** The quench parameter ε now (1 without a quench). */
+    get higgsQuenchEpsilon() {
+        const q = this._higgsQuench;
+        return q ? Math.min(1, Math.max(-1, (this.simTime - q.t0) / q.tau - 1)) : 1;
     }
 
     /**

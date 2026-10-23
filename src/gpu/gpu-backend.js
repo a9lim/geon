@@ -153,6 +153,7 @@ export default class GPUBackend {
         this.renderer.periodic = sim.boundaryMode === BOUND_LOOP;
         this.renderer.showGrid = sim.view.grid;
         this.renderer.scaleA = this.physics.scaleA;
+        this.renderer.higgsVev = Math.sqrt(Math.max(this.physics.higgsQuenchEpsilon, 0));
 
         // A non-lab frame: slice every world line on the observer's hyperplane first
         if (sim.frames.active && !sim.frames.allowed) sim.framePanel?.choose('lab');

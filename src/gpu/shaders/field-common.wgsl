@@ -39,6 +39,12 @@ struct FieldUniforms {
     scaleA: f32,
     invScaleA: f32,
     damping: u32,           // 0: no ether damping (misalignment and other free-field runs)
+    // A Kibble–Zurek quench (GPUPhysics.setHiggsQuench): the Higgs mass term is ε·μ², ε ramped
+    // from −1 through the transition; and a Langevin bath at temperature higgsNoise on the
+    // Higgs damping, so slow quenches have fluctuations to grow from
+    higgsQuench: f32,
+    higgsNoise: f32,
+    noiseSeed: u32,
 };
 
 // ─── PQS (Cubic B-Spline, Order 3) Weight Computation ───
