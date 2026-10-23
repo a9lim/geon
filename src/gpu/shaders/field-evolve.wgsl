@@ -22,6 +22,10 @@
 // through its proper time (e^{Φ}/γ dt, the 1/γ applied at deposit), so its
 // source carries e^{4Φ}·e^{Φ} = e^{5Φ}. Damping is a rate in proper time, so it
 // picks up one lapse factor e^{Φ}. Returns (e^{4Φ}, e^{2Φ}, e^{Φ}, Φ̇).
+//
+// Under expansion the field is the 3D field of a slab of FRW: φ̈ + 3Hφ̇ − ∇²φ + V′ = source/a,
+// with ∇² in physical coordinates (the grid is comoving, so its cells grow with a) and the
+// source spread over a slab a·ℓ thick.
 fn metricCoeffs(idx: u32) -> vec4<f32> {
     if (uniforms.gravityEnabled == 0u) { return vec4<f32>(1.0, 1.0, 1.0, 0.0); }
     let lapse = exp(clamp(metricPhi[idx], -METRIC_PHI_CLAMP, METRIC_PHI_CLAMP));
@@ -75,13 +79,13 @@ fn higgsHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     let mH = uniforms.higgsMass;
     let muSq = 0.5 * mH * mH;
-    let damp = 2.0 * mH;
+    let damp = select(0.0, 2.0 * mH, uniforms.damping != 0u);
     let halfDt = uniforms.dt * 0.5;
 
     let phi = field[idx];
     let lapI = inlineLaplacian(ix, iy, idx, invCWsq, invCHsq);
     let muSqEff = muSq - thermal[idx];  // Phase transition: KE reduces effective μ²
-    let srcTerm = source[idx] * invCellArea;
+    let srcTerm = source[idx] * invCellArea * uniforms.invScaleA;
     let fdC = fieldDot[idx];
 
     // Numerical viscosity: ν·∇²(ȧ) with ν = 1/(2√(1/dx²+1/dy²)) → Q=1 at Nyquist, vanishes for physical modes
@@ -117,7 +121,7 @@ fn higgsHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     let mc = metricCoeffs(idx);
     let ddphi = mc.x * lapI + mc.y * force + mc.x * mc.z * srcTerm
-              - mc.z * damp * fdC + viscosity + 4.0 * mc.w * fdC;
+              - mc.z * damp * fdC + viscosity + 4.0 * mc.w * fdC - 3.0 * uniforms.hubble * fdC;
 
     var newFdot = fdC + ddphi * halfDt;
     // NaN/Inf guard: reset fieldDot and field to VEV (matching CPU higgs-field.js:112)
@@ -148,11 +152,11 @@ fn axionHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     let mA = uniforms.axionMass;
     let mASq = mA * mA;
-    let damp = uniforms.axionCoupling * mA;  // ζ=g/2, Q=1/g → damp = g*m_a
+    let damp = select(0.0, uniforms.axionCoupling * mA, uniforms.damping != 0u);  // ζ=g/2, Q=1/g → damp = g*m_a
 
     let aVal = field[idx];
     let lapI = inlineLaplacian(ix, iy, idx, invCWsq, invCHsq);
-    let srcTerm = source[idx] * invCellArea;
+    let srcTerm = source[idx] * invCellArea * uniforms.invScaleA;
     let fdC = fieldDot[idx];
 
     // Numerical viscosity: ν·∇²(ȧ) with ν = 1/(2√(1/dx²+1/dy²)) → Q=1 at Nyquist, vanishes for physical modes
@@ -188,7 +192,7 @@ fn axionHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     let mc = metricCoeffs(idx);
     let ddA = mc.x * lapI + mc.y * force + mc.x * mc.z * srcTerm
-            - mc.z * damp * fdC + viscosity + 4.0 * mc.w * fdC;
+            - mc.z * damp * fdC + viscosity + 4.0 * mc.w * fdC - 3.0 * uniforms.hubble * fdC;
 
     var newFdot = fdC + ddA * (uniforms.dt * 0.5);
     // NaN/Inf guard on fieldDot only (Axion vacuum is 0.0, handled by drift fixup)

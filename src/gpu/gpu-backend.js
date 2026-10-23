@@ -9,6 +9,9 @@ import {
 import GPUPhysics from './gpu-physics.js';
 import GPURenderer from './gpu-renderer.js';
 
+// Expansion: the most the scale factor may grow per update (ln a), and the most updates a frame
+const EXPANSION_STEP = 0.02;
+const MAX_EXPANSION_CHUNKS = 16;
 const AUTO_SAVE_INTERVAL = 300;
 
 export default class GPUBackend {
@@ -89,10 +92,16 @@ export default class GPUBackend {
         this.physics._collisionMode = sim.collisionMode;
     }
 
-    /** Advance by dt; under expansion the camera follows the universe's growth. */
+    /**
+     * Advance by dt; under expansion the camera follows the universe's growth. The universe
+     * grows once per update(), so a frame with H·dt above EXPANSION_STEP is split: the split
+     * between the stretch and the dynamics, and Hubble friction, stay accurate to that.
+     */
     _advance(sim, dt) {
         const a0 = this.physics.scaleA;
-        this.physics.update(dt);
+        const H = this.physics.expanding ? this.physics.cosmology.H : 0;
+        const chunks = H > 0 ? Math.min(MAX_EXPANSION_CHUNKS, Math.ceil(H * dt / EXPANSION_STEP)) : 1;
+        for (let i = 0; i < chunks; i++) this.physics.update(dt / chunks);
         const a1 = this.physics.scaleA;
         if (a1 !== a0) {
             this.renderer.setDomain(this.physics.domainW, this.physics.domainH);

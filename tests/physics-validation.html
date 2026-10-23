@@ -1006,6 +1006,83 @@ cases.push({
     },
 });
 
+cases.push({
+    name: 'Axion misalignment: frozen while H ≫ m_a, then ρ = ½ȧ² + ½m²a² dilutes as a⁻³',
+    async run() {
+        // A uniform field in the radiation era, H = H₀(a₀/a)², with no ether damping: ä + 3Hȧ +
+        // m²a = 0. While H ≫ m Hubble friction holds it; once m ≫ H the oscillation's energy
+        // per comoving volume is an adiabatic invariant: ρa³ is constant, cold matter
+        const m = 0.1, H0 = 0.5;
+        const gp = await makeUniverse({ on: ['coulombEnabled', 'axionEnabled', 'expansionEnabled'],
+                                        params: { hubbleParam: H0, cosmoSchedule: 3, axionMass: m, fieldDamping: 0 },
+                                        domainW: 64, domainH: 64 });
+        gp.addParticle({ x: 32, y: 32, mass: 0.05, bornAt: -Infinity });
+        gp.setField('axion', 1);
+        const cell = async () => {
+            const f = new Float32Array(await readBuffer(gp, gp._axionBuffers.field, 4));
+            const fd = new Float32Array(await readBuffer(gp, gp._axionBuffers.fieldDot, 4));
+            return { phi: f[0], e: gp.scaleA ** 3 * (0.5 * fd[0] * fd[0] + 0.5 * m * m * f[0] * f[0]) };
+        };
+        const dt = 0.25;
+        await run(gp, 1, dt);
+        const early = await cell();              // H = H₀/(1 + 2H₀t) = 0.25 = 2.5m: still frozen
+        await run(gp, 399, dt);
+        const late1 = await cell();               // a ≈ 20, H/m ≈ 0.012
+        await run(gp, 400, dt);
+        const late2 = await cell();
+        gp.destroy();
+        const drift = Math.abs(late2.e / late1.e - 1);
+        return {
+            expected: `φ(1) ≈ 1 (frozen); ρa³ equal at t = 400, 800`,
+            measured: `φ(1) = ${fmt(early.phi)}; ρa³ = ${fmt(late1.e)}, ${fmt(late2.e)}`,
+            metric: `${fmt(drift * 100, 2)}%, frozen to ${fmt((1 - early.phi) * 100, 2)}%`,
+            pass: early.phi > 0.97 && drift < 0.03,
+        };
+    },
+});
+
+cases.push({
+    name: 'Expansion ledger: a field’s slab energy plus the booked work stays constant',
+    async run() {
+        // The misalignment run again, read directly: the slab energy a·Σ(½ȧ² + ½m²a²)dA grows
+        // ~30× while frozen and then dilutes; field-ledger.wgsl books Hubble friction and the
+        // stretch into cosmoAccum[0], so E + W should not move
+        const m = 0.1;
+        const gp = await makeUniverse({ on: ['coulombEnabled', 'axionEnabled', 'expansionEnabled'],
+                                        params: { hubbleParam: 0.5, cosmoSchedule: 3, axionMass: m, fieldDamping: 0 },
+                                        domainW: 64, domainH: 64 });
+        gp.addParticle({ x: 32, y: 32, mass: 0.05, bornAt: -Infinity });
+        gp.setField('axion', 1);
+        const slab = async () => {
+            const f = new Float32Array(await readBuffer(gp, gp._axionBuffers.field, 4));
+            const fd = new Float32Array(await readBuffer(gp, gp._axionBuffers.fieldDot, 4));
+            return gp.scaleA * gp.domainW * gp.domainH * (0.5 * fd[0] * fd[0] + 0.5 * m * m * f[0] * f[0]);
+        };
+        const takeWork = async () => {
+            const w = new Float32Array(await readBuffer(gp, gp._cosmoAccum, 4))[0];
+            gp.device.queue.writeBuffer(gp._cosmoAccum, 0, new Uint32Array(8));
+            return w;
+        };
+        await takeWork();
+        const e0 = await slab();
+        let W = 0, eMax = e0;
+        for (let k = 0; k < 40; k++) {
+            await run(gp, 10, 0.25);
+            W += await takeWork();
+            eMax = Math.max(eMax, await slab());
+        }
+        const e1 = await slab();
+        gp.destroy();
+        const err = (e1 + W - e0) / eMax;
+        return {
+            expected: `E + W = E₀ = ${fmt(e0)}`,
+            measured: `E = ${fmt(e1)} (peak ${fmt(eMax)}), W = ${fmt(W)}, E + W = ${fmt(e1 + W)}`,
+            metric: `${fmt(err * 100, 2)}% of the peak`,
+            pass: Math.abs(err) < 0.01,
+        };
+    },
+});
+
 // ── Runner ──
 
 /** Run every case, or those whose name contains `filter` (console: runAll('Liénard')). */

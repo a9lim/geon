@@ -27,6 +27,7 @@ export function createPhysicsSettings() {
         axionMass: DEFAULT_AXION_MASS,
         hubbleParam: DEFAULT_HUBBLE,
         cosmoSchedule: 0,          // cosmology.js SCHEDULE_KEYS: the Friedmann closure
+        fieldDamping: 1,           // 0 turns off the fields' ether damping (Higgs 2m_H, axion g·m_a)
         higgsMass: DEFAULT_HIGGS_MASS,
 
         // Uniform background fields, independent of the force toggles

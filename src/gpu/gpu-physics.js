@@ -103,6 +103,9 @@ const _addParticleColorData = new Uint32Array(1);
 const _addParticleModData = new Float32Array(4);
 const _addParticleClockData = new Float32Array(4);   // τ, ring phase, θ, lapse
 const _birthSampleData = new Float32Array(12);
+const _fieldLedgerData = new ArrayBuffer(48);       // field-ledger.wgsl LedgerUniforms
+const _fieldLedgerF32 = new Float32Array(_fieldLedgerData);
+const _fieldLedgerU32 = new Uint32Array(_fieldLedgerData);
 const _expansionUniformData = new ArrayBuffer(32);   // ExpansionUniforms
 const _expansionUniformF32 = new Float32Array(_expansionUniformData);
 const _expansionUniformU32 = new Uint32Array(_expansionUniformData);       // one world-line sample (WL_STRIDE)
@@ -338,6 +341,7 @@ export default class GPUPhysics {
         this._disintegrationEnabled = false;
         this._hubbleParam = 0.001;
         this._cosmoSchedule = 0;
+        this._fieldDamping = 1;
         this._heatmapEnabled = false;
         this._heatmapMode = 'all';
         this._heatmapFrame = 0;
@@ -2181,6 +2185,7 @@ export default class GPUPhysics {
         this._expansionEnabled = physics.expansionEnabled;
         this.cosmology.h0 = physics.hubbleParam || 0;
         this._cosmoSchedule = physics.cosmoSchedule | 0;
+        this._fieldDamping = physics.fieldDamping ?? 1;
         this.cosmology.schedule = SCHEDULE_KEYS[this._cosmoSchedule] || SCHEDULE_KEYS[0];
         this._disintegrationEnabled = physics.disintegrationEnabled;
         this._hubbleParam = physics.hubbleParam || 0.001;
@@ -2387,6 +2392,10 @@ export default class GPUPhysics {
         f[22] = cellH;
         f[23] = 1 / (cellW * cellW);
         f[24] = 1 / (cellH * cellH);
+        f[25] = this.expanding ? this.cosmology.H : 0;
+        f[26] = this.scaleA;
+        f[27] = 1 / this.scaleA;
+        u[28] = this._fieldDamping ? 1 : 0;
         this.device.queue.writeBuffer(buf, 0, _fieldUniformData);
     }
 
@@ -2569,9 +2578,14 @@ export default class GPUPhysics {
         };
     }
 
-    /** Upload the sheet Green's function Ĝ for G(r) = -1/√(r² + ℓ²), once per domain. */
+    /**
+     * Upload the sheet Green's function Ĝ for G(r) = -1/√(r² + ℓ²), once per domain. It is
+     * built on the comoving grid (field-gravity.wgsl scales by 1/a), and while the universe
+     * expands it drops k = 0: the mean density is the background's.
+     */
     _uploadGreenHat() {
-        const key = `${this.domainW},${this.domainH}`;
+        const expanding = this.expanding;
+        const key = `${this.comovingW},${this.comovingH},${expanding}`;
         if (this._greenHatKey === key) return;
         this._greenHatKey = key;
         this._metricPrimed = false; // the potential's scale just changed
@@ -2580,8 +2594,8 @@ export default class GPUPhysics {
         const N2 = N * N;
         const re = new Float64Array(N2);
         const im = new Float64Array(N2);
-        const cellW = this.domainW / N;
-        const cellH = this.domainH / N;
+        const cellW = this.comovingW / N;
+        const cellH = this.comovingH / N;
 
         // Wrapped indices: the circular convolution treats the grid as periodic
         for (let iy = 0; iy < N; iy++) {
@@ -2592,6 +2606,7 @@ export default class GPUPhysics {
             }
         }
         fft2d(re, im, N, false);
+        if (expanding) { re[0] = 0; im[0] = 0; }
         for (let i = 0; i < N2; i++) {
             _greenHatUploadData[i * 2] = re[i];
             _greenHatUploadData[i * 2 + 1] = im[i];
@@ -2951,7 +2966,7 @@ export default class GPUPhysics {
             const base = eventCount * 4;
             _excitationEventData[base] = me.x;
             _excitationEventData[base + 1] = me.y;
-            _excitationEventData[base + 2] = me.energy;
+            _excitationEventData[base + 2] = me.energy / this.scaleA;   // the slab is a·ℓ thick
             _excitationEventData[base + 3] = 0; // padding
             eventCount++;
         }
@@ -2992,9 +3007,10 @@ export default class GPUPhysics {
     }
 
     /**
-     * The expansion's work on what the GPU pass doesn't see: the potential energy of the
-     * stretched separations, to first order (dPE = ln r · Σ d·∂V/∂d from the last stats), and
-     * the escaped radiation, which redshifts by 1/r.
+     * The expansion's work on what the GPU passes don't see, from the last stats: the
+     * potential energy of the stretched separations, to first order (dPE = ln r · Σ d·∂V/∂d),
+     * and the escaped radiation, which redshifts by 1/r. The fields' share is on the GPU
+     * (field-ledger.wgsl).
      */
     _ledgerExpansion(ratio) {
         const L = this.ledger;
@@ -3008,16 +3024,70 @@ export default class GPUPhysics {
     }
 
     /**
+     * Book the fields' share of the expansion's work (field-ledger.wgsl): mode 0 is a substep's
+     * Hubble friction, mode 1 the stretch by `ratio`, both from the domain and a the step began with.
+     */
+    _dispatchFieldLedger(encoder, mode, ratio, dt) {
+        const pl = this._ledgerPipelines;
+        const hb = this._higgsEnabled ? this._higgsBuffers : null;
+        const ab = this._axionEnabled ? this._axionBuffers : null;
+        if (!pl || !pl.field || (!hb && !ab)) return;
+        if (!this._fieldLedgerUniform) {
+            this._fieldLedgerUniform = this.device.createBuffer({
+                label: 'fieldLedgerUniforms', size: 48, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+            });
+            this._fieldLedgerDummy = this.device.createBuffer({ label: 'fieldLedgerDummy', size: 16, usage: GPUBufferUsage.STORAGE });
+        }
+        const key = `${hb ? 1 : 0}${ab ? 1 : 0}`;
+        if (this._fieldLedgerKey !== key || this._fieldLedgerBuffers !== hb || this._fieldLedgerAxion !== ab) {
+            const dummy = this._fieldLedgerDummy;
+            this._fieldLedgerKey = key;
+            this._fieldLedgerBuffers = hb;
+            this._fieldLedgerAxion = ab;
+            this._fieldLedgerBG = this.device.createBindGroup({
+                label: 'fieldLedger',
+                layout: pl.fieldLayout,
+                entries: [
+                    { binding: 0, resource: { buffer: this._fieldLedgerUniform } },
+                    { binding: 1, resource: { buffer: hb ? hb.field : dummy } },
+                    { binding: 2, resource: { buffer: hb ? hb.fieldDot : dummy } },
+                    { binding: 3, resource: { buffer: ab ? ab.field : dummy } },
+                    { binding: 4, resource: { buffer: ab ? ab.fieldDot : dummy } },
+                    { binding: 5, resource: { buffer: this._cosmoAccum } },
+                ],
+            });
+        }
+        const cellW = this.domainW / FIELD_GRID_RES, cellH = this.domainH / FIELD_GRID_RES;
+        const u = _fieldLedgerU32, f = _fieldLedgerF32;
+        u[0] = mode; u[1] = hb ? 1 : 0; u[2] = ab ? 1 : 0; u[3] = 0;
+        // The stretch runs after cosmology.step(), so a is already the new one there
+        f[4] = mode === 1 ? this.scaleA / ratio : this.scaleA; f[5] = ratio; f[6] = this.cosmology.H * dt;
+        f[7] = cellW * cellH; f[8] = 1 / (cellW * cellW); f[9] = 1 / (cellH * cellH);
+        f[10] = this._higgsMass; f[11] = this._axionMass;
+        this.device.queue.writeBuffer(this._fieldLedgerUniform, 0, _fieldLedgerData);
+        const p = encoder.beginComputePass({ label: 'fieldLedger' });
+        p.setPipeline(pl.field);
+        p.setBindGroup(0, this._fieldLedgerBG);
+        p.dispatchWorkgroups(1);
+        p.end();
+    }
+
+    /**
      * Collect a stats readback's ledger words (compute-stats.wgsl [96-99]) and feed the
      * Friedmann closure its densities at the scale factor `a` the stats were taken at.
      */
-    _absorbLedger(d, a) {
+    _absorbLedger(d, a, then) {
         const L = this.ledger;
-        L.expansionWork += d[96];
-        L.escapedE += d[97];
-        L.escapedPx += d[98];
-        L.escapedPy += d[99];
-        if (this._peScale === null) L.expansionWork -= this._lnrPending * d[26];
+        for (const l of [L, then]) {
+            l.expansionWork += d[96];
+            l.escapedE += d[97];
+            l.escapedPx += d[98];
+            l.escapedPy += d[99];
+        }
+        if (this._peScale === null) {
+            L.expansionWork -= this._lnrPending * d[26];
+            then.expansionWork -= this._lnrPending * d[26];
+        }
         this._peScale = d[26];
         this._lnrPending = 0;
         const V = slabVolume(a, this.comovingW, this.comovingH);
@@ -3468,8 +3538,12 @@ export default class GPUPhysics {
         {
             const encoder = this.device.createCommandEncoder({ label: 'post-substep' });
 
-            // The universe grows by `ratio` (expansion.wgsl); the domain follows after submit
-            if (ratio !== 1) this._dispatchExpansion(encoder, ratio);
+            // The universe grows by `ratio` (expansion.wgsl); the domain follows after submit.
+            // The fields' share of the stretch is booked from their state just before it.
+            if (ratio !== 1) {
+                this._dispatchFieldLedger(encoder, 1, ratio, 0);
+                this._dispatchExpansion(encoder, ratio);
+            }
 
             // Pool culls: the removed energy becomes escaped radiation (boson-ledger.wgsl)
             if (this._ledgerPipelines) {
@@ -3692,7 +3766,11 @@ export default class GPUPhysics {
         if (this._fieldDeposit) {
             if (this._higgsEnabled) this._writeFieldUniforms(dtSub, 0);
             if (this._axionEnabled) this._writeFieldUniforms(dtSub, 1);
+            // Hubble friction's share of the energy ledger, from K before and after the step
+            const friction = this.expanding && this.cosmology.H > 0;
+            if (friction) this._dispatchFieldLedger(encoder, 0, 1, dtSub);
             this._dispatchFieldStep(encoder, dtSub);
+            if (friction) this._dispatchFieldLedger(encoder, 0, 1, dtSub);
         }
 
         // (Field forces already dispatched at Pass 5c, before Boris)
@@ -4080,6 +4158,7 @@ export default class GPUPhysics {
         this.ledger = { escapedE: 0, escapedPx: 0, escapedPy: 0, expansionWork: 0 };
         this._peScale = null;
         this._lnrPending = 0;
+        this._statsLedger = null;
         this.stateVersion++;
         this._stepsSinceChange = 0;
         this.resetGen++;
@@ -4163,6 +4242,24 @@ export default class GPUPhysics {
     resetFields() {
         if (this._higgsBuffers) this._initFieldToVacuum('higgs');
         if (this._axionBuffers) this._initFieldToVacuum('axion');
+    }
+
+    /**
+     * Set a field ('higgs' or 'axion') at rest: `value` is a number (uniform) or a function
+     * (ix, iy) → φ over the FIELD_GRID_RES² grid. Presets use it for initial conditions.
+     */
+    setField(which, value) {
+        const fb = which === 'higgs' ? this._higgsBuffers : this._axionBuffers;
+        if (!fb) return;
+        const N = FIELD_GRID_RES;
+        const data = new Float32Array(N * N);
+        for (let iy = 0; iy < N; iy++) {
+            for (let ix = 0; ix < N; ix++) data[iy * N + ix] = typeof value === 'function' ? value(ix, iy) : value;
+        }
+        this.device.queue.writeBuffer(fb.field, 0, data);
+        const enc = this.device.createCommandEncoder({ label: `${which}-field-set` });
+        enc.clearBuffer(fb.fieldDot);
+        this.device.queue.submit([enc.finish()]);
     }
 
     /**
@@ -4342,11 +4439,17 @@ export default class GPUPhysics {
         const statsA = this.scaleA, gen = this.resetGen;
         // Current: no state change since the request, and at least one step before it
         const version = this._stepsSinceChange > 0 ? this.stateVersion : -1;
+        // The readback describes the state at the request: its a, and the ledger then
+        const ledgerThen = { ...this.ledger };
         staging.mapAsync(GPUMapMode.READ).then(() => {
             this._statsData = new Float32Array(staging.getMappedRange().slice(0));
             this._statsDataVersion = version;
+            this._statsScaleA = statsA;
             // The ledger words belong to the state before a reset when one intervened
-            if (gen === this.resetGen) this._absorbLedger(this._statsData, statsA);
+            if (gen === this.resetGen) {
+                this._absorbLedger(this._statsData, statsA, ledgerThen);
+                this._statsLedger = ledgerThen;
+            }
             this._statsDataSel = selectedGpuIdx;
             staging.unmap();
             this._statsResultReady = true;
@@ -4381,8 +4484,8 @@ export default class GPUPhysics {
             pionE: d[23], pionPx: d[24], pionPy: d[25],
             pendingRadiation: d[27],
             peScale: d[26],
-            ledger: this.ledger,
-            scaleA: this.scaleA,
+            ledger: this._statsLedger ?? this.ledger,
+            scaleA: this._statsScaleA ?? this.scaleA,
             current: this._statsDataVersion === this.stateVersion,
             selectedIdx: this._statsDataSel, // the selection this readback describes
             selected: null,

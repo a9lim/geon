@@ -218,6 +218,7 @@ export function setupUI(sim) {
         { target: 'hubble-group', show: () => tEl['expansion-toggle'].checked },
         { target: 'cosmo-schedule-group', show: () => tEl['expansion-toggle'].checked },
         { target: 'comoving-group', show: () => tEl['expansion-toggle'].checked },
+        { target: 'field-damping-group', show: () => tEl['axion-toggle'].checked || tEl['higgs-toggle'].checked },
         { target: 'higgs-sliders', show: () => tEl['higgs-toggle'].checked },
         // Mode-dependent visibility
         { target: 'friction-group', show: () => sim.collisionMode === COL_BOUNCE || sim.boundaryMode === BOUND_BOUNCE },
@@ -352,13 +353,14 @@ export function setupUI(sim) {
         _haptics.trigger('selection');
     }, _fmt2);
 
+    // Logarithmic: the slider holds log₁₀ H, from 10⁻⁴ (effectively none) to 0.5
     const hubbleSlider = document.getElementById('hubbleInput');
     const hubbleLabel = document.getElementById('hubbleValue');
     _forms.bindSlider(hubbleSlider, hubbleLabel, v => {
-        sim.settings.hubbleParam = v;
+        sim.settings.hubbleParam = 10 ** v;
         _syncSlidersToGPU();
         _haptics.trigger('selection');
-    }, v => v.toFixed(4));
+    }, v => (10 ** v).toPrecision(2));
 
     // The expansion history; the slider is H₀ for the imposed schedules, the vacuum H_Λ for
     // the Friedmann closure
@@ -378,6 +380,11 @@ export function setupUI(sim) {
     syncSchedule();
     _forms.bindToggle(document.getElementById('comovingToggle'), (v) => {
         sim.setComovingView(v);
+    });
+    // The fields' ether damping (Higgs 2m_H, axion g·m_a); Hubble friction applies regardless
+    _forms.bindToggle(document.getElementById('fieldDampingToggle'), (v) => {
+        sim.settings.fieldDamping = v ? 1 : 0;
+        _syncSlidersToGPU();
     });
 
     const higgsMassSlider = document.getElementById('higgsMassInput');

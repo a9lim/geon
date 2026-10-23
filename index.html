@@ -404,6 +404,11 @@
                                 <input type="range" id="higgsMassInput" min="0.25" max="0.75" step="0.01" value="0.50">
                             </div>
                         </div>
+                        <div class="ctrl-sub" id="field-damping-group" style="display:none">
+                            <div class="control-group">
+                                <label class="checkbox-label"><span data-i18n="force.fieldDamping">Field damping</span> <input type="checkbox" id="fieldDampingToggle" checked></label>
+                            </div>
+                        </div>
                     </div>
                     <div class="panel-section">
                         <h2 class="group-label" data-i18n="group.physics">Physics</h2>
@@ -473,7 +478,7 @@
                         </div>
                         <div class="control-group" id="hubble-group" style="display:none">
                             <label><span id="hubbleLabel" data-i18n="sim.hubbleVacuum">Vacuum H_Λ</span> <span class="slider-value" id="hubbleValue">0.0100</span></label>
-                            <input type="range" id="hubbleInput" min="0" max="0.05" step="0.0005" value="0.01">
+                            <input type="range" id="hubbleInput" min="-4" max="-0.3" step="0.01" value="-2">
                         </div>
                         <div class="control-group" id="comoving-group" style="display:none">
                             <label class="checkbox-label"><span data-i18n="cosmo.comoving">Comoving view</span> <input type="checkbox" id="comovingToggle"></label>

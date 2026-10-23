@@ -47,7 +47,8 @@ export default class StatsDisplay {
         const L = e.ledger;
         const angMom = e.orbitalAngMom + e.spinAngMom;
         const pe = e.pe + e.pfiEnergy;
-        const allFieldE = e.fieldEnergy + e.higgsFieldEnergy + e.axionFieldEnergy;
+        // A scalar field's energy is the slab's, a·ℓ thick under expansion (cosmology.js)
+        const allFieldE = e.fieldEnergy + (e.higgsFieldEnergy + e.axionFieldEnergy) * e.scaleA;
         const radiated = e.photonE + e.pionE + e.pendingRadiation + L.escapedE;
         const total = e.totalMass + e.linearKE + e.spinKE + pe + allFieldE + radiated;
         const ledgerTotal = total + L.expansionWork;
@@ -68,8 +69,10 @@ export default class StatsDisplay {
             this.initialAngMom = angMom;
         }
 
-        const eDrift = this.initialEnergy !== null
-            ? ((ledgerTotal - this.initialEnergy) / Math.max(Math.abs(this.initialEnergy), 1e-6) * 100) : 0;
+        // Relative to the run's energy scale: under expansion the energy that has flowed through
+        // the ledger can dwarf the starting total (a frozen field's slab energy grows as a³)
+        const eScale = Math.max(Math.abs(this.initialEnergy ?? 0), Math.abs(total), Math.abs(L.expansionWork), 1e-6);
+        const eDrift = this.initialEnergy !== null ? ((ledgerTotal - this.initialEnergy) / eScale * 100) : 0;
         const pDrift = this.initialMomentum !== null
             ? ((pComoving - this.initialMomentum) / Math.max(Math.abs(this.initialMomentum), 1e-6) * 100) : 0;
         const aDrift = this.initialAngMom !== null

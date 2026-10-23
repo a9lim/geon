@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 99;
+const SHADER_VERSION = 102;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -2087,6 +2087,24 @@ export async function createComputeStatsPipeline(device, wgslConstants = '') {
         cull: device.createComputePipeline({ label: 'cullBosons', layout: ledgerPipelineLayout, compute: { module: ledgerModule, entryPoint: 'cullBosons' } }),
         stats: device.createComputePipeline({ label: 'statsBosons', layout: ledgerPipelineLayout, compute: { module: ledgerModule, entryPoint: 'statsBosons' } }),
     };
+
+    // The scalar fields' share (field-ledger.wgsl): uniforms, 4 field arrays, cosmoAccum
+    const fieldLedgerCode = await fetchShader('field-ledger.wgsl', prefix);
+    const fieldLedgerModule = device.createShaderModule({ label: 'fieldLedger', code: fieldLedgerCode });
+    const fieldLedgerLayout = device.createBindGroupLayout({
+        label: 'fieldLedger_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+            ...[1, 2, 3, 4].map(binding => ({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } })),
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        ],
+    });
+    ledger.fieldLayout = fieldLedgerLayout;
+    ledger.field = device.createComputePipeline({
+        label: 'fieldLedger',
+        layout: device.createPipelineLayout({ bindGroupLayouts: [fieldLedgerLayout] }),
+        compute: { module: fieldLedgerModule, entryPoint: 'fieldLedger' },
+    });
 
     return { pipelines, group0Layout, group1Layout, ledger };
 }

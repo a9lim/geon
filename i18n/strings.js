@@ -176,6 +176,7 @@ const UI_EN = {
     'cosmo.radiation': 'Radiation, a ∝ t^(1/2)',
     'cosmo.lcdm': 'ΛCDM',
     'cosmo.comoving': 'Comoving view',
+    'force.fieldDamping': 'Field damping',
 
     // ── External fields ──
     'ext.aria': 'External fields info',
@@ -578,6 +579,7 @@ const UI_JA = {
     'cosmo.radiation': '放射優勢、a ∝ t^(1/2)',
     'cosmo.lcdm': 'ΛCDM',
     'cosmo.comoving': '共動座標で表示',
+    'force.fieldDamping': '場の減衰',
 
     // ── External fields ──
     'ext.aria': '外部場の説明',

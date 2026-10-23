@@ -32,6 +32,13 @@ struct FieldUniforms {
     cellH: f32,
     invCellWSq: f32,
     invCellHSq: f32,
+    // Expansion (cosmology.js): the grid is comoving and the slab a·ℓ thick, so fields feel
+    // Hubble friction 3Hφ̇, particle sources thin by 1/a, and the slab's field energy is a
+    // times the grid's
+    hubble: f32,
+    scaleA: f32,
+    invScaleA: f32,
+    damping: u32,           // 0: no ether damping (misalignment and other free-field runs)
 };
 
 // ─── PQS (Cubic B-Spline, Order 3) Weight Computation ───

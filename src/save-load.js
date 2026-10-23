@@ -53,7 +53,17 @@ function syncUI(sim) {
     const frictionEl = document.getElementById('frictionInput');
     if (frictionEl) { frictionEl.value = ph.bounceFriction; frictionEl.dispatchEvent(new Event('input')); }
     const hubbleEl = document.getElementById('hubbleInput');
-    if (hubbleEl) { hubbleEl.value = ph.hubbleParam; hubbleEl.dispatchEvent(new Event('input')); }
+    if (hubbleEl) { hubbleEl.value = Math.log10(Math.max(ph.hubbleParam, 1e-4)); hubbleEl.dispatchEvent(new Event('input')); }
+    const scheduleEl = document.getElementById('cosmo-schedule');
+    if (scheduleEl && scheduleEl.value !== String(ph.cosmoSchedule)) {
+        scheduleEl.value = String(ph.cosmoSchedule);
+        scheduleEl.dispatchEvent(new Event('change'));
+    }
+    const dampingEl = document.getElementById('fieldDampingToggle');
+    if (dampingEl && dampingEl.checked !== !!ph.fieldDamping) {
+        dampingEl.checked = !!ph.fieldDamping;
+        dampingEl.dispatchEvent(new Event('change'));
+    }
     const yukawaMuEl = document.getElementById('yukawaMuInput');
     if (yukawaMuEl) { yukawaMuEl.value = ph.yukawaMu; yukawaMuEl.dispatchEvent(new Event('input')); }
     const axionMassEl = document.getElementById('axionMassInput');

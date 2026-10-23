@@ -555,6 +555,31 @@ export const PRESETS = {
             }
         },
     },
+
+    misalignment: {
+        name: 'Axion misalignment',
+        desc: 'A uniform axion field frozen by Hubble friction until H falls to m_a, then oscillating as cold matter whose density dilutes as a⁻³',
+        toggles: {
+            gravity: false, coulomb: true, magnetic: false, gravitomag: false,
+            relativity: false, onepn: false, blackhole: false,
+            radiation: false, spinorbit: false, disintegration: false,
+            barneshut: false, bosonInter: false, yukawa: false, axion: true, expansion: true, higgs: false,
+        },
+        // Radiation era from H₀ = 5m_a: oscillations start near a ≈ √5, with no ether damping
+        settings: { collision: 'pass', boundary: 'loop', topology: 'torus', speed: 16,
+                    schedule: 3, hubble: 0.5, axionMass: 0.1, fieldDamping: false },
+        visuals: { trails: false, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            sim._gpuPhysics.setField('axion', 1);
+            // Neutral tracers at rest in comoving coordinates (the axion couples only to charge)
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    sim.addParticle((i + 0.5) * sim.domainW / 3, (j + 0.5) * sim.domainH / 3, 0, 0,
+                        { mass: 0.05, charge: 0, spin: 0 });
+                }
+            }
+        },
+    },
 };
 
 export const PRESET_ORDER = [
@@ -562,7 +587,7 @@ export const PRESET_ORDER = [
     'wheel', 'thomas', 'geodetic', 'twinBounce', 'twinTorus',
     'atom', 'bremsstrahlung', 'magnetic',
     'nucleus', 'axion', 'pionexchange', 'higgs', 'higgsboson', 'axionburst', 'pecceiQuinn',
-    'expansion',
+    'expansion', 'misalignment',
 ];
 
 // ─── Toggle/Setting Application ───
@@ -614,6 +639,16 @@ const MODE_GROUPS = {
 // Select menus: a preset's value is the option's value
 const SELECT_MAP = {
     schedule: 'cosmo-schedule',
+};
+
+// Checkboxes outside the toggle list, with their defaults
+const CHECK_MAP = {
+    fieldDamping: ['fieldDampingToggle', true],
+};
+
+// Sliders whose control holds a transform of the setting (hubble is logarithmic)
+const SLIDER_TRANSFORM = {
+    hubble: (v) => Math.log10(Math.max(v, 1e-4)),
 };
 
 const SLIDER_MAP = {
@@ -668,8 +703,17 @@ export function loadPreset(name, sim) {
             if (val == null) continue;
             const el = document.getElementById(elId);
             if (!el) continue;
-            el.value = val;
+            el.value = SLIDER_TRANSFORM[key] ? SLIDER_TRANSFORM[key](val) : val;
             el.dispatchEvent(new Event('input'));
+        }
+
+        for (const [key, [elId, dflt]] of Object.entries(CHECK_MAP)) {
+            const el = document.getElementById(elId);
+            const want = preset.settings[key] ?? dflt;
+            if (el && el.checked !== want) {
+                el.checked = want;
+                el.dispatchEvent(new Event('change'));
+            }
         }
 
         for (const [key, elId] of Object.entries(SELECT_MAP)) {

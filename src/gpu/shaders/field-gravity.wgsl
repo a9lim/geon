@@ -6,6 +6,10 @@
 // The fields see the total, metricPhi = Φ_F + Φ_P, and its time derivative.
 // Particle–particle gravity stays in the force shaders, so Φ_P is never used
 // as a force.
+//
+// Under expansion the kernel is comoving (ℓ = a·ℓ_c), so G_phys = G_comoving/a: Ĝ is built
+// for the comoving grid and the unpacks scale by 1/a. The fields' source is the slab's
+// energy, a times the grid's, and Ĝ drops k = 0, since the mean density is the background's.
 
 @group(0) @binding(0) var<uniform> uniforms: FieldUniforms;
 @group(0) @binding(1) var<storage, read_write> fftComplex: array<f32>;   // interleaved re/im
@@ -46,7 +50,7 @@ fn packFieldEnergy(@builtin(global_invocation_id) gid: vec3<u32>) {
         rho += 0.5 * uniforms.axionMass * uniforms.axionMass * f * f;
     }
 
-    let val = rho * uniforms.cellW * uniforms.cellH;
+    let val = rho * uniforms.cellW * uniforms.cellH * uniforms.scaleA;
     if (uniforms.gravAccumulate != 0u) {
         fftComplex[2u * idx] += val;
     } else {
@@ -71,11 +75,12 @@ fn unpackPhiF(@builtin(global_invocation_id) gid: vec3<u32>) {
     let iy = gid.y;
     if (ix >= GRID || iy >= GRID) { return; }
     let idx = iy * GRID + ix;
-    phiF[idx] = fftComplex[2u * idx];
+    let s = uniforms.invScaleA;
+    phiF[idx] = fftComplex[2u * idx] * s;
 
     if (ix > 0u && ix < GRID_LAST && iy > 0u && iy < GRID_LAST) {
-        phiFGradX[idx] = (fftComplex[2u * (idx + 1u)] - fftComplex[2u * (idx - 1u)]) * 0.5;
-        phiFGradY[idx] = (fftComplex[2u * (idx + GRID)] - fftComplex[2u * (idx - GRID)]) * 0.5;
+        phiFGradX[idx] = (fftComplex[2u * (idx + 1u)] - fftComplex[2u * (idx - 1u)]) * 0.5 * s;
+        phiFGradY[idx] = (fftComplex[2u * (idx + GRID)] - fftComplex[2u * (idx - GRID)]) * 0.5 * s;
         return;
     }
     let bcMode = uniforms.boundaryMode;
@@ -88,8 +93,8 @@ fn unpackPhiF(@builtin(global_invocation_id) gid: vec3<u32>) {
     let fL = select(0.0, fftComplex[2u * u32(max(iL, 0))], iL >= 0);
     let fB = select(0.0, fftComplex[2u * u32(max(iB, 0))], iB >= 0);
     let fT = select(0.0, fftComplex[2u * u32(max(iT, 0))], iT >= 0);
-    phiFGradX[idx] = (fR - fL) * 0.5;
-    phiFGradY[idx] = (fB - fT) * 0.5;
+    phiFGradX[idx] = (fR - fL) * 0.5 * s;
+    phiFGradY[idx] = (fB - fT) * 0.5 * s;
 }
 
 // ─── FFT output → Φ_P ───
@@ -97,7 +102,7 @@ fn unpackPhiF(@builtin(global_invocation_id) gid: vec3<u32>) {
 fn unpackPhiP(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (gid.x >= GRID || gid.y >= GRID) { return; }
     let idx = gid.y * GRID + gid.x;
-    phiP[idx] = fftComplex[2u * idx];
+    phiP[idx] = fftComplex[2u * idx] * uniforms.invScaleA;
 }
 
 // ─── metricPhi = Φ_F + Φ_P (before the first half-kick) ───
