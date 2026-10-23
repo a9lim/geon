@@ -303,6 +303,7 @@
                 <button class="tab-btn active" data-tab="settings" role="tab" aria-selected="true" data-i18n="tab.settings">Settings</button>
                 <button class="tab-btn" data-tab="stats" role="tab" aria-selected="false" data-i18n="tab.stats">Stats</button>
                 <button class="tab-btn" data-tab="particle" role="tab" aria-selected="false" data-i18n="tab.particle">Particle</button>
+                <button class="tab-btn" data-tab="frame" role="tab" aria-selected="false" data-i18n="tab.frame">Frame</button>
             </div>
             <button id="panelClose" class="tool-btn icon-tight" title="Close" aria-label="Close panel" data-i18n-title="topbar.close" data-i18n-aria="topbar.closePanel" data-icon="close" data-icon-size="16"></button>
         </div>
@@ -549,6 +550,48 @@
                     <div class="panel-section" id="eff-pot-section" hidden>
                         <h2 class="group-label" data-i18n="group.effPotential">Effective potential</h2>
                         <div id="eff-pot-container"></div>
+                    </div>
+                </div>
+                <!-- ── Frame ── -->
+                <div class="tab-panel" id="tab-frame" role="tabpanel">
+                    <div class="panel-section">
+                        <h2 class="group-label"><span data-i18n="group.frame">Observer</span> <button class="info-trigger" data-info="frames" aria-label="Frames info" data-i18n-aria="frame.aria">?</button></h2>
+                        <div class="control-group">
+                            <select id="frame-select" class="sim-select" aria-label="Frame" data-i18n-aria="frame.select">
+                                <option value="lab" data-i18n="frame.lab" selected>Lab</option>
+                                <option value="zmf" data-i18n="frame.zmf">Zero momentum</option>
+                                <option value="particle" data-i18n="frame.particle">Selected particle</option>
+                                <option value="boost" data-i18n="frame.boost">Boost</option>
+                                <option value="corotate" data-i18n="frame.corotate">Co-rotating</option>
+                            </select>
+                        </div>
+                        <div class="control-group" id="frame-boost-group" style="display:none">
+                            <label><span data-i18n="frame.speed">Speed</span> <span class="slider-value" id="frameSpeedValue">0.54c</span></label>
+                            <input type="range" id="frameRapidityInput" min="0" max="3" step="0.01" value="0.6">
+                        </div>
+                        <div class="control-group" id="frame-direction-group" style="display:none">
+                            <label><span data-i18n="frame.direction">Direction</span> <span class="slider-value" id="frameDirValue">0°</span></label>
+                            <input type="range" id="frameDirInput" min="0" max="359" step="1" value="0">
+                        </div>
+                        <div class="control-group" id="frame-corotate-group" style="display:none">
+                            <label><span data-i18n="frame.omega">Rate Ω</span> <span class="slider-value" id="frameOmegaValue">0.050</span></label>
+                            <input type="range" id="frameOmegaInput" min="-0.2" max="0.2" step="0.001" value="0.05">
+                        </div>
+                        <div id="frame-readout" hidden>
+                            <div class="stat-row"><span class="stat-label" data-i18n="frame.observerSpeed">Observer speed</span><span class="stat-value" id="frame-speed">—</span></div>
+                            <div class="stat-row"><span class="stat-label" data-i18n="frame.gamma">γ</span><span class="stat-value" id="frame-gamma">—</span></div>
+                            <div class="stat-row"><span class="stat-label" data-i18n="frame.now">Your now</span><span class="stat-value" id="frame-now">—</span></div>
+                        </div>
+                        <div class="control-group" id="frame-scrub-group" style="display:none">
+                            <label><span data-i18n="frame.lookBack">Look back</span> <span class="slider-value" id="frameLookBackValue">0</span></label>
+                            <input type="range" id="frameLookBackInput" min="0" max="100" step="0.5" value="0">
+                        </div>
+                        <p class="panel-hint" id="frame-hint" data-i18n="frame.hint">Frames are a view: spawning and selecting act in the lab.</p>
+                    </div>
+                    <div class="panel-section" id="minkowski-section">
+                        <h2 class="group-label" data-i18n="group.minkowski">Spacetime diagram</h2>
+                        <div id="minkowski-container"></div>
+                        <p class="panel-hint" data-i18n="frame.minkowskiHint">World lines projected on the observer's direction of motion, with your now and light cone.</p>
                     </div>
                 </div>
             </div>

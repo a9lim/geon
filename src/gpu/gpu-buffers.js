@@ -502,6 +502,31 @@ export function createTrailBuffers(device, maxParticles) {
     };
 }
 
+/** Torus frames draw each body's 3×3 nearest images. */
+export const FRAME_IMAGES_MAX = 9;
+export const FRAME_PARAMS_SIZE = 96;   // FrameParams (frame-slice.wgsl)
+export const FRAME_STATE_SIZE = 80;    // FrameState
+
+/**
+ * Frame buffers (frame-slice.wgsl): the observer's parameters and state, and the view
+ * copies of the per-particle buffers the renderer draws in a non-lab frame, one entry per
+ * (slot, image).
+ */
+export function createFrameBuffers(device, maxParticles) {
+    const n = maxParticles * FRAME_IMAGES_MAX;
+    // COPY_SRC throughout, so the oracle page can read the views back
+    const storage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
+    return {
+        frameParams: device.createBuffer({ label: 'frameParams', size: FRAME_PARAMS_SIZE,
+                                           usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+        frameState:  device.createBuffer({ label: 'frameState', size: FRAME_STATE_SIZE, usage: storage }),
+        viewState:   device.createBuffer({ label: 'viewState',   size: n * PARTICLE_STATE_SIZE, usage: storage }),
+        viewAux:     device.createBuffer({ label: 'viewAux',     size: n * PARTICLE_AUX_SIZE, usage: storage }),
+        viewDerived: device.createBuffer({ label: 'viewDerived', size: n * DERIVED_SIZE, usage: storage }),
+        viewClocks:  device.createBuffer({ label: 'viewClocks',  size: n * 16, usage: storage }),
+    };
+}
+
 export {
     FIELD_GRID_RES, FIELD_GRID_SQ,
     PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE,

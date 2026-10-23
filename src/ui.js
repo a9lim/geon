@@ -150,6 +150,7 @@ export function setupUI(sim) {
             { type: 'toggle', label: 'Barnes-Hut', id: 'barneshut-toggle', checked: false },
             { type: 'toggle', label: 'Trails', id: 'trailsToggle', checked: true },
             { type: 'toggle', label: 'Clocks', id: 'clocksToggle', checked: false },
+            { type: 'toggle', label: 'Grid', id: 'gridToggle', checked: true },
             { type: 'toggle', label: 'Velocity vectors', id: 'velocityToggle', checked: false },
             { type: 'toggle', label: 'Accel. vectors', id: 'forceToggle', checked: false },
             { type: 'toggle', label: 'Accel. components', id: 'forceComponentsToggle', checked: false },
@@ -269,6 +270,10 @@ export function setupUI(sim) {
     });
     _forms.bindToggle(document.getElementById('clocksToggle'), (v) => {
         sim.view.showClocks = v;
+        sim._dirty = true;
+    });
+    _forms.bindToggle(document.getElementById('gridToggle'), (v) => {
+        sim.view.grid = v;
         sim._dirty = true;
     });
     _forms.bindToggle(document.getElementById('velocityToggle'), (v) => {
@@ -488,6 +493,14 @@ export function setupUI(sim) {
             sim.view.showClocks = el.checked;
             sim._dirty = true;
         }},
+        { key: 'G',          label: _T('shortcut.toggleGrid',        'Toggle grid'),                   group: G_VIEW(), action: () => {
+            const el = document.getElementById('gridToggle');
+            el.checked = !el.checked;
+            sim.view.grid = el.checked;
+            sim._dirty = true;
+        }},
+        { key: 'B',          label: _T('shortcut.cycleFrame',        'Next frame'),                    group: G_VIEW(), action: () => sim.framePanel?.cycle() },
+        { key: 'L',          label: _T('shortcut.labFrame',          'Back to the lab frame'),         group: G_VIEW(), action: () => sim.framePanel?.choose('lab') },
         { key: 'T',          label: _T('shortcut.toggleTheme',       'Toggle theme'),                  group: G_VIEW(), action: toggleTheme },
         { key: 'S',          label: _T('shortcut.toggleSidebar',     'Toggle sidebar'),                group: G_VIEW(), action: () => _toolbar.toggleSidebar() },
         { key: 'Escape',     label: _T('shortcut.closePanel',        'Close panel'),                   group: G_VIEW(), action: () => _toolbar.closeSidebar() },
@@ -538,7 +551,7 @@ export function setupUI(sim) {
         'gravitomag', 'relativity', 'radiation', 'disintegration', 'spinorbit',
         'barneshut', 'collision', 'boundary', 'topology', 'charge', 'blackhole',
         'onepn', 'yukawa', 'axion', 'expansion', 'higgs', 'external', 'pion',
-        'fieldExcitation', 'bosoninter',
+        'fieldExcitation', 'bosoninter', 'frames',
     ];
     const _buildInfoData = () => {
         const data = {};

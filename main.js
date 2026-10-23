@@ -9,6 +9,8 @@ import { WORLD_SCALE, DEFAULT_DOMAIN, ZOOM_MIN, ZOOM_MAX, WHEEL_ZOOM_IN, DEFAULT
 import { createPhysicsSettings } from './src/physics-settings.js';
 import { loadState, quickSave, quickLoad, downloadState, uploadState } from './src/save-load.js';
 import GPUBackend from './src/gpu/gpu-backend.js';
+import Frames from './src/frames.js';
+import FramePanel from './src/frame-panel.js';
 
 /**
  * Request a WebGPU device with the limits the simulation needs.
@@ -81,12 +83,13 @@ class Simulation {
 
         this.settings = createPhysicsSettings();
         this.overlay = new Overlay(this.canvas);
-        this.view = { trails: true, showClocks: false, showVelocity: false, showForce: false, showForceComponents: false };
+        this.view = { trails: true, showClocks: false, showVelocity: false, showForce: false, showForceComponents: false, grid: true };
         this.heatmap = { enabled: false, mode: 'all' };
         // The domain is simulation state; the window is only a camera onto it
         this.domainW = DEFAULT_DOMAIN;
         this.domainH = DEFAULT_DOMAIN;
 
+        this.frames = new Frames(this);
         this.phasePlot = new PhasePlot();
         this.effPotPlot = new EffectivePotentialPlot();
 
@@ -99,6 +102,8 @@ class Simulation {
             wheelFactor: WHEEL_ZOOM_IN,
             onUpdate() { sim._dirty = true; },
             clamp(cam) {
+                // A frame's camera is in the observer's coordinates, unbounded
+                if (sim.frames && sim.frames.active) return;
                 const halfW = cam.viewportW / (2 * cam.zoom);
                 const halfH = cam.viewportH / (2 * cam.zoom);
                 const dw = sim.domainW, dh = sim.domainH;
@@ -278,6 +283,7 @@ class Simulation {
         this._wrapSharedToolbar();
 
         setupUI(this);
+        this.framePanel = new FramePanel(this);
 
         // Re-apply DOM translations after UI setup in case any modules
         // mutated text content during their wiring (e.g. mode-btn label).
@@ -401,9 +407,11 @@ class Simulation {
         // Refresh cached layout dimensions for sidebar plots
         this.phasePlot.cacheSize();
         this.effPotPlot.cacheSize();
-        // Preserve top-left world position across resize
-        this.camera.x += (this.width - oldW) / (2 * this.camera.zoom);
-        this.camera.y += (this.height - oldH) / (2 * this.camera.zoom);
+        // Preserve the top-left world position across resize (a frame keeps its observer centred)
+        if (!this.frames.active) {
+            this.camera.x += (this.width - oldW) / (2 * this.camera.zoom);
+            this.camera.y += (this.height - oldH) / (2 * this.camera.zoom);
+        }
         this.camera.viewportW = this.width;
         this.camera.viewportH = this.height;
         this._dirty = true;
@@ -515,7 +523,7 @@ class Simulation {
 
         const gpu = this.gpu;
         if (!gpu) {
-            this.overlay.draw(this.camera, this.input, this.domainW, this.domainH);
+            this.overlay.draw(this.camera, this.input);
             return;
         }
         if (this.running) {

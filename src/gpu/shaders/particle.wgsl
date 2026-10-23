@@ -18,7 +18,8 @@ struct CameraUniforms {
     relativityOn: f32,
     blackHoleOn: f32,
     showClocks: f32,
-    _pad: f32,
+    frameOn: f32,      // drawing a frame's view buffers (frame-slice.wgsl)
+    frameImages: f32,  // view entries per slot
 };
 
 // Struct definitions (ParticleState, ParticleAux, ParticleDerived) provided by shared-structs.wgsl.
@@ -89,8 +90,9 @@ fn vs_main(
     out.boost = vec4(n, gamma, speed);
     out.body = vec4(r, clocks[instanceIndex].z, omega, drawR);
 
-    // Unpack RGBA from u32 (ABGR packed)
-    let packed = color[instanceIndex];
+    // Unpack RGBA from u32 (ABGR packed); colors stay per slot in a frame's view
+    let slot = select(instanceIndex, instanceIndex / u32(max(camera.frameImages, 1.0)), camera.frameOn > 0.5);
+    let packed = color[slot];
     out.particleColor = vec4(
         f32(packed & 0xFFu) / 255.0,
         f32((packed >> 8u) & 0xFFu) / 255.0,

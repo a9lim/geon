@@ -85,7 +85,8 @@ export default class InputHandler {
             return;
         }
 
-        if (e.touches.length === 1 && !this._wasPinching) {
+        // Frames are view-only: one finger does nothing there (two still pinch)
+        if (e.touches.length === 1 && !this._wasPinching && !this.sim.frames.active) {
             const t = e.touches[0];
             this.isDragging = true;
             this.dragStart = this._getPosNew(t.clientX, t.clientY);
@@ -177,6 +178,8 @@ export default class InputHandler {
     onMouseDown(e) {
         const isRight = e.button === 2;
         if (e.button !== 0 && !isRight) return;
+        // Frames are view-only: spawning, selecting and deleting act in the lab
+        if (this.sim.frames.active) return;
 
         const pos = this._getPosNew(e.clientX, e.clientY);
 
@@ -202,8 +205,11 @@ export default class InputHandler {
             this._hoverE = e;
             requestAnimationFrame(() => {
                 this._hoverPending = false;
-                // The tooltip updates when pollGPUHitResult sees the answer; hide the stale one
-                if (this.sim._gpuPhysics) this.sim._gpuPhysics.hitTest(this.currentPos.x, this.currentPos.y);
+                // The tooltip updates when pollGPUHitResult sees the answer; hide the stale one.
+                // Hit tests search lab positions, so frames have no hover readout.
+                if (this.sim._gpuPhysics && !this.sim.frames.active) {
+                    this.sim._gpuPhysics.hitTest(this.currentPos.x, this.currentPos.y);
+                }
                 this.tooltip.hide();
             });
         } else {

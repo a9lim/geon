@@ -4,7 +4,7 @@
  */
 import {
     TWO_PI, PHYSICS_DT, SPAWN_COUNT, spawnOffset,
-    GPU_HEATMAP_GRID, STATS_THROTTLE_MASK, INERTIA_K, EPSILON,
+    GPU_HEATMAP_GRID, STATS_THROTTLE_MASK, INERTIA_K, EPSILON, BOUND_LOOP,
 } from '../config.js';
 import GPUPhysics from './gpu-physics.js';
 import GPURenderer from './gpu-renderer.js';
@@ -23,6 +23,7 @@ export default class GPUBackend {
         const physics = new GPUPhysics(device, sim.domainW, sim.domainH);
         const renderer = new GPURenderer(gpuCanvas, device, physics.buffers);
         await physics.init();
+        renderer.frameBuffers = physics.frameBuffers;
         await renderer.init();
         // The theme was synced before this async backend existed; adopt it now
         // (after init, which creates the light/dark pipeline pairs setTheme swaps).
@@ -124,6 +125,22 @@ export default class GPUBackend {
         this.renderer.relativityOn = sim.settings.relativityEnabled;
         this.renderer.blackHoleOn = sim.settings.blackHoleEnabled;
         this.renderer.setDomain(sim.domainW, sim.domainH);
+        this.renderer.periodic = sim.boundaryMode === BOUND_LOOP;
+        this.renderer.showGrid = sim.view.grid;
+
+        // A non-lab frame: slice every world line on the observer's hyperplane first
+        const frameParams = sim.frames.params();
+        if (frameParams) {
+            this.physics.sliceFrame(frameParams);
+            const state = this.physics.readFrameState();
+            if (state) {
+                sim.frames.state = state;
+                if (!state.valid && state.kind === 2) sim.framePanel?.observerLost();
+            }
+            sim.framePanel?.update();
+        }
+        this.renderer.frameOn = !!frameParams;
+        this.renderer.frameImages = frameParams ? frameParams.images : 1;
 
         this.physics.setTrailsEnabled(sim.view.trails);
         const trailBufs = this.physics.getTrailBuffers();
@@ -185,7 +202,7 @@ export default class GPUBackend {
         }
 
         this.renderer.render(this.physics.aliveCount, renderOpts);
-        sim.overlay.draw(sim.camera, sim.input, sim.domainW, sim.domainH);
+        sim.overlay.draw(sim.camera, sim.input);
         this._renderStats(sim);
     }
 

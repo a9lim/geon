@@ -8,7 +8,7 @@
  * dark mode uses additive blending ('lighter' equivalent, matching CPU Canvas 2D).
  * On theme change setTheme() swaps _pipeline / _photonPipeline / _pionPipeline.
  */
-import { fetchShader, getSharedPrefix, createBosonRenderPipelines, createFieldRenderPipeline, createHeatmapRenderPipeline, createArrowRenderPipeline, createClockRenderPipeline, createTorqueRenderPipeline, createRingRenderPipeline, createTrailRenderPipeline } from './gpu-pipelines.js';
+import { fetchShader, getSharedPrefix, createBosonRenderPipelines, createFieldRenderPipeline, createHeatmapRenderPipeline, createArrowRenderPipeline, createClockRenderPipeline, createTorqueRenderPipeline, createRingRenderPipeline, createTrailRenderPipeline, createGridRenderPipeline } from './gpu-pipelines.js';
 import { TRAIL_LEN } from './gpu-buffers.js';
 import { buildWGSLConstants, paletteRGB } from './gpu-constants.js';
 import { HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA, GPU_MAX_PHOTONS, GPU_MAX_PIONS, GPU_MAX_LEPTONS } from '../config.js';
@@ -16,6 +16,9 @@ import { HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA, GPU_MAX_PHOTONS, GPU_MAX_PIONS,
 // Pre-allocated typed arrays for per-frame writeBuffer calls (eliminate GC pressure)
 const _cameraData = new ArrayBuffer(256);
 const _cameraF32 = new Float32Array(_cameraData);
+const _gridData = new ArrayBuffer(16);   // GridParams: domainW, domainH, periodic, showLines
+const _gridF32 = new Float32Array(_gridData);
+const _gridU32 = new Uint32Array(_gridData);
 const _trailData = new ArrayBuffer(16);
 const _trailU32 = new Uint32Array(_trailData);
 const _trailF32 = new Float32Array(_trailData);
@@ -177,6 +180,15 @@ export default class GPURenderer {
         this.showClocks = false;
         this.relativityOn = false;  // Lorentz-contracted bodies and bent spokes
         this.blackHoleOn = false;   // spokes turn at the horizon's Ω_H
+
+        // Frames: GPUPhysics' frame buffers (set before init()). In a non-lab frame the
+        // body passes draw the view buffers, frameImages copies per slot.
+        this.frameBuffers = null;
+        this.frameOn = false;
+        this.frameImages = 1;
+        this.showGrid = true;
+        this.periodic = false;
+        this._gridReady = false;
     }
 
     /** Create render pipeline. Must be called after GPUPhysics.init(). */
@@ -254,8 +266,24 @@ export default class GPURenderer {
                 { binding: 5, resource: { buffer: this.buffers.clocks } },
             ],
         });
+        const fb = this.frameBuffers;
+        this._bindGroupView = fb && this.device.createBindGroup({
+            label: 'particle render (frame view)',
+            layout: bindGroupLayout,
+            entries: [
+                { binding: 0, resource: { buffer: this.cameraBuffer } },
+                { binding: 1, resource: { buffer: fb.viewState } },
+                { binding: 2, resource: { buffer: fb.viewAux } },
+                { binding: 3, resource: { buffer: this.buffers.color } },
+                { binding: 4, resource: { buffer: fb.viewDerived } },
+                { binding: 5, resource: { buffer: fb.viewClocks } },
+            ],
+        });
 
         this._ready = true;
+
+        // --- Background grid: lab rulers and the domain edge ---
+        await this._initGridRendering();
 
         // --- Boson render pipelines (Phase 4) ---
         await this._initBosonRendering();
@@ -271,6 +299,30 @@ export default class GPURenderer {
 
         // --- Ring render pipeline (ergosphere + antimatter dashed circles) ---
         await this._initRingRendering();
+    }
+
+    /** The background grid pass (grid-render.wgsl). */
+    async _initGridRendering() {
+        try {
+            const { pipeline, bindGroupLayout } =
+                await createGridRenderPipeline(this.device, this.format, this._wgslConstants || '');
+            this._gridPipeline = pipeline;
+            this._gridUniformBuffer = this.device.createBuffer({
+                label: 'gridParams', size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+            });
+            this._gridBindGroup = this.device.createBindGroup({
+                label: 'gridRender',
+                layout: bindGroupLayout,
+                entries: [
+                    { binding: 0, resource: { buffer: this.cameraBuffer } },
+                    { binding: 1, resource: { buffer: this._gridUniformBuffer } },
+                    { binding: 2, resource: { buffer: this.frameBuffers.frameState } },
+                ],
+            });
+            this._gridReady = true;
+        } catch (e) {
+            console.warn('[geon] Grid render pipeline creation failed, skipping:', e.message);
+        }
     }
 
     /** Create boson (photon + pion) render pipelines — both light and dark variants. */
@@ -326,6 +378,7 @@ export default class GPURenderer {
                 layout: bindGroupLayouts[0],
                 entries: [
                     { binding: 0, resource: { buffer: this.cameraBuffer } },
+                    { binding: 1, resource: { buffer: this.frameBuffers.frameState } },
                 ],
             });
 
@@ -423,6 +476,18 @@ export default class GPURenderer {
                     { binding: 4, resource: { buffer: b.clocks } },
                 ],
             });
+            const fb = this.frameBuffers;
+            this._clockBindGroupView = fb && this.device.createBindGroup({
+                label: 'clockRender (frame view)',
+                layout: bindGroupLayout,
+                entries: [
+                    { binding: 0, resource: { buffer: this.cameraBuffer } },
+                    { binding: 1, resource: { buffer: fb.viewState } },
+                    { binding: 2, resource: { buffer: fb.viewAux } },
+                    { binding: 3, resource: { buffer: fb.viewDerived } },
+                    { binding: 4, resource: { buffer: fb.viewClocks } },
+                ],
+            });
             this._clockReady = true;
         } catch (e) {
             console.warn('[geon] Clock render pipeline creation failed, skipping:', e.message);
@@ -507,6 +572,18 @@ export default class GPURenderer {
                     ],
                 }));
             }
+            const fb = this.frameBuffers;
+            this._ringBindGroupsView = fb && this._ringUniformBufs.map((buf, i) => this.device.createBindGroup({
+                label: `ringRender_${i} (frame view)`,
+                layout: bindGroupLayout,
+                entries: [
+                    { binding: 0, resource: { buffer: this.cameraBuffer } },
+                    { binding: 1, resource: { buffer: fb.viewState } },
+                    { binding: 2, resource: { buffer: fb.viewAux } },
+                    { binding: 3, resource: { buffer: fb.viewDerived } },
+                    { binding: 4, resource: { buffer: buf } },
+                ],
+            }));
 
             // Keep legacy single buffer/bindGroup for backward compat.
             this._ringUniformBuffer = this._ringUniformBufs[0];
@@ -599,7 +676,8 @@ export default class GPURenderer {
         f[36] = this.relativityOn ? 1.0 : 0.0;
         f[37] = this.blackHoleOn ? 1.0 : 0.0;
         f[38] = this.showClocks ? 1.0 : 0.0;
-        f[39] = 0.0;
+        f[39] = this.frameOn ? 1.0 : 0.0;
+        f[40] = this.frameImages;
 
         this.device.queue.writeBuffer(this.cameraBuffer, 0, _cameraData);
     }
@@ -614,9 +692,39 @@ export default class GPURenderer {
 
         const textureView = this.context.getCurrentTexture().createView();
 
-        // Pass 0: Trail rendering (behind particles — drawn first, like CPU renderer)
-        // Trails clear the canvas; particles load on top.
-        const trailsDrawn = this._trailReady && this.showTrails && aliveCount > 0;
+        // In a non-lab frame the body passes draw the view buffers, frameImages per slot;
+        // trails, vectors, torques and the field and potential overlays are lab-only
+        const frame = this.frameOn && !!this._bindGroupView;
+        const instances = frame ? aliveCount * this.frameImages : aliveCount;
+
+        // Pass 0: clear, then the background grid (lab rulers and the domain edge)
+        {
+            const gridEncoder = this.device.createCommandEncoder({ label: 'grid-render' });
+            const gridPass = gridEncoder.beginRenderPass({
+                label: 'grid render',
+                colorAttachments: [{
+                    view: textureView,
+                    clearValue: this.isLight ? _bgLight : _bgDark,
+                    loadOp: 'clear',
+                    storeOp: 'store',
+                }],
+            });
+            if (this._gridReady) {
+                _gridF32[0] = this._domainW || 1;
+                _gridF32[1] = this._domainH || 1;
+                _gridU32[2] = this.periodic ? 1 : 0;
+                _gridU32[3] = this.showGrid ? 1 : 0;
+                this.device.queue.writeBuffer(this._gridUniformBuffer, 0, _gridData);
+                gridPass.setPipeline(this._gridPipeline);
+                gridPass.setBindGroup(0, this._gridBindGroup);
+                gridPass.draw(3);
+            }
+            gridPass.end();
+            this.device.queue.submit([gridEncoder.finish()]);
+        }
+
+        // Pass 0b: Trail rendering (behind particles), lab frame only
+        const trailsDrawn = !frame && this._trailReady && this.showTrails && aliveCount > 0;
         if (trailsDrawn) {
             try {
                 // Write trail uniforms (pre-allocated buffer)
@@ -629,12 +737,7 @@ export default class GPURenderer {
                 const trailEncoder = this.device.createCommandEncoder({ label: 'trail-render' });
                 const trailPass = trailEncoder.beginRenderPass({
                     label: 'trail render',
-                    colorAttachments: [{
-                        view: textureView,
-                        clearValue: this.isLight ? _bgLight : _bgDark,
-                        loadOp: 'clear',
-                        storeOp: 'store',
-                    }],
+                    colorAttachments: [{ view: textureView, loadOp: 'load', storeOp: 'store' }],
                 });
                 trailPass.setPipeline(this._trailPipeline);
                 trailPass.setBindGroup(0, this._trailBindGroup);
@@ -647,25 +750,18 @@ export default class GPURenderer {
             }
         }
 
-        // Pass 1: Particle rendering (load if trails already cleared, otherwise clear here)
+        // Pass 1: Particle rendering
         const encoder = this.device.createCommandEncoder({ label: 'render' });
         const pass = encoder.beginRenderPass({
             label: 'particle render',
-            colorAttachments: [{
-                view: textureView,
-                ...(!trailsDrawn ? {
-                    clearValue: this.isLight ? _bgLight : _bgDark,
-                } : {}),
-                loadOp: trailsDrawn ? 'load' : 'clear',
-                storeOp: 'store',
-            }],
+            colorAttachments: [{ view: textureView, loadOp: 'load', storeOp: 'store' }],
         });
 
         if (aliveCount > 0) {
             pass.setPipeline(this._pipeline);
-            pass.setBindGroup(0, this._bindGroup);
-            // 6 vertices per quad (2 triangles), aliveCount instances
-            pass.draw(6, aliveCount);
+            pass.setBindGroup(0, frame ? this._bindGroupView : this._bindGroup);
+            // 6 vertices per quad (2 triangles), one instance per body (and image)
+            pass.draw(6, instances);
         }
         pass.end();
 
@@ -673,8 +769,8 @@ export default class GPURenderer {
         this.device.queue.submit([encoder.finish()]);
 
         // Pass 2: Field + heatmap overlays (load to preserve particles)
-        const hasOverlays = (this._fieldRenderReady && (opts.higgsField || opts.axionField)) ||
-            (this._heatmapRenderReady && opts.heatmapBuffers);
+        const hasOverlays = !frame && ((this._fieldRenderReady && (opts.higgsField || opts.axionField)) ||
+            (this._heatmapRenderReady && opts.heatmapBuffers));
         if (hasOverlays) {
             const overlayEncoder = this.device.createCommandEncoder({ label: 'overlay' });
             const overlayPass = overlayEncoder.beginRenderPass({
@@ -751,11 +847,11 @@ export default class GPURenderer {
                     }],
                 });
                 // Triangle-strip ribbons: 48 segments × 2 vertices
-                clockPass.setBindGroup(0, this._clockBindGroup);
+                clockPass.setBindGroup(0, frame ? this._clockBindGroupView : this._clockBindGroup);
                 clockPass.setPipeline(this._clockTrackPipeline);
-                clockPass.draw(96, aliveCount);
+                clockPass.draw(96, instances);
                 clockPass.setPipeline(this._clockArcPipeline);
-                clockPass.draw(96, aliveCount);
+                clockPass.draw(96, instances);
                 clockPass.end();
                 this.device.queue.submit([clockEncoder.finish()]);
             } catch (e) {
@@ -808,8 +904,8 @@ export default class GPURenderer {
                         colorAttachments: [{ view: textureView, loadOp: 'load', storeOp: 'store' }],
                     });
                     ringPass.setPipeline(this._ringPipeline);
-                    ringPass.setBindGroup(0, this._ringBindGroups[slot]);
-                    ringPass.draw(130, aliveCount); // (RING_SEGMENTS + 1) * 2 to close strip
+                    ringPass.setBindGroup(0, frame ? this._ringBindGroupsView[slot] : this._ringBindGroups[slot]);
+                    ringPass.draw(130, instances); // (RING_SEGMENTS + 1) * 2 to close strip
                     ringPass.end();
                 }
                 this.device.queue.submit([ringEnc.finish()]);
@@ -823,7 +919,7 @@ export default class GPURenderer {
         // Each arrow type uses its own pre-allocated uniform buffer (slot = draw index)
         // so all writeBuffers execute before the encoder, yet each render pass reads
         // from its own buffer. Reduces up to 12 submits down to 1.
-        const wantsArrows = this._arrowReady && aliveCount > 0 &&
+        const wantsArrows = !frame && this._arrowReady && aliveCount > 0 &&
             (this.showForce || this.showForceComponents || this.showVelocity);
         if (wantsArrows) {
             try {
@@ -901,7 +997,7 @@ export default class GPURenderer {
         // Pass 5: Torque arcs — batched into ONE encoder + ONE submit.
         // Each torque type uses its own pre-allocated uniform buffer. Arc + arrowhead
         // for all types share the same encoder; reduces up to 8 submits to 1.
-        const wantsTorques = this._torqueReady && aliveCount > 0 &&
+        const wantsTorques = !frame && this._torqueReady && aliveCount > 0 &&
             (this.showForce || this.showForceComponents);
         if (wantsTorques) {
             try {

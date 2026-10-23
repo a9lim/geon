@@ -631,6 +631,85 @@ cases.push({
     },
 });
 
+// Frames: a boost frame (frame-slice.wgsl) cuts world lines on t − u·x = const and draws them
+// in the observer's coordinates. Lab-static bodies L apart along u sit L/γ apart and move at
+// −u; a body at v composes to (v − u)/(1 − uv); lab-synchronized static clocks L apart read
+// u·L apart on the observer's now (relativity of simultaneity).
+async function readView(gp, n) {
+    const fb = gp.frameBuffers;
+    const st = new Float32Array(await readBuffer(gp, fb.viewState, n * PARTICLE_STATE_SIZE));
+    const st32 = new Uint32Array(st.buffer);
+    const dv = new Float32Array(await readBuffer(gp, fb.viewDerived, n * 32));
+    const ck = new Float32Array(await readBuffer(gp, fb.viewClocks, n * 16));
+    return Array.from({ length: n }, (_, i) => ({
+        x: st[i * 9], y: st[i * 9 + 1], valid: (st32[i * 9 + 8] & 1) !== 0,
+        vx: dv[i * 8 + 4], vy: dv[i * 8 + 5], tau: ck[i * 4],
+    }));
+}
+
+async function readFrameState(gp) {
+    const f = new Float32Array(await readBuffer(gp, gp.frameBuffers.frameState, 80));
+    return { ux: f[0], uy: f[1], gamma: f[2], tA: f[3], xA: [f[4], f[5]], lag: f[9], valid: f[11] > 0.5 };
+}
+
+function frameParams(o) {
+    return Object.assign({
+        kind: 3, slot: 0, lorentz: true, images: 1, boostX: 0, boostY: 0, originX: 0, originY: 0,
+        refT: 0, lookBack: 0, viewX: 0, viewY: 0, viewHalfW: 40, viewHalfH: 40, omega: 0,
+    }, o);
+}
+
+cases.push({
+    name: 'Frames: rulers contract by 1/γ, velocities compose, lab clocks read u·L apart',
+    async run() {
+        const gp = await makeSim({ on: ['relativityEnabled'], domainW: 512, domainH: 512 });
+        const L = 60, u = 0.6, g = 1.25, v = 0.5;
+        gp.addParticle({ x: 200, y: 256, mass: 1, bornAt: -Infinity });
+        gp.addParticle({ x: 200 + L, y: 256, mass: 1, bornAt: -Infinity });
+        gp.addParticle({ x: 230, y: 300, vx: v / Math.sqrt(1 - v * v), mass: 1, bornAt: -Infinity });
+        await run(gp, 60, 0.25);
+        gp.sliceFrame(frameParams({ boostX: u, originX: 230, originY: 256, refT: gp.simTime }));
+        const [a, b, c] = await readView(gp, 3);
+        gp.destroy();
+        // B is further along u, so the slice meets it later in lab time: it reads ahead
+        const sep = b.x - a.x, dTau = b.tau - a.tau;
+        const vC = (v - u) / (1 - u * v);
+        const errs = [sep / (L / g) - 1, a.vx / -u - 1, c.vx / vC - 1, dTau / (u * L) - 1];
+        const worst = Math.max(...errs.map(Math.abs));
+        return { expected: `Δx′ ${fmt(L / g, 4)}, v′ −0.6 and ${fmt(vC, 4)}, Δτ ${fmt(u * L, 4)}`,
+                 measured: `${fmt(sep, 4)}, ${fmt(a.vx, 4)} and ${fmt(c.vx, 4)}, ${fmt(dTau, 4)}`,
+                 metric: `${fmt(worst * 100, 2)}%`, pass: a.valid && b.valid && c.valid && worst < 2e-3 };
+    },
+});
+
+// An observer under constant proper acceleration a (a charge in a uniform field, F = qE):
+// all its instantaneous rest-frame slices pass through one event, at proper distance 1/a
+// behind it (the Rindler bifurcation).
+cases.push({
+    name: 'Frames: an accelerated observer’s slices pivot 1/a behind it (Rindler)',
+    async run() {
+        const E = 0.01, q = 1, m = 1, a = q * E / m;
+        const gp = await makeSim({ on: ['relativityEnabled'], params: { extElectric: E, extElectricAngle: 0 },
+                                   domainW: 4096, domainH: 512 });
+        gp.addParticle({ x: 200, y: 256, mass: m, charge: q, bornAt: -Infinity });
+        const slices = [];
+        for (const T of [40, 80]) {
+            await run(gp, T - gp.simTime, 0.25);
+            gp.sliceFrame(frameParams({ kind: 2, slot: 0, viewHalfW: 1, viewHalfH: 1 }));
+            slices.push(await readFrameState(gp));
+        }
+        gp.destroy();
+        // Each slice: t − u·x = t_A − u·x_A (along x); their crossing
+        const c = slices.map(s => s.tA - s.ux * s.xA[0]);
+        const xP = (c[0] - c[1]) / (slices[1].ux - slices[0].ux);
+        const tP = c[1] + slices[1].ux * xP;
+        const s2 = slices[1];
+        const proper = Math.sqrt((s2.xA[0] - xP) ** 2 - (s2.tA - tP) ** 2);
+        return { expected: `1/a = ${fmt(1 / a, 4)}`, measured: `${fmt(proper, 4)} (u = ${fmt(slices[0].ux, 3)}, ${fmt(s2.ux, 3)})`,
+                 metric: `${fmt((proper * a - 1) * 100, 2)}%`, pass: slices.every(s => s.valid) && Math.abs(proper * a - 1) < 0.01 };
+    },
+});
+
 // π⁰ beam at γ = 5: survival N/N₀ = exp(−ln2·t/(γT½)) in lab time t.
 cases.push({
     name: 'π⁰ beam at γ = 5 decays on proper time (lab t = γT½, 2γT½)',

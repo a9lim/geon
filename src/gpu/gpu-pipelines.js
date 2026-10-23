@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 89;
+const SHADER_VERSION = 95;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -968,6 +968,7 @@ export async function createBosonRenderPipelines(device, format, isLight, wgslCo
         label: 'bosonRender_g0',
         entries: [
             { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+            { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }, // frameState
         ],
     });
     const g1 = device.createBindGroupLayout({
@@ -2070,4 +2071,62 @@ export async function createComputeStatsPipeline(device, wgslConstants = '') {
     }
 
     return { pipelines, group0Layout, group1Layout };
+}
+
+/**
+ * Frame slicing (frame-slice.wgsl): frameAnchor and sliceWorldLines share one layout.
+ *   Group 0: frameParams (uniform) + frameState (rw) + particleState + particleAux + wlData + wlMeta
+ *   Group 1: viewState + viewAux + viewDerived + viewClocks (rw)
+ */
+export async function createFrameSlicePipelines(device, wgslConstants = '') {
+    const prefix = await getSharedPrefix(wgslConstants);
+    const c = await _ensureSharedCache();
+    const code = prefix + '\n' + c.worldLine + '\n' + await fetchShader('frame-slice.wgsl');
+    const module = device.createShaderModule({ label: 'frameSlice', code });
+    const ro = (binding) => ({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } });
+    const rw = (binding) => ({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } });
+    const g0 = device.createBindGroupLayout({
+        label: 'frameSlice_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+            rw(1), ro(2), ro(3), ro(4), ro(5),
+        ],
+    });
+    const g1 = device.createBindGroupLayout({ label: 'frameSlice_g1', entries: [rw(0), rw(1), rw(2), rw(3)] });
+    const layout = device.createPipelineLayout({ bindGroupLayouts: [g0, g1] });
+    const make = (entryPoint) => device.createComputePipeline({
+        label: entryPoint, layout, compute: { module, entryPoint },
+    });
+    return { frameAnchor: make('frameAnchor'), sliceWorldLines: make('sliceWorldLines'), bindGroupLayouts: [g0, g1] };
+}
+
+/**
+ * The background grid (grid-render.wgsl): a full-screen pass, alpha-blended over the clear.
+ *   Group 0: camera (uniform) + gridParams (uniform) + frameState
+ */
+export async function createGridRenderPipeline(device, format, wgslConstants = '') {
+    const code = await fetchShader('grid-render.wgsl', wgslConstants);
+    const module = device.createShaderModule({ label: 'gridRender', code });
+    const bindGroupLayout = device.createBindGroupLayout({
+        label: 'gridRender_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+            { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+            { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
+        ],
+    });
+    const pipeline = device.createRenderPipeline({
+        label: 'gridRender',
+        layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+        vertex: { module, entryPoint: 'vsFullscreen' },
+        fragment: {
+            module, entryPoint: 'fsGrid',
+            targets: [{ format, blend: {
+                color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+                alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+            } }],
+        },
+        primitive: { topology: 'triangle-list' },
+    });
+    return { pipeline, bindGroupLayout };
 }

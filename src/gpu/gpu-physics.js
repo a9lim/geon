@@ -35,8 +35,8 @@
  *  substep crosses a WORLDLINE_DT mark, else only merge breaks and new death snapshots.
  *  GPU times are relative to a rolling epoch (gpuTime, _maybeRebaseEpoch).
  */
-import { createParticleBuffers, createUniformBuffer, writeFrameUniforms, writeSubstepUniforms, createFieldBuffers, createGravityGridBuffers, createAtomicGridBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createKugelblitzBuffers, createTrailBuffers, FIELD_GRID_RES, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
-import { fetchShader, createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createMergePhotonPipeline, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldGravityPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createBosonDispatchArgsPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline } from './gpu-pipelines.js';
+import { createParticleBuffers, createUniformBuffer, writeFrameUniforms, writeSubstepUniforms, createFieldBuffers, createGravityGridBuffers, createAtomicGridBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createKugelblitzBuffers, createTrailBuffers, createFrameBuffers, FRAME_PARAMS_SIZE, FRAME_STATE_SIZE, FIELD_GRID_RES, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
+import { fetchShader, createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createMergePhotonPipeline, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldGravityPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createBosonDispatchArgsPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline, createFrameSlicePipelines } from './gpu-pipelines.js';
 import { buildWGSLConstants, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT, GRAVITOMAG_BIT, ONE_PN_BIT, RELATIVITY_BIT, SPIN_ORBIT_BIT, RADIATION_BIT, BLACK_HOLE_BIT, DISINTEGRATION_BIT, EXPANSION_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BARNES_HUT_BIT, BOSON_INTER_BIT, FIELD_GRAV_BIT_T1, HERTZ_BOUNCE_BIT_T1, EM_PAIRWISE_BIT_T1, WL_STRIDE, WL_META_STRIDE } from './gpu-constants.js';
 import { createGPUDispatchPlan, updateGPUDispatchPlan } from './pass-graph.js';
 import {
@@ -106,6 +106,9 @@ const _addParticleMetaU32 = new Uint32Array(_addParticleMetaBuf);
 const _addParticleMetaF32 = new Float32Array(_addParticleMetaBuf);
 const _zeroU32 = new Uint32Array([0]);                // reusable zero for counter resets
 const _retiredFlagU32 = new Uint32Array([2]);         // FLAG_RETIRED for removeParticle
+const _frameParamsData = new ArrayBuffer(FRAME_PARAMS_SIZE);
+const _frameParamsF32 = new Float32Array(_frameParamsData);
+const _frameParamsU32 = new Uint32Array(_frameParamsData);
 const _rebaseUniformData = new ArrayBuffer(16);           // shift (f32), slots (u32), pad
 const _rebaseUniformF32 = new Float32Array(_rebaseUniformData);
 const _rebaseUniformU32 = new Uint32Array(_rebaseUniformData);
@@ -580,8 +583,89 @@ export default class GPUPhysics {
             this._rebuildStatsFieldBindGroup();
         }
 
+        await this._initFrames(wgslConstants);
+
         this._ready = true;
     }
+
+    // ─── Frames (frame-slice.wgsl) ───
+
+    async _initFrames(wgslConstants) {
+        this.frameBuffers = createFrameBuffers(this.device, this.buffers.maxParticles);
+        const pl = await createFrameSlicePipelines(this.device, wgslConstants);
+        const fb = this.frameBuffers;
+        const b = this.buffers;
+        this._framePipelines = pl;
+        this._frameBG0 = this.device.createBindGroup({
+            label: 'frameSlice_g0', layout: pl.bindGroupLayouts[0],
+            entries: [fb.frameParams, fb.frameState, b.particleState, b.particleAux, b.wlData, b.wlMeta]
+                .map((buffer, i) => ({ binding: i, resource: { buffer } })),
+        });
+        this._frameBG1 = this.device.createBindGroup({
+            label: 'frameSlice_g1', layout: pl.bindGroupLayouts[1],
+            entries: [fb.viewState, fb.viewAux, fb.viewDerived, fb.viewClocks]
+                .map((buffer, i) => ({ binding: i, resource: { buffer } })),
+        });
+        this._frameStatePending = false;
+        this._frameStateLatest = null;
+    }
+
+    /**
+     * Slice every world line on the observer's hyperplane (frames.js builds `p`), writing the
+     * view buffers the renderer draws in a non-lab frame. Times in `p` are lab times.
+     */
+    sliceFrame(p) {
+        if (!this._framePipelines || this.aliveCount === 0) return;
+        const f = _frameParamsF32, u = _frameParamsU32;
+        u[0] = p.kind; u[1] = Math.max(0, p.slot | 0); u[2] = p.lorentz ? 1 : 0; u[3] = p.images;
+        f[4] = p.boostX; f[5] = p.boostY; f[6] = p.originX; f[7] = p.originY;
+        f[8] = p.refT - this.timeEpoch; f[9] = this.gpuTime; f[10] = p.lookBack; f[11] = p.omega;
+        f[12] = p.viewX; f[13] = p.viewY; f[14] = p.viewHalfW; f[15] = p.viewHalfH;
+        u[16] = this.aliveCount; f[17] = this.domainW; f[18] = this.domainH;
+        u[19] = this.boundaryMode === BOUND_LOOP ? 1 : 0; u[20] = this.topologyMode;
+        f[21] = WORLDLINE_LEN * WORLDLINE_DT - 1;   // lag cap: the recorded history
+        f[22] = 0; f[23] = 0;
+        this.device.queue.writeBuffer(this.frameBuffers.frameParams, 0, _frameParamsData);
+
+        const encoder = this.device.createCommandEncoder({ label: 'frameSlice' });
+        const pass = encoder.beginComputePass({ label: 'frameSlice' });
+        pass.setBindGroup(0, this._frameBG0);
+        pass.setBindGroup(1, this._frameBG1);
+        pass.setPipeline(this._framePipelines.frameAnchor);
+        pass.dispatchWorkgroups(1);
+        pass.setPipeline(this._framePipelines.sliceWorldLines);
+        pass.dispatchWorkgroups(Math.ceil(this.aliveCount * p.images / 64));
+        pass.end();
+        this.device.queue.submit([encoder.finish()]);
+        this._readbackFrameState();
+    }
+
+    /** The observer's state (lag, u, γ, validity) for the HUD, a frame late. */
+    _readbackFrameState() {
+        if (this._frameStatePending) return;
+        this._frameStatePending = true;
+        if (!this._frameStateStaging) {
+            this._frameStateStaging = this.device.createBuffer({
+                label: 'frameStateStaging', size: FRAME_STATE_SIZE,
+                usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+            });
+        }
+        const staging = this._frameStateStaging;
+        const enc = this.device.createCommandEncoder({ label: 'frameStateReadback' });
+        enc.copyBufferToBuffer(this.frameBuffers.frameState, 0, staging, 0, FRAME_STATE_SIZE);
+        this.device.queue.submit([enc.finish()]);
+        staging.mapAsync(GPUMapMode.READ).then(() => {
+            const f = new Float32Array(staging.getMappedRange().slice(0));
+            staging.unmap();
+            this._frameStateLatest = {
+                ux: f[0], uy: f[1], gamma: f[2], tA: f[3] + this.timeEpoch,
+                xA: [f[4], f[5]], aNow: [f[6], f[7]], phi: f[8], lag: f[9],
+                lorentz: f[10] > 0.5, valid: f[11] > 0.5, omega: f[12], images: f[13], kind: f[17],
+            };
+        }).catch(() => {}).finally(() => { this._frameStatePending = false; });
+    }
+
+    readFrameState() { return this._frameStateLatest; }
 
     _createPhase2BindGroups() {
         const b = this.buffers;
