@@ -61,16 +61,21 @@ substepping advances them.
 - **Charge quantization.** Every charge is a multiple of 0.1, and emission, absorption,
   decay, and discharge move charge in whole units.
 - **Space.** Despawn, bounce, or periodic boundaries; periodic space can be a torus, a
-  Klein bottle, or the real projective plane. Cosmological expansion adds a Hubble flow.
+  Klein bottle, or the real projective plane.
+- **Cosmology.** With expansion on, the periodic domain is a slice of an expanding FRW
+  universe: an imposed history or one set by the contents through the Friedmann
+  equation, redshift, Hubble friction on the fields, the Hubble radius and event
+  horizon, and an energy ledger for what the expansion takes. Presets for axion
+  misalignment and Kibble–Zurek domain walls.
 - **Analysis.** Energy, momentum, and angular-momentum totals with drift percentages; a
   per-force breakdown for the selected particle; a potential heatmap (gravity,
   electric, Yukawa, or all); and a phase-space plot and an effective-potential curve
   for the selected particle against the heaviest other body.
-- **Presets.** Twenty scenarios, from Kepler orbits and binary inspiral through
+- **Presets.** Twenty-two scenarios, from Kepler orbits and binary inspiral through
   Hawking evaporation, a relativistic wheel, Thomas and geodetic precession, the twin
   paradox on a line and on a torus, atoms,
-  nuclei, and pion exchange to the Higgs boson, axion bursts, and an expanding
-  universe.
+  nuclei, and pion exchange to the Higgs boson, axion bursts, an expanding universe,
+  axion misalignment, and Kibble–Zurek walls.
 - **Save and load.** Quick save to the browser, or download and upload the state as
   JSON (domain, particles with their clocks, toggles, settings, and camera). Each
   preset sets its own domain size; the window is a camera onto it.

@@ -1,7 +1,7 @@
 ---
 name: Geon
 title: Geon — Interactive Particle Physics Simulator
-description: Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty browser presets.
+description: Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-two browser presets.
 updated: 2026-10-23
 ---
 
@@ -11,7 +11,7 @@ Geon is a real-time N-body simulator that models how particles move under gravit
 
 ## Forces
 
-Geon exposes 11 force and correction families: Newtonian gravity, gravitomagnetism (frame-dragging), Coulomb electrostatics, magnetic (Lorentz) force, Yukawa interaction, Higgs field coupling, axion field coupling, cosmological expansion (Hubble flow), first post-Newtonian correction, spin-orbit coupling, and radiation reaction. Applicable particle and boson interactions can use Barnes-Hut tree acceleration; scalar fields evolve on grids, and external or correction terms run in their own passes.
+Geon exposes 11 force and correction families: Newtonian gravity, gravitomagnetism (frame-dragging), Coulomb electrostatics, magnetic (Lorentz) force, Yukawa interaction, Higgs field coupling, axion field coupling, cosmological expansion, first post-Newtonian correction, spin-orbit coupling, and radiation reaction. Applicable particle and boson interactions can use Barnes-Hut tree acceleration; scalar fields evolve on grids, and external or correction terms run in their own passes.
 
 ## Integration
 
@@ -35,13 +35,17 @@ The view can be drawn for observers other than the lab: the zero-momentum frame,
 
 On a torus the lab is a preferred frame: opposite edges are identified at equal lab time, so a traveller circling a torus of length L at speed v sees its own images, in its own frame, spaced γL apart with clocks γvL apart. A twin who circles the torus at 0.8c meets the stay-at-home twin every lap, younger each time, without ever turning around (Barrow and Levin, 2001). In the other twin preset the traveller bounces off a wall, and at the turn the home clock's reading on the traveller's slice jumps ahead by 2vd.
 
+## Expansion
+
+With expansion on, the periodic domain becomes a slice of an expanding Friedmann–Robertson–Walker universe. Bodies at rest keep their comoving positions while the space between them grows; peculiar momenta and photon energies fall as 1/a; scalar fields feel Hubble friction; and bound systems keep their size. The history can be imposed (de Sitter, matter, radiation, ΛCDM) or follow from the universe's own contents through the Friedmann equation, with matter, radiation and field energy each diluting at its own rate. Signals travel on light cones that are straight in comoving coordinates and conformal time, and because Maxwell's equations are conformally invariant a charge's Liénard–Wiechert field stays exact, its radiation dimmed by the redshift. The Stats tab shows the scale factor, the Hubble rate, the Hubble radius and the event horizon, and books the energy the expansion takes or gives as its own line, so the energy drift still measures numerical error. An axion field frozen by Hubble friction starts oscillating once the Hubble rate falls below its mass and then dilutes like cold matter (misalignment), and a Higgs field quenched through its symmetry-breaking transition freezes into domains whose walls thin out as the quench slows, at the rate the Kibble–Zurek mechanism predicts (Kibble, 1976; Zurek, 1985).
+
 ## Scalar Fields
 
 The Higgs and axion fields evolve on a 128 × 128 grid. With gravity on, they evolve in the metric ds² = −e^{2Φ}dt² + e^{−2Φ}dx², whose Klein–Gordon equation reduces to the weak-field form at small Φ and stays well behaved in deep wells. The potential Φ comes from the fields' own energy and the particles' mass, solved by FFT convolution over a sheet of thickness 8, so field oscillations near a massive body slow by the gravitational redshift factor e^Φ.
 
 ## Presets
 
-Twenty curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, the twin paradox on a line and on a torus, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, and cosmological expansion. Each preset sets initial conditions and force parameters for one compact demonstration.
+Twenty-two curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, the twin paradox on a line and on a torus, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, an expanding universe, axion misalignment, and Kibble–Zurek domain walls. Each preset sets initial conditions and force parameters for one compact demonstration.
 
 ## Black Hole Physics
 
@@ -61,7 +65,7 @@ WebGPU compute shaders run the whole simulation and WebGPU instanced rendering d
 
 ## Topology Modes
 
-Boundary handling has three modes: open/despawn, reflective bounce, and loop. Loop mode can use three topologies: torus, Klein bottle, and RP2. Toroidal boundaries use minimum-image convention for force calculation to avoid double-counting.
+Boundary handling has three modes: open/despawn, reflective bounce, and loop. Loop mode can use three topologies: torus, Klein bottle, and RP2. Cosmological expansion requires loop mode, since the periodic domain is the whole universe. Toroidal boundaries use minimum-image convention for force calculation to avoid double-counting.
 
 ## Signal Delay
 

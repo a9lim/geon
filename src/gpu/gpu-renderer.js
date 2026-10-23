@@ -16,7 +16,7 @@ import { HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA, GPU_MAX_PHOTONS, GPU_MAX_PIONS,
 // Pre-allocated typed arrays for per-frame writeBuffer calls (eliminate GC pressure)
 const _cameraData = new ArrayBuffer(256);
 const _cameraF32 = new Float32Array(_cameraData);
-const _gridData = new ArrayBuffer(32);   // GridParams: domainW, domainH, periodic, showLines, scaleA
+const _gridData = new ArrayBuffer(64);   // GridParams (grid-render.wgsl)
 const _gridF32 = new Float32Array(_gridData);
 const _gridU32 = new Uint32Array(_gridData);
 const _trailData = new ArrayBuffer(16);
@@ -187,6 +187,8 @@ export default class GPURenderer {
         this.frameOn = false;
         this.scaleA = 1;          // the grid's rulers are comoving
         this.higgsVev = 1;        // the Higgs vacuum the overlay measures from (√ε in a quench)
+        this.lensBuffers = null;  // GPUPhysics' lens map (set before init()); this.lens per frame
+        this.lens = null;
         this.frameImages = 1;
         this.showGrid = true;
         this.periodic = false;
@@ -310,7 +312,7 @@ export default class GPURenderer {
                 await createGridRenderPipeline(this.device, this.format, this._wgslConstants || '');
             this._gridPipeline = pipeline;
             this._gridUniformBuffer = this.device.createBuffer({
-                label: 'gridParams', size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+                label: 'gridParams', size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
             });
             this._gridBindGroup = this.device.createBindGroup({
                 label: 'gridRender',
@@ -319,6 +321,7 @@ export default class GPURenderer {
                     { binding: 0, resource: { buffer: this.cameraBuffer } },
                     { binding: 1, resource: { buffer: this._gridUniformBuffer } },
                     { binding: 2, resource: { buffer: this.frameBuffers.frameState } },
+                    { binding: 3, resource: { buffer: this.lensBuffers.map } },
                 ],
             });
             this._gridReady = true;
@@ -717,6 +720,18 @@ export default class GPURenderer {
                 _gridU32[2] = this.periodic ? 1 : 0;
                 _gridU32[3] = this.showGrid ? 1 : 0;
                 _gridF32[4] = this.scaleA || 1;
+                // The lens map's rectangle and the probe's star (GPUBackend sets this.lens)
+                const lens = this.lens;
+                _gridU32[5] = lens ? 1 : 0;
+                _gridU32[6] = lens ? lens.res : 1;
+                _gridU32[7] = lens && lens.star ? 1 : 0;
+                _gridF32[8] = lens ? lens.left : 0;
+                _gridF32[9] = lens ? lens.top : 0;
+                _gridF32[10] = lens ? lens.width / lens.res : 1;
+                _gridF32[11] = lens ? lens.height / lens.res : 1;
+                _gridF32[12] = lens && lens.star ? lens.star.x : 0;
+                _gridF32[13] = lens && lens.star ? lens.star.y : 0;
+                _gridF32[14] = lens && lens.star ? lens.star.r : 1;
                 this.device.queue.writeBuffer(this._gridUniformBuffer, 0, _gridData);
                 gridPass.setPipeline(this._gridPipeline);
                 gridPass.setBindGroup(0, this._gridBindGroup);

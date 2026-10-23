@@ -6,7 +6,7 @@ import {
     TWO_PI, PHYSICS_DT, SPAWN_COUNT, spawnOffset,
     GPU_HEATMAP_GRID, STATS_THROTTLE_MASK, INERTIA_K, EPSILON, BOUND_LOOP,
 } from '../config.js';
-import GPUPhysics from './gpu-physics.js';
+import GPUPhysics, { LENS_RES } from './gpu-physics.js';
 import GPURenderer from './gpu-renderer.js';
 import { t } from '../i18n.js';
 
@@ -28,6 +28,7 @@ export default class GPUBackend {
         const renderer = new GPURenderer(gpuCanvas, device, physics.buffers);
         await physics.init();
         renderer.frameBuffers = physics.frameBuffers;
+        renderer.lensBuffers = physics.lensBuffers;
         await renderer.init();
         // The theme was synced before this async backend existed; adopt it now
         // (after init, which creates the light/dark pipeline pairs setTheme swaps).
@@ -228,6 +229,18 @@ export default class GPUBackend {
                 ho.doCoulomb = ph.coulombEnabled && (hmMode === 'all' || hmMode === 'electric');
                 ho.doYukawa = ph.yukawaEnabled && (hmMode === 'all' || hmMode === 'yukawa');
             }
+        }
+
+        // The lensed backdrop: the deflection map over the view (lab frame only)
+        if (sim.lens.on && !frameParams && this.physics.aliveCount > 0) {
+            const cam = sim.camera;
+            const w = 1.1 * sim.width / cam.zoom, h = 1.1 * sim.height / cam.zoom;
+            const lens = { res: LENS_RES, left: cam.x - w / 2, top: cam.y - h / 2, width: w, height: h, star: sim.lens.star };
+            this.physics.dispatchLens({ ...lens, distance: sim.lens.distance });
+            this.renderer.lens = lens;
+            sim.lensPanel?.update();
+        } else {
+            this.renderer.lens = null;
         }
 
         this.renderer.render(this.physics.aliveCount, renderOpts);

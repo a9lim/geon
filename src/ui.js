@@ -580,7 +580,7 @@ export function setupUI(sim) {
         'gravitomag', 'relativity', 'radiation', 'disintegration', 'spinorbit',
         'barneshut', 'collision', 'boundary', 'topology', 'charge', 'blackhole',
         'onepn', 'yukawa', 'axion', 'expansion', 'higgs', 'external', 'pion',
-        'fieldExcitation', 'bosoninter', 'frames',
+        'fieldExcitation', 'bosoninter', 'frames', 'lensing',
     ];
     const _buildInfoData = () => {
         const data = {};

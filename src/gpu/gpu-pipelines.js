@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 105;
+const SHADER_VERSION = 106;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -2140,6 +2140,30 @@ export async function createFrameSlicePipelines(device, wgslConstants = '') {
  * The background grid (grid-render.wgsl): a full-screen pass, alpha-blended over the clear.
  *   Group 0: camera (uniform) + gridParams (uniform) + frameState
  */
+/**
+ * The lens map (lens-deflection.wgsl): LensParams, particleState, the map, the probe's hits.
+ */
+export async function createLensPipeline(device, wgslConstants = '') {
+    const prefix = await getSharedPrefix(wgslConstants);
+    const code = await fetchShader('lens-deflection.wgsl', prefix);
+    const module = device.createShaderModule({ label: 'lensDeflection', code });
+    const layout = device.createBindGroupLayout({
+        label: 'lens_g0',
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        ],
+    });
+    const pipeline = device.createComputePipeline({
+        label: 'lensDeflection',
+        layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }),
+        compute: { module, entryPoint: 'lensDeflection' },
+    });
+    return { pipeline, layout };
+}
+
 export async function createGridRenderPipeline(device, format, wgslConstants = '') {
     const code = await fetchShader('grid-render.wgsl', wgslConstants);
     const module = device.createShaderModule({ label: 'gridRender', code });
@@ -2149,6 +2173,7 @@ export async function createGridRenderPipeline(device, format, wgslConstants = '
             { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
             { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
             { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
+            { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // lens map
         ],
     });
     const pipeline = device.createRenderPipeline({

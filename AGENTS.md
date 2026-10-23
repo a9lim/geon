@@ -39,7 +39,9 @@ src/physics-contract.js  toggle/parameter keys shared by save/load and the GPU s
 src/ui.js                controls, toggle dependencies, settings dropdown, shortcuts, about
 src/input.js             spawn, select, delete through GPU hit tests
 src/overlay.js           the 2D canvas above the GPU canvas: the spawn-drag line
-src/presets.js           20 presets (PRESET_ORDER); each may set its domain
+src/presets.js           22 presets (PRESET_ORDER); each may set its domain
+src/cosmology.js         the scale factor a(t): schedules, the Friedmann closure, horizons
+src/cosmology-panel.js   the Stats tab's expansion readouts and the overlay's horizons
 src/frames.js            the observer the view is drawn for (sim.frames), FrameParams
 src/frame-panel.js       the Frame tab: frame choice, parameters, readouts, scrubber
 src/minkowski.js         the Frame tab's 1+1 spacetime diagram
@@ -54,7 +56,7 @@ src/gpu/gpu-buffers.js   allocation and packed struct sizes
 src/gpu/gpu-constants.js generated WGSL constants and toggle bits
 src/gpu/gpu-renderer.js  instanced rendering, light/dark pipeline pairs
 src/gpu/pass-graph.js    per-frame dispatch plan
-src/gpu/shaders/         60 WGSL files; shared-*.wgsl are prepended includes
+src/gpu/shaders/         62 WGSL files; shared-*.wgsl are prepended includes
 tests/physics-validation.html   analytic oracles against a headless GPUPhysics
 ```
 
@@ -99,7 +101,13 @@ clears itself; each stats readback carries the selection it was requested for
 - Charges are multiples of `BOSON_CHARGE` (0.1): `addParticle()` rounds, pions and
   leptons carry 0 or ±`BOSON_CHARGE`, and emission, absorption, decay, Schwinger
   discharge, extremal shedding, and Roche transfer move whole quanta.
-- Energy totals include rest mass plus kinetic, spin, potential, field, and radiated terms.
+- Energy totals include rest mass plus kinetic, spin, potential, field, and radiated
+  terms. Radiated is the boson pools (`boson-ledger.wgsl`: photons, pions and leptons),
+  the radiation bodies have lost but not yet emitted (the `RadiationState`
+  accumulators), and escaped radiation: the pool culls bound memory, so what they
+  remove goes to `GPUPhysics.ledger.escapedE` instead of vanishing. Stats readbacks
+  carry the state version, scale factor and ledger as of their request, so a readback
+  in flight across a reset, spawn or removal can't set the drift baseline.
 
 ### Integrator
 
@@ -109,19 +117,66 @@ into at most 32 substeps from the previous frame's `maxAccel` readback,
 command buffer so that substep's uniforms (`simTime` above all) are the ones its passes
 read. `_dispatchSubstep()` lists the order in its pass comments: forces, external and
 field forces come before the fused kick–rotate–kick, then spin-orbit and torques,
-radiation, drift, clocks, expansion, the 1PN velocity-Verlet correction, the field step,
+radiation, drift, clocks, the 1PN velocity-Verlet correction, the field step,
 collisions, disintegration, bosons, the boundary, and the world lines (a sample whenever
-`simTime` crosses the next `WORLDLINE_DT` mark, else merge breaks and death snapshots
-only). Pion decay, boson interaction, dead-slot GC, quadrupole radiation, colors, and
-trails run once per frame after the substeps. The scheme is the staggered Boris pusher:
+the world-line clock crosses the next `WORLDLINE_DT` mark, else merge breaks and death
+snapshots only). After the substeps, once per frame: the expansion (below), the pool
+culls, pion decay, boson interaction, dead-slot GC, quadrupole radiation, colors, and
+trails. The scheme is the staggered Boris pusher:
 both half-kicks precede the drift, so velocities sit half a kick from positions, and
 spin-orbit kicks change `w` directly rather than through `totalForce`.
 
-GPU times are f32 relative to a rolling epoch: `gpuTime = simTime − timeEpoch`, and
-`_maybeRebaseEpoch()` advances the epoch by `EPOCH_STEP` (256) once GPU time passes
-`EPOCH_SPAN` (512), shifting every stored time back (`worldline-rebase.wgsl`). Only
-world-line samples, creation times and `ParticleAux.deathTime` hold absolute GPU times;
-`simTime` itself stays an f64 in JS.
+GPU times are f32 relative to a rolling epoch on the world-line clock: lab time, or
+conformal time η (dη = dt/a) while the universe expands, kept in f64 as
+`conformalTime`; `gpuTime = conformalTime − timeEpoch`, and `_maybeRebaseEpoch()`
+advances the epoch by `EPOCH_STEP` (256) once GPU time passes `EPOCH_SPAN` (512),
+shifting every stored time back (`worldline-rebase.wgsl`). `SimUniforms.simTime` is that
+clock: only world-line samples, creation times and `ParticleAux.deathTime` hold
+absolute GPU times. Lab time `simTime` stays an f64 in JS.
+
+### Expansion
+
+Expansion requires loop topology (decision 3; the toggle switches the boundary to
+loop): the universe is the periodic domain, a slab of comoving thickness
+`SHEET_THICKNESS` cut from flat 3D FRW.
+
+- **The scale factor** (`cosmology.js`, `GPUPhysics.cosmology`): `step(dt)` integrates
+  `da/dt = a·H(a)` by RK4 for the schedule chosen under the toggle: de Sitter, matter,
+  radiation, ΛCDM (Ω_m 0.3), or the Friedmann closure `H² = (8π/3)ρ̄ + H_Λ²`. The slider
+  (logarithmic) is H₀ for the imposed schedules and the vacuum H_Λ for the closure, whose
+  ρ̄ comes from each stats readback (`_absorbLedger`): rest plus kinetic energy of bodies,
+  pions and leptons, photons with pending and escaped radiation, and the fields' slab
+  energy, over `a³·W_c·H_c·ℓ`; between readbacks matter and fields scale as a⁻³ and
+  radiation as a⁻⁴. a stops at `A_MAX` (1000, single precision) with a toast.
+- **Physical coordinates on a growing domain.** `sim.domainW/H` is the comoving domain
+  (state, saved); `GPUPhysics.domainW/H` is a times it (`setComovingDomain`). The forces
+  never see a: within a frame the universe is static, and after the substeps
+  `expansion.wgsl` scales every position (bodies, retired bodies, photons, pions,
+  trails) by r = a_new/a_old about the domain's corner and every peculiar momentum and
+  photon energy by 1/r. On a torus, Klein bottle or RP² that scaling is homogeneous, so
+  it is the comoving dynamics, `d̈ = (ä/a)d − ∇Φ_pec`; the mean density's pull cancels
+  over each body's minimum-image cell. `GPUBackend._advance` splits a frame whose H·dt
+  exceeds 0.02. The camera follows the universe (`sim.followExpansion`); the comoving
+  view zooms out with it, and the grid's rulers are comoving.
+- **World lines are comoving and conformal:** samples hold C = x/a on the cover,
+  conformal time and dw/dη = a·dw/dt, and boundary decks are comoving.
+  `retardedState(…, scaleA)` solves the flat cone in (η, C) and returns `rel·a` and
+  `acc/a`, so the flat-space Liénard–Wiechert formula gives E_phys = E_conformal/a²
+  (Maxwell is conformally invariant): exact, with radiation fields dimmed by 1/(1 + z).
+  The other laws use the same physical retarded position. Non-lab frames are off once a
+  ≠ 1 (FRW has no global boosts); the spacetime diagram becomes the conformal diagram.
+- **Fields** (below) feel Hubble friction, thin their particle sources by 1/a and count
+  a slab energy of a times the grid's.
+- **The ledger.** `GPUPhysics.ledger.expansionWork` is the energy the expansion took,
+  so `E_total + W` should hold: kinetic and photon redshift summed exactly in
+  `expansion.wgsl` (`cosmoAccum[0]`), the fields' Hubble friction and stretch in
+  `field-ledger.wgsl` (friction by the kick's own linear trapezoid), and in JS the
+  stretched potentials to first order (`stats[26]` = Σ d·∂V/∂d) and the escaped
+  background's redshift. Momentum drift compares a·P, which expansion conserves.
+- **Readouts:** the Stats tab's Expansion section (`cosmology-panel.js`): a, H, c/H, the
+  event horizon (finite only with a vacuum term), the Friedmann density, and ln a and H
+  over the run; the overlay rings the selection (or the view's centre) with c/H and the
+  event horizon.
 
 The Boris rotation parameter is `(q/2m)·Bz + 2·Bgz`, scaled by dt/γ, so the stored fields
 act as `F = q v × B + 4m v × Bg`. In the force shaders the displacement r is source −
@@ -142,7 +197,7 @@ velocity-Verlet correction.
 
 Sixteen toggles (`TOGGLE_KEYS`). Their dependency graph is the declarative
 `_forms.bindDeps()` list in `ui.js`; `updateAllDeps()` adds the mode locks (Black hole
-and the hidden Disintegration force Merge collisions, Expansion forces Despawn). Less
+and the hidden Disintegration force Merge collisions, Expansion forces Loop). Less
 obvious couplings: Boson interaction needs the Barnes–Hut toggle (settings dropdown);
 signal delay runs whenever Relativity is on, and with it charges interact through their
 Liénard–Wiechert fields; field gravity follows Gravity; kugelblitz runs under Boson
@@ -201,8 +256,9 @@ created at `−∞` and act at once.
   body and an accent arc that fills once per `CLOCK_PERIOD` (16) of its proper time,
   contracted with the body. The particle panel shows τ and dτ/dt.
 - **World lines** (`worldline.wgsl` writes, `shared-worldline.wgsl` reads): a ring of
-  `WORLDLINE_LEN` (1024) samples per slot, one every `WORLDLINE_DT` (1/8) of lab time,
-  always recorded. A sample is 12 floats, `t, x, y, wx, wy, ax, ay, τ, θ, angw, m, q`
+  `WORLDLINE_LEN` (1024) samples per slot, one every `WORLDLINE_DT` (1/8) of the
+  world-line clock (lab time, or conformal time under expansion: positions are then
+  comoving, see Expansion), always recorded. A sample is 12 floats, `t, x, y, wx, wy, ax, ay, τ, θ, angw, m, q`
   (`WL_STRIDE`), with a = dw/dt including the Boris magnetic and gravitomagnetic
   rotation. Samples live on the covering plane: each slot's deck maps its wrapped
   position to `C = A·x + b` (A a diagonal of ±1), and `boundary.wgsl` updates the deck
@@ -341,6 +397,17 @@ antimatter. Scalar sources couple through proper time (`× 1/γ`). Merge and ann
 excitations enter `fieldDot` as impulses solved against the existing `fieldDot` cross
 term, so field kinetic energy rises by exactly the event energy (`field-excitation.wgsl`).
 
+**Damping and the bath.** The fields' ether damping (Higgs `2m_H`, axion `g·m_a`) is the
+`fieldDamping` setting, on by default. `setHiggsQuench(τ_Q, T)` (the Kibble–Zurek preset)
+ramps the Higgs mass term as `ε·μ²`, ε = −1 + t/τ_Q clamped to [−1, 1], and adds a
+Langevin bath `⟨ξ²⟩ = 2γT/(cellArea·dt)` on the Higgs damping. The Higgs overlay measures
+from the current vacuum √ε and colours φ < 0 with the enhanced hue.
+
+**Under expansion** the grid is comoving (its cells grow with a, so the Laplacian is
+physical), the kicks add Hubble friction `−3Hφ̇`, particle sources thin by 1/a (spread
+over a slab a·ℓ thick), and the slab's field energy is a times the grid's (stats,
+Friedmann density, excitation impulses scaled by 1/a).
+
 **Grid gravity.** With Gravity on, the fields evolve in the metric
 `ds² = −e^{2Φ}dt² + e^{−2Φ}d𝐱²`, where the Klein–Gordon equation is exactly
 `φ̈ = e^{4Φ}∇²φ − e^{2Φ}V′ + 4Φ̇φ̇` (the 3+1 weak-field form at small Φ, with no
@@ -350,6 +417,8 @@ proper time on top of the kinetic normalization), and damping is a proper-time r
 (`createGravityGridBuffers`): Φ_F from both fields' energy (also the field → particle
 force) and Φ_P from the particles' rest mass, each an FFT convolution with
 `−1/√(r² + ℓ²)`, `ℓ = SHEET_THICKNESS` (8, independent of the particle softening ε).
+ℓ is comoving: Ĝ is built on the comoving grid and the unpacks scale by 1/a, the fields'
+source is their slab energy, and while the universe expands Ĝ drops k = 0.
 `metricPhi = Φ_F + Φ_P` is solved before the first half-kick and after the drift; Φ̇ is
 the backward difference between consecutive post-drift solves. The FFT stage
 parameters are a static uniform table picked by dynamic offset: a `queue.writeBuffer`
@@ -475,5 +544,8 @@ canvas text needs no font-load redraw.
   keyboard; `FramePanel._sync()` shows the fix (dispatch `change` after setting the value).
 - The Kepler preset places its planets at random angles without zeroing the total
   momentum, so the system drifts at up to ~0.1c.
-- `sim.totalRadiated` only ever decreases (kugelblitz): nothing adds GPU-emitted
-  radiation to it, so the stats' radiated column reads 0.
+- `compute-stats.wgsl`'s velocity-dependent energies (Darwin field energy, the EIH and
+  Bažański 1PN terms) predate the 2026-10-23 force audit and don't match the forces now
+  applied, so 1PN and magnetic runs show a drift that is bookkeeping, not dynamics.
+- Schwinger and extremal-shedding leptons carry kinetic energy the hole never pays
+  (see Black holes); now that the pools count, the hawking preset's drift shows it.

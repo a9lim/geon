@@ -49,14 +49,15 @@ Cost: **S** about one session · **M** a few sessions · **L** a milestone ·
 | 2026-10-23 | **Frames default to the lagged view** (open decision 1): the slice is all computed past, and the HUD names the lag. | §5.4 |
 | 2026-10-23 | **Liénard–Wiechert before frames** (open decision 6), so frames are honest for EM from the start. Landed the same day. | §11.1, §2.1 |
 | 2026-10-23 | **The full 1.5 suite this leg:** M2, M3 and M4 after M1. | §3 |
+| 2026-10-23 | **Expansion requires loop topology** (open decision 3): the universe is the periodic domain; the centred expanding cloud is gone. | §5.6 |
+| 2026-10-23 | **M3 keeps physical coordinates on a growing domain** (Claude's call): positions scale by a_new/a_old once per frame, which on a periodic domain is the comoving dynamics exactly, so the force shaders never see a; world lines are comoving and conformal. | §5.6 |
 | 2026-10-23 | **The event log waits for a consumer:** the slicer reads births, deaths and merges from creation times, death snapshots and breaks (Claude's call while building M2). | §10.2 |
 
 ### Open
 
 1. *(Decided: the lagged view, §5.4.)*
 2. *(Decided: the sweep ring, §5.2.)*
-3. **Expansion outside loop mode:** keep it as a labelled "expanding cloud"
-   with a centre, or disable it. §5.6.
+3. *(Decided: Expansion requires loop topology, §5.6.)*
 4. **Gas solver:** SPH (recommended; shares particle infrastructure with dust)
    or Plasma's Eulerian solver. §7.3.
 5. **Quantum interpretation surface:** measurement-as-spawn, Bohmian tracers,
@@ -327,6 +328,30 @@ The tie is explicit and per mode, which is what Codex asked for.
     clock offset, and the bounce twin coasting at 1/γ and coming home younger.
   - Deferred, with reasons: the event log (§10.2), the covariance meter and the
     slingshot twin (§5.4).
+- **M3 (2026-10-23): honest cosmology** (§5.6).
+  - Expansion requires loop topology (decision 3). Positions stay physical on a
+    domain a times the comoving one; once a frame `expansion.wgsl` scales them by
+    a_new/a_old and peculiar momenta and photon energies by the inverse, which on a
+    periodic domain is the comoving dynamics exactly. Frames with H·dt > 0.02 split.
+  - a(t) (`cosmology.js`): de Sitter, matter, radiation, ΛCDM, or the Friedmann
+    closure from the contents (matter, radiation including pending and escaped,
+    fields' slab energy) plus a vacuum H_Λ. Hubble radius and event horizon.
+  - World lines comoving and conformal, so Liénard–Wiechert stays exact in FRW by
+    conformal invariance (`retardedState` returns rel·a and acc/a).
+  - Fields: Hubble friction, sources ÷a, slab energy ×a, comoving grid gravity
+    with k = 0 dropped; field damping is a setting.
+  - The energy ledger: boson pools, pending and escaped radiation now count (the
+    radiated column used to read 0); the expansion's work is booked exactly for
+    kinetic and photon redshift and the fields, to first order for the stretched
+    potentials.
+  - Readouts (Stats → Expansion, the overlay's horizons), a comoving view,
+    comoving rulers, a logarithmic H slider.
+  - Presets: the expanding universe rebuilt as a de Sitter torus, axion
+    misalignment, Kibble–Zurek walls (a Higgs quench with a Langevin bath) (22).
+  - Oracles (29): de Sitter a(t), w ∝ 1/a and photon E ∝ 1/a, comoving rest; a
+    comoving charge's field at the proper distance now; the Friedmann dust law;
+    zero force from a periodic lattice; misalignment frozen then ρa³ constant; the
+    field ledger's closure; Kibble–Zurek walls ∝ τ_Q^{−0.24} against 1/4.
 
 ### 2.2 Physics bugs and gaps found by the 2.0 scouting
 
@@ -341,12 +366,18 @@ The tie is explicit and per mode, which is what Codex asked for.
 - **Field damping is ether-like friction:** axion `damp = AXION_COUPLING·m_a`
   (Q ≈ 20), Higgs critical damping `2m_H`, and numerical viscosity `ν∇²φ̇` on
   top. It gives fields a preferred frame and kills self-bound lumps.
-- **Cosmology is centred and partial.**
-  - Hubble flow `x += H(x − c)dt` runs about the *domain centre*, with
-    `w *= 1 − H dt`, on particles only (`src/gpu/shaders/expansion.wgsl`).
-  - Photons, pions and leptons neither redshift nor co-expand.
-  - H is constant; fields get no Hubble friction.
-  - In loop mode the flow is discontinuous across the wrap.
+- **Cosmology's model boundaries** (M3, §2.1):
+  - the expansion is a first-order split at frame cadence (H·dt ≤ 0.02 per step);
+  - the ledger's potential term is first order and lags a readback, and its fields
+    term assumes the KDK's linear friction; it closes to about 1% of the energy that
+    flows through the expansion;
+  - the other force laws act from the physical retarded position without FRW
+    corrections (only Liénard–Wiechert is exact); particle softening stays physical
+    while ℓ is comoving;
+  - Friedmann densities lag a readback and assume a⁻³ / a⁻⁴ in between.
+- **The stats' velocity-dependent energies predate the force audit:**
+  `compute-stats.wgsl` still books Darwin field energy and the old EIH and
+  Bažański energies, so 1PN and magnetic runs drift by bookkeeping.
 - **World lines have no event log** (deferred from M2, §10.2): births, deaths
   and merges exist as creation times, death snapshots and breaks, which is all
   the slicer needs; boson emission and absorption leave no record.
@@ -387,11 +418,11 @@ The tie is explicit and per mode, which is what Codex asked for.
 ### 2.3 Still open from the June audit
 
 - **Tests (audit §1, its top item):** `tests/physics-validation.html` runs
-  22 analytic oracles against the production `GPUPhysics` (§10.3). No Node
+  29 analytic oracles against the production `GPUPhysics` (§10.3). No Node
   kernel tests yet. The audit's route, a headless CPU engine as a GPU↔CPU
   parity oracle, died with the CPU path.
-- **Preset coverage (audit §3):** 20 presets, five of them relativity's
-  (M1, M2), and none turns on boson interaction.
+- **Preset coverage (audit §3):** 22 presets, five of them relativity's
+  (M1, M2) and three cosmology's (M3), and none turns on boson interaction.
   - Nothing exercises superradiance, Schwinger discharge, kugelblitz,
     Roche/disintegration, the Klein/RP² topologies or the external fields.
   - Annihilation is only incidental (Peccei–Quinn).
@@ -473,7 +504,7 @@ Versions set the order. Milestone IDs are stable names, not an order:
 | **M0′** (done 2026-10-23, §2.1) | 1.5 | Retire the CPU path (§4): port the phase plot and effective potential to readback; device-loss recovery; a "requires WebGPU" notice; delete about 8,100 lines; update the docs. Can share a session with M0. | M0 |
 | **M1** (done 2026-10-23, §2.1) | 1.5 | **Relativity you can see.** The world-line store (§10.2); τ and θ state; the spoke shader; clocks; spoke precession; domain decoupled from viewport (§10.4). | M0′ |
 | **M2** (done 2026-10-23 but for the covariance meter and slingshot twin, §2.1) | 1.5 | **Frames.** The slicer; lab, ZMF, particle and custom frames (view-only); lagged and true-now modes; the scrubber; the 1+1 Minkowski panel; the grid as lab rulers. | M1 |
-| **M3** | 1.5 | **Honest cosmology.** Comoving rewrite; the a(t) selector and self-consistent background; redshift; Hubble friction; the ledger; horizons; misalignment and Kibble–Zurek presets. | M2 (grid) |
+| **M3** (done 2026-10-23, §2.1) | 1.5 | **Honest cosmology.** Comoving rewrite; the a(t) selector and self-consistent background; redshift; Hubble friction; the ledger; horizons; misalignment and Kibble–Zurek presets. | M2 (grid) |
 | **M4** | 1.5 | **Lensing.** Lens mode on the grid; microlensing probe. | M2 (grid) |
 | **2.0** | 2.0 | The visual overhaul. Milestones are defined with its scope. | 1.5 |
 | **M8** | 2.1 | **The brush, then refractive media.** The layer system and brush UI (§7.1); n grids, Fresnel optics, dispersion, Cherenkov, gravity as an index (§7.2). | 2.0 |
@@ -708,7 +739,15 @@ microlensing light curve. **[standard]** Point lens:
 
 **Oracles:** `θ_E = √(4M·D_eff)`, μ(u), and 1/γ lattice compression.
 
-### 5.6 Honest cosmology (M3, L)
+### 5.6 Honest cosmology (M3, done)
+
+Landed 2026-10-23 (§2.1). Differences from the plan below: positions stay physical
+on a growing periodic domain rather than comoving (equivalent on a periodic domain,
+and the force shaders never see a); the Kibble–Zurek quench ramps the Higgs mass term
+with a Langevin bath rather than tying a temperature to a(t); the CMB-dipole and
+structure-formation presets wait for M5 dust. The comoving frame is the lab once a ≠ 1.
+
+The design as planned:
 
 **Under the 3D convention (§1.2):** this is the *FRW-background* reduction.
 The slab is a slice of homogeneous 3D FRW with comoving thickness ℓ_c.

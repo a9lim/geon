@@ -38,7 +38,7 @@
  *  conformal time (cosmology.js, expansion.wgsl).
  */
 import { createParticleBuffers, createUniformBuffer, writeFrameUniforms, writeSubstepUniforms, createFieldBuffers, createGravityGridBuffers, createAtomicGridBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createKugelblitzBuffers, createTrailBuffers, createFrameBuffers, FRAME_PARAMS_SIZE, FRAME_STATE_SIZE, FIELD_GRID_RES, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
-import { fetchShader, createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createMergePhotonPipeline, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldGravityPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createBosonDispatchArgsPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline, createFrameSlicePipelines } from './gpu-pipelines.js';
+import { fetchShader, createLensPipeline, createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createMergePhotonPipeline, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldGravityPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createBosonDispatchArgsPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline, createFrameSlicePipelines } from './gpu-pipelines.js';
 import { buildWGSLConstants, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT, GRAVITOMAG_BIT, ONE_PN_BIT, RELATIVITY_BIT, SPIN_ORBIT_BIT, RADIATION_BIT, BLACK_HOLE_BIT, DISINTEGRATION_BIT, EXPANSION_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BARNES_HUT_BIT, BOSON_INTER_BIT, FIELD_GRAV_BIT_T1, HERTZ_BOUNCE_BIT_T1, EM_PAIRWISE_BIT_T1, WL_STRIDE, WL_META_STRIDE } from './gpu-constants.js';
 import { createGPUDispatchPlan, updateGPUDispatchPlan } from './pass-graph.js';
 import {
@@ -103,6 +103,12 @@ const _addParticleColorData = new Uint32Array(1);
 const _addParticleModData = new Float32Array(4);
 const _addParticleClockData = new Float32Array(4);   // τ, ring phase, θ, lapse
 const _birthSampleData = new Float32Array(12);
+const _lensData = new ArrayBuffer(80);               // lens-deflection.wgsl LensParams
+const _lensF32 = new Float32Array(_lensData);
+const _lensU32 = new Uint32Array(_lensData);
+// The lens map's resolution, and a small core so a ray through a body stays finite
+export const LENS_RES = 512;
+const LENS_CORE_SQ = 0.01;
 const _fieldLedgerData = new ArrayBuffer(48);       // field-ledger.wgsl LedgerUniforms
 const _fieldLedgerF32 = new Float32Array(_fieldLedgerData);
 const _fieldLedgerU32 = new Uint32Array(_fieldLedgerData);
@@ -635,8 +641,69 @@ export default class GPUPhysics {
         }
 
         await this._initFrames(wgslConstants);
+        await this._initLens(wgslConstants);
 
         this._ready = true;
+    }
+
+    // ─── Lensing (lens-deflection.wgsl) ───
+
+    async _initLens(wgslConstants) {
+        const d = this.device;
+        this.lensBuffers = {
+            params: d.createBuffer({ label: 'lensParams', size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+            map: d.createBuffer({ label: 'lensMap', size: LENS_RES * LENS_RES * 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }),
+            hits: d.createBuffer({ label: 'lensHits', size: 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST }),
+            staging: d.createBuffer({ label: 'lensHitsStaging', size: 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }),
+        };
+        const pl = await createLensPipeline(d, wgslConstants);
+        const lb = this.lensBuffers;
+        this._lensPipeline = pl.pipeline;
+        this._lensBG = d.createBindGroup({
+            label: 'lens_g0', layout: pl.layout,
+            entries: [lb.params, this.buffers.particleState, lb.map, lb.hits].map((buffer, i) => ({ binding: i, resource: { buffer } })),
+        });
+        this._lensPending = false;
+        this.lensHits = null;   // the probe's last count, with the cell area and star radius it used
+    }
+
+    /**
+     * Build the lens map over the rectangle `p` = { left, top, width, height } (lab) for the
+     * backdrop distance `p.distance`, and count the probe's rays when `p.star` = { x, y, r }
+     * is set (read back a frame late into `lensHits`).
+     */
+    dispatchLens(p) {
+        if (!this._lensPipeline) return;
+        const cellW = p.width / LENS_RES, cellH = p.height / LENS_RES;
+        const f = _lensF32, u = _lensU32;
+        f[0] = p.left; f[1] = p.top; f[2] = cellW; f[3] = cellH;
+        u[4] = LENS_RES; u[5] = this.aliveCount;
+        f[6] = 4 * p.distance;
+        f[7] = LENS_CORE_SQ;
+        f[8] = p.star ? p.star.x : 0; f[9] = p.star ? p.star.y : 0; f[10] = p.star ? p.star.r * p.star.r : 0;
+        u[11] = p.star ? 1 : 0;
+        u[12] = this.boundaryMode === BOUND_LOOP ? 1 : 0; u[13] = this.topologyMode;
+        f[14] = this.domainW; f[15] = this.domainH;
+        u[16] = this._blackHoleEnabled ? 1 : 0;
+        this.device.queue.writeBuffer(this.lensBuffers.params, 0, _lensData);
+        const enc = this.device.createCommandEncoder({ label: 'lens' });
+        enc.clearBuffer(this.lensBuffers.hits);
+        const pass = enc.beginComputePass({ label: 'lensDeflection' });
+        pass.setPipeline(this._lensPipeline);
+        pass.setBindGroup(0, this._lensBG);
+        pass.dispatchWorkgroups(LENS_RES / 8, LENS_RES / 8);
+        pass.end();
+        const readHits = p.star && !this._lensPending;
+        if (readHits) enc.copyBufferToBuffer(this.lensBuffers.hits, 0, this.lensBuffers.staging, 0, 4);
+        this.device.queue.submit([enc.finish()]);
+        if (!readHits) return;
+        this._lensPending = true;
+        const cellArea = cellW * cellH, r = p.star.r, t = this.simTime;
+        this.lensBuffers.staging.mapAsync(GPUMapMode.READ).then(() => {
+            const n = new Uint32Array(this.lensBuffers.staging.getMappedRange().slice(0))[0];
+            this.lensBuffers.staging.unmap();
+            this.lensHits = { hits: n, magnification: n * cellArea / (Math.PI * r * r), t };
+        }).catch(() => {}).finally(() => { this._lensPending = false; });
     }
 
     // ─── Frames (frame-slice.wgsl) ───
@@ -4604,6 +4671,7 @@ export default class GPUPhysics {
         // Expansion
         _d(this._expansionUniformBuffer);
         _d(this._cosmoAccum);
+        if (this.lensBuffers) Object.values(this.lensBuffers).forEach(_d);
         if (this._expansionDummyTrails) this._expansionDummyTrails.forEach(_d);
 
         // FFT

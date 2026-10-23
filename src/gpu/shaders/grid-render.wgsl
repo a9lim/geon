@@ -1,6 +1,12 @@
 // ─── The background grid: lab rulers and the domain edge ───
 // Under expansion the rulers are comoving: spaced 2^k in x/a, so in the physical view they
 // stretch with the universe and in the comoving view they stand still.
+//
+// Lensing (lab frame only): the rulers are a backdrop seen through the slab's masses, so a
+// pixel at θ draws the backdrop at β = θ − α(θ) from lens-deflection.wgsl's map, sampled
+// bilinearly. The domain edge is in the slab and stays unlensed. The probe's backdrop star
+// shows wherever a ray lands on it, so its images (arcs, an Einstein ring) appear; the
+// imposed black-hole capture disks are filled with the ground's ink.
 // One sheet at rest in the lab, behind the slab. A full-screen pass maps each pixel back to
 // lab coordinates on the current slice and draws multiscale hairlines at spacings 2^k,
 // faded in by their on-screen spacing (12–48 px), plus the domain edge (the seams, in loop
@@ -27,9 +33,17 @@ struct GridParams {
     periodic: u32,
     showLines: u32,
     scaleA: f32,        // the rulers are comoving
+    lensOn: u32,
+    lensRes: u32,
+    starOn: u32,
+    lensLeft: f32,      // the lens map's rectangle (lab)
+    lensTop: f32,
+    lensCellW: f32,
+    lensCellH: f32,
+    starX: f32,         // the probe's backdrop star (lab)
+    starY: f32,
+    starR: f32,
     _pad0: f32,
-    _pad1: f32,
-    _pad2: f32,
 };
 
 // FrameState as frame-slice.wgsl writes it
@@ -56,6 +70,22 @@ struct FrameState {
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
 @group(0) @binding(1) var<uniform> grid: GridParams;
 @group(0) @binding(2) var<storage, read> frame: FrameState;
+@group(0) @binding(3) var<storage, read> lensMap: array<vec4<f32>>;
+
+/** The lens map at lab point p, bilinear: (αx, αy, shadow, _). */
+fn lensAt(p: vec2<f32>) -> vec4<f32> {
+    let n = i32(grid.lensRes);
+    let g = vec2((p.x - grid.lensLeft) / grid.lensCellW - 0.5, (p.y - grid.lensTop) / grid.lensCellH - 0.5);
+    let i0 = vec2<i32>(floor(g));
+    let f = g - floor(g);
+    let a = clamp(i0, vec2(0), vec2(n - 1));
+    let b = clamp(i0 + vec2(1), vec2(0), vec2(n - 1));
+    let s00 = lensMap[a.y * n + a.x];
+    let s10 = lensMap[a.y * n + b.x];
+    let s01 = lensMap[b.y * n + a.x];
+    let s11 = lensMap[b.y * n + b.x];
+    return mix(mix(s00, s10, f.x), mix(s01, s11, f.x), f.y);
+}
 
 struct VertexOutput {
     @builtin(position) pos: vec4<f32>,
@@ -135,7 +165,33 @@ fn fsGrid(in: VertexOutput) -> @location(0) vec4<f32> {
     let ink = select(COLOR_TEXT_LIGHT, COLOR_TEXT_DARK, dark);
     // Hairline weights: the edge matches --border (text at 12% / 13%), rulers sit below it
     let edge = edgeAlpha(lab, fw) * select(0.12, 0.13, dark);
-    let lines = select(0.0, gridAlpha(lab / grid.scaleA, fw / grid.scaleA) * select(0.075, 0.09, dark), grid.showLines != 0u);
-    let a = max(edge, lines);
-    return vec4(ink * a, a);
+
+    // The backdrop: lensed rulers and the probe's star
+    var backdrop = lab;
+    var shadow = 0.0;
+    let lensed = grid.lensOn != 0u && camera.frameOn < 0.5;
+    if (lensed) {
+        let l = lensAt(lab);
+        backdrop = lab - l.xy;
+        shadow = l.z;
+    }
+    let bfw = max(fwidth(backdrop), vec2(1e-6));
+    var lines = select(0.0, gridAlpha(backdrop / grid.scaleA, bfw / grid.scaleA) * select(0.075, 0.09, dark), grid.showLines != 0u);
+    lines *= 1.0 - smoothstep(0.3, 0.7, shadow);
+    var a = max(edge, lines);
+    var color = ink * a;
+    if (lensed && grid.starOn != 0u) {
+        let ds = length(backdrop - vec2(grid.starX, grid.starY)) / grid.starR;
+        let star = (1.0 - smoothstep(0.85, 1.0, ds)) * 0.9;
+        let accent = select(COLOR_ACCENT_LIGHT, COLOR_ACCENT_DARK, dark);
+        color = color * (1.0 - star) + accent * star;
+        a = a + star * (1.0 - a);
+    }
+    if (lensed && shadow > 0.0) {
+        // The imposed capture disk: the ground's ink at the edge's weight, so it reads as a hole
+        let s = smoothstep(0.3, 0.7, shadow) * select(0.55, 0.7, dark);
+        color = color * (1.0 - s) + ink * s * 0.35;
+        a = a + s * 0.35 * (1.0 - a);
+    }
+    return vec4(color, a);
 }

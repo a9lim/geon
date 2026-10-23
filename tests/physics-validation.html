@@ -1137,6 +1137,68 @@ cases.push({
     },
 });
 
+// ── Lensing (M4) ──
+
+/** Build the lens map over a square of side `side` centred on (cx, cy), and wait for the probe. */
+async function lensMap(gp, cx, cy, side, distance, star = null) {
+    gp.lensHits = null;
+    gp.dispatchLens({ left: cx - side / 2, top: cy - side / 2, width: side, height: side, distance, star });
+    await gp.device.queue.onSubmittedWorkDone();
+    while (star && !gp.lensHits) await new Promise(r => setTimeout(r, 2));
+    return new Float32Array(await readBuffer(gp, gp.lensBuffers.map, 512 * 512 * 16));
+}
+
+cases.push({
+    name: 'Lensing: a lone mass deflects the backdrop by 4MD/θ, so its Einstein ring has θ_E = √(4MD)',
+    async run() {
+        const M = 4, D = 1.5, side = 40, res = 512;
+        const thetaE = Math.sqrt(4 * M * D);
+        const gp = await makeSim({ domainW: 64, domainH: 64 });
+        gp.addParticle({ x: 32, y: 32, mass: M });
+        const map = await lensMap(gp, 32, 32, side, D);
+        gp.destroy();
+        // The cell centre nearest (32 + θ_E, 32)
+        const cell = side / res;
+        const ix = Math.round((thetaE + side / 2) / cell - 0.5), iy = Math.round(side / 2 / cell - 0.5);
+        const x = -side / 2 + (ix + 0.5) * cell, y = -side / 2 + (iy + 0.5) * cell;
+        const r = Math.hypot(x, y);
+        const k = (iy * res + ix) * 4;
+        const alpha = Math.hypot(map[k], map[k + 1]);
+        const expect = 4 * M * D / r;
+        return {
+            expected: `|α(θ)| = 4MD/θ = ${fmt(expect)} at θ = ${fmt(r)}; θ_E = ${fmt(thetaE)}`,
+            measured: `|α| = ${fmt(alpha)}, so β = θ − α = ${fmt(r - alpha, 3)} (0 on the ring)`,
+            metric: `${fmt((alpha / expect - 1) * 100, 2)}%`,
+            pass: Math.abs(alpha / expect - 1) < 1e-3 && Math.abs(r - alpha) < 0.02 * thetaE,
+        };
+    },
+});
+
+cases.push({
+    name: 'Microlensing: a point lens magnifies a backdrop star by (u² + 2)/(u√(u² + 4))',
+    async run() {
+        // Inverse ray shooting: cells whose rays land on the star, times the cell area, over
+        // its area. θ_E = 8, a star of radius θ_E/10 (finite-source effects below 1% at u ≥ 0.5)
+        const M = 16, D = 1, thetaE = 8, rs = 0.8, side = 48;
+        const gp = await makeSim({ domainW: 128, domainH: 128 });
+        gp.addParticle({ x: 64, y: 64, mass: M });
+        const rows = [];
+        for (const u of [0.5, 1, 2]) {
+            await lensMap(gp, 64, 64, side, D, { x: 64 + u * thetaE, y: 64, r: rs });
+            const mu = gp.lensHits.magnification;
+            rows.push({ u, mu, exp: (u * u + 2) / (u * Math.sqrt(u * u + 4)) });
+        }
+        gp.destroy();
+        const worst = Math.max(...rows.map(r => Math.abs(r.mu / r.exp - 1)));
+        return {
+            expected: rows.map(r => `μ(${r.u}) = ${fmt(r.exp, 3)}`).join(', '),
+            measured: rows.map(r => fmt(r.mu, 3)).join(', '),
+            metric: `worst ${fmt(worst * 100, 2)}%`,
+            pass: worst < 0.03,
+        };
+    },
+});
+
 // ── Runner ──
 
 /** Run every case, or those whose name contains `filter` (console: runAll('Liénard')). */

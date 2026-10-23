@@ -443,23 +443,30 @@ const REF_EN = {
 
     'ref.expansion.title': 'Cosmological expansion',
     'ref.expansion.body': `
-<p>The universe is expanding: distant galaxies recede from us at speeds proportional to their distance. This is Hubble's law, the observational cornerstone of modern cosmology.</p>
+<p>The universe is the periodic domain, a slab cut from a flat, homogeneous, expanding 3D universe (Friedmann–Robertson–Walker). Expansion needs loop topology: an expanding universe with an edge would have a centre.</p>
 
-<h3>Hubble flow</h3>
-<p>$$\\mathbf{v}_H = H\\cdot\\mathbf{r}$$</p>
-<p>where $H$ is the Hubble parameter and $\\mathbf{r}$ is measured from the domain center. Every particle acquires an outward drift proportional to its distance. This is not a force — it is the stretching of space itself.</p>
+<h3>The scale factor</h3>
+<p>Distances between bodies at rest grow with the scale factor $a(t)$ at the rate $H = \\dot a/a$. Choose the history: de Sitter ($H$ constant), matter ($a \\propto t^{2/3}$), radiation ($a \\propto t^{1/2}$), ΛCDM, or Friedmann, where the universe's own contents set the rate:</p>
+<p>$$H^2 = \\frac{8\\pi}{3}\\bar\\rho + H_\\Lambda^2$$</p>
+<p>with $\\bar\\rho$ the mean density of matter, radiation and fields over the slab, and $H_\\Lambda$ a vacuum term. Matter dilutes as $a^{-3}$ and radiation as $a^{-4}$, so a universe of dust alone grows as $t^{2/3}$.</p>
 
-<h3>Hubble drag (cosmological redshift)</h3>
-<p>Peculiar velocities (motion relative to the Hubble flow) redshift over time:</p>
-<p>$$\\mathbf{v}_{\\text{pec}} \\to \\mathbf{v}_{\\text{pec}}(1-H\\,dt)$$</p>
-<p>A photon emitted by a distant galaxy arrives with a longer wavelength because space expanded while it was in transit. The same effect decelerates particles that are not bound together.</p>
+<h3>What expansion does</h3>
+<ul>
+<li>Bodies at rest stay at fixed comoving coordinates while the space between them grows. The domain itself grows; the grid's rulers are comoving and stretch with it.</li>
+<li>Peculiar momentum, motion relative to the comoving grid, decays as $1/a$ at any speed.</li>
+<li>Photons redshift: their energy falls as $1/a$.</li>
+<li>Bound systems keep their size. Expansion acts on a binary only through the tidal term $(\\ddot a/a)\\,d$, tiny beside its own gravity.</li>
+<li>Scalar fields feel Hubble friction: $\\ddot\\phi + 3H\\dot\\phi - \\nabla^2\\phi + V'(\\phi) = 0$. A field frozen while $H$ exceeds its mass starts oscillating once $H$ falls below it, and then dilutes like matter: axion misalignment.</li>
+</ul>
 
-<h3>Bound vs. unbound systems</h3>
-<p>The key physical result: gravitationally bound systems resist expansion. A binary orbit where the binding energy exceeds the Hubble kinetic energy stays together, while unbound particles are swept apart.</p>
-<p>This is exactly how large-scale cosmic structure forms — dense regions collapse under gravity while the expanding background carries diffuse matter apart, creating a cosmic web of galaxies, filaments, and voids.</p>
+<h3>Light in an expanding universe</h3>
+<p>Signals travel on light cones that are straight in comoving coordinates and conformal time $\\eta$ ($d\\eta = dt/a$). Maxwell's equations are conformally invariant, so a charge's Liénard–Wiechert field is exact here too: its Coulomb part falls with the distance now, and its radiation is dimmed by $1/(1+z)$.</p>
 
-<h3>Limitations</h3>
-<p>This implementation uses a constant $H$ (de Sitter expansion). The real universe has $H(t)$ that evolves with matter, radiation, and dark energy content. The simulation locks boundary mode to "despawn" when expansion is active, since periodic boundaries would conflict with the outward flow.</p>
+<h3>Horizons</h3>
+<p>The Hubble radius $c/H$ is where the recession of comoving bodies reaches the speed of light. Beyond it they recede faster, which relativity allows, since nothing moves through space that fast. The event horizon bounds the events whose light will ever reach you; it is finite only when a vacuum term keeps $H$ from falling to zero (de Sitter gives $c/H$).</p>
+
+<h3>Energy</h3>
+<p>An expanding universe has no conserved global energy. The Stats tab books what the expansion takes or gives (redshifted kinetic energy and photons, stretched potentials, the fields' friction and dilution) as a separate line, so the drift measures numerical error alone.</p>
 `,
 
     'ref.disintegration.title': 'Disintegration & Roche limit',
@@ -1182,23 +1189,30 @@ const REF_JA = {
 
     'ref.expansion.title': '宇宙膨張',
     'ref.expansion.body': `
-<p>宇宙は膨張しています：遠方銀河は距離に比例した速度で我々から遠ざかっています。これがハッブルの法則 — 現代宇宙論の観測的礎石です。</p>
+<p>宇宙は周期的な領域そのもので、平坦で一様な膨張する3次元宇宙（フリードマン＝ロバートソン＝ウォーカー）から切り出した薄板です。膨張にはループ境界が必要です。端のある膨張宇宙には中心ができてしまうからです。</p>
 
-<h3>ハッブル流</h3>
-<p>$$\\mathbf{v}_H = H\\cdot\\mathbf{r}$$</p>
-<p>$H$ はハッブルパラメータ、$\\mathbf{r}$ は領域中心からの位置。すべての粒子は距離に比例した外向きドリフトを獲得します。これは力ではなく、空間そのものの伸長です。</p>
+<h3>スケール因子</h3>
+<p>静止した物体どうしの距離はスケール因子 $a(t)$ とともに、率 $H = \\dot a/a$ で伸びます。膨張の歴史は、ド・ジッター（$H$ 一定）、物質優勢（$a \\propto t^{2/3}$）、放射優勢（$a \\propto t^{1/2}$）、ΛCDM、そして宇宙自身の内容物が率を決めるフリードマンから選べます。</p>
+<p>$$H^2 = \\frac{8\\pi}{3}\\bar\\rho + H_\\Lambda^2$$</p>
+<p>$\\bar\\rho$ は薄板にわたる物質・放射・場の平均密度、$H_\\Lambda$ は真空の項です。物質は $a^{-3}$、放射は $a^{-4}$ で薄まるので、塵だけの宇宙は $t^{2/3}$ で膨張します。</p>
 
-<h3>ハッブルドラッグ（宇宙論的赤方偏移）</h3>
-<p>固有速度（ハッブル流に対する運動）は時間とともに赤方偏移します：</p>
-<p>$$\\mathbf{v}_{\\text{pec}} \\to \\mathbf{v}_{\\text{pec}}(1-H\\,dt)$$</p>
-<p>遠方銀河から放たれた光子は、伝搬中に空間が膨張するため、より長い波長で到着します。同じ効果が、束縛されていない粒子を減速させます。</p>
+<h3>膨張がもたらすもの</h3>
+<ul>
+<li>静止した物体は共動座標に留まり、その間の空間が伸びます。領域そのものが大きくなり、格子の物差しは共動座標でともに伸びます。</li>
+<li>共動格子に対する運動である特異運動量は、どんな速さでも $1/a$ で減衰します。</li>
+<li>光子は赤方偏移し、エネルギーが $1/a$ で減ります。</li>
+<li>束縛系は大きさを保ちます。膨張が連星に及ぼすのは潮汐項 $(\\ddot a/a)\\,d$ だけで、連星自身の重力に比べてごく小さいものです。</li>
+<li>スカラー場はハッブル摩擦を受けます：$\\ddot\\phi + 3H\\dot\\phi - \\nabla^2\\phi + V'(\\phi) = 0$。$H$ が質量より大きい間は凍結していた場が、$H$ が質量を下回ると振動を始め、物質のように薄まります。これがアクシオンのミスアラインメント機構です。</li>
+</ul>
 
-<h3>束縛系と非束縛系</h3>
-<p>核心的な物理結果：重力的に束縛された系は膨張に抗います。束縛エネルギーがハッブル運動エネルギーを上回る連星軌道はまとまりを保ち、非束縛粒子は引き離されます。</p>
-<p>これが大規模宇宙構造の形成の仕組みそのものです — 密な領域は重力で崩壊する一方、膨張する背景は希薄物質を引き離し、銀河・フィラメント・ボイドの宇宙ウェブを作ります。</p>
+<h3>膨張宇宙の光</h3>
+<p>信号は、共動座標と共形時間 $\\eta$（$d\\eta = dt/a$）で真っ直ぐな光円錐の上を伝わります。マクスウェル方程式は共形不変なので、電荷のリエナール＝ヴィーヘルト場はここでも厳密です。クーロン部分は現在の距離とともに減衰し、放射は $1/(1+z)$ だけ弱まります。</p>
 
-<h3>制約</h3>
-<p>本実装は一定の $H$（ドジッター膨張）を用います。実際の宇宙では $H(t)$ が物質・放射・ダークエネルギー含有量とともに進化します。膨張が有効なときシミュレーションは境界モードを「消滅」に固定します — 周期境界は外向き流と矛盾するためです。</p>
+<h3>地平面</h3>
+<p>ハッブル半径 $c/H$ は、共動する物体の後退速度が光速に達する距離です。その外ではさらに速く遠ざかりますが、空間の中をその速さで動くものはないので、相対論はこれを許します。事象の地平面は、その光がいつか届く事象の範囲を限ります。真空の項が $H$ をゼロまで下がらせない場合にだけ有限です（ド・ジッターでは $c/H$）。</p>
+
+<h3>エネルギー</h3>
+<p>膨張宇宙には保存される大域的なエネルギーがありません。統計タブは、膨張が奪い与えるもの（赤方偏移した運動エネルギーと光子、引き伸ばされたポテンシャル、場の摩擦と希釈）を別の行に記録するので、ドリフトは数値誤差だけを表します。</p>
 `,
 
     'ref.disintegration.title': '分裂とロッシュ限界',

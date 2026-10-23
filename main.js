@@ -13,6 +13,7 @@ import Frames from './src/frames.js';
 import FramePanel from './src/frame-panel.js';
 import MinkowskiPanel from './src/minkowski.js';
 import CosmologyPanel from './src/cosmology-panel.js';
+import LensPanel from './src/lens-panel.js';
 
 /**
  * Request a WebGPU device with the limits the simulation needs.
@@ -87,6 +88,8 @@ class Simulation {
         this.overlay = new Overlay(this.canvas);
         this.view = { trails: true, showClocks: false, showVelocity: false, showForce: false, showForceComponents: false, grid: true };
         this.heatmap = { enabled: false, mode: 'all' };
+        // The grid as a lensed backdrop (lens-panel.js): on, distance D, the probe's star
+        this.lens = { on: false, distance: 1, star: null };
         // The domain is simulation state; the window is only a camera onto it
         this.domainW = DEFAULT_DOMAIN;
         this.domainH = DEFAULT_DOMAIN;
@@ -287,6 +290,7 @@ class Simulation {
         this.framePanel = new FramePanel(this);
         this.minkowski = new MinkowskiPanel(this, document.getElementById('minkowski-container'));
         this.cosmologyPanel = new CosmologyPanel(this);
+        this.lensPanel = new LensPanel(this);
 
         // Re-apply DOM translations after UI setup in case any modules
         // mutated text content during their wiring (e.g. mode-btn label).
@@ -518,6 +522,7 @@ class Simulation {
         this.select(-1);
         if (this.gpu) this.gpu.reset(this);
         this.camera.minZoom = ZOOM_MIN;
+        this.lensPanel?.setProbe(false);
     }
 
     /** Select a particle by GPU slot (-1 clears); the sidebar fills on the next stats readback. */
