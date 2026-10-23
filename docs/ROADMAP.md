@@ -46,11 +46,13 @@ Cost: **S** about one session · **M** a few sessions · **L** a milestone ·
 | 2026-10-23 | **Thomas precession takes non-gravitational acceleration only;** gravity gets the geodetic `(3/2)∇Φ×v`. | §5.3 |
 | 2026-10-23 | **World-line samples are 12 floats** (`t, x, y, wx, wy, ax, ay, τ, θ, angw, m, q`), so Liénard–Wiechert has its acceleration; the event log's schema is fixed in M1 and built in M2. | §10.2 |
 | 2026-10-23 | **The domain is state:** presets carry their size, the default sandbox is square, and the window is a camera. | §10.4 |
+| 2026-10-23 | **Frames default to the lagged view** (open decision 1): the slice is all computed past, and the HUD names the lag. | §5.4 |
+| 2026-10-23 | **Liénard–Wiechert before frames** (open decision 6), so frames are honest for EM from the start. Landed the same day. | §11.1, §2.1 |
+| 2026-10-23 | **The full 1.5 suite this leg:** M2, M3 and M4 after M1. | §3 |
 
 ### Open
 
-1. **Default frame-view mode:** lagged (filled) or true-now (uncomputed region
-   shown). §5.4.
+1. *(Decided: the lagged view, §5.4.)*
 2. *(Decided: the sweep ring, §5.2.)*
 3. **Expansion outside loop mode:** keep it as a labelled "expanding cloud"
    with a centre, or disable it. §5.6.
@@ -58,8 +60,7 @@ Cost: **S** about one session · **M** a few sessions · **L** a milestone ·
    or Plasma's Eulerian solver. §7.3.
 5. **Quantum interpretation surface:** measurement-as-spawn, Bohmian tracers,
    both, or neither. §8.
-6. **Liénard–Wiechert fields:** bring them in before frames, so frames are
-   honest for EM on day one, or after. §11.1.
+6. *(Decided: before frames; landed, §2.1.)*
 7. **The 2.0 overhaul's scope:** which pillars are in, and whether it includes
    a rendering-architecture rewrite. §6.
 
@@ -265,6 +266,42 @@ The tie is explicit and per mode, which is what Codex asked for.
   - Oracles: free clock at γ = 2, static clock `√(1 + 2Φ_N)`, circular-orbit
     clock `√(1 − 3M/r)`, Thomas `−2π(γ − 1)` and geodetic `3π·g·r` per orbit,
     world-line sampling; 12 in all.
+- **Liénard–Wiechert and the force-law audit (2026-10-23, opening M2):**
+  - With Relativity on, charges interact through their Liénard–Wiechert fields
+    from the retarded state (velocity and acceleration fields, B = n̂ × E,
+    σ³-softened), in place of Coulomb with the toy aberration, Biot–Savart, and
+    Darwin. Barnes–Hut runs EM pairwise then (tree aggregates have no world
+    lines).
+  - World lines: on the covering plane through a per-slot deck, so wraps and
+    Klein/RP² mirrors never break them; cubic Hermite segments with Newton
+    refinement; the source's current state as a last point (pairs closer than
+    one sample interval used to find no root); retarded acceleration, mass and
+    charge; merges record a break instead of resetting the kept slot's line;
+    a rolling f32 epoch with recentering; a per-slot generation counter.
+  - Sign and normalization bugs found and fixed, each with an oracle (Codex
+    verified the derivations, SymPy for the 1PN algebra):
+    - moving-charge Bz had the wrong sign: co-moving like charges repelled
+      magnetically (factor 1 + w² instead of 1 − w²);
+    - moving-mass Bgz had the wrong sign, and spin-sourced Bgz was −2J/r³
+      instead of +J/(2r³) (the gravitomagnetic clock effect now gives 4πJ/M);
+    - the 1PN EIH block used the inward normal throughout, so with the Bgz
+      flip Geon applied −a₁PN, a retrograde perihelion advance. Now it is the
+      EIH remainder in N plus the kick correction ½v²a_N + v(v·a_N) for the
+      w = γv integrator; the perihelion advance oracle gives 6πM/p to 0.1%;
+    - Bažański's mixed coefficient becomes q₁q₂(6m₁ + 5m₂) − (q₁²m₂ + q₂²m₁)
+      beside Liénard–Wiechert; scalar Breit gains its proper-time vertex
+      factors and order-reduced acceleration terms; Darwin is gone;
+    - spin-orbit's gravitomagnetic coupling is +2L∇Bgz (was −L∇Bgz) with
+      matching energy bookkeeping, and both couplings use moving-source
+      gradients only, since dipole fields double-counted the direct
+      dipole-dipole forces;
+    - Barnes–Hut on periodic domains counted every pair twice: ghosts weighed
+      as much as their originals while every walk min-images. Ghosts now weigh
+      nothing in the aggregates.
+  - Oracles (19 in all): Barnes–Hut = pairwise on a torus, the co-moving
+    charges, the gravitomagnetic clock effect, a uniformly moving charge's
+    present-position field (directly, and after three torus wraps and an
+    epoch rebase), and the 1PN perihelion advance.
 
 ### 2.2 Physics bugs and gaps found by the 2.0 scouting
 
@@ -285,11 +322,9 @@ The tie is explicit and per mode, which is what Codex asked for.
   - Photons, pions and leptons neither redshift nor co-expand.
   - H is constant; fields get no Hubble friction.
   - In loop mode the flow is discontinuous across the wrap.
-- **World lines can't yet reconstruct a past scene** (M2, §10.2).
-  - Linear interpolation; times are absolute f32, whose spacing reaches
-    `WORLDLINE_DT/2` near t = 10⁶.
-  - Positions are wrapped, with no wrap count.
-  - No event log yet: births, deaths and merges exist only as slot flags.
+- **World lines have no event log yet** (M2, §10.2): births, deaths and merges
+  exist as slot flags, creation times and breaks; boson emission and absorption
+  leave no record.
 - **The lapse ignores field gravity.** `clocks.wgsl` sums the particles'
   softened Φ_N; Φ_F from the grid moves fields' clocks (KG) but not
   particles'.
@@ -298,10 +333,25 @@ The tie is explicit and per mode, which is what Codex asked for.
   precession `Ω₁ = (2 + 3m₂/2m₁)·L_N/r³` also has the "2" from the
   companion's motion, the gravitomagnetic field the orbit already feels as
   `Bgz`; θ ignores it. Needs the GEM factor derived and a binary oracle.
-- **Signal delay is a toy.**
-  - Forces scale by `1/(1 − n·v)³`, capped at 100.
-  - The heatmap uses delayed positions with a plain 1/r, which is not the
-    Liénard–Wiechert potential.
+- **Signal delay is still a toy outside EM.** Gravity, Yukawa and the dipole
+  forces act from the retarded position with the factor `1/(1 − n·v)³`, capped
+  at 100; only charges have true moving-source (Liénard–Wiechert) fields. Their
+  gravitational counterpart (linearized gravity from the world line) is open.
+- **Liénard–Wiechert's model boundaries** (Codex review, 2026-10-23):
+  - the fields are regularized: σ³ softening and the κ floor at 0.215, which
+    suppresses forward fields of sources faster than about 0.785c;
+  - β̇ is the stored dw/dt (`totalForce` plus the Boris rotations), linearly
+    interpolated, while positions are cubic Hermite, so position and
+    acceleration are not one trajectory; spin-orbit kicks are missing from it;
+  - field gradients for spin-orbit are the static Biot–Savart form at the
+    retarded state; intrinsic dipoles keep their static fields;
+  - no energy-in-transit term: EM energy drift includes field energy on its way
+    between charges.
+- **The integrator is the staggered Boris pusher** (Codex): both half-kicks come
+  before the drift, so velocities sit half a kick from positions, and the 1PN
+  velocity-Verlet correction is an endpoint-force correction, not a full
+  velocity-Verlet step. `vvKick1PN` doesn't refresh `derived.vel`, and the
+  clocks run before it.
 - **Pool culls destroy bound photons.** `PHOTON_CULL_AGE = 256` and
   `LEPTON_CULL_AGE = 512` are now named as culls, but any bound photon
   structure still dies at the age limit.
@@ -409,7 +459,7 @@ Versions set the order. Milestone IDs are stable names, not an order:
 
 | Item | Natural slot | Note |
 |---|---|---|
-| Liénard–Wiechert fields (§11.1) | 1.5, alongside M2, or later | Open decision 6. |
+| Linearized-gravity fields from world lines (§2.2) | after M2 | The gravitational counterpart of Liénard–Wiechert. |
 | Kerr equatorial geodesics (§11.2) | any time after M1 | |
 | Share-by-URL (§2.3) | 2.0, with the UI work, or any time | The domain is state since M1. |
 | Preset coverage (§2.3) | every version | Each version ships presets for its own features. The annihilation and photon-geon presets can land any time. |
@@ -1091,17 +1141,21 @@ Decided (§4). WGSL is the single source of physics truth.
 - Every `WORLDLINE_DT = 1/8` of lab time, 1024 samples (128 time units, the
   domain diagonal over c plus the boost lag), always recorded. 512 × 1024 ×
   48 B = 24 MB, allocated at init.
-- Meta per slot: `writeIdx, count, creationTime, _pad`. A birth sample on
-  every add, a death snapshot on removal, a reset on slot reuse. Signal delay
-  is its only reader, with linear interpolation.
+- A birth sample on every add, a death snapshot on removal.
 
-**M2:**
-- `t` relative to a rolling f32 epoch.
+**Built opening M2** (with Liénard–Wiechert, §2.1):
+- `t` relative to a rolling f32 epoch (`EPOCH_SPAN` 512, `EPOCH_STEP` 256).
 - Cubic Hermite interpolation from positions and velocities: O(Δt⁴) against
   linear's O(Δt²).
-- Unwrapped positions plus a wrap count, for time-shifted periodic images.
-- A per-slot generation counter in meta's `_pad`, bumped on reuse, so
-  `(slot, gen)` names one body for the event log.
+- Positions on the covering plane through a per-slot deck `C = A·x + b`, in
+  place of the planned wrap count: it also covers the Klein and RP² mirrors.
+  The rebase recentres each line on its tile.
+- Meta grew to 8 words: `writeIdx, count, creationTime, generation, deck
+  flips, bx, by, _pad`; the generation names one body across slot reuse.
+- Merge breaks: the old body extrapolated to the merge and the merged body,
+  at one time.
+
+**Still M2:**
 - The event log, to the schema below.
 - **Bosons:** back-extrapolation first, short rings later.
 - **Fields and dust density:** snapshot rings.
@@ -1175,7 +1229,9 @@ struct WorldEvent {          // 48 B, 12 words
 
 Ordered by how much they strengthen the chosen work.
 
-1. **Liénard–Wiechert fields (L).**
+1. **Liénard–Wiechert fields (L).** *Landed 2026-10-23 (§2.1); the Heaviside
+   pancake shows in the heatmap's electric potential. Purcell's kinked field
+   lines and the energy-in-transit term remain.*
    - Replace the toy aberration with full velocity and acceleration fields
      from the world-line store: exact 3D Maxwell for point charges, which is
      what the 3D convention asks for.

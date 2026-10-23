@@ -1,28 +1,57 @@
 // ─── World Lines ───
 // Every particle's history: a ring of WL_LEN samples, one every WORLDLINE_DT of lab
-// time, recorded whatever the toggles. Signal delay solves its light cone against it;
-// frame slicing (M2) will too.
+// time, recorded whatever the toggles. Signal delay solves its light cone against it, and
+// frame slicing reads it. shared-worldline.wgsl documents the layout and reads it back.
 //
-// Sample layout, WL_STRIDE = 12 f32:
-//   [0] t  [1] x  [2] y  [3] wx  [4] wy  [5] ax  [6] ay  [7] τ  [8] θ  [9] angw  [10] m  [11] q
-// (w = proper velocity, a = dw/dt including the Boris magnetic and gravitomagnetic
-// rotation, τ = proper time, θ = spoke orientation.)
-// Meta, WL_META_STRIDE = 4 u32: writeIdx, count, creationTime (f32 bits), _pad.
+// Samples are on the covering plane: position, proper velocity, dw/dt and θ go through
+// the slot's deck (C = A·x + b), which boundary.wgsl keeps continuous across crossings.
+//
+// Entry points:
+//   recordWorldLines — a sample for every particle (when one is due), plus breaks
+//   recordBreaks     — breaks only (every other substep)
+// A break records a merge's jump: the old body extrapolated to now, then the merged body,
+// both at the same time, so no segment interpolates across the jump.
 
 @group(0) @binding(0) var<uniform> u: SimUniforms;
-@group(0) @binding(1) var<storage, read_write> particles: array<ParticleState>;  // rw: clears FLAG_REBORN
+@group(0) @binding(1) var<storage, read_write> particles: array<ParticleState>;  // rw: clears FLAG_WL_BREAK
 @group(0) @binding(2) var<storage, read> allForces: array<AllForces>;
 @group(0) @binding(3) var<storage, read> clocks: array<vec4<f32>>;
+@group(0) @binding(4) var<storage, read> particleAux: array<ParticleAux>;
 
 @group(1) @binding(0) var<storage, read_write> wlData: array<f32>;
 @group(1) @binding(1) var<storage, read_write> wlMeta: array<u32>;
 
-fn writeSample(i: u32) {
+fn deckOf(i: u32) -> vec4<f32> {
+    let mb = i * WL_META_STRIDE;
+    let bits = wlMeta[mb + 4u];
+    return vec4(select(1.0, -1.0, (bits & 1u) != 0u), select(1.0, -1.0, (bits & 2u) != 0u),
+                bitcast<f32>(wlMeta[mb + 5u]), bitcast<f32>(wlMeta[mb + 6u]));
+}
+
+/** Append one sample (12 floats, already on the cover) to slot i's ring. */
+fn appendSample(i: u32, s0: vec4<f32>, s1: vec4<f32>, s2: vec4<f32>) {
     let metaBase = i * WL_META_STRIDE;
     let writeIdx = wlMeta[metaBase];
     let count = wlMeta[metaBase + 1u];
     let base = i * WL_LEN * WL_STRIDE + (writeIdx & WL_MASK) * WL_STRIDE;
+    wlData[base + 0u] = s0.x;
+    wlData[base + 1u] = s0.y;
+    wlData[base + 2u] = s0.z;
+    wlData[base + 3u] = s0.w;
+    wlData[base + 4u] = s1.x;
+    wlData[base + 5u] = s1.y;
+    wlData[base + 6u] = s1.z;
+    wlData[base + 7u] = s1.w;
+    wlData[base + 8u] = s2.x;
+    wlData[base + 9u] = s2.y;
+    wlData[base + 10u] = s2.z;
+    wlData[base + 11u] = s2.w;
+    wlMeta[metaBase] = (writeIdx + 1u) & WL_MASK;
+    wlMeta[metaBase + 1u] = min(count + 1u, WL_LEN);
+}
 
+/** The current state of slot i as a sample: t, x, y, wx, wy, ax, ay, τ, θ, angw, m, q. */
+fn writeCurrent(i: u32) {
     let p = particles[i];
     let af = allForces[i];
     let w = vec2<f32>(p.velWX, p.velWY);
@@ -35,46 +64,70 @@ fn writeSample(i: u32) {
     dwdt /= max(p.mass, EPSILON);
     let c = clocks[i];
 
-    wlData[base + 0u] = u.simTime;
-    wlData[base + 1u] = p.posX;
-    wlData[base + 2u] = p.posY;
-    wlData[base + 3u] = w.x;
-    wlData[base + 4u] = w.y;
-    wlData[base + 5u] = dwdt.x;
-    wlData[base + 6u] = dwdt.y;
-    wlData[base + 7u] = c.x;
-    wlData[base + 8u] = c.z;
-    wlData[base + 9u] = p.angW;
-    wlData[base + 10u] = p.mass;
-    wlData[base + 11u] = p.charge;
+    // Onto the cover; a mirror reverses θ's sense and angw's sign
+    let deck = deckOf(i);
+    let pos = deck.xy * vec2(p.posX, p.posY) + deck.zw;
+    let wc = deck.xy * w;
+    let ac = deck.xy * dwdt;
+    let theta = atan2(deck.y * sin(c.z), deck.x * cos(c.z));
+    let angw = deck.x * deck.y * p.angW;
+    // A retired slot's mass is zeroed by merges and annihilation; its death mass is the last
+    let retired = (p.flags & FLAG_ALIVE) == 0u;
+    let m = select(p.mass, particleAux[i].deathMass, retired);
 
-    wlMeta[metaBase] = (writeIdx + 1u) & WL_MASK;
-    wlMeta[metaBase + 1u] = min(count + 1u, WL_LEN);
+    appendSample(i, vec4(u.simTime, pos, wc.x), vec4(wc.y, ac, c.x), vec4(theta, angw, m, p.charge));
+}
+
+/** Slot i's newest sample carried by uniform motion to now: the old body at the merge. */
+fn writeExtrapolatedNewest(i: u32) {
+    let metaBase = i * WL_META_STRIDE;
+    let count = wlMeta[metaBase + 1u];
+    if (count == 0u) { return; }
+    let base = i * WL_LEN * WL_STRIDE + ((wlMeta[metaBase] + WL_LEN - 1u) & WL_MASK) * WL_STRIDE;
+    let dt = max(u.simTime - wlData[base], 0.0);
+    let w = vec2(wlData[base + 3u], wlData[base + 4u]);
+    let g = sqrt(1.0 + dot(w, w));
+    let pos = vec2(wlData[base + 1u], wlData[base + 2u]) + (w / g) * dt;
+    appendSample(i,
+        vec4(u.simTime, pos, w.x),
+        vec4(w.y, wlData[base + 5u], wlData[base + 6u], wlData[base + 7u] + dt / g),
+        vec4(wlData[base + 8u], wlData[base + 9u], wlData[base + 10u], wlData[base + 11u]));
+}
+
+/** Returns true when slot i still needs its regular sample. */
+fn recordCommon(i: u32) -> bool {
+    let flags = particles[i].flags;
+
+    // A newly retired particle records one final sample, then FLAG_DEATH_HIST stops it
+    if ((flags & FLAG_RETIRED) != 0u && (flags & FLAG_ALIVE) == 0u) {
+        if ((flags & FLAG_DEATH_HIST) != 0u) { return false; }
+        particles[i].flags = flags | FLAG_DEATH_HIST;
+        writeCurrent(i);
+        return false;
+    }
+    if ((flags & FLAG_ALIVE) == 0u) { return false; }
+
+    if ((flags & FLAG_WL_BREAK) != 0u) {
+        writeExtrapolatedNewest(i);
+        writeCurrent(i);
+        particles[i].flags = flags & ~FLAG_WL_BREAK;
+        return false;
+    }
+    return true;
 }
 
 @compute @workgroup_size(64)
 fn recordWorldLines(@builtin(global_invocation_id) gid: vec3u) {
     let i = gid.x;
     if (i >= u.aliveCount) { return; }
+    if (recordCommon(i)) { writeCurrent(i); }
+}
+
+@compute @workgroup_size(64)
+fn recordBreaks(@builtin(global_invocation_id) gid: vec3u) {
+    let i = gid.x;
+    if (i >= u.aliveCount) { return; }
     let flags = particles[i].flags;
-
-    // A newly retired particle records one final sample, then FLAG_DEATH_HIST stops it
-    if ((flags & FLAG_RETIRED) != 0u && (flags & FLAG_ALIVE) == 0u) {
-        if ((flags & FLAG_DEATH_HIST) != 0u) { return; }
-        particles[i].flags = flags | FLAG_DEATH_HIST;
-        writeSample(i);
-        return;
-    }
-    if ((flags & FLAG_ALIVE) == 0u) { return; }
-
-    // A merge product reborn in a recycled slot starts a fresh world line
-    if ((flags & FLAG_REBORN) != 0u) {
-        let metaBase = i * WL_META_STRIDE;
-        wlMeta[metaBase] = 0u;
-        wlMeta[metaBase + 1u] = 0u;
-        wlMeta[metaBase + 2u] = bitcast<u32>(u.simTime);
-        wlMeta[metaBase + 3u] = 0u;
-        particles[i].flags = flags & ~FLAG_REBORN;
-    }
-    writeSample(i);
+    if ((flags & FLAG_WL_BREAK) == 0u && (flags & FLAG_ALIVE) != 0u) { return; }
+    _ = recordCommon(i);
 }

@@ -4,6 +4,9 @@
 //   computeHeatmap:     O(N*GRID²) pairwise, with signal delay support
 //   computeHeatmapTree: O(log(N)*GRID²) BH tree walk, no signal delay (non-periodic only)
 // Dead/retired particles always use pairwise scan with signal delay history.
+// With signal delay each source sits at its retarded state (shared-worldline.wgsl), and the
+// electric potential is the Liénard–Wiechert q/(κR), κ = 1 − n̂·β; gravity and Yukawa keep
+// their static forms at the retarded position.
 
 struct HeatmapUniforms {
     // Camera/viewport for world-space grid
@@ -44,7 +47,7 @@ struct HeatmapUniforms {
 @group(1) @binding(2) var<storage, read_write> yukawaPotential: array<f32>;
 @group(1) @binding(3) var<uniform> hu: HeatmapUniforms;
 
-// Group 2: signal delay history (interleaved format, only used when useDelay != 0)
+// Group 2: world lines (only read when useDelay != 0)
 @group(2) @binding(0) var<storage, read_write> wlData: array<f32>;
 @group(2) @binding(1) var<storage, read_write> wlMeta: array<u32>;
 
@@ -72,37 +75,56 @@ fn gravityPotential(rawRSq: f32, mass: f32, radius: f32, invR: f32, blackHole: b
     return -mass * invR;
 }
 
-// ─── Helper: accumulate potential from a single source position ───
+// ─── Helper: accumulate potential from one source at displacement (dx, dy) ───
 fn accumulatePotential(
-    wx: f32, wy: f32,
-    srcX: f32, srcY: f32,
+    dx: f32, dy: f32,
     mass: f32, charge: f32,
     radius: f32,
+    kappa: f32,
     doG: bool, doC: bool, doY: bool,
     softeningSq: f32, yCutSq: f32,
     yukCoupling: f32, yukMu: f32,
-    periodic: bool,
     gPhi: ptr<function, f32>,
     ePhi: ptr<function, f32>,
     yPhi: ptr<function, f32>,
 ) {
-    var dx: f32; var dy: f32;
-    if (periodic) {
-        let d = fullMinImageP(wx, wy, srcX, srcY, hu.domainW, hu.domainH, hu.topologyMode);
-        dx = d.x; dy = d.y;
-    } else {
-        dx = srcX - wx; dy = srcY - wy;
-    }
-
     let rawRSq = dx * dx + dy * dy;
     let rSq = rawRSq + softeningSq;
     let invR = 1.0 / sqrt(rSq);
 
     if (doG) { *gPhi += gravityPotential(rawRSq, mass, radius, invR, hu.blackHole != 0u); }
-    if (doC) { *ePhi += charge * invR; }
+    if (doC) { *ePhi += charge * invR / kappa; }
     if (doY && rSq < yCutSq) {
         let r = 1.0 / invR;
         *yPhi -= yukCoupling * mass * exp(-yukMu * r) * invR;
+    }
+}
+
+/** Liénard–Wiechert κ = 1 − n̂·β at a retarded state, n̂ from the source to the cell. */
+fn lwKappa(ret: Retarded) -> f32 {
+    let R = length(ret.rel);
+    if (R < EPSILON) { return 1.0; }
+    return max(1.0 + dot(ret.rel / R, ret.vel), LW_KAPPA_MIN);
+}
+
+/** Retired particles keep sourcing until the light from their world line's end has passed. */
+fn accumulateRetired(
+    wx: f32, wy: f32, doG: bool, doC: bool, doY: bool, isPeriodic: bool, yCutSq: f32,
+    gPhi: ptr<function, f32>, ePhi: ptr<function, f32>, yPhi: ptr<function, f32>,
+) {
+    for (var di = 0u; di < hu.particleCount; di++) {
+        let dp = particles[di];
+        if ((dp.flags & FLAG_RETIRED) == 0u) { continue; }
+        if ((dp.flags & FLAG_ALIVE) != 0u) { continue; }
+
+        let ret = retardedState(di, wx, wy, hu.simTime,
+            vec2(dp.posX, dp.posY), vec2(0.0), 0.0, 0.0, dp.charge,
+            false, isPeriodic, hu.domainW, hu.domainH, hu.topologyMode);
+        if (!ret.valid) { continue; }
+
+        accumulatePotential(ret.rel.x, ret.rel.y, ret.mass, ret.charge, bhSourceRadius(ret.mass, ret.charge),
+            lwKappa(ret), doG, doC, doY, hu.softeningSq, yCutSq, hu.yukawaCoupling, hu.yukawaMu,
+            gPhi, ePhi, yPhi);
     }
 }
 
@@ -130,44 +152,28 @@ fn computeHeatmap(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Alive particles
     for (var i = 0u; i < hu.particleCount; i++) {
         let p = particles[i];
-        let flag = p.flags;
-        if ((flag & FLAG_ALIVE) == 0u) { continue; }
+        if ((p.flags & FLAG_ALIVE) == 0u) { continue; }
 
-        var srcX = p.posX;
-        var srcY = p.posY;
-
-        // Signal delay: solve for delayed source position
         if (useDelay) {
-            let ret = getDelayedStateGPU(i, wx, wy, hu.simTime,
-                isPeriodic, hu.domainW, hu.domainH,
-                hu.topologyMode, false);
+            let ret = retardedState(i, wx, wy, hu.simTime,
+                vec2(p.posX, p.posY), vec2(p.velWX, p.velWY), p.angW, p.mass, p.charge,
+                true, isPeriodic, hu.domainW, hu.domainH, hu.topologyMode);
             if (!ret.valid) { continue; } // outside past light cone — particle not yet visible
-            srcX = ret.x;
-            srcY = ret.y;
+            accumulatePotential(ret.rel.x, ret.rel.y, ret.mass, ret.charge, particleAux[i].radius,
+                lwKappa(ret), doG, doC, doY, hu.softeningSq, yCutSq, hu.yukawaCoupling, hu.yukawaMu,
+                &gPhi, &ePhi, &yPhi);
+        } else {
+            var d = vec2(p.posX - wx, p.posY - wy);
+            if (isPeriodic) { d = fullMinImageP(wx, wy, p.posX, p.posY, hu.domainW, hu.domainH, hu.topologyMode); }
+            accumulatePotential(d.x, d.y, p.mass, p.charge, particleAux[i].radius, 1.0,
+                doG, doC, doY, hu.softeningSq, yCutSq, hu.yukawaCoupling, hu.yukawaMu,
+                &gPhi, &ePhi, &yPhi);
         }
-
-        accumulatePotential(wx, wy, srcX, srcY, p.mass, p.charge, particleAux[i].radius,
-            doG, doC, doY, hu.softeningSq, yCutSq, hu.yukawaCoupling, hu.yukawaMu,
-            isPeriodic, &gPhi, &ePhi, &yPhi);
     }
 
     // Dead/retired particles: signal delay fade-out
     if (useDelay) {
-        for (var di = 0u; di < hu.particleCount; di++) {
-            let dp = particles[di];
-            if ((dp.flags & FLAG_RETIRED) == 0u) { continue; }
-            if ((dp.flags & FLAG_ALIVE) != 0u) { continue; }
-
-            let ret = getDelayedStateGPU(di, wx, wy, hu.simTime,
-                isPeriodic, hu.domainW, hu.domainH,
-                hu.topologyMode, true);
-            if (!ret.valid) { continue; }
-
-            let dAux = particleAux[di];
-            accumulatePotential(wx, wy, ret.x, ret.y, dAux.deathMass, dp.charge, bhSourceRadius(dAux.deathMass, dp.charge),
-                doG, doC, doY, hu.softeningSq, yCutSq, hu.yukawaCoupling, hu.yukawaMu,
-                isPeriodic, &gPhi, &ePhi, &yPhi);
-        }
+        accumulateRetired(wx, wy, doG, doC, doY, isPeriodic, yCutSq, &gPhi, &ePhi, &yPhi);
     }
 
     let idx = gy * HGRID + gx;
@@ -274,24 +280,8 @@ fn computeHeatmapTree(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
 
     // Dead/retired particles: always pairwise (signal delay needed)
-    let useDelay = hu.useDelay != 0u;
-    let isPeriodic = hu.periodic != 0u;
-    if (useDelay) {
-        for (var di = 0u; di < hu.particleCount; di++) {
-            let dp = particles[di];
-            if ((dp.flags & FLAG_RETIRED) == 0u) { continue; }
-            if ((dp.flags & FLAG_ALIVE) != 0u) { continue; }
-
-            let ret = getDelayedStateGPU(di, wx, wy, hu.simTime,
-                isPeriodic, hu.domainW, hu.domainH,
-                hu.topologyMode, true);
-            if (!ret.valid) { continue; }
-
-            let dAux = particleAux[di];
-            accumulatePotential(wx, wy, ret.x, ret.y, dAux.deathMass, dp.charge, bhSourceRadius(dAux.deathMass, dp.charge),
-                doG, doC, doY, softeningSq, yCutSq, yukCoupling, yukMu,
-                isPeriodic, &gPhi, &ePhi, &yPhi);
-        }
+    if (hu.useDelay != 0u) {
+        accumulateRetired(wx, wy, doG, doC, doY, hu.periodic != 0u, yCutSq, &gPhi, &ePhi, &yPhi);
     }
 
     let idx = gy * HGRID + gx;

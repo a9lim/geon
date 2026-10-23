@@ -15,7 +15,7 @@ Geon exposes 11 force and correction families: Newtonian gravity, gravitomagneti
 
 ## Integration
 
-Particle trajectories are advanced with a phase-space-volume-preserving Boris rotation and adaptive substeps. Relativistic corrections use a first post-Newtonian approximation rather than a full general-relativistic geodesic solve.
+Particle trajectories are advanced with a phase-space-volume-preserving Boris rotation and adaptive substeps. Relativistic corrections use the first post-Newtonian (Einstein–Infeld–Hoffmann) equations of motion rather than a full general-relativistic geodesic solve; a slightly eccentric orbit's perihelion advances by 6πM/p per revolution, Schwarzschild's value at this order.
 
 ## Proper Time
 
@@ -59,7 +59,7 @@ Boundary handling has three modes: open/despawn, reflective bounce, and loop. Lo
 
 ## Signal Delay
 
-Optional signal delay mode computes forces from delayed source positions rather than instantaneous positions, giving a toy finite-speed propagation effect. It solves the light-cone condition against each body's world line, a record of position, velocity, acceleration, proper time, and spoke angle sampled every eighth of a time unit, and applies a scalar aberration factor, so it is useful for visible near-c delays but is not a full moving-source field solution.
+With relativity on, every force acts from where its source was when the signal left it, found on each body's recorded world line. Charges interact through their full Liénard–Wiechert fields, the exact electromagnetic field of a moving point charge: a fast charge's field flattens into a pancake around its present position, and an accelerating charge radiates a field that falls off only as 1/r. Gravity, the nuclear force, and the magnetic dipole interactions use their static laws at the delayed position with a scalar aberration factor, a toy model of finite-speed propagation rather than a field solution. Fields are softened at short range and capped for sources moving almost straight at an observer.
 
 ## Accessibility
 

@@ -21,8 +21,9 @@ physics bugs. This file describes the code as it is.
   validation error rather than a throw; a missing shader file does throw, and the page
   then logs `[geon] GPU init failed` and shows the WebGPU popup.
 - `tests/physics-validation.html` runs analytic oracles against a headless `GPUPhysics`
-  (open `http://localhost:8000/geon/tests/physics-validation.html`, press Run; `runAll()`
-  from the console). Every new feature adds its oracle there (`docs/ROADMAP.md` §1.1).
+  (open `http://localhost:8000/geon/tests/physics-validation.html` and press Run, or call
+  `runAll()` from the console; `runAll('Liénard')` runs the cases whose names contain the
+  string). Every new feature adds its oracle there (`docs/ROADMAP.md` §1.1).
   The stager skips `tests/`, so it never deploys.
 
 ## Layout
@@ -50,7 +51,7 @@ src/gpu/gpu-buffers.js   allocation and packed struct sizes
 src/gpu/gpu-constants.js generated WGSL constants and toggle bits
 src/gpu/gpu-renderer.js  instanced rendering, light/dark pipeline pairs
 src/gpu/pass-graph.js    per-frame dispatch plan
-src/gpu/shaders/         56 WGSL files; shared-*.wgsl are prepended includes
+src/gpu/shaders/         58 WGSL files; shared-*.wgsl are prepended includes
 tests/physics-validation.html   analytic oracles against a headless GPUPhysics
 ```
 
@@ -106,15 +107,32 @@ command buffer so that substep's uniforms (`simTime` above all) are the ones its
 read. `_dispatchSubstep()` lists the order in its pass comments: forces, external and
 field forces come before the fused kick–rotate–kick, then spin-orbit and torques,
 radiation, drift, clocks, expansion, the 1PN velocity-Verlet correction, the field step,
-collisions, disintegration, bosons, the boundary, and a world-line sample whenever
-`simTime` crosses the next `WORLDLINE_DT` mark. Pion decay, boson interaction, dead-slot
-GC, quadrupole radiation, colors, and trails run once per frame after the substeps.
+collisions, disintegration, bosons, the boundary, and the world lines (a sample whenever
+`simTime` crosses the next `WORLDLINE_DT` mark, else merge breaks and death snapshots
+only). Pion decay, boson interaction, dead-slot GC, quadrupole radiation, colors, and
+trails run once per frame after the substeps. The scheme is the staggered Boris pusher:
+both half-kicks precede the drift, so velocities sit half a kick from positions, and
+spin-orbit kicks change `w` directly rather than through `totalForce`.
 
-The Boris rotation parameter is `(q/2m)·Bz + 2·Bgz`, scaled by dt/γ. Gravitomagnetism
-uses the GEM sign: a moving mass sources `Bgz = −m(v×r̂)/r²`, and the GM dipole force
-`+3L₁L₂/r⁴` attracts where the EM dipole's `−3μ₁μ₂/r⁴` repels aligned dipoles. In
-`pair-force` the displacement is source − observer, so a positive radial coefficient
-attracts. 1PN forces are velocity-dependent and break Newton's third law, hence the
+GPU times are f32 relative to a rolling epoch: `gpuTime = simTime − timeEpoch`, and
+`_maybeRebaseEpoch()` advances the epoch by `EPOCH_STEP` (256) once GPU time passes
+`EPOCH_SPAN` (512), shifting every stored time back (`worldline-rebase.wgsl`). Only
+world-line samples, creation times and `ParticleAux.deathTime` hold absolute GPU times;
+`simTime` itself stays an f64 in JS.
+
+The Boris rotation parameter is `(q/2m)·Bz + 2·Bgz`, scaled by dt/γ, so the stored fields
+act as `F = q v × B + 4m v × Bg`. In the force shaders the displacement r is source −
+observer, so a positive radial coefficient attracts. The fields, in that convention:
+- Moving charge (Biot–Savart, B = q v × R̂/R² with R̂ toward the observer):
+  `Bz = −q (v × r)_z/r³`. Parallel currents attract.
+- Magnetic dipole: `Bz = −μ/r³` in the plane; aligned dipoles side by side repel,
+  `−3μ₁μ₂/r⁴`.
+- Moving mass: `Bgz = +m (v × r)_z/r³`. Parallel mass currents repel, and `4m v × Bg` is
+  exactly EIH's v₁·v₂ sector, which the 1PN pair force leaves out.
+- Spinning mass: `Bgz = +J/(2r³)` in the plane, which slows prograde orbits
+  (Ω_pro = Ω_K − J/r³); the gravitomagnetic dipole force `+3L₁L₂/r⁴` attracts.
+Those signs were reversed until 2026-10-23 (`docs/ROADMAP.md` §2.1); the oracle page pins
+each. 1PN forces are velocity-dependent and break Newton's third law, hence the
 velocity-Verlet correction.
 
 ### Forces and toggles
@@ -123,21 +141,37 @@ Sixteen toggles (`TOGGLE_KEYS`). Their dependency graph is the declarative
 `_forms.bindDeps()` list in `ui.js`; `updateAllDeps()` adds the mode locks (Black hole
 and the hidden Disintegration force Merge collisions, Expansion forces Despawn). Less
 obvious couplings: Boson interaction needs the Barnes–Hut toggle (settings dropdown);
-signal delay runs whenever Relativity is on; field gravity follows Gravity; kugelblitz
-runs under Boson interaction with Gravity; 1PN's EIH sector runs with Gravitomagnetic
-(not Gravity), Darwin with Magnetic, Bažański with both, scalar Breit with Yukawa.
+signal delay runs whenever Relativity is on, and with it charges interact through their
+Liénard–Wiechert fields; field gravity follows Gravity; kugelblitz runs under Boson
+interaction with Gravity. The 1PN pair forces (`shared-1pn.wgsl`, shared by the force
+pass and the velocity-Verlet recompute): EIH with Gravitomagnetic (not Gravity),
+Bažański's mixed static term with Gravitomagnetic and Coulomb, scalar Breit with Yukawa.
+There is no Darwin term: Liénard–Wiechert carries EM to all orders in v.
 
 Barnes–Hut picks tree walk over pairwise forces; collisions and hit tests use the tree
-either way. With Higgs on, the Yukawa range is `yukawaMu·√(higgsMod_i·higgsMod_j)`,
+either way. With Relativity on as well, EM runs pairwise first (`EM_PAIRWISE_BIT`):
+Liénard–Wiechert needs each source's world line, which tree aggregates lack, so the walk
+carries everything else. Periodic modes put ghost copies in the tree for seam collisions
+and hit tests, but ghosts weigh nothing in the aggregates (`tree-build.wgsl`), because
+every walk takes minimum-image displacements and a weighted ghost would count its pair
+twice. With Higgs on, the Yukawa range is `yukawaMu·√(higgsMod_i·higgsMod_j)`,
 `higgsMod = max(|φ|, HIGGS_MASS_FLOOR)` cached per particle in `axYukMod.z`.
 
-Signal delay solves the light-cone condition against each source's world line
-(`signal-delay-common.wgsl`, linear interpolation). Removed particles keep sourcing
-forces until their signal has crossed the domain: retired slots keep death time, mass,
-and spin in `ParticleAux`. A source's past before its first sample is extrapolated as
-uniform motion back to its creation time and is invalid before it, so a body spawned
-by hand sources nothing until its light arrives; preset and loaded bodies are created
-at `−∞` and act at once.
+Signal delay finds each source's retarded state, `retardedState()` in
+`shared-worldline.wgsl`: the image nearest the observer now fixes which copy of the world
+line it sees; a binary search brackets the past light cone among the samples plus the
+source's current state, and Newton's method finds it on the cubic Hermite segment. The
+result carries position, velocity, acceleration, angw, mass and charge at the retarded
+time. Charges act through their Liénard–Wiechert fields, E = q[(n̂ − β)(1 − β²)/(κ³R²) +
+n̂ × ((n̂ − β) × β̇)/(κ³R)] and B = n̂ × E, both scaled by σ³ with σ = R/√(R² + ε²) so that
+a charge at rest gives the softened Coulomb field, and κ floored at `LW_KAPPA_MIN`
+(1/κ³ ≤ 100). Every other law is its static form at the retarded position times the toy
+aberration factor (1 − n̂·v)⁻³. The heatmap's electric potential is q/(κR). Removed
+particles keep sourcing forces until the light from their world line's end has passed:
+retired slots keep their death snapshot. A source's past before its first sample is
+extrapolated as uniform motion back to its creation time and is invalid before it, so a
+body spawned by hand sources nothing until its light arrives; preset and loaded bodies are
+created at `−∞` and act at once.
 
 ### Proper time, the spoke, and world lines
 
@@ -163,14 +197,20 @@ at `−∞` and act at once.
 - **The Clocks overlay** (K, settings dropdown; `clock-render.wgsl`): a faint ring per
   body and an accent arc that fills once per `CLOCK_PERIOD` (16) of its proper time,
   contracted with the body. The particle panel shows τ and dτ/dt.
-- **World lines** (`worldline.wgsl`): a ring of `WORLDLINE_LEN` (1024) samples per slot,
-  one every `WORLDLINE_DT` (1/8) of lab time, always recorded. A sample is 12 floats,
-  `t, x, y, wx, wy, ax, ay, τ, θ, angw, m, q` (`WL_STRIDE`), with a = dw/dt including
-  the Boris magnetic and gravitomagnetic rotation; meta is `writeIdx, count,
-  creationTime, _pad` (`WL_META_STRIDE`). `addParticle()` writes a birth sample; a
-  removal writes a death snapshot (`FLAG_DEATH_HIST`), and slot reuse resets the line
-  (`FLAG_REBORN`). Times are absolute f32 and positions are wrapped; the event log and
-  frame slicing are M2 (`docs/ROADMAP.md` §10.2).
+- **World lines** (`worldline.wgsl` writes, `shared-worldline.wgsl` reads): a ring of
+  `WORLDLINE_LEN` (1024) samples per slot, one every `WORLDLINE_DT` (1/8) of lab time,
+  always recorded. A sample is 12 floats, `t, x, y, wx, wy, ax, ay, τ, θ, angw, m, q`
+  (`WL_STRIDE`), with a = dw/dt including the Boris magnetic and gravitomagnetic
+  rotation. Samples live on the covering plane: each slot's deck maps its wrapped
+  position to `C = A·x + b` (A a diagonal of ±1), and `boundary.wgsl` updates the deck
+  at every loop crossing so C never jumps; velocities, accelerations, θ and angw are
+  mirrored with it. Meta (`WL_META_STRIDE` = 8): `writeIdx, count, creationTime,
+  generation, deck flips, bx, by, _pad`; the generation counts the slot's occupants
+  (`_slotGeneration`). `addParticle()` writes a birth sample and an identity deck; a
+  removal writes a death snapshot with the death mass (`FLAG_DEATH_HIST`); a merge sets
+  `FLAG_WL_BREAK` on the kept slot, and the next substep records the old body
+  extrapolated to now and the merged body at the same time, so no segment smooths the
+  jump. The epoch rebase also maps each line by its inverse deck, back to the identity.
 - **Continuity.** An inelastic merge keeps the heavier parent's slot, so its τ and θ
   carry on; disintegration fragments and Roche transfers copy the parent's clock
   (`addParticle({ inheritClockFrom })`, through `_clockScratch`, since
@@ -304,8 +344,12 @@ canvas text needs no font-load redraw.
 - **Naming.** Code, comments, and UI text say "signal delay" or "finite-speed force
   propagation", never "retarded potential(s)" (a9's rule; `docs/ROADMAP.md` §12 adds
   "light-cone" and "Liénard–Wiechert").
-- **Force laws.** A force-law change touches `pair-force`, `forces-tree`, `onePN`,
-  `compute-stats` (PE), and `heatmap.wgsl`, and `effective-potential.js` for the plot.
+- **Force laws.** A force-law change touches `pair-force`, `forces-tree`,
+  `compute-stats` (PE), and `heatmap.wgsl`, and `effective-potential.js` for the plot;
+  a 1PN change touches `shared-1pn.wgsl` alone. Spin-orbit (`spin-orbit.wgsl`) applies
+  `F = μ∇Bz` and `F = +2L∇Bgz` (a spinning body's gravitomagnetic moment is 2L), from the
+  moving-source field gradients only: dipole fields add no gradient, since the direct
+  dipole-dipole terms already carry spin-spin.
 - **Constants.** WGSL constants are generated from `config.js`, but the toggle bits are
   written twice in `gpu-constants.js` (WGSL string and JS exports), and tree node
   layouts are repeated in `boson-tree` and `kugelblitz.wgsl`. JS uniform writers follow

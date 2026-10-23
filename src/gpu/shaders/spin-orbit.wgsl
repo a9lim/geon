@@ -1,7 +1,10 @@
 // Spin-orbit coupling: energy transfer + translational kicks.
-// Stern-Gerlach: F = +mu * grad(Bz) (magnetic moment in B-field gradient)
-// Mathisson-Papapetrou: F = -L * grad(Bgz) (angular momentum in gravitomagnetic gradient)
-// Energy coupling: transfers KE between translational and rotational DOFs.
+// Stern-Gerlach: F = +μ ∇Bz (magnetic moment in B-field gradient).
+// Mathisson-Papapetrou: F = +2L ∇Bgz. With F = 4m v × Bg on a point mass, a spinning body's
+// gravitomagnetic moment is (4m/2m)·L = 2L, H = −2L·Bg.
+// The gradients are of the moving-source fields only: spin-spin forces are the direct
+// dipole-dipole terms in the force pass, so dipole fields carry no gradient here.
+// Energy coupling: the kick's work F·v comes out of the spin, dω = −F·v dt/L.
 //
 // Uses packed ParticleState + ParticleDerived + AllForces structs.
 
@@ -64,7 +67,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         // Energy transfer: angw -= mu * (v . grad(Bz)) * dt / (I*omega)
         let sgCoupling = mu * (vx * dBzdx + vy * dBzdy);
         newAngW -= sgCoupling * uniforms.dt / safeAngMom;
-        soTorque -= sgCoupling;  // record for display (matches CPU torqueSpinOrbit)
+        soTorque -= sgCoupling;  // record for display
         // Stern-Gerlach translational kick
         let sgX = mu * dBzdx * dtOverM;
         let sgY = mu * dBzdy * dtOverM;
@@ -75,17 +78,17 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
 
     if (hasGM) {
-        // Energy transfer: angw -= L * (v . grad(Bgz)) * dt / (I*omega)
-        let mpCoupling = L * (vx * dBgzdx + vy * dBgzdy);
+        // Energy transfer: angw -= 2L * (v . grad(Bgz)) * dt / (I*omega)
+        let mpCoupling = 2.0 * L * (vx * dBgzdx + vy * dBgzdy);
         newAngW -= mpCoupling * uniforms.dt / safeAngMom;
-        soTorque -= mpCoupling;  // record for display (matches CPU torqueSpinOrbit)
-        // Mathisson-Papapetrou translational kick (GEM sign flip)
-        let mpX = -L * dBgzdx * dtOverM;
-        let mpY = -L * dBgzdy * dtOverM;
+        soTorque -= mpCoupling;  // record for display
+        // Mathisson-Papapetrou translational kick, F = 2L ∇Bgz
+        let mpX = 2.0 * L * dBgzdx * dtOverM;
+        let mpY = 2.0 * L * dBgzdy * dtOverM;
         kickX += mpX;
         kickY += mpY;
-        scX += -L * dBgzdx;
-        scY += -L * dBgzdy;
+        scX += 2.0 * L * dBgzdx;
+        scY += 2.0 * L * dBgzdy;
     }
 
     // NaN guard

@@ -18,11 +18,13 @@ substepping advances them.
   with a massive pion mediator), spin-curvature coupling, and uniform external
   gravitational, electric, and magnetic fields. Forces can be summed pairwise or with a
   Barnes–Hut tree.
-- **Relativity.** First post-Newtonian corrections (Einstein–Infeld–Hoffmann for
-  gravity, Darwin for electromagnetism, Bažański cross terms, scalar Breit for Yukawa)
-  and signal delay: forces come from where sources were when their signal left, with a
-  scalar aberration factor. This is a toy model of finite-speed propagation, not a full
-  field solution.
+- **Relativity.** Signal delay: forces come from where sources were when their signal
+  left, read off each body's recorded world line. Charges interact through their exact
+  Liénard–Wiechert fields; gravity and the other forces use their static laws at the
+  delayed position with a scalar aberration factor, a toy model of finite-speed
+  propagation. First post-Newtonian corrections (Einstein–Infeld–Hoffmann for gravity,
+  Bažański cross terms, scalar Breit for Yukawa) give the relativistic perihelion
+  advance.
 - **Black holes.** Kerr–Newman horizons set by mass, spin, and charge (super-extremal
   inputs are clamped to an effective radius), a Paczyński–Wiita gravity well that
   swallows bodies crossing the horizon, ergosphere rendering, Hawking evaporation,

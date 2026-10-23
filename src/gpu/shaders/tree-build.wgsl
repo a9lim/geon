@@ -406,7 +406,12 @@ fn computeAggregates(@builtin(global_invocation_id) gid: vec3<u32>) {
     var wx: f32;
     var wy: f32;
 
-    if (isRetired) {
+    if ((ps.flags & FLAG_GHOST) != 0u) {
+        // Ghosts stay in the tree for seam collisions and hit tests, but weigh nothing:
+        // every tree walk takes minimum-image displacements, so the original already
+        // supplies the nearest image and a weighted ghost would count the pair twice.
+        m = 0.0; q = 0.0; mm = 0.0; am = 0.0; wx = 0.0; wy = 0.0;
+    } else if (isRetired) {
         let aux = particleAux[pIdx];
         m = aux.deathMass;
         q = ps.charge;

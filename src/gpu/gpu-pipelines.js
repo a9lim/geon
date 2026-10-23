@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 84;
+const SHADER_VERSION = 89;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -32,8 +32,10 @@ async function _ensureSharedCache() {
             fetchShader('shared-tree-nodes.wgsl'),
             fetchShader('shared-rng.wgsl'),
             fetchShader('shared-relativity.wgsl'),
-        ]).then(([structs, topo, treeNodes, rng, rel]) => {
-            _sharedCache = { structs, topo, treeNodes, rng, rel };
+            fetchShader('shared-worldline.wgsl'),
+            fetchShader('shared-1pn.wgsl'),
+        ]).then(([structs, topo, treeNodes, rng, rel, worldLine, onePN]) => {
+            _sharedCache = { structs, topo, treeNodes, rng, rel, worldLine, onePN };
             return _sharedCache;
         });
     }
@@ -62,6 +64,12 @@ export async function getSharedPrefix(wgslConstants) {
     return _cachedPrefix;
 }
 
+/** World-line readers and the 1PN pair forces, for the force and potential shaders */
+async function getForceIncludes() {
+    const c = await _ensureSharedCache();
+    return c.worldLine + '\n' + c.onePN;
+}
+
 /** Prefix for tree-walk shaders: standard prefix + read-only node accessors */
 async function getTreePrefix(wgslConstants) {
     if (wgslConstants === _cachedTreePrefixKey && _cachedTreePrefix !== null) return _cachedTreePrefix;
@@ -79,7 +87,7 @@ async function getTreePrefix(wgslConstants) {
 export async function createPhase2Pipelines(device, wgslConstants = '') {
     const prefix = await getSharedPrefix(wgslConstants);
     const commonWGSL = prefix + '\n' + await fetchShader('common.wgsl');
-    const signalDelayWGSL = await fetchShader('signal-delay-common.wgsl');
+    const forceIncludes = await getForceIncludes();
 
     async function makePipeline(label, filename, layouts) {
         const code = commonWGSL + '\n' + await fetchShader(filename);
@@ -117,8 +125,8 @@ export async function createPhase2Pipelines(device, wgslConstants = '') {
     // Group 2: allForces (rw) + maxAccel (rw) = 2 storage
     // Group 3: wlData (rw) + wlMeta (rw) = 2 storage
     // Total: 8 storage buffers per stage
-    // Prepend signal-delay-common.wgsl for getDelayedStateGPU()
-    const pairForceCode = commonWGSL + '\n' + signalDelayWGSL + '\n'
+    // Prepend the world-line readers (retardedState) and the 1PN pair forces
+    const pairForceCode = commonWGSL + '\n' + forceIncludes + '\n'
         + await fetchShader('pair-force.wgsl');
     const pairForce = await (async () => {
         const module = device.createShaderModule({ label: 'pairForce', code: pairForceCode });
@@ -278,10 +286,9 @@ export async function createTreeBuildPipelines(device, wgslConstants = '') {
  */
 export async function createTreeForcePipeline(device, wgslConstants = '') {
     const treePrefix = await getTreePrefix(wgslConstants);
-    const signalDelayWGSL = await fetchShader('signal-delay-common.wgsl');
     const treeForceWGSL = await fetchShader('forces-tree.wgsl');
-    // Prepend: treePrefix (structs+topology+nodeAccessors) → signal-delay-common → forces-tree
-    const code = treePrefix + '\n' + signalDelayWGSL + '\n' + treeForceWGSL;
+    // Prepend: treePrefix (structs+topology+nodeAccessors) → world lines + 1PN → forces-tree
+    const code = treePrefix + '\n' + await getForceIncludes() + '\n' + treeForceWGSL;
     const module = device.createShaderModule({ label: 'treeForce', code });
 
     const group0Layout = device.createBindGroupLayout({
@@ -464,8 +471,8 @@ export async function createPhase4Pipelines(device, wgslConstants = '') {
         ({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: readOnly ? 'read-only-storage' : 'storage' } });
     const uniform0 = { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } };
 
-    // ── recordWorldLines (worldline.wgsl) ──
-    // Group 0: uniform + particleState (rw: clears FLAG_REBORN) + allForces + clocks
+    // ── recordWorldLines, recordBreaks (worldline.wgsl) ──
+    // Group 0: uniform + particleState (rw: clears FLAG_WL_BREAK) + allForces + clocks + particleAux
     // Group 1: wlData + wlMeta
     const worldLineModule = device.createShaderModule({
         label: 'worldline', code: await fetchShader('worldline.wgsl', prefix),
@@ -473,17 +480,43 @@ export async function createPhase4Pipelines(device, wgslConstants = '') {
     const worldLineLayouts = [
         device.createBindGroupLayout({
             label: 'worldline_g0',
-            entries: [uniform0, storage(1), storage(2, true), storage(3, true)],
+            entries: [uniform0, storage(1), storage(2, true), storage(3, true), storage(4, true)],
         }),
         device.createBindGroupLayout({ label: 'worldline_g1', entries: [storage(0), storage(1)] }),
     ];
+    const worldLineLayout = device.createPipelineLayout({ bindGroupLayouts: worldLineLayouts });
     const recordWorldLines = {
         pipeline: device.createComputePipeline({
             label: 'recordWorldLines',
-            layout: device.createPipelineLayout({ bindGroupLayouts: worldLineLayouts }),
+            layout: worldLineLayout,
             compute: { module: worldLineModule, entryPoint: 'recordWorldLines' },
         }),
         bindGroupLayouts: worldLineLayouts,
+    };
+    const recordBreaks = {
+        pipeline: device.createComputePipeline({
+            label: 'recordBreaks',
+            layout: worldLineLayout,
+            compute: { module: worldLineModule, entryPoint: 'recordBreaks' },
+        }),
+        bindGroupLayouts: worldLineLayouts,
+    };
+
+    // ── rebaseWorldLines (worldline-rebase.wgsl): uniform + wlData + wlMeta + particleAux ──
+    const rebaseModule = device.createShaderModule({
+        label: 'worldlineRebase', code: await fetchShader('worldline-rebase.wgsl', prefix),
+    });
+    const rebaseLayouts = [device.createBindGroupLayout({
+        label: 'worldlineRebase_g0',
+        entries: [uniform0, storage(1), storage(2), storage(3)],
+    })];
+    const rebaseWorldLines = {
+        pipeline: device.createComputePipeline({
+            label: 'rebaseWorldLines',
+            layout: device.createPipelineLayout({ bindGroupLayouts: rebaseLayouts }),
+            compute: { module: rebaseModule, entryPoint: 'rebaseWorldLines' },
+        }),
+        bindGroupLayouts: rebaseLayouts,
     };
 
     // ── advanceClocks (clocks.wgsl) ──
@@ -510,12 +543,10 @@ export async function createPhase4Pipelines(device, wgslConstants = '') {
     // Group 2: allForces (rw) + f1pnOld (rw) = 2 storage
     // Group 3: wlData (rw) + wlMeta (rw) = 2 storage
     // Total: 7 storage + 1 uniform
-    // Prepend signal-delay-common.wgsl for getDelayedStateGPU()
-    const signalDelayWGSL_1PN = await fetchShader('signal-delay-common.wgsl');
     const c = await _ensureSharedCache();
     // Both modules need tree-nodes prepended because onePN.wgsl contains
     // compute1PNTree which references tree accessor functions.
-    const onePNCode = prefix + '\n' + c.treeNodes + '\n' + signalDelayWGSL_1PN + '\n'
+    const onePNCode = prefix + '\n' + c.treeNodes + '\n' + await getForceIncludes() + '\n'
         + await fetchShader('onePN.wgsl');
     const onePNModule = device.createShaderModule({ label: 'onePN', code: onePNCode });
 
@@ -903,7 +934,7 @@ export async function createPhase4Pipelines(device, wgslConstants = '') {
     };
 
     return {
-        recordWorldLines,
+        recordWorldLines, recordBreaks, rebaseWorldLines,
         advanceClocks,
         compute1PN, vvKick1PN, compute1PNTree,
         larmorRadiation, hawkingRadiation, pionEmission, schwingerDischarge,
@@ -1389,15 +1420,14 @@ export async function createFieldExcitationPipeline(device, wgslConstants = '') 
  *   heatmapLayout:
  *     Group 0: particleState (rw) + particleAux (rw) + treeNodes (rw) = 3
  *     Group 1: potential grids (3 rw) + HeatmapUniforms = 4
- *     Group 2: signal delay history (wlData, wlMeta) = 2
+ *     Group 2: world lines (wlData, wlMeta) = 2
  *   blurLayout: unchanged
  */
 export async function createHeatmapPipelines(device, wgslConstants = '') {
     const treePrefix = await getTreePrefix(wgslConstants);
-    const signalDelayWGSL = await fetchShader('signal-delay-common.wgsl');
     const heatmapWGSL = await fetchShader('heatmap.wgsl');
-    // Prepend: treePrefix (structs+topology+rng+treeNodes) → signal-delay-common → heatmap
-    const code = treePrefix + '\n' + signalDelayWGSL + '\n' + heatmapWGSL;
+    // Prepend: treePrefix (structs+topology+rng+treeNodes) → world lines + 1PN → heatmap
+    const code = treePrefix + '\n' + await getForceIncludes() + '\n' + heatmapWGSL;
     const module = device.createShaderModule({ label: 'heatmap', code });
 
     const hmG0 = device.createBindGroupLayout({

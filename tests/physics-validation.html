@@ -57,7 +57,7 @@ import { PION_SIZE, PARTICLE_STATE_SIZE } from './src/gpu/gpu-buffers.js';
 import {
     PION_HALF_LIFE, CHARGED_PION_HALF_LIFE, MIN_MASS, BOSON_CHARGE,
     SHEET_THICKNESS_SQ, SOFTENING_SQ, BOUND_LOOP, GPU_SCALAR_GRID, PHYSICS_DT,
-    WORLDLINE_LEN, WORLDLINE_DT,
+    WORLDLINE_LEN, WORLDLINE_DT, INERTIA_K,
 } from './src/config.js';
 import { WL_STRIDE } from './src/gpu/gpu-constants.js';
 import { TOGGLE_KEYS } from './src/physics-contract.js';
@@ -413,6 +413,224 @@ cases.push({
     },
 });
 
+// Barnes–Hut must reproduce the pairwise sum on a torus. Ghost copies once weighed as much
+// as their originals there, and every tree walk min-images, so each pair counted twice.
+cases.push({
+    name: 'Barnes–Hut equals the pairwise sum on a torus, across the seam and inside',
+    async run() {
+        const kick = async (bh, x1, x2) => {
+            const gp = await makeSim({ on: ['gravityEnabled', ...(bh ? ['barnesHutEnabled'] : [])],
+                                       domainW: 64, domainH: 64, boundary: BOUND_LOOP });
+            gp.addParticle({ x: x1, y: 32, mass: 1000 });
+            gp.addParticle({ x: x2, y: 32, mass: 1 });
+            gp.update(0.01);
+            const [, p] = await readParticles(gp);
+            gp.destroy();
+            return p.wx;
+        };
+        // Separation 6 either way: F/m = 1000·6/(36 + ε²)^{3/2}, one kick of 0.01
+        const expected = 0.01 * 1000 * 6 / Math.pow(36 + SOFTENING_SQ, 1.5);
+        const got = [await kick(false, 2, 60), await kick(true, 2, 60), await kick(false, 26, 32), await kick(true, 26, 32)];
+        const want = [expected, expected, -expected, -expected];
+        const worst = Math.max(...got.map((g, i) => Math.abs(g / want[i] - 1)));
+        return { expected: `Δw = ±${fmt(expected, 4)}`, measured: got.map(g => fmt(g, 4)).join(', '),
+                 metric: `${fmt(worst * 100, 2)}%`, pass: worst < 1e-3 };
+    },
+});
+
+// Co-moving like charges (relativity off): the magnetic force q v × B, with the Biot–Savart
+// field of the partner, takes w² of the electric repulsion away. The field's sign was once
+// reversed, which made it add w² instead.
+cases.push({
+    name: 'Co-moving like charges: the magnetic force cancels w² of the electric (Biot–Savart sign)',
+    async run() {
+        const w = 0.75;
+        const lateral = async (mag) => {
+            const gp = await makeSim({ on: ['coulombEnabled', ...(mag ? ['magneticEnabled'] : [])], domainW: 256, domainH: 256 });
+            gp.addParticle({ x: 100, y: 128, vx: w, mass: 1000, charge: 2 });
+            gp.addParticle({ x: 100, y: 138, vx: w, mass: 1000, charge: 2 });
+            await run(gp, 1, 0.05);
+            const [, p] = await readParticles(gp);
+            gp.destroy();
+            return p.wy;
+        };
+        const ratio = await lateral(true) / await lateral(false);
+        const expected = 1 - w * w;
+        return { expected: fmt(expected, 4), measured: fmt(ratio, 4),
+                 metric: `${fmt((ratio / expected - 1) * 100, 2)}%`, pass: Math.abs(ratio / expected - 1) < 1e-3 };
+    },
+});
+
+// Gravitomagnetic clock effect (relativity off): around a spinning mass, prograde circular
+// orbits run slow and retrograde ones fast, T₊ − T₋ = 4πJ/M at first order in J
+// (Cohen & Mashhoon 1993). With the softened kernel s = (r² + ε²)^{-3/2}, a circular orbit has
+// Ω² ± 2JsΩ − Ms = 0, and softening cancels from the leading term.
+cases.push({
+    name: 'Gravitomagnetic clock effect: prograde minus retrograde period = 4πJ/M',
+    async run() {
+        const gp = await makeSim({ on: ['gravityEnabled', 'gravitomagEnabled'], domainW: 256, domainH: 256 });
+        const M = 10, r = 40, R = Math.cbrt(M), omega = 0.5 / R;
+        const J = INERTIA_K * M * omega * R * R;
+        const s3 = Math.pow(r * r + SOFTENING_SQ, -1.5);
+        const Om = (sign) => -sign * J * s3 + Math.sqrt(J * J * s3 * s3 + M * s3);
+        gp.addParticle({ x: 128, y: 128, mass: M, angw: omega });
+        gp.addParticle({ x: 128 + r, y: 128, vy: Om(1) * r, mass: 1e-3 });    // prograde
+        gp.addParticle({ x: 128 - r, y: 128, vy: Om(-1) * r, mass: 1e-3 });   // retrograde: +y at −x, L < 0
+        const T = [2 * Math.PI / Om(1), 2 * Math.PI / Om(-1)];
+        // Unwrapped orbital angle of each, until both have gone once round
+        const angle = (p, c) => Math.atan2(p.y - c.y, p.x - c.x);
+        let ps = await readParticles(gp);
+        let last = [angle(ps[1], ps[0]), angle(ps[2], ps[0])];
+        const swept = [0, 0], period = [0, 0];
+        const dt = 0.25;
+        let t = 0;
+        while ((!period[0] || !period[1]) && t < 1.2 * Math.max(...T)) {
+            gp.update(dt);
+            t += dt;
+            ps = await readParticles(gp);
+            for (let k = 0; k < 2; k++) {
+                const a = angle(ps[k + 1], ps[0]);
+                let d = a - last[k];
+                d -= 2 * Math.PI * Math.round(d / (2 * Math.PI));
+                const before = swept[k];
+                swept[k] += Math.abs(d);
+                last[k] = a;
+                if (!period[k] && swept[k] >= 2 * Math.PI) {
+                    period[k] = t - dt + dt * (2 * Math.PI - before) / (swept[k] - before);
+                }
+            }
+        }
+        gp.destroy();
+        const expected = T[0] - T[1], measured = period[0] - period[1];
+        return { expected: `${fmt(expected, 4)} (4πJ/M = ${fmt(4 * Math.PI * J / M, 4)})`, measured: fmt(measured, 4),
+                 metric: `${fmt((measured / expected - 1) * 100, 2)}%`, pass: Math.abs(measured / expected - 1) < 0.03 };
+    },
+});
+
+// Liénard–Wiechert: a charge in uniform motion pulls along the line from its *present*
+// position, E = q(1 − v²)R̂/(R²(1 − v² sin²ψ)^{3/2}), γq/b² abeam (Jackson §11.10), times the
+// softening σ³, σ = R_ret/√(R_ret² + ε²), at the retarded distance.
+cases.push({
+    name: 'Liénard–Wiechert: a uniformly moving charge acts from its present position',
+    async run() {
+        const gp = await makeSim({ on: ['coulombEnabled', 'relativityEnabled'], domainW: 1024, domainH: 1024 });
+        const v = 0.6, g = 1 / Math.sqrt(1 - v * v), Q = 10, q = 0.1, b = 40, t0 = 100, dt = 0.25;
+        const x0 = 512 - v * t0;
+        gp.addParticle({ x: x0, y: 512, vx: g * v, mass: 1e6, charge: Q, bornAt: -Infinity });
+        gp.addParticle({ x: 512, y: 512 + b, mass: 1e6, charge: q, bornAt: -Infinity });
+        await run(gp, t0, dt);
+        const af = new Float32Array(await readBuffer(gp, gp.buffers.allForces, 2 * 160));
+        gp.destroy();
+        const F = [af[40 + 2], af[40 + 3]];   // slot 1, f0.zw (Coulomb)
+        // The last force pass ran at the start of the last substep, t_e = t0 − dt
+        const te = t0 - dt;
+        const xs = (t) => x0 + v * t;
+        const Rp = [512 - xs(te), b];
+        const Rlen = Math.hypot(...Rp), sin2 = (Rp[1] / Rlen) ** 2;
+        let tr = te - Rlen;                   // retarded time: |obs − x_s(t_r)| = t_e − t_r
+        for (let k = 0; k < 40; k++) tr = te - Math.hypot(512 - xs(tr), b);
+        const Rret = te - tr, sigma = Rret / Math.sqrt(Rret * Rret + SOFTENING_SQ);
+        const k = q * Q * (1 - v * v) / (Rlen ** 3 * Math.pow(1 - v * v * sin2, 1.5)) * sigma ** 3;
+        const want = [k * Rp[0], k * Rp[1]];
+        const err = Math.hypot(F[0] - want[0], F[1] - want[1]) / Math.hypot(...want);
+        return { expected: `(${fmt(want[0], 3)}, ${fmt(want[1], 4)}); abeam γqQ/b² = ${fmt(g * q * Q / (b * b), 4)}`,
+                 measured: `(${fmt(F[0], 3)}, ${fmt(F[1], 4)})`, metric: `${fmt(err * 100, 2)}%`, pass: err < 2e-3 };
+    },
+});
+
+// The same field after the source has wrapped a torus three times and the GPU epoch has
+// rebased twice: the world line must stay continuous on the covering plane, and the observer
+// must see the nearest image.
+cases.push({
+    name: 'Liénard–Wiechert across torus wraps and epoch rebases',
+    async run() {
+        const W = 128, v = 0.6, g = 1 / Math.sqrt(1 - v * v), Q = 10, q = 0.1, b = 20, dt = 0.25, T = 700;
+        const gp = await makeSim({ on: ['coulombEnabled', 'relativityEnabled'], domainW: W, domainH: W, boundary: BOUND_LOOP });
+        gp.addParticle({ x: 10, y: 64, vx: g * v, mass: 1e6, charge: Q, bornAt: -Infinity });
+        gp.addParticle({ x: 100, y: 64 + b, mass: 1e6, charge: q, bornAt: -Infinity });
+        await run(gp, T, dt);
+        const af = new Float32Array(await readBuffer(gp, gp.buffers.allForces, 2 * 160));
+        const epoch = gp.timeEpoch;
+        gp.destroy();
+        const F = [af[40 + 2], af[40 + 3]];
+        const te = T - dt;
+        const xs = (t) => 10 + v * t;   // unwrapped
+        // The image nearest now, followed back along its own world line (minimum image is
+        // chosen at the present, as the solver does)
+        const shift = -W * Math.round((100 - xs(te)) / W);
+        const dxAt = (t) => 100 - xs(t) + shift;
+        const Rp = [dxAt(te), b];
+        const Rlen = Math.hypot(...Rp), sin2 = (Rp[1] / Rlen) ** 2;
+        let tr = te - Rlen;
+        for (let k = 0; k < 40; k++) tr = te - Math.hypot(dxAt(tr), b);
+        const Rret = te - tr, sigma = Rret / Math.sqrt(Rret * Rret + SOFTENING_SQ);
+        const k = q * Q * (1 - v * v) / (Rlen ** 3 * Math.pow(1 - v * v * sin2, 1.5)) * sigma ** 3;
+        const want = [k * Rp[0], k * Rp[1]];
+        const err = Math.hypot(F[0] - want[0], F[1] - want[1]) / Math.hypot(...want);
+        return { expected: `(${fmt(want[0], 4)}, ${fmt(want[1], 4)}), ${Math.floor(xs(te) / W)} wraps`,
+                 measured: `(${fmt(F[0], 4)}, ${fmt(F[1], 4)}), epoch ${epoch}`,
+                 metric: `${fmt(err * 100, 2)}%`, pass: err < 2e-3 && epoch > 0 };
+    },
+});
+
+// 1PN perihelion advance (test-mass limit): Schwarzschild's 6πM/p per orbit, p the semi-latus
+// rectum, of which the special-relativistic Kepler problem supplies πM/p, so switching 1PN on
+// adds the rest. Each run measures its own p from periapsis and apoapsis; the difference
+// cancels softening's own precession.
+cases.push({
+    name: '1PN perihelion advance: 6πM/p with 1PN, πM/p from special relativity alone',
+    async run() {
+        // Weak field, M/r_p = 0.01: at stronger fields the 1PN energy shift unbinds the orbit
+        // far more than its precession changes
+        const M = 2, rp = 200, p0 = 300, C = 2048;
+        const advance = async (pn) => {
+            const gp = await makeSim({ on: ['gravityEnabled', 'gravitomagEnabled', 'relativityEnabled',
+                                            ...(pn ? ['onePNEnabled'] : [])], domainW: 2 * C, domainH: 2 * C });
+            gp.addParticle({ x: C, y: C, mass: M, bornAt: -Infinity });
+            gp.addParticle({ x: C + rp, y: C, vy: Math.sqrt(M * p0) / rp, mass: 1e-4, bornAt: -Infinity });
+            const sample = async () => {
+                const [c, q] = await readParticles(gp);
+                return { r: Math.hypot(q.x - c.x, q.y - c.y), a: Math.atan2(q.y - c.y, q.x - c.x) };
+            };
+            // Coarse: out through apoapsis and most of the way back
+            let ra = 0, prev = rp;
+            for (let k = 0; k < 4000; k++) {
+                for (let j = 0; j < 10; j++) gp.update(2);
+                const { r } = await sample();
+                ra = Math.max(ra, r);
+                if (r < prev && r < 1.3 * rp) break;
+                prev = r;
+            }
+            // Fine: the minimum of r, fitted by a parabola through three samples. The orbit
+            // started at periapsis on the +x axis, so this periapsis's angle is the advance.
+            const hist = [];
+            for (let k = 0; k < 8000; k++) {
+                gp.update(0.5);
+                hist.push(await sample());
+                const n = hist.length;
+                if (n >= 3 && hist[n - 2].r < hist[n - 3].r && hist[n - 2].r <= hist[n - 1].r) {
+                    const [h0, h1, h2] = hist.slice(n - 3);
+                    const off = 0.5 * (h0.r - h2.r) / (h0.r - 2 * h1.r + h2.r);
+                    const nb = off > 0 ? h2.a - h1.a : h1.a - h0.a;
+                    let aV = h1.a + off * (nb - 2 * Math.PI * Math.round(nb / (2 * Math.PI)));
+                    aV -= 2 * Math.PI * Math.round(aV / (2 * Math.PI));
+                    gp.destroy();
+                    return { adv: aV, p: 2 * rp * ra / (rp + ra) };
+                }
+            }
+            gp.destroy();
+            return { adv: NaN, p: NaN };
+        };
+        const on = await advance(true), off = await advance(false);
+        const expected = 6 * Math.PI * M / on.p - Math.PI * M / off.p;
+        const measured = on.adv - off.adv;
+        const deg = (x) => `${fmt(x * 180 / Math.PI)}°`;
+        return { expected: `${deg(expected)} (p = ${fmt(on.p, 4)}, ${fmt(off.p, 4)})`,
+                 measured: `${deg(measured)}; SR alone ${deg(off.adv)} vs πM/p ${deg(Math.PI * M / off.p)}`,
+                 metric: `${fmt((measured / expected - 1) * 100, 2)}%`, pass: Math.abs(measured / expected - 1) < 0.05 };
+    },
+});
+
 // π⁰ beam at γ = 5: survival N/N₀ = exp(−ln2·t/(γT½)) in lab time t.
 cases.push({
     name: 'π⁰ beam at γ = 5 decays on proper time (lab t = γT½, 2γT½)',
@@ -516,11 +734,13 @@ cases.push({
 
 // ── Runner ──
 
-async function runAll() {
+/** Run every case, or those whose name contains `filter` (console: runAll('Liénard')). */
+async function runAll(filter = '') {
     rowsEl.textContent = '';
     logEl.textContent = '';
     let failed = 0;
-    for (const c of cases) {
+    const chosen = cases.filter(c => typeof filter !== 'string' || c.name.includes(filter));
+    for (const c of chosen) {
         const tr = document.createElement('tr');
         tr.className = 'running';
         tr.innerHTML = `<td>running</td><td></td><td></td><td></td><td></td>`;
@@ -545,11 +765,11 @@ async function runAll() {
             logln(`ERROR ${c.name}: ${e.stack || e}`);
         }
     }
-    statusEl.textContent = failed ? `${failed} of ${cases.length} failed.` : `All ${cases.length} passed.`;
-    window.__results = { failed, total: cases.length };
+    statusEl.textContent = failed ? `${failed} of ${chosen.length} failed.` : `All ${chosen.length} passed.`;
+    window.__results = { failed, total: chosen.length };
 }
 
-document.getElementById('runBtn').addEventListener('click', runAll);
+document.getElementById('runBtn').addEventListener('click', () => runAll());
 window.runAll = runAll;
 </script>
 </body>

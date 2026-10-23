@@ -5,12 +5,31 @@
 // Bounce uses Hertz contact repulsion (F = delta^1.5) with tangential friction,
 // matching CPU _applyBoundaryForces(). Forces written to allForces.f4.xy for display.
 // Despawn writes death metadata (deathTime, deathMass, deathAngVel) for signal delay fade-out.
+// Every loop crossing updates the slot's deck (shared-worldline.wgsl) so its world line stays
+// continuous on the covering plane.
 
 @group(0) @binding(0) var<uniform> uniforms: SimUniforms;
 @group(0) @binding(1) var<storage, read_write> particleState: array<ParticleState>;
 @group(0) @binding(2) var<storage, read_write> particleAux: array<ParticleAux>;
 @group(0) @binding(3) var<storage, read_write> allForces: array<AllForces>;
 @group(0) @binding(4) var<storage, read_write> clocks: array<vec4<f32>>;
+@group(0) @binding(5) var<storage, read_write> wlMeta: array<u32>;
+
+/**
+ * After a crossing took the body from oldPos to newPos, mirroring the axes where flips is
+ * −1: the deck D (cover = A·x + b) becomes D′ with D′(newPos) = D(oldPos) and A′ = A·flips.
+ */
+fn updateDeck(idx: u32, oldPos: vec2<f32>, newPos: vec2<f32>, flips: vec2<f32>) {
+    let mb = idx * WL_META_STRIDE;
+    let bits = wlMeta[mb + 4u];
+    let A = vec2(select(1.0, -1.0, (bits & 1u) != 0u), select(1.0, -1.0, (bits & 2u) != 0u));
+    let b = vec2(bitcast<f32>(wlMeta[mb + 5u]), bitcast<f32>(wlMeta[mb + 6u]));
+    let A2 = A * flips;
+    let b2 = A * oldPos + b - A2 * newPos;
+    wlMeta[mb + 4u] = select(0u, 1u, A2.x < 0.0) | select(0u, 2u, A2.y < 0.0);
+    wlMeta[mb + 5u] = bitcast<u32>(b2.x);
+    wlMeta[mb + 6u] = bitcast<u32>(b2.y);
+}
 
 fn mirrorTheta(idx: u32, xMirror: bool) {
     var c = clocks[idx];
@@ -34,6 +53,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     if (uniforms.boundaryMode == BOUND_LOOP) {
         let topo = uniforms.topologyMode;
+        let oldPos = vec2(x, y);
+        var flips = vec2(1.0, 1.0);
 
         if (topo == TOPO_TORUS) {
             // Torus: simple periodic wrap on both axes
@@ -55,12 +76,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 ps.velWX = -ps.velWX;
                 ps.angW = -ps.angW;
                 mirrorTheta(idx, true);
+                flips.x = -flips.x;
             } else if (y >= h) {
                 y -= h;
                 x = w - x;
                 ps.velWX = -ps.velWX;
                 ps.angW = -ps.angW;
                 mirrorTheta(idx, true);
+                flips.x = -flips.x;
             }
             ps.posX = x;
             ps.posY = y;
@@ -79,12 +102,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 vy = -vy;
                 aw = -aw;
                 mirrorTheta(idx, false);
+                flips.y = -flips.y;
             } else if (x >= w) {
                 x -= w;
                 y = h - y;
                 vy = -vy;
                 aw = -aw;
                 mirrorTheta(idx, false);
+                flips.y = -flips.y;
             }
             if (y < 0.0) {
                 y += h;
@@ -92,12 +117,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 vx = -vx;
                 aw = -aw;
                 mirrorTheta(idx, true);
+                flips.x = -flips.x;
             } else if (y >= h) {
                 y -= h;
                 x = w - x;
                 vx = -vx;
                 aw = -aw;
                 mirrorTheta(idx, true);
+                flips.x = -flips.x;
             }
 
             ps.posX = x;
@@ -106,6 +133,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             ps.velWY = vy;
             ps.angW = aw;
         }
+
+        let newPos = vec2(ps.posX, ps.posY);
+        if (any(newPos != oldPos)) { updateDeck(idx, oldPos, newPos, flips); }
 
     } else if (uniforms.boundaryMode == BOUND_BOUNCE) {
         // Hertz wall repulsion matching CPU _applyBoundaryForces().

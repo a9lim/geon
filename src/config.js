@@ -113,6 +113,10 @@ export const MIN_KUGELBLITZ_COUNT = 4;       // minimum boson count in collapsin
 export const WORLDLINE_LEN = 1024;            // power of 2 (ring mask)
 export const WORLDLINE_DT = 1 / 8;
 export const CLOCK_PERIOD = 16;              // proper time per sweep of the clock ring
+// GPU times are f32 relative to a rolling epoch. Once GPU time passes EPOCH_SPAN, every
+// stored time shifts back by EPOCH_STEP and each world line is recentred on its tile.
+export const EPOCH_SPAN = 512;
+export const EPOCH_STEP = 256;
 
 // ── GPU-Specific ──
 export const GPU_SCALAR_GRID = 128;            // GPU scalar field grid resolution

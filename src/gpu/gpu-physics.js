@@ -31,11 +31,13 @@
  *  - heatmap compute + blur   (Phase 5 — every HEATMAP_INTERVAL frames)
  *  - bosonInteraction         (Phase 4 — build boson tree + particle/boson gravity + pion Coulomb)
  *  - deadParticleGC           (Phase 3)
- *  World lines are recorded at the end of any substep that crosses a WORLDLINE_DT mark.
+ *  World lines record at the end of every substep: a sample for every particle when the
+ *  substep crosses a WORLDLINE_DT mark, else only merge breaks and new death snapshots.
+ *  GPU times are relative to a rolling epoch (gpuTime, _maybeRebaseEpoch).
  */
 import { createParticleBuffers, createUniformBuffer, writeFrameUniforms, writeSubstepUniforms, createFieldBuffers, createGravityGridBuffers, createAtomicGridBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createKugelblitzBuffers, createTrailBuffers, FIELD_GRID_RES, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
 import { fetchShader, createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createMergePhotonPipeline, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldGravityPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createBosonDispatchArgsPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline } from './gpu-pipelines.js';
-import { buildWGSLConstants, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT, GRAVITOMAG_BIT, ONE_PN_BIT, RELATIVITY_BIT, SPIN_ORBIT_BIT, RADIATION_BIT, BLACK_HOLE_BIT, DISINTEGRATION_BIT, EXPANSION_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BARNES_HUT_BIT, BOSON_INTER_BIT, FIELD_GRAV_BIT_T1, HERTZ_BOUNCE_BIT_T1, WL_STRIDE, WL_META_STRIDE } from './gpu-constants.js';
+import { buildWGSLConstants, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT, GRAVITOMAG_BIT, ONE_PN_BIT, RELATIVITY_BIT, SPIN_ORBIT_BIT, RADIATION_BIT, BLACK_HOLE_BIT, DISINTEGRATION_BIT, EXPANSION_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BARNES_HUT_BIT, BOSON_INTER_BIT, FIELD_GRAV_BIT_T1, HERTZ_BOUNCE_BIT_T1, EM_PAIRWISE_BIT_T1, WL_STRIDE, WL_META_STRIDE } from './gpu-constants.js';
 import { createGPUDispatchPlan, updateGPUDispatchPlan } from './pass-graph.js';
 import {
     WORLDLINE_DT, WORLDLINE_LEN, GPU_MAX_PHOTONS, GPU_MAX_PIONS, GPU_MAX_LEPTONS,
@@ -45,6 +47,7 @@ import {
     SOFTENING, BH_SOFTENING, SOFTENING_SQ, BH_SOFTENING_SQ, SHEET_THICKNESS_SQ, CLOCK_PERIOD,
     HIGGS_MASS_FLOOR, HIGGS_MASS_MAX_DELTA, HIGGS_COUPLING, AXION_COUPLING,
     TIDAL_STRENGTH, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, MIN_MASS, SPAWN_COUNT, BOSON_CHARGE,
+    EPOCH_SPAN, EPOCH_STEP,
 } from '../config.js';
 import { GPU_PARAMETER_SLOTS } from '../physics-contract.js';
 import { fft2d } from '../fft.js';
@@ -98,11 +101,14 @@ const _addParticleModData = new Float32Array(4);
 const _addParticleClockData = new Float32Array(4);   // τ, ring phase, θ, lapse
 const _birthSampleData = new Float32Array(12);       // one world-line sample (WL_STRIDE)
 const _addParticleRadData = new Float32Array(12);    // RADIATION_STATE_SIZE / 4
-const _addParticleMetaBuf = new ArrayBuffer(16);       // 4 u32 for wlMeta (stride 4)
+const _addParticleMetaBuf = new ArrayBuffer(32);       // 8 u32 for wlMeta (WL_META_STRIDE)
 const _addParticleMetaU32 = new Uint32Array(_addParticleMetaBuf);
 const _addParticleMetaF32 = new Float32Array(_addParticleMetaBuf);
 const _zeroU32 = new Uint32Array([0]);                // reusable zero for counter resets
 const _retiredFlagU32 = new Uint32Array([2]);         // FLAG_RETIRED for removeParticle
+const _rebaseUniformData = new ArrayBuffer(16);           // shift (f32), slots (u32), pad
+const _rebaseUniformF32 = new Float32Array(_rebaseUniformData);
+const _rebaseUniformU32 = new Uint32Array(_rebaseUniformData);
 const _deathMetaData = new ArrayBuffer(12);           // deathTime(f32), deathMass(f32), deathAngVel(f32)
 const _deathMetaF32 = new Float32Array(_deathMetaData);
 
@@ -144,7 +150,7 @@ const _dsAuxU32     = new Uint32Array(_dsAuxData);
 const _dsColorData  = new Uint32Array(_DS_MAX);        // 4 bytes each
 const _dsModData    = new Float32Array(_DS_MAX * 4);   // VEC4_SIZE = 16
 const _dsRadData    = new Float32Array(_DS_MAX * 12);  // RADIATION_STATE_SIZE = 48 = 12 f32
-const _dsMetaData   = new ArrayBuffer(_DS_MAX * 16);  // wlMeta: 4 u32 per particle
+const _dsMetaData   = new ArrayBuffer(_DS_MAX * 32);  // wlMeta: WL_META_STRIDE (8) u32 per particle
 const _dsMetaF32    = new Float32Array(_dsMetaData);
 const _dsMetaU32    = new Uint32Array(_dsMetaData);
 const _dsClockData  = new Float32Array(_DS_MAX * 4);   // clocks: τ, phase, θ, lapse
@@ -160,7 +166,11 @@ export default class GPUPhysics {
         this.domainW = domainW;
         this.domainH = domainH;
         this.simTime = 0;
+        this.timeEpoch = 0;   // GPU times are simTime − timeEpoch (gpuTime)
         this.aliveCount = 0;
+        // Per-slot generation, bumped whenever addParticle() fills the slot: (slot, generation)
+        // names one body across slot reuse (world-line meta word 3)
+        this._slotGeneration = new Uint32Array(GPU_MAX_PARTICLES);
 
         // Defaults matching CPU path
         this.boundaryMode = 0;  // despawn
@@ -416,6 +426,7 @@ export default class GPUPhysics {
                 { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleAux
                 { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // allForces
                 { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // clocks
+                { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // wlMeta (decks)
             ],
         });
 
@@ -434,6 +445,7 @@ export default class GPUPhysics {
                 { binding: 2, resource: { buffer: this.buffers.particleAux } },
                 { binding: 3, resource: { buffer: this.buffers.allForces } },
                 { binding: 4, resource: { buffer: this.buffers.clocks } },
+                { binding: 5, resource: { buffer: this.buffers.wlMeta } },
             ],
         });
 
@@ -878,7 +890,13 @@ export default class GPUPhysics {
 
         // ── World lines and clocks ──
         this._phase4BindGroups.worldLineG0 = bg('worldline_g0', p4.recordWorldLines.bindGroupLayouts[0],
-            [this.uniformBuffer, b.particleState, b.allForces, b.clocks]);
+            [this.uniformBuffer, b.particleState, b.allForces, b.clocks, b.particleAux]);
+        this._rebaseUniformBuffer = this.device.createBuffer({
+            label: 'worldlineRebaseUniforms', size: 16,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+        this._phase4BindGroups.rebaseG0 = bg('worldlineRebase_g0', p4.rebaseWorldLines.bindGroupLayouts[0],
+            [this._rebaseUniformBuffer, b.wlData, b.wlMeta, b.particleAux]);
         this._phase4BindGroups.worldLineG1 = bg('worldline_g1', p4.recordWorldLines.bindGroupLayouts[1],
             [b.wlData, b.wlMeta]);
         this._phase4BindGroups.clocksG0 = bg('clocks_g0', p4.advanceClocks.bindGroupLayouts[0],
@@ -1352,15 +1370,40 @@ export default class GPUPhysics {
         pass.end();
     }
 
-    /** Append a world-line sample for every particle (worldline.wgsl). */
-    _dispatchRecordWorldLines(encoder) {
+    /**
+     * World lines (worldline.wgsl), every substep: a sample for every particle when one is
+     * due, else only the breaks that merges left and the snapshots of new deaths.
+     */
+    _dispatchRecordWorldLines(encoder, due) {
         const bgs = this._phase4BindGroups;
-        const pass = encoder.beginComputePass({ label: 'recordWorldLines' });
-        pass.setPipeline(this._phase4.recordWorldLines.pipeline);
+        const pass = encoder.beginComputePass({ label: due ? 'recordWorldLines' : 'recordBreaks' });
+        pass.setPipeline(due ? this._phase4.recordWorldLines.pipeline : this._phase4.recordBreaks.pipeline);
         pass.setBindGroup(0, bgs.worldLineG0);
         pass.setBindGroup(1, bgs.worldLineG1);
         pass.dispatchWorkgroups(Math.ceil(this.aliveCount / 64));
         pass.end();
+    }
+
+    /** GPU time: lab time relative to the rolling epoch (config.js EPOCH_SPAN). */
+    get gpuTime() { return this.simTime - this.timeEpoch; }
+
+    /**
+     * Advance the epoch by EPOCH_STEP once GPU time passes EPOCH_SPAN: every stored GPU time
+     * shifts back, and each world line is recentred on its tile (worldline-rebase.wgsl).
+     */
+    _maybeRebaseEpoch() {
+        if (this.gpuTime < EPOCH_SPAN) return;
+        _rebaseUniformF32[0] = EPOCH_STEP;
+        _rebaseUniformU32[1] = this.buffers.maxParticles;
+        this.device.queue.writeBuffer(this._rebaseUniformBuffer, 0, _rebaseUniformData);
+        const encoder = this.device.createCommandEncoder({ label: 'worldlineRebase' });
+        const pass = encoder.beginComputePass({ label: 'rebaseWorldLines' });
+        pass.setPipeline(this._phase4.rebaseWorldLines.pipeline);
+        pass.setBindGroup(0, this._phase4BindGroups.rebaseG0);
+        pass.dispatchWorkgroups(Math.ceil(this.buffers.maxParticles / 64));
+        pass.end();
+        this.device.queue.submit([encoder.finish()]);
+        this.timeEpoch += EPOCH_STEP;
     }
 
     /**
@@ -1827,12 +1870,15 @@ export default class GPUPhysics {
         }
 
         // World line: one sample at birth, so signal delay has a state to extrapolate
-        // from before the first recorded one. Meta: writeIdx, count, creation time, _pad.
+        // from before the first recorded one. Meta (shared-worldline.wgsl): writeIdx, count,
+        // creation time, generation, and an identity deck (the cover starts on the domain).
         this._writeBirthSample(idx, x, y, vx, vy, m, q, angw, tau, theta);
+        this._slotGeneration[idx]++;
+        _addParticleMetaU32.fill(0);
         _addParticleMetaU32[0] = 1;
         _addParticleMetaU32[1] = 1;
-        _addParticleMetaF32[2] = bornAt ?? this.simTime;
-        _addParticleMetaU32[3] = 0;
+        _addParticleMetaF32[2] = bornAt == null ? this.gpuTime : bornAt - this.timeEpoch;
+        _addParticleMetaU32[3] = this._slotGeneration[idx];
         this.device.queue.writeBuffer(this.buffers.wlMeta, idx * WL_META_STRIDE * 4, _addParticleMetaBuf);
         return idx;
     }
@@ -1851,7 +1897,7 @@ export default class GPUPhysics {
         // ParticleState: posX(0), posY(4), velWX(8), velWY(12), mass(16), charge(20), angW(24), baseMass(28), flags(32)
         this.device.queue.writeBuffer(this.buffers.particleState, idx * PARTICLE_STATE_SIZE + 32, _retiredFlagU32);
         // Write death metadata to ParticleAux: deathTime(offset 8), deathMass(12), deathAngVel(16)
-        _deathMetaF32[0] = this.simTime;
+        _deathMetaF32[0] = this.gpuTime;
         _deathMetaF32[1] = deathMass;
         _deathMetaF32[2] = deathAngVel;
         this.device.queue.writeBuffer(this.buffers.particleAux, idx * PARTICLE_AUX_SIZE + 8, _deathMetaData);
@@ -1860,7 +1906,7 @@ export default class GPUPhysics {
     /** Write a particle's first world-line sample (ring slot 0) at the current time. */
     _writeBirthSample(idx, x, y, wx, wy, m, q, angw, tau, theta) {
         const f = _birthSampleData;
-        f[0] = this.simTime; f[1] = x; f[2] = y; f[3] = wx; f[4] = wy;
+        f[0] = this.gpuTime; f[1] = x; f[2] = y; f[3] = wx; f[4] = wy;
         f[5] = 0; f[6] = 0; f[7] = tau; f[8] = theta; f[9] = angw; f[10] = m; f[11] = q;
         this.device.queue.writeBuffer(this.buffers.wlData, idx * WORLDLINE_LEN * WL_STRIDE * 4, f);
     }
@@ -1892,6 +1938,9 @@ export default class GPUPhysics {
         let t1 = 0;
         if (physics.gravityEnabled) t1 |= FIELD_GRAV_BIT_T1; // field gravity follows gravity
         if (physics.collisionMode === COL_BOUNCE) t1 |= HERTZ_BOUNCE_BIT_T1;
+        this._emPairwise = physics.barnesHutEnabled && physics.relativityEnabled
+            && (physics.coulombEnabled || physics.magneticEnabled);
+        if (this._emPairwise) t1 |= EM_PAIRWISE_BIT_T1;
         this._toggles1 = t1;
 
         this._isDarkTheme = document.documentElement.dataset.theme === 'dark';
@@ -2941,7 +2990,7 @@ export default class GPUPhysics {
         _heatmapUniformF32[4] = this._blackHoleEnabled ? BH_SOFTENING_SQ : SOFTENING_SQ; // softeningSq
         _heatmapUniformF32[5] = this._yukawaCoupling;
         _heatmapUniformF32[6] = this._yukawaMu;
-        _heatmapUniformF32[7] = this.simTime;
+        _heatmapUniformF32[7] = this.gpuTime;
         _heatmapUniformF32[8] = this.domainW;
         _heatmapUniformF32[9] = this.domainH;
         const hm = this._heatmapMode;
@@ -3101,9 +3150,10 @@ export default class GPUPhysics {
         const dtSub = dt / numSubsteps;
 
         // Write slow-changing uniforms once per frame (toggles, domain, sliders, etc.)
+        this._maybeRebaseEpoch();
         writeFrameUniforms(this.device, this.uniformBuffer, {
             dt: dtSub,
-            simTime: this.simTime,
+            simTime: this.gpuTime,
             domainW: this.domainW,
             domainH: this.domainH,
             speedScale: 1,
@@ -3225,7 +3275,7 @@ export default class GPUPhysics {
     _dispatchSubstep(dtSub) {
         // Write only the 5 substep-varying fields (dt, simTime, aliveCount, particleCount, frameCount)
         writeSubstepUniforms(this.device, this.uniformBuffer,
-            dtSub, this.simTime, this.aliveCount,
+            dtSub, this.gpuTime, this.aliveCount,
             this.aliveCount + this._ghostCount, this._frameCount);
 
         const workgroups = Math.ceil(this.aliveCount / 64);
@@ -3254,7 +3304,20 @@ export default class GPUPhysics {
         pass2.dispatchWorkgroups(workgroups);
         pass2.end();
 
-        // Pass 5: force computation — BH tree walk or O(N^2) pairwise
+        // Pass 5: force computation — BH tree walk or O(N^2) pairwise. With Barnes–Hut and
+        // Relativity, EM runs pairwise first (Liénard–Wiechert needs each source's world line)
+        // and the tree walk adds everything else on top.
+        const pairwise = !this._barnesHutEnabled || this._emPairwise;
+        if (pairwise) {
+            const pass5 = encoder.beginComputePass({ label: 'pairForce' });
+            pass5.setPipeline(p2.pairForce.pipeline);
+            pass5.setBindGroup(0, this._bg_pairForce0);
+            pass5.setBindGroup(1, this._bg_pairForce1);
+            pass5.setBindGroup(2, this._bg_pairForce2);
+            pass5.setBindGroup(3, this._bg_pairForce3);
+            pass5.dispatchWorkgroups(workgroups);
+            pass5.end();
+        }
         if (this._barnesHutEnabled) {
             // Tree walk force computation (O(N log N))
             const passTree = encoder.beginComputePass({ label: 'treeForce' });
@@ -3265,16 +3328,6 @@ export default class GPUPhysics {
             passTree.setBindGroup(3, this._treeForceGroup3);
             passTree.dispatchWorkgroups(workgroups);
             passTree.end();
-        } else {
-            // Pairwise force computation (O(N^2) tiled)
-            const pass5 = encoder.beginComputePass({ label: 'pairForce' });
-            pass5.setPipeline(p2.pairForce.pipeline);
-            pass5.setBindGroup(0, this._bg_pairForce0);
-            pass5.setBindGroup(1, this._bg_pairForce1);
-            pass5.setBindGroup(2, this._bg_pairForce2);
-            pass5.setBindGroup(3, this._bg_pairForce3);
-            pass5.dispatchWorkgroups(workgroups);
-            pass5.end();
         }
 
         // Pass 5b: externalFields (skip when all external fields are zero)
@@ -3384,11 +3437,11 @@ export default class GPUPhysics {
         passBoundary.dispatchWorkgroups(workgroups);
         passBoundary.end();
 
-        // Pass 25: world-line sample, when this substep crosses a WORLDLINE_DT mark
-        if (this.simTime >= this._nextWorldLineTime) {
-            this._dispatchRecordWorldLines(encoder);
-            this._nextWorldLineTime = (Math.floor(this.simTime / WORLDLINE_DT) + 1) * WORLDLINE_DT;
-        }
+        // Pass 25: world lines — a sample when this substep crosses a WORLDLINE_DT mark,
+        // otherwise merge breaks and death snapshots only
+        const due = this.simTime >= this._nextWorldLineTime;
+        this._dispatchRecordWorldLines(encoder, due);
+        if (due) this._nextWorldLineTime = (Math.floor(this.simTime / WORLDLINE_DT) + 1) * WORLDLINE_DT;
 
         return encoder.finish();
     }
@@ -3688,12 +3741,14 @@ export default class GPUPhysics {
             _dsClockData[idx * 4 + 2] = pd.theta || 0;
             _dsClockData[idx * 4 + 3] = 1;
 
-            // World-line meta (4 u32 = 16 bytes per particle): writeIdx, count, creationTimeBits, _pad
-            const hBase = idx * 4;
+            // World-line meta (shared-worldline.wgsl): writeIdx, count, creation time,
+            // generation, identity deck
+            const hBase = idx * WL_META_STRIDE;
+            _dsMetaU32.fill(0, hBase, hBase + WL_META_STRIDE);
             _dsMetaU32[hBase + 0] = 1;          // writeIdx (the birth sample is written below)
             _dsMetaU32[hBase + 1] = 1;          // count
             _dsMetaF32[hBase + 2] = -Infinity;  // creationTime — always existing particle
-            _dsMetaU32[hBase + 3] = 0;          // _pad
+            _dsMetaU32[hBase + 3] = ++this._slotGeneration[idx];
         }
 
         if (count > 0) {
@@ -3733,6 +3788,7 @@ export default class GPUPhysics {
     reset() {
         this.aliveCount = 0;
         this.simTime = 0;
+        this.timeEpoch = 0;
         this._nextWorldLineTime = 0;
         this._frameCount = 0;
         this._heatmapFrame = 0;
@@ -3776,7 +3832,7 @@ export default class GPUPhysics {
     syncUniforms() {
         writeFrameUniforms(this.device, this.uniformBuffer, {
             dt: 0,
-            simTime: this.simTime,
+            simTime: this.gpuTime,
             domainW: this.domainW,
             domainH: this.domainH,
             aliveCount: this.aliveCount,

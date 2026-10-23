@@ -147,6 +147,8 @@ const SPAWN_OFFSET_FLOOR: f32 = ${wf(SPAWN_OFFSET_FLOOR)};
 const ABERRATION_THRESHOLD: f32 = ${wf(ABERRATION_THRESHOLD)};
 const ABERRATION_CLAMP_MIN: f32 = 0.01;
 const ABERRATION_CLAMP_MAX: f32 = 100.0;
+// Liénard–Wiechert beaming floor: κ = 1 − n̂·β ≥ 0.01^(1/3), so 1/κ³ ≤ 100 like the aberration clamp
+const LW_KAPPA_MIN: f32 = 0.21544347;
 
 // Grid constants
 const GRID: u32 = ${GRID}u;
@@ -163,7 +165,9 @@ const HGRID_SQ: u32 = ${HGRID_SQ}u;
 const WL_LEN: u32 = ${WORLDLINE_LEN}u;
 const WL_MASK: u32 = ${WORLDLINE_LEN - 1}u;
 const WL_STRIDE: u32 = 12u;
-const WL_META_STRIDE: u32 = 4u;  // writeIdx, count, creationTimeBits, _pad
+// Meta: writeIdx, count, creationTime (f32 bits), generation, deck flips (bit 0 x, bit 1 y),
+// deck offset x, y (f32 bits), _pad. The deck maps the wrapped position onto the covering plane.
+const WL_META_STRIDE: u32 = 8u;
 const CLOCK_PERIOD: f32 = ${wf(CLOCK_PERIOD)};
 const TRAIL_LEN: u32 = ${MAX_TRAIL_LENGTH}u;
 
@@ -191,7 +195,7 @@ const FLAG_RETIRED: u32 = 2u;
 const FLAG_ANTIMATTER: u32 = 4u;
 const FLAG_BH: u32 = 8u;
 const FLAG_GHOST: u32 = 16u;
-const FLAG_REBORN: u32 = 32u;
+const FLAG_WL_BREAK: u32 = 32u;   // a merge jumped this body: its world line records a break
 const FLAG_DEATH_HIST: u32 = 64u;
 
 // Toggle bit constants (toggles0)
@@ -215,6 +219,9 @@ const BOSON_INTER_BIT: u32 = 32768u;
 // Toggle bit constants (toggles1)
 const FIELD_GRAV_BIT: u32 = 1u;
 const HERTZ_BOUNCE_BIT: u32 = 2u;
+// Barnes–Hut with Relativity: EM runs pairwise (Liénard–Wiechert needs each source's
+// world line, which tree aggregates lack), the tree walk carries everything else
+const EM_PAIRWISE_BIT: u32 = 4u;
 
 // Barnes-Hut tree constants
 // NOTE: QT_CAPACITY intentionally NOT included — GPU uses 1 (lock-free), CPU uses 4.
@@ -283,7 +290,8 @@ export const BOSON_INTER_BIT = 32768;
 // toggles1
 export const FIELD_GRAV_BIT_T1 = 1;
 export const HERTZ_BOUNCE_BIT_T1 = 2;
+export const EM_PAIRWISE_BIT_T1 = 4;
 
 // World-line buffer layout (must match the WGSL block above)
 export const WL_STRIDE = 12;
-export const WL_META_STRIDE = 4;
+export const WL_META_STRIDE = 8;

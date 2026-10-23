@@ -389,9 +389,10 @@ fn resolveCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
         newPs.charge = ps1.charge + ps2.charge;
         newPs.angW = newAngW;
         newPs.baseMass = ps1.baseMass + ps2.baseMass;
-        // Preserve antimatter flag from p1 unless BH mode (no hair); FLAG_REBORN signals history/trail reset
+        // Preserve antimatter flag from p1 unless BH mode (no hair). The kept slot's world line
+        // carries on through the merge; FLAG_WL_BREAK has worldline.wgsl record the jump.
         let amFlag = select(ps1.flags & FLAG_ANTIMATTER, 0u, bhOn);
-        newPs.flags = FLAG_ALIVE | FLAG_REBORN | amFlag;
+        newPs.flags = FLAG_ALIVE | FLAG_WL_BREAK | amFlag;
 
         // Fresh aux for new particle (unique ID, clean death state)
         keepAux.radius = select(newRadius, kerrNewmanRadiusLocal(totalMass, newRadius * newRadius, newAngVel, newPs.charge), bhOn);
