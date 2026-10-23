@@ -75,66 +75,111 @@ const REF_EN = {
 
     'ref.magnetic.title': 'Magnetic interactions',
     'ref.magnetic.body': `
-<p>Magnetism arises from charges in motion. This simulation models two distinct mechanisms: the Lorentz force from translating charges, and dipole-dipole interactions from spinning charges.</p>
+<p>Magnetism comes from charges in motion. Geon models two sources: translating charges, whose field acts on other moving charges through the Lorentz force, and spinning charges, which are magnetic dipoles.</p>
 
 <h3>Lorentz force</h3>
 <p>$$\\mathbf{F} = q\\,\\mathbf{v}\\times\\mathbf{B}$$</p>
-<p>Always perpendicular to velocity, so it does no work — only deflects. In a uniform field, charges spiral in cyclotron orbits at radius $r_L = mv_\\perp/(qB)$. The Boris integrator handles this rotation exactly, preserving energy through the magnetic gyration.</p>
+<p>Always perpendicular to the velocity, so it does no work. In a uniform field a charge circles at radius $r_L = mv_\\perp/(qB)$. The Boris integrator applies this rotation exactly.</p>
 
-<h3>Magnetic dipole–dipole interaction</h3>
-<p>$$\\mathbf{F}_{\\text{dipole}} = +\\frac{3\\mu_1\\mu_2}{r^4}\\,\\hat{r}$$</p>
-<p>Spinning charges act as magnetic dipoles with moment $\\mu = qr^2\\omega/5$ (uniform sphere). The dipole-dipole force is $1/r^4$ (steeper than $1/r^2$ Coulomb), making it dominant only at close range. Aligned dipoles attract; anti-aligned dipoles repel.</p>
+<h3>Field of a moving charge</h3>
+<p>$$\\mathbf{B} = \\frac{q\\,\\mathbf{v}\\times\\hat{\\mathbf{R}}}{R^2}$$</p>
+<p>with $\\hat{\\mathbf{R}}$ pointing from the charge to the field point (Biot–Savart, the low-speed limit). Parallel currents attract: two like charges moving side by side repel less than at rest, because their magnetic attraction cancels a fraction $v^2$ of the Coulomb repulsion. With Relativity on, the field is the full Liénard–Wiechert field $\\mathbf{B} = \\hat{\\mathbf{n}}\\times\\mathbf{E}$ from the charge's delayed state (see Special relativity).</p>
 
-<h3>The sign convention</h3>
-<p>The simulation uses a <em>positive</em> sign for the dipole-dipole force. This is the opposite of the standard physics convention but matches the gravitomagnetic case below — both forms of magnetism use the same sign, making the GEM analogy clean.</p>
+<h3>Magnetic dipoles</h3>
+<p>A spinning charged body is a magnetic dipole with moment $\\mu = q r^2\\omega/5$ (a uniformly charged sphere), perpendicular to the plane. Its field in the plane is $B_z = -\\mu/r^3$, and two dipoles side by side push apart with</p>
+<p>$$F = \\frac{3\\mu_1\\mu_2}{r^4}$$</p>
+<p>so aligned dipoles repel and opposed dipoles attract, like two bar magnets laid side by side. The force falls off as $1/r^4$ and matters only at close range.</p>
 `,
 
     'ref.gravitomag.title': 'Gravitomagnetism',
     'ref.gravitomag.body': `
-<p>General relativity predicts that mass currents create gravitational analogs of magnetic fields. Just as moving charges produce $\\mathbf{B}$, moving masses produce $\\mathbf{B}_g$ — a phenomenon called <b>gravitomagnetism</b> or <b>frame-dragging</b>.</p>
-
-<h3>Frame-dragging</h3>
-<p>A spinning mass drags the surrounding spacetime around with it, like a stirring spoon in honey. Gyroscopes near the Earth precess slightly due to this effect — confirmed by the Gravity Probe B experiment in 2011.</p>
+<p>General relativity predicts that mass currents produce a gravitational analogue of the magnetic field. Moving masses source a gravitomagnetic field $\\mathbf{B}_g$, and spinning masses drag the space around them (frame dragging).</p>
 
 <h3>Gravitomagnetic Lorentz force</h3>
-<p>$$\\mathbf{F} = +4m\\,\\mathbf{v}\\times\\mathbf{B}_g$$</p>
-<p>The factor of 4 comes from the linearized Einstein equations, and is twice the EM Lorentz coefficient. As with the magnetic Lorentz force, this is velocity-dependent and does no work directly.</p>
+<p>$$\\mathbf{F} = 4m\\,\\mathbf{v}\\times\\mathbf{B}_g$$</p>
+<p>The factor 4 comes from the linearized Einstein equations. Like the magnetic force it bends paths without doing work, and the Boris integrator applies it as a rotation.</p>
 
-<h3>Gravitomagnetic dipole force</h3>
-<p>$$\\mathbf{F} = +\\frac{3L_1 L_2}{r^4}\\,\\hat{r}$$</p>
-<p>where $L = 2m r^2\\omega/5$ is the angular momentum of a spinning sphere. Like spins (co-rotating masses) attract — the opposite of EM dipoles, which repel when co-rotating. This is the GEM "sign flip."</p>
+<h3>Field of a moving mass</h3>
+<p>$$\\mathbf{B}_g = -\\frac{m\\,\\mathbf{v}\\times\\hat{\\mathbf{R}}}{R^2}$$</p>
+<p>The magnetic form with the opposite sign, because like masses attract where like charges repel. Parallel mass currents therefore repel gravitomagnetically, the reverse of electric currents. With the Lorentz force above, this is exactly the $\\mathbf{v}_1\\cdot\\mathbf{v}_2$ part of the Einstein–Infeld–Hoffmann equations (see 1PN corrections).</p>
 
-<h3>The GEM analogy</h3>
+<h3>Field of a spinning mass</h3>
+<p>$$B_{g,z} = \\frac{J}{2r^3}$$</p>
+<p>in the plane, for angular momentum $J$ perpendicular to it. It slows prograde orbits and speeds retrograde ones, $\\Omega \\approx \\Omega_K \\mp J/r^3$, so a prograde circular orbit takes longer than a retrograde one by $4\\pi J/M$: the gravitomagnetic clock effect (Cohen and Mashhoon, 1993).</p>
+
+<h3>Spin–spin force</h3>
+<p>$$F = \\frac{3L_1 L_2}{r^4}\\ \\text{(attractive)}$$</p>
+<p>with $L = 2mr^2\\omega/5$ for a uniform sphere. Aligned spins side by side attract, the reverse of magnetic dipoles.</p>
+
+<h3>The analogy</h3>
 <table style="width:100%;border-collapse:collapse;margin:12px 0">
 <tr><th style="text-align:left;padding:4px 8px">Electromagnetism</th><th style="text-align:left;padding:4px 8px">Gravitoelectromagnetism</th></tr>
 <tr><td style="padding:4px 8px">Charge $q$</td><td style="padding:4px 8px">Mass $m$</td></tr>
-<tr><td style="padding:4px 8px">Magnetic moment $\\mu = qr^2\\omega/5$</td><td style="padding:4px 8px">Angular momentum $L = 2mr^2\\omega/5$</td></tr>
-<tr><td style="padding:4px 8px">Like dipoles repel</td><td style="padding:4px 8px">Like dipoles attract</td></tr>
-<tr><td style="padding:4px 8px">$\\mathbf{F}_L = q\\mathbf{v}\\times\\mathbf{B}$</td><td style="padding:4px 8px">$\\mathbf{F}_L = 4m\\mathbf{v}\\times\\mathbf{B}_g$</td></tr>
+<tr><td style="padding:4px 8px">Parallel currents attract</td><td style="padding:4px 8px">Parallel mass currents repel</td></tr>
+<tr><td style="padding:4px 8px">Moment $\\mu = qr^2\\omega/5$; aligned dipoles repel</td><td style="padding:4px 8px">Spin $L = 2mr^2\\omega/5$; aligned spins attract</td></tr>
+<tr><td style="padding:4px 8px">$\\mathbf{F} = q\\mathbf{v}\\times\\mathbf{B}$</td><td style="padding:4px 8px">$\\mathbf{F} = 4m\\mathbf{v}\\times\\mathbf{B}_g$</td></tr>
 </table>
+
+<p>Frame dragging also turns gyroscopes: a spinning mass precesses each nearby body's spoke (Lense–Thirring precession), the effect Gravity Probe B measured around the Earth.</p>
 `,
 
     'ref.relativity.title': 'Special relativity',
     'ref.relativity.body': `
-<p>When particles move at appreciable fractions of $c$, Newtonian mechanics breaks down. Special relativity replaces velocity with proper velocity and prevents particles from ever reaching the speed of light.</p>
+<p>When particles move at appreciable fractions of $c$, Newtonian mechanics breaks down. Geon integrates proper velocity, so no body ever reaches the speed of light.</p>
 
 <h3>Proper velocity</h3>
 <p>$$\\mathbf{w} = \\gamma\\mathbf{v}, \\qquad \\gamma = \\frac{1}{\\sqrt{1-v^2}}$$</p>
-<p>Unlike ordinary velocity $\\mathbf{v}$ (bounded by $c$), proper velocity $\\mathbf{w}$ is unbounded above. The simulation uses proper velocity as its primary state variable.</p>
+<p>Unlike ordinary velocity $\\mathbf{v}$ (bounded by $c$), proper velocity $\\mathbf{w}$ is unbounded. It is the state variable the simulation stores.</p>
 
 <h3>Conversion</h3>
 <p>$$\\mathbf{v} = \\frac{\\mathbf{w}}{\\sqrt{1+w^2}}, \\qquad \\gamma = \\sqrt{1+w^2}$$</p>
-<p>This guarantees $|\\mathbf{v}| < 1$ for any $\\mathbf{w}$ — particles can be infinitely energetic but never reach light speed.</p>
+<p>This guarantees $|\\mathbf{v}| < 1$ for any $\\mathbf{w}$: a body can be arbitrarily energetic but never reaches light speed.</p>
 
 <h3>Relativistic energy</h3>
 <p>$$E = \\gamma m, \\qquad \\text{KE} = (\\gamma - 1)m$$</p>
-<p>At low speeds, $\\text{KE} \\approx \\frac{1}{2}mv^2$ (Newtonian limit). At high speeds, $\\text{KE} \\to \\infty$ as $v \\to c$ — this is why no finite force can accelerate a particle to light speed.</p>
+<p>At low speeds $\\text{KE} \\approx \\frac{1}{2}mv^2$. As $v \\to c$, $\\text{KE} \\to \\infty$, which is why no finite force accelerates a body to light speed. Energy totals include rest mass.</p>
+
+<h3>Proper time</h3>
+<p>$$\\frac{d\\tau}{dt} = \\sqrt{1 + 2\\Phi - v^2}$$</p>
+<p>Every body carries a clock that runs slow with speed and in a gravitational well $\\Phi$. This weak-field rate is exact for a free particle, for a clock held at rest near a Schwarzschild mass, and on a circular Schwarzschild orbit. Decay, evaporation and discharge run on it.</p>
 
 <h3>Signal delay</h3>
-<p>With relativity enabled, forces propagate at finite speed: a particle responds to where the source <em>was</em> when its signal was emitted, not where it <em>is</em> now. The simulation searches each particle's history to find the emission event satisfying $|\\mathbf{r}_i(t) - \\mathbf{r}_j(t')| = c(t-t')$. This naturally produces phenomena like aberration and the gravitational/electromagnetic Doppler effect.</p>
+<p>With Relativity on, forces travel at the speed of light. Every body's world line is recorded, and a body at time $t$ feels each source from the event on the source's world line where $|\\mathbf{x}(t) - \\mathbf{x}_s(t')| = t - t'$, on its past light cone.</p>
+<p>Charges act through the Liénard–Wiechert fields, the exact fields of a point charge in arbitrary motion:</p>
+<p>$$\\mathbf{E} = q\\left[\\frac{(\\hat{\\mathbf{n}}-\\boldsymbol{\\beta})(1-\\beta^2)}{\\kappa^3R^2} + \\frac{\\hat{\\mathbf{n}}\\times\\big((\\hat{\\mathbf{n}}-\\boldsymbol{\\beta})\\times\\dot{\\boldsymbol{\\beta}}\\big)}{\\kappa^3R}\\right], \\qquad \\mathbf{B} = \\hat{\\mathbf{n}}\\times\\mathbf{E}$$</p>
+<p>Here $\\hat{\\mathbf{n}}$ and $R$ are the direction and distance from the delayed position, $\\boldsymbol{\\beta}$ and $\\dot{\\boldsymbol{\\beta}}$ the source's velocity and acceleration at that moment, and $\\kappa = 1 - \\hat{\\mathbf{n}}\\cdot\\boldsymbol{\\beta}$. The first term is the velocity field: for a charge in uniform motion it points from the charge's present position and flattens into a pancake around it. The second is the radiation field, which falls off only as $1/R$. Geon softens both at short range and caps $1/\\kappa^3$ at 100.</p>
+<p>Gravity, the Yukawa force and the dipole interactions use their static laws at the delayed position, times the aberration factor $(1 - \\hat{\\mathbf{n}}\\cdot\\mathbf{v})^{-3}$: a toy model of finite-speed propagation, not a field solution.</p>
+<p>A body spawned by hand exerts no force anywhere until its light arrives. Bodies placed by a preset or loaded from a save have always existed.</p>
+`,
 
-<h3>Mass-energy equivalence</h3>
-<p>The energy of a stationary particle is $E_0 = m$ (with $c=1$). All forms of energy contribute to gravity through the stress-energy tensor — radiated photons gravitate, kinetic energy gravitates, and field energy gravitates. The simulation tracks all these contributions to total energy conservation.</p>
+    'ref.frames.title': 'Frames',
+    'ref.frames.body': `
+<p>The view can be drawn for an observer other than the lab. Geon records every body's world line and redraws the scene on the observer's surface of simultaneity. Frames are a view: spawning and selecting still act in the lab.</p>
+
+<h3>Slicing world lines</h3>
+<p>An inertial observer moving at velocity $\\mathbf{u}$ calls simultaneous the events on the hyperplane</p>
+<p>$$t - \\mathbf{u}\\cdot\\mathbf{x} = t_A - \\mathbf{u}\\cdot\\mathbf{X}_A$$</p>
+<p>through its anchor event $(t_A, \\mathbf{X}_A)$. Each body is drawn where its world line crosses that plane, in the observer's coordinates. A lab separation $\\Delta$ along $\\mathbf{u}$ becomes $\\Delta/\\gamma$, velocities compose relativistically,</p>
+<p>$$\\mathbf{v}' = \\frac{\\mathbf{v}_\\parallel - \\mathbf{u} + \\mathbf{v}_\\perp/\\gamma}{1 - \\mathbf{u}\\cdot\\mathbf{v}},$$</p>
+<p>and each clock shows the proper time it had at the crossing. Clocks synchronized in the lab a distance $L$ apart along $\\mathbf{u}$ read $uL$ apart on the observer's slice: the relativity of simultaneity.</p>
+
+<h3>The lagged view</h3>
+<p>Ahead of the observer the slice reaches into the lab's future, which hasn't been computed. Geon sets the observer's present far enough back, $t_A = t_{\\text{now}} - |\\mathbf{u}|\\gamma\\max x'_\\parallel$ over the visible area, that everything drawn has already happened. The Frame tab shows the lag, and says when part of the slice lies outside the recorded history (128 time units), where bodies are extrapolated at constant velocity.</p>
+
+<h3>The frames</h3>
+<ul>
+<li><b>Zero momentum</b> moves with the system's total momentum, $\\mathbf{u} = \\mathbf{P}/E$.</li>
+<li><b>Selected particle</b> is the body's instantaneous rest frame, re-tilted as it accelerates. Under constant proper acceleration $a$ its slices pivot about a line $1/a$ behind it, the Rindler horizon.</li>
+<li><b>Boost</b> moves at a chosen speed and direction.</li>
+<li><b>Co-rotating</b> turns at a chosen rate $\\Omega$ about the point at the centre of the view. It is not inertial and keeps the lab's slices.</li>
+</ul>
+<p>With Relativity off every frame keeps the lab's slices (Galilean frames). A background grid of rulers at rest in the lab shows the lab lattice as the observer sees it, and the spacetime diagram plots nearby world lines in the observer's coordinates.</p>
+
+<h3>The twin paradox on a torus</h3>
+<p>A torus identifies opposite edges at equal lab time, which singles out the lab as a preferred frame. A traveller circling a torus of length $L$ at speed $v$ sees its own images, in its own frame, spaced $\\gamma L$ apart with clocks $\\gamma vL$ apart, and it meets the stay-at-home twin every lap, younger each time, without ever turning around (Barrow and Levin, 2001).</p>
+
+<h3>Limits</h3>
+<p>Trails, force arrows, the heatmap and the field overlays are lab-only. Bosons are drawn along straight paths back to their emission. On the Klein bottle and the projective plane only each body's primary image is drawn.</p>
 `,
 
     'ref.radiation.title': 'Radiation',
@@ -169,33 +214,30 @@ const REF_EN = {
 
     'ref.onepn.title': '1PN corrections',
     'ref.onepn.body': `
-<p>First post-Newtonian corrections are $O(v^2/c^2)$ terms that appear when expanding general relativity (or its EM analog) beyond leading order. They capture the first effects of finite light speed on the equations of motion.</p>
+<p>First post-Newtonian (1PN) corrections are the $O(v^2/c^2)$ terms of the two-body equations of motion beyond what the other force sectors already carry. They need Relativity, and each sector needs its own force.</p>
 
-<h3>Einstein-Infeld-Hoffmann (EIH) — gravitational sector</h3>
-<p>Requires Gravitomagnetic. The EIH equations of motion at 1PN produce the famous perihelion precession:</p>
-<p>$$\\Delta\\phi = \\frac{6\\pi M}{a(1-e^2)} \\text{ rad/orbit}$$</p>
-<p>For Mercury, this gives 43 arcseconds per century — the anomaly that led Einstein to general relativity. In this simulation, the precession appears as a slowly rotating ellipse.</p>
-<p>The full EIH interaction Lagrangian at 1PN:</p>
-<p>$$\\mathcal{L}_{\\text{EIH}} = \\frac{m_1 m_2}{2r}\\!\\left[3(v_1^2\\!+\\!v_2^2) - 7\\,\\mathbf{v}_1\\!\\cdot\\!\\mathbf{v}_2 - (\\mathbf{v}_1\\!\\cdot\\!\\hat{r})(\\mathbf{v}_2\\!\\cdot\\!\\hat{r})\\right] + \\frac{m_1 m_2(m_1\\!+\\!m_2)}{2r^2}$$</p>
-<p>The resulting force is decomposed into a gravitomagnetic Lorentz piece (handled by the Boris rotation via $B_{gz}$) and a direct position-and-velocity-dependent remainder accumulated into the 1PN display vector.</p>
+<h3>Einstein–Infeld–Hoffmann: gravity</h3>
+<p>Needs Gravitomagnetic. The EIH equations give the relativistic perihelion advance,</p>
+<p>$$\\Delta\\phi = \\frac{6\\pi M}{a(1-e^2)} \\text{ per orbit,}$$</p>
+<p>43 arcseconds per century for Mercury. Geon splits the EIH acceleration in two. Its $\\mathbf{v}_1\\cdot\\mathbf{v}_2$ sector is the gravitomagnetic Lorentz force $4m\\,\\mathbf{v}\\times\\mathbf{B}_g$ of the moving mass's field, applied as a rotation. The rest is a direct force; with $\\mathbf{N}$ the unit vector from the source (mass $M$, velocity $\\mathbf{v}_2$) to the body (mass $m$, velocity $\\mathbf{v}_1$),</p>
+<p>$$\\mathbf{a} = \\frac{M}{r^2}\\Big\\{\\mathbf{N}\\Big[-v_1^2 - 2v_2^2 + \\tfrac{3}{2}(\\mathbf{N}\\cdot\\mathbf{v}_2)^2 + \\frac{5m+4M}{r}\\Big] + \\mathbf{v}_1\\big(4\\,\\mathbf{N}\\cdot\\mathbf{v}_1 - 3\\,\\mathbf{N}\\cdot\\mathbf{v}_2\\big) + 3\\,\\mathbf{v}_2\\,(\\mathbf{N}\\cdot\\mathbf{v}_2)\\Big\\}$$</p>
+<p>EIH gives $d\\mathbf{v}/dt$, while Geon integrates $\\mathbf{w} = \\gamma\\mathbf{v}$, so the kick also carries $\\tfrac{1}{2}v_1^2\\mathbf{a}_N + \\mathbf{v}_1(\\mathbf{v}_1\\cdot\\mathbf{a}_N)$ from the Newtonian acceleration $\\mathbf{a}_N$.</p>
 
-<h3>Darwin EM — electromagnetic sector</h3>
-<p>Requires Magnetic. The Darwin Lagrangian for two charges at $O(v^2/c^2)$:</p>
-<p>$$\\mathcal{L}_{\\text{Darwin}} = -\\frac{q_1 q_2}{2r}\\!\\left[(\\mathbf{v}_1 \\!\\cdot\\! \\mathbf{v}_2) + (\\mathbf{v}_1 \\!\\cdot\\! \\hat{r})(\\mathbf{v}_2 \\!\\cdot\\! \\hat{r})\\right]$$</p>
-<p>This adds velocity-dependent corrections beyond Coulomb + Lorentz. It modifies atomic electron orbits and is the classical counterpart to the Breit interaction in quantum mechanics.</p>
+<h3>Electromagnetism</h3>
+<p>There is no Darwin term. With Relativity on, charges interact through their Liénard–Wiechert fields, which contain the Darwin interaction and every higher order in $v$.</p>
 
-<h3>Bazanski cross-term — mixed gravity-EM sector</h3>
-<p>Requires both Gravitomagnetic and Magnetic. A mixed gravity-EM interaction Lagrangian at 1PN:</p>
-<p>$$\\mathcal{L}_{\\text{Baz}} = -\\frac{q_1 q_2(m_1+m_2) - (q_1^2 m_2 + q_2^2 m_1)}{2r^2}$$</p>
-<p>Unlike the EIH and Darwin terms, this Lagrangian has no velocity dependence — it is purely a position-dependent $1/r^2$ potential correction. It vanishes for identical particles (when $q_1 = q_2$ and $m_1 = m_2$) and represents the gravitational correction to electromagnetic self-energy and vice versa.</p>
+<h3>Bažański: gravity and electromagnetism together</h3>
+<p>Needs Gravitomagnetic and Coulomb. At order $Gq^2$ the two-body equations hold a static term that neither force contains alone. What remains of it beside the Liénard–Wiechert field is a radial force on body 1,</p>
+<p>$$\\mathbf{F}_1 = \\frac{q_1 q_2(6m_1 + 5m_2) - (q_1^2 m_2 + q_2^2 m_1)}{r^3}\\,\\hat{\\mathbf{r}}$$</p>
+<p>with $\\hat{\\mathbf{r}}$ pointing toward body 2.</p>
 
-<h3>Scalar Breit — Yukawa sector</h3>
-<p>Requires Yukawa. The $O(v^2/c^2)$ relativistic correction for massive scalar (spin-0) boson exchange, derived from the Breit equation:</p>
-<p>$$\\mathcal{L}_{\\text{Breit}} = \\frac{g^2 m_1 m_2\\,e^{-\\mu r}}{2r}\\left[\\mathbf{v}_1\\!\\cdot\\!\\mathbf{v}_2 + (\\hat{r}\\!\\cdot\\!\\mathbf{v}_1)(\\hat{r}\\!\\cdot\\!\\mathbf{v}_2)(1+\\mu r)\\right]$$</p>
-<p>Because this interaction is bilinear in velocities, the Legendre transform gives $H = L$ — the Hamiltonian and Lagrangian are numerically identical. This is positive (repulsive), weakening the Yukawa attraction for fast-moving particles. The $(1+\\mu r)$ factor on the radial-velocity term comes from the massive propagator. Unlike EM (spin-1) exchange, scalar exchange produces no magnetic-type force — there is no Boris rotation component. All corrections are radial and velocity-dependent, with both radial and tangential force components accumulated into the 1PN display vector.</p>
+<h3>Scalar Breit: the Yukawa force</h3>
+<p>Needs Yukawa. Massive scalar exchange at $O(v^2)$, with the scalar sourced by $m/\\gamma$ (Chen, Tu and Wang, 2021):</p>
+<p>$$L = \\frac{K e^{-\\mu r}}{r}\\Big[1 + \\tfrac{1}{2}\\big(-v_1^2 - v_2^2 + \\mathbf{v}_1\\cdot\\mathbf{v}_2 - \\alpha\\,(\\hat{\\mathbf{n}}\\cdot\\mathbf{v}_1)(\\hat{\\mathbf{n}}\\cdot\\mathbf{v}_2)\\big)\\Big], \\qquad \\alpha = 1 + \\mu r, \\quad K = g\\,m_1 m_2$$</p>
+<p>Its acceleration terms are reduced to order with the two-body Yukawa accelerations. Scalar exchange has no magnetic-type field, so the whole correction is a direct force.</p>
 
-<h3>Integration scheme</h3>
-<p>All four sectors use velocity-Verlet: the 1PN force is computed before and after the drift step, and the average is applied, giving second-order accuracy. This is necessary because 1PN forces depend on both position and velocity.</p>
+<h3>Integration</h3>
+<p>1PN forces depend on velocity and break Newton's third law. Geon recomputes them after the drift and applies the difference as a correction to the kick: an endpoint-force correction, not a full velocity-Verlet step.</p>
 `,
 
     'ref.blackhole.title': 'Black hole mode',
@@ -772,66 +814,111 @@ const REF_JA = {
 
     'ref.magnetic.title': '磁気相互作用',
     'ref.magnetic.body': `
-<p>磁気は運動する電荷から生じます。本シミュレーションでは2つの異なる機構をモデル化します：並進電荷によるローレンツ力と、自転電荷による双極子間相互作用です。</p>
+<p>磁気は運動する電荷から生じます。Geonは2つの源をモデル化します。並進する電荷はその場がローレンツ力を通じて他の運動電荷に働き、自転する電荷は磁気双極子になります。</p>
 
 <h3>ローレンツ力</h3>
 <p>$$\\mathbf{F} = q\\,\\mathbf{v}\\times\\mathbf{B}$$</p>
-<p>常に速度に垂直なため仕事をせず、軌道を曲げるだけです。一様磁場中では電荷は半径 $r_L = mv_\\perp/(qB)$ のサイクロトロン軌道を描きます。ボリス積分器はこの回転を厳密に処理し、ジャイレーションを通じてエネルギーを保存します。</p>
+<p>常に速度に垂直なので仕事をしません。一様磁場中では電荷は半径 $r_L = mv_\\perp/(qB)$ の円を描きます。ボリス積分器はこの回転を厳密に適用します。</p>
 
-<h3>磁気双極子間相互作用</h3>
-<p>$$\\mathbf{F}_{\\text{dipole}} = +\\frac{3\\mu_1\\mu_2}{r^4}\\,\\hat{r}$$</p>
-<p>自転する電荷はモーメント $\\mu = qr^2\\omega/5$（一様球）の磁気双極子として振る舞います。双極子間力は $1/r^4$ （クーロンの $1/r^2$ より急峻）で、近距離でのみ支配的です。整列した双極子は引き合い、反整列は反発します。</p>
+<h3>運動する電荷の場</h3>
+<p>$$\\mathbf{B} = \\frac{q\\,\\mathbf{v}\\times\\hat{\\mathbf{R}}}{R^2}$$</p>
+<p>$\\hat{\\mathbf{R}}$ は電荷から場の点へ向く単位ベクトルです（ビオ＝サバール、低速の極限）。平行な電流は引き合います。並んで運動する同符号の電荷は、磁気的な引力がクーロン反発の $v^2$ の割合を打ち消すため、静止時より弱く反発します。相対論を有効にすると、場は電荷の遅延状態から求めた完全なリエナール＝ヴィーヘルト場 $\\mathbf{B} = \\hat{\\mathbf{n}}\\times\\mathbf{E}$ になります（「特殊相対論」参照）。</p>
 
-<h3>符号規約</h3>
-<p>本シミュレーションは双極子間力に<em>正</em>の符号を採用しています。これは標準的な物理規約とは逆ですが、下記の重力磁気の場合と一致させるためです — 2種類の磁気で同じ符号にしておくと、GEM（重力電磁気）対応がきれいになります。</p>
+<h3>磁気双極子</h3>
+<p>自転する帯電体は、平面に垂直なモーメント $\\mu = q r^2\\omega/5$（一様帯電球）の磁気双極子です。平面内での場は $B_z = -\\mu/r^3$ で、並んだ2つの双極子は</p>
+<p>$$F = \\frac{3\\mu_1\\mu_2}{r^4}$$</p>
+<p>で押し合います。並べた棒磁石と同じく、向きのそろった双極子は反発し、逆向きなら引き合います。力は $1/r^4$ で減衰し、近距離でのみ効きます。</p>
 `,
 
     'ref.gravitomag.title': '重力磁気',
     'ref.gravitomag.body': `
-<p>一般相対論は質量の流れが磁場の重力的アナロジーを生むと予言します。電荷の運動が $\\mathbf{B}$ を生むように、質量の運動が $\\mathbf{B}_g$ を生む — これを<b>重力磁気</b>または<b>フレームドラッギング</b>と呼びます。</p>
-
-<h3>フレームドラッギング</h3>
-<p>自転する質量は、蜂蜜をかき混ぜるスプーンのように、周囲の時空を引きずり回します。地球近傍のジャイロスコープがこの効果でわずかに歳差運動することは、2011年の Gravity Probe B 実験で確認されました。</p>
+<p>一般相対論は、質量の流れが磁場の重力版を生むと予言します。運動する質量は重力磁場 $\\mathbf{B}_g$ を作り、自転する質量は周囲の空間を引きずります（慣性系の引きずり）。</p>
 
 <h3>重力磁気ローレンツ力</h3>
-<p>$$\\mathbf{F} = +4m\\,\\mathbf{v}\\times\\mathbf{B}_g$$</p>
-<p>係数 4 は線形化アインシュタイン方程式に由来し、電磁ローレンツ係数の2倍です。電磁ローレンツ力と同様、速度依存で直接には仕事をしません。</p>
+<p>$$\\mathbf{F} = 4m\\,\\mathbf{v}\\times\\mathbf{B}_g$$</p>
+<p>係数 4 は線形化したアインシュタイン方程式に由来します。磁気力と同様に仕事をせずに軌道を曲げ、ボリス積分器が回転として適用します。</p>
 
-<h3>重力磁気双極子間力</h3>
-<p>$$\\mathbf{F} = +\\frac{3L_1 L_2}{r^4}\\,\\hat{r}$$</p>
-<p>ここで $L = 2m r^2\\omega/5$ は自転球の角運動量です。同方向のスピン（共回転質量）は引き合い — 共回転すると反発するEM双極子と逆です。これがGEMの「符号反転」です。</p>
+<h3>運動する質量の場</h3>
+<p>$$\\mathbf{B}_g = -\\frac{m\\,\\mathbf{v}\\times\\hat{\\mathbf{R}}}{R^2}$$</p>
+<p>磁場と同じ形で符号が逆です。同符号の電荷は反発しますが、質量どうしは引き合うからです。そのため平行な質量の流れは重力磁気的に反発し、電流とは逆になります。上のローレンツ力と合わせると、これはアインシュタイン＝インフェルト＝ホフマン方程式の $\\mathbf{v}_1\\cdot\\mathbf{v}_2$ の部分そのものです（「1PN補正」参照）。</p>
 
-<h3>GEM 対応表</h3>
+<h3>自転する質量の場</h3>
+<p>$$B_{g,z} = \\frac{J}{2r^3}$$</p>
+<p>平面に垂直な角運動量 $J$ に対する平面内の場です。順行軌道を遅くし逆行軌道を速め、$\\Omega \\approx \\Omega_K \\mp J/r^3$ となるので、順行の円軌道は逆行より $4\\pi J/M$ だけ長くかかります。これが重力磁気時計効果です（Cohen と Mashhoon, 1993）。</p>
+
+<h3>スピン間の力</h3>
+<p>$$F = \\frac{3L_1 L_2}{r^4}\\ \\text{（引力）}$$</p>
+<p>一様球では $L = 2mr^2\\omega/5$ です。並んだ同じ向きのスピンは引き合い、磁気双極子とは逆です。</p>
+
+<h3>対応関係</h3>
 <table style="width:100%;border-collapse:collapse;margin:12px 0">
-<tr><th style="text-align:left;padding:4px 8px">電磁気</th><th style="text-align:left;padding:4px 8px">重力電磁気 (GEM)</th></tr>
+<tr><th style="text-align:left;padding:4px 8px">電磁気</th><th style="text-align:left;padding:4px 8px">重力電磁気</th></tr>
 <tr><td style="padding:4px 8px">電荷 $q$</td><td style="padding:4px 8px">質量 $m$</td></tr>
-<tr><td style="padding:4px 8px">磁気モーメント $\\mu = qr^2\\omega/5$</td><td style="padding:4px 8px">角運動量 $L = 2mr^2\\omega/5$</td></tr>
-<tr><td style="padding:4px 8px">同方向の双極子は反発</td><td style="padding:4px 8px">同方向の双極子は引力</td></tr>
-<tr><td style="padding:4px 8px">$\\mathbf{F}_L = q\\mathbf{v}\\times\\mathbf{B}$</td><td style="padding:4px 8px">$\\mathbf{F}_L = 4m\\mathbf{v}\\times\\mathbf{B}_g$</td></tr>
+<tr><td style="padding:4px 8px">平行な電流は引き合う</td><td style="padding:4px 8px">平行な質量の流れは反発する</td></tr>
+<tr><td style="padding:4px 8px">モーメント $\\mu = qr^2\\omega/5$、そろった双極子は反発</td><td style="padding:4px 8px">スピン $L = 2mr^2\\omega/5$、そろったスピンは引力</td></tr>
+<tr><td style="padding:4px 8px">$\\mathbf{F} = q\\mathbf{v}\\times\\mathbf{B}$</td><td style="padding:4px 8px">$\\mathbf{F} = 4m\\mathbf{v}\\times\\mathbf{B}_g$</td></tr>
 </table>
+
+<p>慣性系の引きずりはジャイロスコープも回します。自転する質量は近くの物体のスポークを歳差させます（レンズ＝ティリング歳差）。Gravity Probe B が地球のまわりで測定した効果です。</p>
 `,
 
     'ref.relativity.title': '特殊相対論',
     'ref.relativity.body': `
-<p>粒子が光速の相当な割合で動くとき、ニュートン力学は破綻します。特殊相対論は速度を固有速度で置き換え、粒子が光速に到達することを防ぎます。</p>
+<p>粒子が光速の相当な割合で運動すると、ニュートン力学は成り立ちません。Geonは固有速度を積分するので、どの物体も光速に達しません。</p>
 
 <h3>固有速度</h3>
 <p>$$\\mathbf{w} = \\gamma\\mathbf{v}, \\qquad \\gamma = \\frac{1}{\\sqrt{1-v^2}}$$</p>
-<p>通常速度 $\\mathbf{v}$（$c$ で上限）と異なり、固有速度 $\\mathbf{w}$ には上限がありません。本シミュレーションは固有速度を主たる状態変数としています。</p>
+<p>通常の速度 $\\mathbf{v}$（上限 $c$）と違い、固有速度 $\\mathbf{w}$ には上限がありません。シミュレーションが保持する状態変数はこちらです。</p>
 
 <h3>変換</h3>
 <p>$$\\mathbf{v} = \\frac{\\mathbf{w}}{\\sqrt{1+w^2}}, \\qquad \\gamma = \\sqrt{1+w^2}$$</p>
-<p>これにより任意の $\\mathbf{w}$ で $|\\mathbf{v}| < 1$ が保証されます — 粒子は無限のエネルギーを持ち得ますが光速には到達しません。</p>
+<p>これにより任意の $\\mathbf{w}$ で $|\\mathbf{v}| < 1$ が保証されます。物体はいくらでも大きなエネルギーを持てますが、光速には達しません。</p>
 
 <h3>相対論的エネルギー</h3>
 <p>$$E = \\gamma m, \\qquad \\text{KE} = (\\gamma - 1)m$$</p>
-<p>低速では $\\text{KE} \\approx \\frac{1}{2}mv^2$（ニュートン極限）。高速では $v \\to c$ で $\\text{KE} \\to \\infty$ — これが、有限の力で粒子を光速まで加速できない理由です。</p>
+<p>低速では $\\text{KE} \\approx \\frac{1}{2}mv^2$ です。$v \\to c$ で $\\text{KE} \\to \\infty$ となるため、有限の力では物体を光速まで加速できません。エネルギーの合計には静止質量も含まれます。</p>
+
+<h3>固有時</h3>
+<p>$$\\frac{d\\tau}{dt} = \\sqrt{1 + 2\\Phi - v^2}$$</p>
+<p>すべての物体は時計を持ち、速さと重力ポテンシャル $\\Phi$ の井戸の深さに応じて遅れます。この弱場の進み方は、自由粒子、シュワルツシルト質量の近くで静止させた時計、シュワルツシルト円軌道で厳密です。崩壊・蒸発・放電はこの時計で進みます。</p>
 
 <h3>信号遅延</h3>
-<p>相対論を有効にすると、力は有限速度で伝播します：粒子は信号が放出された時点での発信源の位置に応答し、現在位置ではありません。シミュレーションは各粒子の履歴を探索し、$|\\mathbf{r}_i(t) - \\mathbf{r}_j(t')| = c(t-t')$ を満たす放出事象を見つけます。これにより光行差や重力／電磁ドップラー効果といった現象が自然に生じます。</p>
+<p>相対論を有効にすると、力は光速で伝わります。すべての物体の世界線が記録され、時刻 $t$ の物体は、各発信源の世界線上で $|\\mathbf{x}(t) - \\mathbf{x}_s(t')| = t - t'$ を満たす事象、つまり自分の過去光円錐上の事象から力を受けます。</p>
+<p>電荷は、任意の運動をする点電荷の厳密な場であるリエナール＝ヴィーヘルト場を通じて相互作用します。</p>
+<p>$$\\mathbf{E} = q\\left[\\frac{(\\hat{\\mathbf{n}}-\\boldsymbol{\\beta})(1-\\beta^2)}{\\kappa^3R^2} + \\frac{\\hat{\\mathbf{n}}\\times\\big((\\hat{\\mathbf{n}}-\\boldsymbol{\\beta})\\times\\dot{\\boldsymbol{\\beta}}\\big)}{\\kappa^3R}\\right], \\qquad \\mathbf{B} = \\hat{\\mathbf{n}}\\times\\mathbf{E}$$</p>
+<p>$\\hat{\\mathbf{n}}$ と $R$ は遅延位置からの向きと距離、$\\boldsymbol{\\beta}$ と $\\dot{\\boldsymbol{\\beta}}$ はその時点での発信源の速度と加速度、$\\kappa = 1 - \\hat{\\mathbf{n}}\\cdot\\boldsymbol{\\beta}$ です。第1項は速度場で、等速運動する電荷では電荷の現在位置から放射状に向き、そのまわりでパンケーキ状に押しつぶされます。第2項は放射場で、$1/R$ でしか減衰しません。Geonは両方を近距離で軟化し、$1/\\kappa^3$ を100で打ち切ります。</p>
+<p>重力・湯川力・双極子相互作用は、遅延位置での静的な法則に光行差因子 $(1 - \\hat{\\mathbf{n}}\\cdot\\mathbf{v})^{-3}$ を掛けたものです。有限速度の伝播を表すトイモデルで、場の解ではありません。</p>
+<p>手で生成した物体は、その光が届くまでどこにも力を及ぼしません。プリセットで置いた物体や保存から読み込んだ物体は、ずっと前から存在していたものとして扱います。</p>
+`,
 
-<h3>質量とエネルギーの等価性</h3>
-<p>静止粒子のエネルギーは $E_0 = m$（$c=1$）。あらゆる形のエネルギーは応力エネルギーテンソルを通じて重力に寄与します — 放射光子も、運動エネルギーも、場のエネルギーも重力源です。シミュレーションはこれら全寄与をエネルギー保存のために追跡します。</p>
+    'ref.frames.title': '座標系',
+    'ref.frames.body': `
+<p>実験室以外の観測者から見た様子を描けます。Geonはすべての物体の世界線を記録し、観測者の同時刻面で場面を描き直します。座標系は表示のみで、生成と選択は実験室系で行われます。</p>
+
+<h3>世界線を切る</h3>
+<p>速度 $\\mathbf{u}$ で動く慣性観測者にとって同時なのは、基準事象 $(t_A, \\mathbf{X}_A)$ を通る超平面</p>
+<p>$$t - \\mathbf{u}\\cdot\\mathbf{x} = t_A - \\mathbf{u}\\cdot\\mathbf{X}_A$$</p>
+<p>上の事象です。各物体は、その世界線がこの面と交わる位置に、観測者の座標で描かれます。$\\mathbf{u}$ 方向の実験室での間隔 $\\Delta$ は $\\Delta/\\gamma$ になり、速度は相対論的に合成され</p>
+<p>$$\\mathbf{v}' = \\frac{\\mathbf{v}_\\parallel - \\mathbf{u} + \\mathbf{v}_\\perp/\\gamma}{1 - \\mathbf{u}\\cdot\\mathbf{v}},$$</p>
+<p>各時計は交点での固有時を示します。実験室で同期させ $\\mathbf{u}$ 方向に $L$ 離した時計は、観測者の断面では $uL$ だけ食い違います。これが同時性の相対性です。</p>
+
+<h3>遅らせた表示</h3>
+<p>観測者の前方では、断面が実験室のまだ計算していない未来に届きます。Geonは観測者の「今」を、見えている範囲で $t_A = t_{\\text{now}} - |\\mathbf{u}|\\gamma\\max x'_\\parallel$ まで戻し、描くものがすべて計算済みになるようにします。座標系タブには遅れの大きさが表示され、断面の一部が記録された履歴（128時間単位）の外にあるときはその旨も表示されます。そこでは物体を等速運動で外挿します。</p>
+
+<h3>座標系の種類</h3>
+<ul>
+<li><b>運動量ゼロ</b>は系全体の運動量とともに動きます（$\\mathbf{u} = \\mathbf{P}/E$）。</li>
+<li><b>選択した粒子</b>はその物体の瞬間静止系で、加速に応じて断面が傾き直されます。一定の固有加速度 $a$ のもとでは、断面は後方 $1/a$ の直線（リンドラー地平線）を軸に回ります。</li>
+<li><b>ブースト</b>は指定した速さと向きで動きます。</li>
+<li><b>共回転</b>は表示の中心の点のまわりを指定した角速度 $\\Omega$ で回ります。慣性系ではなく、断面は実験室のものを使います。</li>
+</ul>
+<p>相対論を切ると、どの座標系も実験室の断面を使います（ガリレイ系）。実験室に静止した背景の物差しの格子は、観測者から見た実験室の格子を示し、時空図は近くの世界線を観測者の座標で描きます。</p>
+
+<h3>トーラス上の双子のパラドックス</h3>
+<p>トーラスは向かい合う辺を実験室の同時刻で同一視するので、実験室が特別な座標系になります。長さ $L$ のトーラスを速さ $v$ で周回する旅人は、自分の系で自分の像を $\\gamma L$ 間隔に、時計を $\\gamma vL$ ずつずれて見ます。そして折り返すことなく、1周ごとに家に残った双子と出会い、そのたびに若くなっています（Barrow と Levin, 2001）。</p>
+
+<h3>制限</h3>
+<p>軌跡、力の矢印、ヒートマップ、場の表示は実験室系のみです。ボソンは放出点まで直線をさかのぼって描きます。クラインの壺と射影平面では各物体の主像のみを描きます。</p>
 `,
 
     'ref.radiation.title': '放射',
@@ -866,33 +953,30 @@ const REF_JA = {
 
     'ref.onepn.title': '1PN補正',
     'ref.onepn.body': `
-<p>第1ポストニュートン補正は、一般相対論（あるいはその電磁版）を最低次を超えて展開した際に現れる $O(v^2/c^2)$ の項です。光速有限の効果が運動方程式に最初に現れる場面を捉えます。</p>
+<p>第1ポストニュートン（1PN）補正は、2体の運動方程式の $O(v^2/c^2)$ の項のうち、他の力の部門がまだ含んでいないものです。相対論が必要で、各部門にはそれぞれの力が必要です。</p>
 
-<h3>アインシュタイン＝インフェルト＝ホフマン (EIH) — 重力部門</h3>
-<p>重力磁気が必要。1PN での EIH 運動方程式は有名な近日点歳差を生みます：</p>
-<p>$$\\Delta\\phi = \\frac{6\\pi M}{a(1-e^2)} \\text{ rad/軌道}$$</p>
-<p>水星では1世紀あたり 43 秒角となり — アインシュタインを一般相対論へ導いた異常です。本シミュレーションでは、ゆっくり回転する楕円として現れます。</p>
-<p>1PN での完全な EIH 相互作用ラグランジアン：</p>
-<p>$$\\mathcal{L}_{\\text{EIH}} = \\frac{m_1 m_2}{2r}\\!\\left[3(v_1^2\\!+\\!v_2^2) - 7\\,\\mathbf{v}_1\\!\\cdot\\!\\mathbf{v}_2 - (\\mathbf{v}_1\\!\\cdot\\!\\hat{r})(\\mathbf{v}_2\\!\\cdot\\!\\hat{r})\\right] + \\frac{m_1 m_2(m_1\\!+\\!m_2)}{2r^2}$$</p>
-<p>結果として得られる力は、重力磁気ローレンツ部分（$B_{gz}$ によるボリス回転で扱われる）と、位置・速度に依存する直接項（1PN表示ベクトルへ蓄積される）に分解されます。</p>
+<h3>アインシュタイン＝インフェルト＝ホフマン：重力</h3>
+<p>重力磁気が必要です。EIH方程式は相対論的な近日点移動を与えます。</p>
+<p>$$\\Delta\\phi = \\frac{6\\pi M}{a(1-e^2)} \\text{（1周あたり）}$$</p>
+<p>水星では1世紀に43秒角です。GeonはEIHの加速度を2つに分けます。$\\mathbf{v}_1\\cdot\\mathbf{v}_2$ の部分は運動する質量の場による重力磁気ローレンツ力 $4m\\,\\mathbf{v}\\times\\mathbf{B}_g$ で、回転として適用します。残りは直接の力です。発信源（質量 $M$、速度 $\\mathbf{v}_2$）から物体（質量 $m$、速度 $\\mathbf{v}_1$）へ向く単位ベクトルを $\\mathbf{N}$ とすると</p>
+<p>$$\\mathbf{a} = \\frac{M}{r^2}\\Big\\{\\mathbf{N}\\Big[-v_1^2 - 2v_2^2 + \\tfrac{3}{2}(\\mathbf{N}\\cdot\\mathbf{v}_2)^2 + \\frac{5m+4M}{r}\\Big] + \\mathbf{v}_1\\big(4\\,\\mathbf{N}\\cdot\\mathbf{v}_1 - 3\\,\\mathbf{N}\\cdot\\mathbf{v}_2\\big) + 3\\,\\mathbf{v}_2\\,(\\mathbf{N}\\cdot\\mathbf{v}_2)\\Big\\}$$</p>
+<p>EIHは $d\\mathbf{v}/dt$ を与えますが、Geonは $\\mathbf{w} = \\gamma\\mathbf{v}$ を積分するので、キックにはニュートン加速度 $\\mathbf{a}_N$ からの $\\tfrac{1}{2}v_1^2\\mathbf{a}_N + \\mathbf{v}_1(\\mathbf{v}_1\\cdot\\mathbf{a}_N)$ も加わります。</p>
 
-<h3>ダーウィン EM — 電磁部門</h3>
-<p>磁気が必要。$O(v^2/c^2)$ における2電荷ダーウィンラグランジアン：</p>
-<p>$$\\mathcal{L}_{\\text{Darwin}} = -\\frac{q_1 q_2}{2r}\\!\\left[(\\mathbf{v}_1 \\!\\cdot\\! \\mathbf{v}_2) + (\\mathbf{v}_1 \\!\\cdot\\! \\hat{r})(\\mathbf{v}_2 \\!\\cdot\\! \\hat{r})\\right]$$</p>
-<p>これはクーロン＋ローレンツを超える速度依存補正を加えます。原子内電子軌道を変調し、量子力学のブライト相互作用の古典版に相当します。</p>
+<h3>電磁気</h3>
+<p>ダーウィン項はありません。相対論を有効にすると電荷はリエナール＝ヴィーヘルト場で相互作用し、この場はダーウィン相互作用と $v$ のすべての高次を含みます。</p>
 
-<h3>バザンスキ交差項 — 重力EM混合部門</h3>
-<p>重力磁気と磁気の両方が必要。1PN での重力EM混合相互作用ラグランジアン：</p>
-<p>$$\\mathcal{L}_{\\text{Baz}} = -\\frac{q_1 q_2(m_1+m_2) - (q_1^2 m_2 + q_2^2 m_1)}{2r^2}$$</p>
-<p>EIH やダーウィン項と異なり、このラグランジアンは速度依存性を持たず、純粋に位置依存の $1/r^2$ ポテンシャル補正です。同一粒子（$q_1 = q_2$ かつ $m_1 = m_2$）では消え、電磁的自己エネルギーへの重力補正およびその逆を表します。</p>
+<h3>バザンスキ：重力と電磁気の混合</h3>
+<p>重力磁気とクーロンが必要です。$Gq^2$ の次数で、2体の方程式にはどちらの力も単独では含まない静的な項があります。リエナール＝ヴィーヘルト場の分を除いた残りは、物体1への動径方向の力</p>
+<p>$$\\mathbf{F}_1 = \\frac{q_1 q_2(6m_1 + 5m_2) - (q_1^2 m_2 + q_2^2 m_1)}{r^3}\\,\\hat{\\mathbf{r}}$$</p>
+<p>です。$\\hat{\\mathbf{r}}$ は物体2へ向きます。</p>
 
-<h3>スカラー・ブライト — 湯川部門</h3>
-<p>湯川が必要。質量を持つスカラー（スピン0）ボソン交換に対する $O(v^2/c^2)$ 相対論補正で、ブライト方程式から導かれます：</p>
-<p>$$\\mathcal{L}_{\\text{Breit}} = \\frac{g^2 m_1 m_2\\,e^{-\\mu r}}{2r}\\left[\\mathbf{v}_1\\!\\cdot\\!\\mathbf{v}_2 + (\\hat{r}\\!\\cdot\\!\\mathbf{v}_1)(\\hat{r}\\!\\cdot\\!\\mathbf{v}_2)(1+\\mu r)\\right]$$</p>
-<p>速度に対して双線形であるため、ルジャンドル変換により $H = L$ — ハミルトニアンとラグランジアンが数値的に同一になります。これは正（反発的）で、高速粒子に対して湯川の引力を弱めます。動径速度項にかかる $(1+\\mu r)$ 因子は質量を持つプロパゲータに由来します。EM（スピン1）交換と異なり、スカラー交換は磁気型の力を生まず — ボリス回転成分はありません。すべての補正は動径かつ速度依存で、動径成分・接線成分とも 1PN 表示ベクトルへ蓄積されます。</p>
+<h3>スカラー・ブライト：湯川力</h3>
+<p>湯川が必要です。質量を持つスカラーの交換を $O(v^2)$ まで扱い、スカラーの源は $m/\\gamma$ です（Chen, Tu, Wang, 2021）。</p>
+<p>$$L = \\frac{K e^{-\\mu r}}{r}\\Big[1 + \\tfrac{1}{2}\\big(-v_1^2 - v_2^2 + \\mathbf{v}_1\\cdot\\mathbf{v}_2 - \\alpha\\,(\\hat{\\mathbf{n}}\\cdot\\mathbf{v}_1)(\\hat{\\mathbf{n}}\\cdot\\mathbf{v}_2)\\big)\\Big], \\qquad \\alpha = 1 + \\mu r, \\quad K = g\\,m_1 m_2$$</p>
+<p>加速度を含む項は、2体の湯川加速度で次数を落として置き換えます。スカラー交換には磁気型の場がないので、補正はすべて直接の力です。</p>
 
-<h3>積分スキーム</h3>
-<p>4部門すべてにおいて速度ヴェルレ法を使用：1PN力をドリフト前と後に計算し、平均を適用することで2次精度を得ます。1PN 力は位置と速度の両方に依存するため、これが必要となります。</p>
+<h3>積分</h3>
+<p>1PN力は速度に依存し、ニュートンの第3法則を破ります。Geonはドリフトの後に再計算し、その差をキックの補正として加えます。完全な速度ヴェルレ法ではなく、終点の力による補正です。</p>
 `,
 
     'ref.blackhole.title': 'ブラックホールモード',

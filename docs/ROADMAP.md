@@ -49,6 +49,7 @@ Cost: **S** about one session · **M** a few sessions · **L** a milestone ·
 | 2026-10-23 | **Frames default to the lagged view** (open decision 1): the slice is all computed past, and the HUD names the lag. | §5.4 |
 | 2026-10-23 | **Liénard–Wiechert before frames** (open decision 6), so frames are honest for EM from the start. Landed the same day. | §11.1, §2.1 |
 | 2026-10-23 | **The full 1.5 suite this leg:** M2, M3 and M4 after M1. | §3 |
+| 2026-10-23 | **The event log waits for a consumer:** the slicer reads births, deaths and merges from creation times, death snapshots and breaks (Claude's call while building M2). | §10.2 |
 
 ### Open
 
@@ -302,6 +303,30 @@ The tie is explicit and per mode, which is what Codex asked for.
     charges, the gravitomagnetic clock effect, a uniformly moving charge's
     present-position field (directly, and after three torus wraps and an
     epoch rebase), and the 1PN perihelion advance.
+- **M2 (2026-10-23): frames.**
+  - The slicer (§5.4, `frame-slice.wgsl`): lab, zero-momentum, selected-particle,
+    boost and co-rotating observers. Every world line is cut on the observer's
+    hyperplane and drawn in observer coordinates, with relativistic velocity
+    addition, τ and θ at the crossing, and 3×3 images on a torus (`γL` apart,
+    clocks `γvL` apart). Galilean slices with Relativity off and in co-rotation.
+  - The lagged view (decision 1): `lag = |u|γ·max(x′·û)` over the visible
+    rectangle, capped at the ring's reach; the HUD names it and flags slices
+    that leave the recorded history. A look-back scrubber while paused.
+  - Bosons sliced along their straight paths, photons Doppler-shifted
+    `γ(1 − u·v̂)`.
+  - The background grid (§5.5, `grid-render.wgsl`): multiscale lab rulers and
+    the domain edge as one full-screen pass, contracted and turned in a frame.
+  - The 1+1 spacetime diagram in a new Frame tab (`minkowski.js`).
+  - Twin presets: a bounce-wall twin at 0.8c and the Barrow–Levin torus twin
+    (20 presets).
+  - The Thomas preset's nucleus is now mass 600: under Liénard–Wiechert the
+    orbiting electron's tangential field dragged the old light nucleus around
+    and unravelled the orbit.
+  - Oracles (22 in all): rulers at 1/γ, velocity composition, clocks `u·L`
+    apart on the slice, the Rindler pivot at 1/a, the torus twin's images and
+    clock offset, and the bounce twin coasting at 1/γ and coming home younger.
+  - Deferred, with reasons: the event log (§10.2), the covariance meter and the
+    slingshot twin (§5.4).
 
 ### 2.2 Physics bugs and gaps found by the 2.0 scouting
 
@@ -322,9 +347,12 @@ The tie is explicit and per mode, which is what Codex asked for.
   - Photons, pions and leptons neither redshift nor co-expand.
   - H is constant; fields get no Hubble friction.
   - In loop mode the flow is discontinuous across the wrap.
-- **World lines have no event log yet** (M2, §10.2): births, deaths and merges
-  exist as slot flags, creation times and breaks; boson emission and absorption
-  leave no record.
+- **World lines have no event log** (deferred from M2, §10.2): births, deaths
+  and merges exist as creation times, death snapshots and breaks, which is all
+  the slicer needs; boson emission and absorption leave no record.
+- **Frames on Klein and RP² draw the primary image only;** the torus draws 3×3.
+- **Particle momentum isn't conserved under Liénard–Wiechert:** the fields carry
+  momentum in transit, which nothing tracks.
 - **The lapse ignores field gravity.** `clocks.wgsl` sums the particles'
   softened Φ_N; Φ_F from the grid moves fields' clocks (KG) but not
   particles'.
@@ -359,11 +387,11 @@ The tie is explicit and per mode, which is what Codex asked for.
 ### 2.3 Still open from the June audit
 
 - **Tests (audit §1, its top item):** `tests/physics-validation.html` runs
-  12 analytic oracles against the production `GPUPhysics` (§10.3). No Node
+  22 analytic oracles against the production `GPUPhysics` (§10.3). No Node
   kernel tests yet. The audit's route, a headless CPU engine as a GPU↔CPU
   parity oracle, died with the CPU path.
-- **Preset coverage (audit §3):** 18 presets, three of them relativity's
-  (M1), and none turns on boson interaction.
+- **Preset coverage (audit §3):** 20 presets, five of them relativity's
+  (M1, M2), and none turns on boson interaction.
   - Nothing exercises superradiance, Schwinger discharge, kugelblitz,
     Roche/disintegration, the Klein/RP² topologies or the external fields.
   - Annihilation is only incidental (Peccei–Quinn).
@@ -408,15 +436,14 @@ The tie is explicit and per mode, which is what Codex asked for.
   body radius `m^(1/3)` = 1, i.e. Planck-scale. `ELECTRON_MASS = 0.01` puts
   the electron's Bohr radius near 10⁴ units, so a quantum layer needs its own
   particle mass.
-- **The domain is the window size / 16** (`main.js:99-100, 490`). Resizing
-  the window changes the universe.
+- **The domain was the window size / 16** until M1; it is state now (§10.4).
 - **The GPU has a general complex 2D Stockham FFT** at grid size
   (`src/gpu/shaders/field-fft.wgsl`). `fft.js` is imported by the GPU path for
   Green's-function setup.
-- **Particles:** the GPU draws an instanced screen-aligned quad with a circle
-  discard (`src/gpu/shaders/particle.wgsl`). The spin indicator is
-  `spin-render.wgsl` plus `ring-render.wgsl`; torque arcs are
-  `torque-render.wgsl` at ring offsets 0.5 and 1.0.
+- **Particles:** the GPU draws an instanced quad with a circle discard,
+  contracted along v (`src/gpu/shaders/particle.wgsl`), with the spoke drawn
+  in the fragment shader since M1; torque arcs are `torque-render.wgsl` at ring
+  offsets 0.5 and 1.0.
 - **Infrastructure:**
   - Plasma is WebGPU-only and tests in the browser
     (`projects/plasma/tests/physics-validation.html` instantiates the
@@ -445,7 +472,7 @@ Versions set the order. Milestone IDs are stable names, not an order:
 | **M0** (done 2026-10-23, §2.1) | 1.5 | **GPU only; don't fix CPU copies slated for deletion.** The §5.1 clock fix (per-process clocks, emission boosts); the Roche timestep and Eggleton q; the 3+1 KG coefficients (§2.2); the lengths split (ε for particles, ℓ for field gravity, §1.2); seed the browser test page (§10.3) with the pion-beam and moving-BH oracles. | none |
 | **M0′** (done 2026-10-23, §2.1) | 1.5 | Retire the CPU path (§4): port the phase plot and effective potential to readback; device-loss recovery; a "requires WebGPU" notice; delete about 8,100 lines; update the docs. Can share a session with M0. | M0 |
 | **M1** (done 2026-10-23, §2.1) | 1.5 | **Relativity you can see.** The world-line store (§10.2); τ and θ state; the spoke shader; clocks; spoke precession; domain decoupled from viewport (§10.4). | M0′ |
-| **M2** | 1.5 | **Frames.** The slicer; lab, ZMF, particle and custom frames (view-only); lagged and true-now modes; the scrubber; the 1+1 Minkowski panel; the grid as lab rulers. | M1 |
+| **M2** (done 2026-10-23 but for the covariance meter and slingshot twin, §2.1) | 1.5 | **Frames.** The slicer; lab, ZMF, particle and custom frames (view-only); lagged and true-now modes; the scrubber; the 1+1 Minkowski panel; the grid as lab rulers. | M1 |
 | **M3** | 1.5 | **Honest cosmology.** Comoving rewrite; the a(t) selector and self-consistent background; redshift; Hubble friction; the ledger; horizons; misalignment and Kibble–Zurek presets. | M2 (grid) |
 | **M4** | 1.5 | **Lensing.** Lens mode on the grid; microlensing probe. | M2 (grid) |
 | **2.0** | 2.0 | The visual overhaul. Milestones are defined with its scope. | 1.5 |
@@ -526,7 +553,24 @@ Still open:
   including g − 2. A contracted sphere is an oblate ellipsoid, which the
   inclined view (§9.2) would show.
 
-### 5.4 Frame switching (M2, L)
+### 5.4 Frame switching (M2, done but for the covariance meter and slingshot twin)
+
+Landed 2026-10-23 (§2.1): the lab, zero-momentum, selected-particle, boost and
+co-rotating frames, the lagged view, the scrubber, the Minkowski panel, the
+bounce and torus twins, and boson slicing with the Doppler shift. True-now mode
+lost to the lagged view (decision 1). Not built:
+
+- **Free-fall and comoving frames.** Free fall needs a Galilean accelerated
+  slice; comoving waits for M3.
+- **Spawning in a frame** (v2 below) and the heatmap in a frame (hidden).
+- **The covariance meter** below: seeding B's history to match a boosted A
+  needs world-line seeding from a transformed history, which nothing writes yet.
+- **The slingshot twin:** every inertial "home" in Geon falls toward the
+  slingshot mass during the trip, and a U-turn at relativistic speed needs a
+  periapsis inside a few M. A fair version needs a body exempt from gravity.
+- **Aberrated photon directions** and transformed sampling weights.
+
+The design as planned:
 
 **Frames:**
 
@@ -1155,17 +1199,25 @@ Decided (§4). WGSL is the single source of physics truth.
 - Merge breaks: the old body extrapolated to the merge and the merged body,
   at one time.
 
-**Still M2:**
-- The event log, to the schema below.
-- **Bosons:** back-extrapolation first, short rings later.
-- **Fields and dust density:** snapshot rings.
-- **The slicer:** one WGSL module for spacelike planes `n·X = c` (n timelike)
-  and past null cones.
-  - Method: bisect, then Newton on the Hermite segment.
-  - Consumers: signal delay, the light-cone camera, frames, the heatmap and
-    the spacetime view.
+**Built in M2:**
+- **The slicer** for spacelike planes: `wlOnSlice` in `frame-slice.wgsl`,
+  bisection then Newton on the Hermite segment, beside `retardedState`'s past
+  null cones in `shared-worldline.wgsl`. Its other planned consumers (the
+  light-cone camera, the heatmap in a frame, the spacetime view) don't exist
+  yet.
+- **Bosons:** straight-line back-extrapolation to emission, in
+  `boson-render.wgsl`. Short rings later.
 
-**Event-log schema** (fixed in M1, built in M2; **[synthesis]**). The log
+**Deferred:**
+- **The event log** (decided 2026-10-23 while building M2): the slicer needs
+  only who existed at a slice and with what mass and charge, which creation
+  times, death snapshots (`FLAG_DEATH_HIST`), merge breaks and the samples' `m`
+  and `q` already give. Its first real consumer would be boson emission and
+  absorption history (boson rings) or the covariance meter; build it then, to
+  the schema below.
+- **Fields and dust density:** snapshot rings.
+
+**Event-log schema** (fixed in M1; **[synthesis]**). The log
 holds only the discrete events a slice needs to decide who existed then and
 what changed hands. Continuous changes (Hawking loss, superradiance, the mass
 flow of Roche transfer, accretion) live in the samples' `m` and `q`.

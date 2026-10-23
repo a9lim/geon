@@ -1,7 +1,7 @@
 ---
 name: Geon
 title: Geon — Interactive Particle Physics Simulator
-description: Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across eighteen browser presets.
+description: Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty browser presets.
 updated: 2026-10-23
 ---
 
@@ -29,13 +29,19 @@ Each body is drawn as its rest-frame disk pushed through the Lorentz transformat
 
 The spoke's orientation is a transported axis, and it precesses even when the body does not spin. Thomas precession turns it backward by 2π(γ − 1) per circular orbit under non-gravitational forces; geodetic precession turns it forward by 3πM/r per orbit around a mass, as measured by Gravity Probe B; and with gravitomagnetism on, a spinning mass drags it (Lense–Thirring). Gravity enters only through the geodetic and Lense–Thirring terms, never through Thomas precession.
 
+## Frames
+
+The view can be drawn for observers other than the lab: the zero-momentum frame, the selected particle's rest frame, a boost at a chosen speed and direction, or a frame rotating at a chosen rate. Geon records every body's world line and redraws the scene on the observer's surface of simultaneity, so in a boosted frame moving rulers contract, clocks synchronized in the lab disagree across the view, and a fast wheel can be followed in its own rest frame, where it is round. The observer's present is set far enough into the lab's past that everything shown has already been computed, and the Frame tab reports how far behind the lab it is. A background grid of rulers at rest in the lab contracts and shears with the observer, and a spacetime diagram plots nearby world lines in the observer's coordinates with its light cone and proper-time ticks.
+
+On a torus the lab is a preferred frame: opposite edges are identified at equal lab time, so a traveller circling a torus of length L at speed v sees its own images, in its own frame, spaced γL apart with clocks γvL apart. A twin who circles the torus at 0.8c meets the stay-at-home twin every lap, younger each time, without ever turning around (Barrow and Levin, 2001). In the other twin preset the traveller bounces off a wall, and at the turn the home clock's reading on the traveller's slice jumps ahead by 2vd.
+
 ## Scalar Fields
 
 The Higgs and axion fields evolve on a 128 × 128 grid. With gravity on, they evolve in the metric ds² = −e^{2Φ}dt² + e^{−2Φ}dx², whose Klein–Gordon equation reduces to the weak-field form at small Φ and stays well behaved in deep wells. The potential Φ comes from the fields' own energy and the particles' mass, solved by FFT convolution over a sheet of thickness 8, so field oscillations near a massive body slow by the gravitational redshift factor e^Φ.
 
 ## Presets
 
-Eighteen curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, and cosmological expansion. Each preset sets initial conditions and force parameters for one compact demonstration.
+Twenty curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, the twin paradox on a line and on a torus, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, and cosmological expansion. Each preset sets initial conditions and force parameters for one compact demonstration.
 
 ## Black Hole Physics
 
@@ -51,7 +57,7 @@ Designed for undergraduate physics education. Students can toggle individual for
 
 ## Technical Details
 
-WebGPU compute shaders run the whole simulation and WebGPU instanced rendering draws it; there is no CPU fallback, and browsers without WebGPU see a notice instead. The simulation domain has a fixed size, 64 × 64 units unless a preset sets its own, and the window is a camera onto it; a hairline marks the domain's edge. Saves record the domain and every body's proper time and spoke angle. If the GPU device is lost, Geon recreates it and restores the latest auto-save. Simulation state and stepping stay client-side.
+WebGPU compute shaders run the whole simulation and WebGPU instanced rendering draws it; there is no CPU fallback, and browsers without WebGPU see a notice instead. The simulation domain has a fixed size, 64 × 64 units unless a preset sets its own, and the window is a camera onto it; a background grid of lab rulers fills it, and a hairline marks its edge. Saves record the domain and every body's proper time and spoke angle. If the GPU device is lost, Geon recreates it and restores the latest auto-save. Simulation state and stepping stay client-side.
 
 ## Topology Modes
 

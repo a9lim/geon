@@ -25,6 +25,12 @@ substepping advances them.
   propagation. First post-Newtonian corrections (Einstein–Infeld–Hoffmann for gravity,
   Bažański cross terms, scalar Breit for Yukawa) give the relativistic perihelion
   advance.
+- **Frames.** The view can be redrawn for the zero-momentum frame, the selected
+  particle's rest frame, a custom boost, or a rotating frame, by slicing every body's
+  recorded world line on the observer's surface of simultaneity. A background grid of
+  lab rulers contracts with the observer, and a spacetime diagram shows nearby world
+  lines with the light cone. Two twin-paradox presets, one on a torus, where the lab is
+  a preferred frame.
 - **Black holes.** Kerr–Newman horizons set by mass, spin, and charge (super-extremal
   inputs are clamped to an effective radius), a Paczyński–Wiita gravity well that
   swallows bodies crossing the horizon, ergosphere rendering, Hawking evaporation,
@@ -60,8 +66,9 @@ substepping advances them.
   per-force breakdown for the selected particle; a potential heatmap (gravity,
   electric, Yukawa, or all); and a phase-space plot and an effective-potential curve
   for the selected particle against the heaviest other body.
-- **Presets.** Eighteen scenarios, from Kepler orbits and binary inspiral through
-  Hawking evaporation, a relativistic wheel, Thomas and geodetic precession, atoms,
+- **Presets.** Twenty scenarios, from Kepler orbits and binary inspiral through
+  Hawking evaporation, a relativistic wheel, Thomas and geodetic precession, the twin
+  paradox on a line and on a torus, atoms,
   nuclei, and pion exchange to the Higgs boson, axion bursts, and an expanding
   universe.
 - **Save and load.** Quick save to the browser, or download and upload the state as
@@ -82,7 +89,8 @@ substepping advances them.
 - **Keyboard.** Space pauses, `/` steps, `R` resets, `,` and `.` change speed, `1`–`9`
   load presets, `X` toggles antimatter mode, `K` the clocks, `T` the theme, `S` the
   sidebar. `Ctrl+S` /
-  `Ctrl+L` quick save and load. `?` opens the about panel with the full list.
+  `Ctrl+L` quick save and load. `B` cycles frames, `L` returns to the lab, and `G`
+  toggles the grid. `?` opens the about panel with the full list.
 
 ## Running locally
 

@@ -3,6 +3,7 @@
 // reads (speed, γ, and how far behind the lab its now is), and the look-back scrubber, which
 // only acts while paused.
 import { FRAME_KEYS, FRAME_LAB, FRAME_PARTICLE, FRAME_BOOST, FRAME_COROTATE } from './frames.js';
+import { WORLDLINE_LEN, WORLDLINE_DT } from './config.js';
 import { t } from './i18n.js';
 
 export default class FramePanel {
@@ -18,6 +19,7 @@ export default class FramePanel {
             speed: $('frame-speed'),
             gamma: $('frame-gamma'),
             now: $('frame-now'),
+            extrapolated: $('frame-extrapolated'),
             scrub: $('frame-scrub-group'),
             lookBack: $('frameLookBackInput'),
         };
@@ -89,6 +91,7 @@ export default class FramePanel {
             this.el.speed.textContent = '—';
             this.el.gamma.textContent = '—';
             this.el.now.textContent = '—';
+            this.el.extrapolated.hidden = true;
             return;
         }
         const speed = Math.hypot(st.ux, st.uy);
@@ -97,6 +100,29 @@ export default class FramePanel {
         this.el.now.textContent = st.lag > 0.05
             ? t('frame.nowLagged').replace('{lag}', st.lag.toFixed(1))
             : t('frame.nowLab');
+        this.el.extrapolated.hidden = !this._outsideHistory(st);
+    }
+
+    /**
+     * Whether the visible slice leaves the recorded history: its trailing edge before the
+     * run began or the ring's oldest sample, or its leading edge past the lab's now (the lag
+     * is capped at the ring's reach). frame-slice.wgsl extrapolates there.
+     */
+    _outsideHistory(st) {
+        const sim = this.sim;
+        const p = sim.frames.params();
+        const now = sim._gpuPhysics ? sim._gpuPhysics.simTime : 0;
+        let back = 0, ahead = 0;
+        const s = Math.hypot(st.ux, st.uy);
+        if (p && st.lorentz && s > 1e-6) {
+            const nx = st.ux / s, ny = st.uy / s;
+            const spread = Math.abs(p.viewHalfW * nx) + Math.abs(p.viewHalfH * ny);
+            const along = p.viewX * nx + p.viewY * ny;
+            back = s * st.gamma * Math.max(spread - along, 0);
+            ahead = s * st.gamma * Math.max(spread + along, 0);
+        }
+        const start = Math.max(0, now - WORLDLINE_LEN * WORLDLINE_DT);
+        return st.tA - back < start - 0.01 || st.tA + ahead > now + 0.01;
     }
 
     /** The particle frame's observer died: fall back to the lab. */

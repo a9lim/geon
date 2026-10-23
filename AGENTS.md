@@ -29,7 +29,7 @@ physics bugs. This file describes the code as it is.
 ## Layout
 
 ```
-index.html               page shell, sidebar (Settings / Stats / Particle), JSON-LD
+index.html               page shell, sidebar (Settings / Stats / Particle / Frame), JSON-LD
 main.js                  Simulation: state, device lifecycle, fixed-timestep loop
 colors.js                charge and spin hues added to the shared palette
 i18n/strings.js          UI strings (en, ja); merges strings-reference.js (reference overlay)
@@ -38,8 +38,11 @@ src/physics-settings.js  the toggle and parameter store (sim.settings)
 src/physics-contract.js  toggle/parameter keys shared by save/load and the GPU slot map
 src/ui.js                controls, toggle dependencies, settings dropdown, shortcuts, about
 src/input.js             spawn, select, delete through GPU hit tests
-src/overlay.js           the 2D canvas above the GPU canvas: domain edge, spawn-drag line
-src/presets.js           18 presets (PRESET_ORDER); each may set its domain
+src/overlay.js           the 2D canvas above the GPU canvas: the spawn-drag line
+src/presets.js           20 presets (PRESET_ORDER); each may set its domain
+src/frames.js            the observer the view is drawn for (sim.frames), FrameParams
+src/frame-panel.js       the Frame tab: frame choice, parameters, readouts, scrubber
+src/minkowski.js         the Frame tab's 1+1 spacetime diagram
 src/save-load.js         quick save (localStorage), JSON download/upload
 src/stats-display.js     conservation readouts, selected-particle panel
 src/phase-plot.js, effective-potential.js, plot-labels.js   Particle-tab plots
@@ -51,7 +54,7 @@ src/gpu/gpu-buffers.js   allocation and packed struct sizes
 src/gpu/gpu-constants.js generated WGSL constants and toggle bits
 src/gpu/gpu-renderer.js  instanced rendering, light/dark pipeline pairs
 src/gpu/pass-graph.js    per-frame dispatch plan
-src/gpu/shaders/         58 WGSL files; shared-*.wgsl are prepended includes
+src/gpu/shaders/         60 WGSL files; shared-*.wgsl are prepended includes
 tests/physics-validation.html   analytic oracles against a headless GPUPhysics
 ```
 
@@ -216,6 +219,52 @@ created at `−∞` and act at once.
   (`addParticle({ inheritClockFrom })`, through `_clockScratch`, since
   `copyBufferToBuffer` cannot copy within one buffer).
 
+### Frames
+
+`sim.frames` (`frames.js`) names the observer the view is drawn for: the lab (the
+simulation's own frame), zero momentum, the selected particle, a boost (rapidity and
+direction), or co-rotation at a rate Ω about the point the camera was on. Frames are a
+view: spawning, selection, deletion and hover act in the lab, and `input.js` ignores the
+canvas while a frame is active.
+
+- **Slicing** (`frame-slice.wgsl`, from `GPUBackend.render()` each rendered frame).
+  `frameAnchor` (one thread) finds the observer's lab velocity u and its anchor event
+  (t_A, X_A) and writes `FrameState`; `sliceWorldLines` (one thread per slot and image)
+  finds where each world line crosses the observer's now, `t − u·x = t_A − u·X_A` with
+  Relativity on and `t = t_A` with it off or in co-rotation, and writes the view buffers
+  (`viewState`, `viewAux`, `viewDerived`, `viewClocks`) that the body, clock and ring
+  pipelines draw in place of the live ones. On the slice a lab offset Δ maps to
+  `x′∥ = Δ∥/γ` with velocities by relativistic addition; τ and θ come from the world line at
+  the crossing.
+- **The lagged view.** t_A = now − lag with `lag = |u|γ·max(x′·û)` over the visible
+  rectangle plus the scrubber's look-back, capped at the ring's reach (127), so everything
+  drawn has already been computed. The HUD names the lag (`lab − 23`) and says when part
+  of the slice falls outside the recorded history, where `wlOnSlice` extrapolates at
+  constant velocity.
+- **Images.** Each world line is mapped from its covering plane through the image nearest
+  the frame's reference point (the anchor's wrapped position now). On a torus every body
+  is drawn as its 3×3 nearest images (`frames.images`), `γL` apart along u with clocks
+  `γvL` apart, because the torus identification holds at equal lab time; Klein and RP²
+  draw the primary image only. Instances are `alive × images`, and `particle.wgsl` reads
+  each body's colour at `instance / images`.
+- **Bosons** (`boson-render.wgsl`) are drawn where their straight paths cross the slice,
+  no earlier than their emission; photons take the Doppler factor `γ(1 − u·v̂)` in hue.
+- **What frames skip:** trails, force and velocity arrows, torque arcs, the heatmap and
+  the field overlays stay lab-only and are hidden in a frame.
+- **The camera** in a frame is in observer coordinates with the observer at the origin;
+  leaving the lab saves the lab camera and returning restores it. Resizing keeps the
+  observer centred.
+- **The scrubber** (Look back) adds lag while paused, so a paused run can be re-sliced
+  further into its past.
+- **The spacetime diagram** (`minkowski.js`): while the Frame tab is visible it reads the
+  observer (or selection) and the 11 bodies nearest it every 250 ms
+  (`readSlotsSnapshot`, `readWorldLines`) and plots their world lines projected on the
+  observer's direction of motion, x′∥ across and t′ up at equal scales, with the
+  observer's now, its light cone, the lab's now and proper-time ticks every `CLOCK_PERIOD/2`.
+  In the lab its axes are lab x and t through the camera's centre.
+- **Shortcuts:** B cycles frames (skipping the particle frame without a selection),
+  L returns to the lab, G toggles the grid.
+
 ### Black holes
 
 - **Horizon.** `kerrNewmanRadius()` (`config.js`): `r₊ = M + √(M² − a² − Q²)`,
@@ -330,9 +379,14 @@ per stage would land before the whole encoder ran (that bug left Φ ≡ 0 until
 ### Rendering
 
 `GPURenderer` draws on `#gpuCanvas`, behind the 2D `#simCanvas` that `Overlay` uses for
-the domain's edge (a hairline in the `--border` mix) and the spawn-drag line. Bodies,
-their clock rings, and their ring overlays share the camera uniforms' `relativityOn`,
-`blackHoleOn`, and `showClocks` flags. It clears to `_PALETTE.{light,dark}.canvas`, with light/dark
+the spawn-drag line. Each frame starts with the background grid (`grid-render.wgsl`), a
+full-screen pass that clears and then draws the lab rulers and the domain edge: hairlines at
+spacings 2^k, each level faded in between 12 and 24 px on screen, and the edge (or, in loop
+mode, the seams) in the `--border` mix. The grid is a sheet at rest in the lab, so in a
+non-lab frame each pixel maps back through the observer's slice and the rulers contract by
+1/γ along u and turn with co-rotation; `sim.view.grid` (G) hides the rulers but not the
+edge. Bodies, their clock rings, and their ring overlays share the camera uniforms'
+`relativityOn`, `blackHoleOn`, `showClocks`, `frameOn` and `frameImages` flags. It clears to `_PALETTE.{light,dark}.canvas`, with light/dark
 pipeline pairs that `setTheme()` swaps. `syncRendererTheme()` in `ui.js` sets both;
 `GPUBackend.create()` adopts `sim.overlay.isLight` after `renderer.init()` because it is
 created after the first sync. WGSL theme colors are light/dark constant pairs picked by
@@ -415,6 +469,10 @@ canvas text needs no font-load redraw.
   reading the code, not reproduced).
 - The `torque-render.wgsl` header table swaps the contact (0.5) and superradiance (1.0)
   arc offsets relative to `getTorqueOffset()`.
+- The `magnetic` preset drives a body to about 0.99c, as it did before the 2026-10-23
+  force-law fixes.
+- `preset-select`'s shared-dropdown label may not refresh when a preset loads from the
+  keyboard; `FramePanel._sync()` shows the fix (dispatch `change` after setting the value).
 - The Kepler preset places its planets at random angles without zeroing the total
   momentum, so the system drifts at up to ~0.1c.
 - `sim.totalRadiated` only ever decreases (kugelblitz): nothing adds GPU-emitted

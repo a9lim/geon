@@ -7,7 +7,7 @@
 // rendered cache (handled by main.js's i18n change handler).
 
 const REF_KEYS = [
-    'gravity', 'coulomb', 'magnetic', 'gravitomag', 'relativity', 'radiation',
+    'gravity', 'coulomb', 'magnetic', 'gravitomag', 'relativity', 'frames', 'radiation',
     'onepn', 'blackhole', 'kugelblitz', 'spinorbit', 'yukawa', 'axion', 'higgs',
     'expansion', 'disintegration', 'barneshut', 'collision', 'boundary',
     'topology', 'external', 'spin', 'charge', 'energy', 'pion',
