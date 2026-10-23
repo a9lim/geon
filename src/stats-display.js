@@ -73,8 +73,10 @@ export default class StatsDisplay {
         // the ledger can dwarf the starting total (a frozen field's slab energy grows as a³)
         const eScale = Math.max(Math.abs(this.initialEnergy ?? 0), Math.abs(total), Math.abs(L.expansionWork), 1e-6);
         const eDrift = this.initialEnergy !== null ? ((ledgerTotal - this.initialEnergy) / eScale * 100) : 0;
-        const pDrift = this.initialMomentum !== null
-            ? ((pComoving - this.initialMomentum) / Math.max(Math.abs(this.initialMomentum), 1e-6) * 100) : 0;
+        // Relative to the system's momentum scale √(2M·KE) too: a system at rest (zero total
+        // momentum) would otherwise divide float noise by nothing
+        const pScale = Math.max(Math.abs(this.initialMomentum ?? 0), pComoving, Math.sqrt(2 * e.totalMass * e.linearKE), 1e-6);
+        const pDrift = this.initialMomentum !== null ? ((pComoving - this.initialMomentum) / pScale * 100) : 0;
         const aDrift = this.initialAngMom !== null
             ? ((angMom - this.initialAngMom) / Math.max(Math.abs(this.initialAngMom), 1e-6) * 100) : 0;
 
