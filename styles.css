@@ -46,20 +46,6 @@
     min-width: 0;
 }
 
-/* GPU indicator — italic "on GPU" next to the title */
-.gpu-indicator {
-    font-style: italic;
-    font-weight: 400;
-    color: var(--ext-green);
-    margin-left: 6px;
-    user-select: none;
-    font-size: 1em;
-    vertical-align: baseline;
-}
-
-/* Mincho has no italic: keep the Japanese badge upright */
-:lang(ja) .gpu-indicator { font-style: normal; }
-
 /* ─── Language Toggle Button ─── */
 /* Text-pill: label shows the destination language in its own script
    (日本語 in EN, EN in JA). Mirrors root-site .lang-toggle. */

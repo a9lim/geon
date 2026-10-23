@@ -1,8 +1,5 @@
-import Particle from './particle.js';
-import { angwToAngVel } from './relativity.js';
-import { DEFAULT_SPEED_SCALE, SPEED_OPTIONS, DEFAULT_SPEED_INDEX, MAX_PARTICLES, COL_NAMES, BOUND_NAMES, TOPO_NAMES, colFromString, boundFromString, topoFromString } from './config.js';
-import { BACKEND_GPU } from './backend-interface.js';
-import { PARAMETER_KEYS, TOGGLE_KEYS } from './physics-contract.js';
+import { DEFAULT_SPEED_SCALE, SPEED_OPTIONS, DEFAULT_SPEED_INDEX, colFromString, boundFromString, topoFromString } from './config.js';
+import { PARAMETER_KEYS } from './physics-contract.js';
 
 // Maps physics flag names to UI toggle element IDs (same order as presets.js TOGGLE_ORDER)
 const TOGGLE_SYNC = [
@@ -31,7 +28,7 @@ const MODE_SYNC = [
 ];
 
 function syncUI(sim) {
-    const ph = sim.physics;
+    const ph = sim.settings;
     // Sync toggle checkboxes (parent-first order triggers dependency cascades)
     for (const [prop, elId] of TOGGLE_SYNC) {
         const el = document.getElementById(elId);
@@ -76,87 +73,43 @@ function syncUI(sim) {
 }
 
 /**
- * Save simulation state. Async for GPU backend (requires buffer readback).
+ * Save simulation state (async: reads particle buffers back from the GPU).
  * @param {Object} sim
- * @returns {Promise<Object>|Object} State object (async for GPU, sync for CPU)
+ * @returns {Promise<Object|null>} State object, or null before WebGPU is up
  */
 export async function saveState(sim) {
-    if (sim.backend === BACKEND_GPU && sim._gpuPhysics) {
-        return await sim._gpuPhysics.serialize(sim);
-    }
-    return _cpuSaveState(sim);
-}
-
-function _cpuSaveState(sim) {
-    const state = {
-        version: 1,
-        particles: sim.particles.map(p => ({
-            x: p.pos.x, y: p.pos.y,
-            wx: p.w.x, wy: p.w.y,
-            mass: p.mass, baseMass: p.baseMass, charge: p.charge, angw: p.angw, antimatter: p.antimatter,
-        })),
-        toggles: {},
-        settings: {
-            collision: COL_NAMES[sim.collisionMode],
-            boundary: BOUND_NAMES[sim.boundaryMode],
-            topology: TOPO_NAMES[sim.topology],
-            speed: sim.speedScale,
-            friction: sim.physics.bounceFriction,
-        },
-        camera: { x: sim.camera.x, y: sim.camera.y, zoom: sim.camera.zoom },
-    };
-    const ph = sim.physics;
-    for (const key of TOGGLE_KEYS) {
-        state.toggles[key] = ph[key];
-    }
-    for (const key of PARAMETER_KEYS) state[key] = ph[key];
-    return state;
+    if (!sim._gpuPhysics) return null;
+    return await sim._gpuPhysics.serialize(sim);
 }
 
 export function loadState(state, sim) {
-    if (!state || state.version !== 1) return false;
+    if (!state || state.version !== 1 || !sim._gpuPhysics) return false;
 
-    if (sim.backend === BACKEND_GPU && sim._gpuPhysics) {
-        // deserialize() calls reset() internally, then uploads particles to GPU
-        const ok = sim._gpuPhysics.deserialize(state, sim);
-        if (ok) {
-            // Clear CPU-side state (GPU is authoritative)
-            sim.particles.length = 0;
-            sim.deadParticles.length = 0;
-            sim.clearBosons();
-            sim.selectedParticle = null;
-            sim.totalRadiated = 0;
-            sim.totalRadiatedPx = 0;
-            sim.totalRadiatedPy = 0;
+    // deserialize() calls reset() internally, then uploads particles to GPU
+    const ok = sim._gpuPhysics.deserialize(state, sim);
+    if (!ok) return false;
+    sim.select(-1);
+    sim.totalRadiated = 0;
+    sim.totalRadiatedPx = 0;
+    sim.totalRadiatedPy = 0;
 
-            // Restore toggles to CPU physics (for UI sync and slider state)
-            const ph = sim.physics;
-            if (state.toggles) {
-                for (const [key, val] of Object.entries(state.toggles)) {
-                    if (key in ph) ph[key] = val;
-                }
-            }
-            for (const key of PARAMETER_KEYS) {
-                if (state[key] !== undefined && state[key] !== null) ph[key] = state[key];
-            }
-            if (state.settings && state.settings.friction != null) ph.bounceFriction = state.settings.friction;
-
-            _restoreSettings(state, sim);
-
-            // Sync GPU toggles/modes from restored CPU physics state
-            const gpuToggles = Object.create(ph);
-            gpuToggles.heatmapEnabled = sim.heatmap && sim.heatmap.enabled;
-            sim._gpuPhysics.setToggles(gpuToggles);
-            sim._gpuPhysics.boundaryMode = sim.boundaryMode;
-            sim._gpuPhysics.topologyMode = sim.topology;
-            sim._gpuPhysics._collisionMode = sim.collisionMode;
-
-            sim.stats.resetBaseline();
-            syncUI(sim);
+    // Restore toggles and parameters to the settings store (UI sync reads it)
+    const ph = sim.settings;
+    if (state.toggles) {
+        for (const [key, val] of Object.entries(state.toggles)) {
+            if (key in ph) ph[key] = val;
         }
-        return ok;
     }
-    return _cpuLoadState(state, sim);
+    for (const key of PARAMETER_KEYS) {
+        if (state[key] !== undefined && state[key] !== null) ph[key] = state[key];
+    }
+    if (state.settings && state.settings.friction != null) ph.bounceFriction = state.settings.friction;
+
+    _restoreSettings(state, sim);
+    sim.gpu.applySettings(sim);
+    sim.stats.resetBaseline();
+    syncUI(sim);
+    return true;
 }
 
 function _restoreSettings(state, sim) {
@@ -183,43 +136,9 @@ function _restoreSettings(state, sim) {
     }
 }
 
-function _cpuLoadState(state, sim) {
-    sim.reset();
-
-    const ph = sim.physics;
-    for (const [key, val] of Object.entries(state.toggles)) {
-        if (key in ph) ph[key] = val;
-    }
-    for (const key of PARAMETER_KEYS) {
-        if (state[key] !== undefined && state[key] !== null) ph[key] = state[key];
-    }
-
-    _restoreSettings(state, sim);
-    if (state.settings && state.settings.friction != null) ph.bounceFriction = state.settings.friction;
-
-    for (const pd of state.particles) {
-        if (sim.particles.length >= MAX_PARTICLES) break;
-        const p = new Particle(pd.x, pd.y, pd.mass, pd.charge);
-        p.baseMass = pd.baseMass ?? pd.mass;
-        p.angw = pd.angw;
-        p.antimatter = pd.antimatter || false;
-        p.creationTime = -Infinity; // loaded particles treated as always existing
-        p.w.x = pd.wx;
-        p.w.y = pd.wy;
-        p.updateColor();
-        const invG = ph.relativityEnabled ? 1 / Math.sqrt(1 + p.w.magSq()) : 1;
-        p.vel.x = p.w.x * invG;
-        p.vel.y = p.w.y * invG;
-        p.angVel = ph.relativityEnabled ? angwToAngVel(p.angw, p.radius) : p.angw;
-        sim.particles.push(p);
-    }
-    sim.stats.resetBaseline();
-    syncUI(sim);
-    return true;
-}
-
 export async function downloadState(sim) {
     const state = await saveState(sim);
+    if (!state) return;
     const json = JSON.stringify(state);
     const blob = new Blob([json], { type: 'application/json' });
     const a = document.createElement('a');
@@ -256,6 +175,7 @@ export function uploadState(sim, onComplete) {
 
 export async function quickSave(sim) {
     const state = await saveState(sim);
+    if (!state) return;
     localStorage.setItem('nohair-quicksave', JSON.stringify(state));
     showToast((window._i18n && window._i18n.t('toast.quickSaved')) || 'Quick saved');
 }

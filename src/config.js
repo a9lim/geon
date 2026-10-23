@@ -4,7 +4,6 @@
 // ── Math ──
 export const PI = Math.PI;
 export const TWO_PI = 2 * Math.PI;
-export const HALF_PI = Math.PI / 2;
 
 // ── Mode Enums ──
 export const COL_PASS = 0;
@@ -62,23 +61,17 @@ export const TIDAL_STRENGTH = 64;
 // ── Barnes-Hut ──
 export const BH_THETA = 0.5;
 export const BH_THETA_SQ = BH_THETA * BH_THETA;
-export const QUADTREE_CAPACITY = 4;
 
 // ── Radiation & Bosons ──
 // Pool culls: photons and leptons are removed after this lab-time age.
 // Non-physical (leptons are stable, photons don't expire); they bound the pools.
 export const PHOTON_CULL_AGE = 256;
-export const MAX_PHOTONS = 1024;
-export const MAX_PIONS = 256;
-export const MAX_LEPTONS = 256;
 export const GPU_MAX_PHOTONS = 4096;
 export const GPU_MAX_PIONS = 1024;
 export const GPU_MAX_LEPTONS = 1024;
 export const LEPTON_CULL_AGE = 512;
 export const PION_HALF_LIFE = 32;         // pi0 rest-frame half-life (fast EM decay)
 export const CHARGED_PION_HALF_LIFE = 64; // pi+/- rest-frame half-life (slower weak decay)
-export const PION_DECAY_PROB = 1 - Math.exp(-Math.LN2 / PION_HALF_LIFE * PHYSICS_DT);
-export const CHARGED_PION_DECAY_PROB = 1 - Math.exp(-Math.LN2 / CHARGED_PION_HALF_LIFE * PHYSICS_DT);
 export const ELECTRON_MASS = 0.01;                // decay product mass for pi+/- -> e+/- + photon
 export const BOSON_CHARGE = 0.1;                  // magnitude of pion/lepton charge (tunable)
 export const MAX_REJECTION_SAMPLES = 32;     // quadrupole rejection sampling cap
@@ -89,7 +82,6 @@ export const YUKAWA_COUPLING = 14;           // g² coupling strength (fixed)
 export const DEFAULT_PION_MASS = 0.15;       // mediator mass (inverse range), ~m_π/m_N
 
 // ── Scalar Fields (Higgs & Axion) ──
-export const SCALAR_GRID = 64;
 export const SCALAR_FIELD_MAX = 2;           // field value clamp
 export const FIELD_EXCITATION_SIGMA = 2;     // Gaussian width in grid cells (merge wave packets)
 
@@ -97,7 +89,6 @@ export const DEFAULT_HIGGS_MASS = 0.50;      // m_H (oscillation frequency), ~m_
 export const HIGGS_COUPLING = 1;             // g (source = g·baseMass, force = g·baseMass·∇φ)
 export const HIGGS_MASS_FLOOR = 0.05;        // min |φ| for mass: m ≥ 0.05·baseMass (caps accel at 20×)
 export const HIGGS_MASS_MAX_DELTA = 8;       // max mass change per unit time (prevents resonant throb)
-export const SELFGRAV_PHI_MAX = 0.25;        // CPU field path only (retiring with it)
 export const METRIC_PHI_CLAMP = 8;           // NaN guard on the GPU metric potential; e^{±2Φ} stays finite in f32
 
 export const DEFAULT_AXION_MASS = 0.05;      // m_a (oscillation frequency)
@@ -108,7 +99,6 @@ export const HIGGS_AXION_COUPLING = 0.01;    // λ in V_portal = ½λφ²a² (Hi
 export const SPAWN_COUNT = 4;
 export const SPAWN_OFFSET_MULTIPLIER = 1.5;
 export const SPAWN_OFFSET_FLOOR = 1;
-export const SPAWN_MIN_ENERGY = 0.01;         // min energy per emitted photon (Hawking / annihilation)
 export const ROCHE_THRESHOLD = 0.9;
 export const ROCHE_TRANSFER_RATE = 0.1;      // fraction of donor mass per unit donor proper time, per unit overflow
 
@@ -124,7 +114,6 @@ export const HISTORY_STRIDE = 64;            // ~120 snapshots/second
 // ── GPU-Specific ──
 export const GPU_SCALAR_GRID = 128;            // GPU scalar field grid resolution
 export const GPU_HEATMAP_GRID = 128;           // GPU heatmap overlay resolution (tunable to 128)
-export const MAX_PARTICLES = 128;             // CPU particle pool cap
 export const GPU_MAX_PARTICLES = 512;         // GPU buffer pre-allocation limit
 
 // ── Cosmological Expansion ──
@@ -146,15 +135,11 @@ export const SHOOT_VELOCITY_SCALE = 0.02;
 export const MAX_TRAIL_LENGTH = 256;
 export const DISPLAY_SCALE = 100;
 export const STATS_THROTTLE_MASK = 7;           // stats update every 8th frame
-export const FIELD_THROTTLE_MASK = 1;            // field overlay render every 2nd frame
-export const SIDEBAR_THROTTLE_MASK = 3;           // phase/effpot/selected update every 4th frame
 export const PHASE_BUFFER_LEN = 512;
-export const HEATMAP_GRID = 64;
 export const HEATMAP_INTERVAL_MASK = 3;      // heatmap update every 4th render frame (bitmask)
 export const HEATMAP_SENSITIVITY = 2;
 export const HEATMAP_MAX_ALPHA = 100;
 export const VELOCITY_VECTOR_SCALE = 32;
-export const FORCE_VECTOR_SCALE = 256;
 
 // ── Helpers ──
 
@@ -168,21 +153,6 @@ export function kerrNewmanRadius(M, radiusSq, angVel, charge) {
     const a = INERTIA_K * radiusSq * Math.abs(angVel);
     const disc = M * M - a * a - charge * charge;
     return disc >= 0 ? M + Math.sqrt(Math.max(0, disc)) : M;
-}
-
-/** Quantized charge bound for Kerr-Newman black-hole mode. */
-export function blackHoleChargeLimit(M, radiusSq, angVel) {
-    if (!(M > EPSILON)) return 0;
-    const a = INERTIA_K * radiusSq * Math.abs(angVel);
-    return Math.sqrt(Math.max(0, M * M - a * a));
-}
-
-/** Backstop: clamp charge to the largest BOSON_CHARGE quantum within the KN bound. */
-export function quantizedCensoredBlackHoleCharge(M, radiusSq, angVel, charge) {
-    const absQ = Math.abs(charge);
-    if (absQ < EPSILON) return 0;
-    const maxQuantum = Math.floor((blackHoleChargeLimit(M, radiusSq, angVel) + EPSILON) / BOSON_CHARGE) * BOSON_CHARGE;
-    return absQ <= maxQuantum + EPSILON ? charge : Math.sign(charge) * maxQuantum;
 }
 
 /** Source horizon for force/potential helpers, deriving angular velocity from L when needed. */

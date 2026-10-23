@@ -43,7 +43,7 @@ import {
     COL_MERGE, COL_BOUNCE, BOUND_LOOP,
     COL_NAMES, BOUND_NAMES, TOPO_NAMES,
     SOFTENING, BH_SOFTENING, SOFTENING_SQ, BH_SOFTENING_SQ, SHEET_THICKNESS_SQ,
-    HIGGS_MASS_FLOOR, HIGGS_MASS_MAX_DELTA,
+    HIGGS_MASS_FLOOR, HIGGS_MASS_MAX_DELTA, HIGGS_COUPLING, AXION_COUPLING,
     TIDAL_STRENGTH, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, MIN_MASS, SPAWN_COUNT, BOSON_CHARGE,
 } from '../config.js';
 import { GPU_PARAMETER_SLOTS } from '../physics-contract.js';
@@ -289,8 +289,8 @@ export default class GPUPhysics {
         this._cachedExtEy = 0;
         this._bounceFriction = 0.4;
         this._collisionMode = 0;
-        this._axionCoupling = 0.05;
-        this._higgsCoupling = 1.0;
+        this._axionCoupling = AXION_COUPLING;
+        this._higgsCoupling = HIGGS_COUPLING;
         this._dispatchPlan = createGPUDispatchPlan();
 
         // Phase 5: Scalar field buffers (lazy-allocated on first toggle-on)
@@ -2056,8 +2056,8 @@ export default class GPUPhysics {
         this._cachedExtEy = (physics.extElectric || 0) * Math.sin(elecAngle);
         this._bounceFriction = physics.bounceFriction;
         this._collisionMode = physics.collisionMode || 0;
-        this._axionCoupling = 0.05;
-        this._higgsCoupling = 1.0;
+        this._axionCoupling = AXION_COUPLING;
+        this._higgsCoupling = HIGGS_COUPLING;
 
         // Phase 5 toggle state
         this._higgsEnabled = physics.higgsEnabled;
@@ -4008,7 +4008,7 @@ export default class GPUPhysics {
     /**
      * Read the result of a previously queued GPU hit test.
      * Returns null if not ready yet, or an object:
-     *   { index, mass, charge, radius, velX, velY, angVel, posX, posY }
+     *   { index, mass, charge, radius, velX, velY, angVel, posX, posY, antimatter }
      * index is -1 if no particle was hit.
      */
     readHitResult() {
@@ -4019,6 +4019,7 @@ export default class GPUPhysics {
         const f = this._hitStagingF32;
         return {
             index: idx,
+            antimatter: (this._hitStagingI32[9] & FLAG_ANTIMATTER) !== 0,
             mass: f[1],
             charge: f[2],
             radius: f[3],
@@ -4157,6 +4158,7 @@ export default class GPUPhysics {
             pfiEnergy: d[16] + d[17], // higgs + axion particle-field interaction
             scalarFieldMomX: d[18], scalarFieldMomY: d[19],
             selected: null,
+            reference: null,
         };
 
         // Selected particle data at offset 32 (mass = -1 signals no selection)
@@ -4184,6 +4186,17 @@ export default class GPUPhysics {
                 forceExternal:   { x: d[64], y: d[65] },
                 forceHiggs:      { x: d[66], y: d[67] },
                 forceAxion:      { x: d[68], y: d[69] },
+                axMod: d[70], yukMod: d[71], higgsMod: d[72],
+            };
+        }
+        if (d[84] > 0) {
+            result.reference = {
+                index: new Uint32Array(d.buffer, 91 * 4, 1)[0],
+                posX: d[80], posY: d[81],
+                velX: d[82], velY: d[83],
+                mass: d[84], charge: d[85],
+                angVel: d[86], magMoment: d[87], angMomentum: d[88],
+                radius: d[89], higgsMod: d[90],
             };
         }
         return result;

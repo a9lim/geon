@@ -1,47 +1,25 @@
-import Physics from './src/integrator.js';
-import Renderer from './src/renderer.js';
 import InputHandler from './src/input.js';
-import Particle from './src/particle.js';
-import Heatmap from './src/heatmap.js';
-import HiggsField from './src/higgs-field.js';
-import AxionField from './src/axion-field.js';
+import Overlay from './src/overlay.js';
 import PhasePlot from './src/phase-plot.js';
 import EffectivePotentialPlot from './src/effective-potential.js';
 import StatsDisplay from './src/stats-display.js';
 import { setupUI } from './src/ui.js';
 import { init as initI18n, setLang as setI18nLang, getLang as getI18nLang, t as tI18n, onChange as onI18nChange } from './src/i18n.js';
-import { TWO_PI, WORLD_SCALE, ZOOM_MIN, ZOOM_MAX, WHEEL_ZOOM_IN, DEFAULT_SPEED_SCALE, DEFAULT_SPEED_INDEX, SPAWN_MIN_ENERGY, PHYSICS_DT, MAX_SUBSTEPS, MAX_PHOTONS, MAX_FRAME_DT, ACCUMULATOR_CAP, COL_PASS, BOUND_DESPAWN, TORUS, STATS_THROTTLE_MASK, MAX_PARTICLES, BOSON_CHARGE, MAX_SPEED_RATIO, EPSILON, spawnOffset, kerrNewmanRadius } from './src/config.js';
-import MasslessBoson from './src/massless-boson.js';
-import Pion from './src/pion.js';
-import Lepton from './src/lepton.js';
-
-import { setVelocity, angwToAngVel } from './src/relativity.js';
+import { WORLD_SCALE, ZOOM_MIN, ZOOM_MAX, WHEEL_ZOOM_IN, DEFAULT_SPEED_SCALE, DEFAULT_SPEED_INDEX, PHYSICS_DT, MAX_SUBSTEPS, MAX_FRAME_DT, ACCUMULATOR_CAP, COL_PASS, BOUND_DESPAWN, TORUS, STATS_THROTTLE_MASK, BOSON_CHARGE, MAX_SPEED_RATIO } from './src/config.js';
+import { createPhysicsSettings } from './src/physics-settings.js';
 import { loadState, quickSave, quickLoad, downloadState, uploadState } from './src/save-load.js';
-
-import { BACKEND_CPU, BACKEND_GPU } from './src/backend-interface.js';
-import CPUPhysics from './src/cpu-physics.js';
 import GPUBackend from './src/gpu/gpu-backend.js';
 
 /**
- * Detect WebGPU support and return the best available backend.
- * @returns {Promise<{backend: string, device?: GPUDevice}>}
+ * Request a WebGPU device with the limits the simulation needs.
+ * @returns {Promise<GPUDevice|null>} null when WebGPU is unavailable.
  */
-async function selectBackend() {
-    // Allow ?cpu=1 URL param to force CPU backend
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('cpu') === '1') {
-        console.log('[physsim] CPU backend forced via ?cpu=1');
-        return { backend: BACKEND_CPU };
-    }
-
-    if (typeof navigator === 'undefined' || !navigator.gpu) {
-        return { backend: BACKEND_CPU };
-    }
+async function requestDevice() {
+    if (typeof navigator === 'undefined' || !navigator.gpu) return null;
     try {
         const adapter = await navigator.gpu.requestAdapter();
-        if (!adapter) return { backend: BACKEND_CPU };
-
-        const device = await adapter.requestDevice({
+        if (!adapter) return null;
+        return await adapter.requestDevice({
             requiredLimits: {
                 maxStorageBufferBindingSize: 256 * 1024 * 1024,
                 maxBufferSize: 256 * 1024 * 1024,
@@ -51,64 +29,62 @@ async function selectBackend() {
                 maxBindingsPerBindGroup: adapter.limits.maxBindingsPerBindGroup,
             },
         });
-        if (!device) return { backend: BACKEND_CPU };
-
-        return { backend: BACKEND_GPU, device };
     } catch (e) {
-        console.warn('WebGPU detection failed:', e);
-        return { backend: BACKEND_CPU };
+        console.warn('[geon] WebGPU device request failed:', e);
+        return null;
     }
 }
 
-/**
- * Attempt to re-acquire GPU device after a loss.
- * Does not auto-switch — just logs availability.
- */
-async function _attemptGPURecovery() {
-    await new Promise(r => setTimeout(r, 5000));
-    try {
-        const adapter = await navigator.gpu.requestAdapter();
-        if (!adapter) return;
-        const newDevice = await adapter.requestDevice();
-        if (!newDevice) return;
-        console.log('[physsim] WebGPU device recovered — GPU backend available again');
-    } catch (e) {
-        console.warn('[physsim] GPU recovery failed:', e);
-    }
-}
-
-function updateBackendBadge(backend) {
-    const ind = document.getElementById('gpu-indicator');
-    if (ind) ind.hidden = backend !== 'gpu';
+/** The opening popup for browsers without WebGPU: Geon has no other backend. */
+function showWebGPURequired() {
+    if (document.getElementById('webgpu-overlay')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'webgpu-overlay';
+    overlay.className = 'sim-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'webgpu-title');
+    overlay.innerHTML = `
+        <div class="sim-overlay-panel glass">
+            <div class="stats-header">
+                <h2 id="webgpu-title" class="stats-title"></h2>
+                <button class="tool-btn"></button>
+            </div>
+            <div class="sim-overlay-body"><p class="webgpu-body"></p><p class="webgpu-browsers"></p></div>
+        </div>`;
+    const fill = () => {
+        overlay.querySelector('#webgpu-title').textContent = tI18n('webgpu.title');
+        overlay.querySelector('.webgpu-body').textContent = tI18n('webgpu.body');
+        overlay.querySelector('.webgpu-browsers').textContent = tI18n('webgpu.browsers');
+        const close = overlay.querySelector('button');
+        close.setAttribute('aria-label', tI18n('webgpu.close'));
+        close.title = tI18n('webgpu.close');
+    };
+    fill();
+    onI18nChange(fill);
+    if (typeof _ICON !== 'undefined') overlay.querySelector('button').innerHTML = _ICON.at('close', 16);
+    const dismiss = () => overlay.remove();
+    overlay.querySelector('button').addEventListener('click', dismiss);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) dismiss(); });
+    document.addEventListener('keydown', function onKey(e) {
+        if (e.key === 'Escape') { dismiss(); document.removeEventListener('keydown', onKey); }
+    });
+    document.body.appendChild(overlay);
+    overlay.querySelector('button').focus();
 }
 
 class Simulation {
     constructor() {
         this.canvas = document.getElementById('simCanvas');
-        this.ctx = this.canvas.getContext('2d');
         this.width = window.innerWidth;
         this.height = window.innerHeight;
 
-        // Pre-allocate particle array to MAX_PARTICLES to avoid reallocation
-        this.particles = [];
-        this.particles.length = MAX_PARTICLES;
-        this.particles.length = 0;
-        this.deadParticles = [];
-        this.physics = new Physics();
-        this.renderer = new Renderer(this.ctx, this.width, this.height);
+        this.settings = createPhysicsSettings();
+        this.overlay = new Overlay(this.canvas);
+        this.view = { trails: true, showVelocity: false, showForce: false, showForceComponents: false };
+        this.heatmap = { enabled: false, mode: 'all' };
         this.domainW = this.width / WORLD_SCALE;
         this.domainH = this.height / WORLD_SCALE;
-        this._domainDiagonal = 2 * Math.sqrt(this.domainW * this.domainW + this.domainH * this.domainH);
-        this.renderer.domainW = this.domainW;
-        this.renderer.domainH = this.domainH;
-        this.renderer.setTheme(true);
-
-        this.heatmap = new Heatmap();
-        this.renderer.heatmap = this.heatmap;
-
-        // A11: Lazy field initialization — defer grid allocations until first toggle-on
-        this.higgsField = null;
-        this.axionField = null;
 
         this.phasePlot = new PhasePlot();
         this.effPotPlot = new EffectivePotentialPlot();
@@ -133,17 +109,16 @@ class Simulation {
         });
 
         this.input = new InputHandler(this.canvas, this);
-        this.renderer.input = this.input;
 
         this.lastTime = 0;
         this.running = true;
         this.accumulator = 0;
         this._hidden = false;
         this._loopScheduled = false; // prevent duplicate rAF chains
-        this._hmFrame = 0; // heatmap throttle counter
         this._sbFrame = 0;
         this._ttFrame = 0; // tooltip refresh throttle counter
         this._dirty = true; // render dirty flag — skip frames when nothing changed
+        this._statsDirty = false; // request stats on the next frame even while paused
 
         this.speedIndex = DEFAULT_SPEED_INDEX;
         this.dom = {
@@ -170,21 +145,14 @@ class Simulation {
         this.boundaryMode = BOUND_DESPAWN;
         this.topology = TORUS;
         this.speedScale = DEFAULT_SPEED_SCALE;
-        this.selectedParticle = null;
-        this.photons = [];
-        this.pions = [];
-        this.leptons = [];
-        this._MasslessBosonClass = MasslessBoson;  // expose for Pion.decay()
+        this.selectedIdx = -1; // GPU slot of the selected particle, -1 for none
         this.totalRadiated = 0;
         this.totalRadiatedPx = 0;
         this.totalRadiatedPy = 0;
-        this.physics.sim = this;
 
-        // Backend detection (async, completes after first frame)
-        this.backend = BACKEND_CPU;
-        this._cpuPhysics = new CPUPhysics(this.physics);
-        this._gpuReady = false;
-        this._gpuBackend = null;
+        this.gpu = null;          // GPUBackend once WebGPU is up
+        this._gpuPhysics = null;
+        this._gpuRenderer = null;
 
         // Selected particle DOM refs
         this.selDom = {
@@ -228,7 +196,7 @@ class Simulation {
 
         this.stats = new StatsDisplay(this.dom, this.selDom);
 
-        // C2: Pre-allocate render options objects to avoid per-frame allocation
+        // Pre-allocated render options objects (avoid per-frame allocation)
         this._enabledForces = {
             gravity: false, coulomb: false, magnetic: false, gravitomag: false,
             onePN: false, spinOrbit: false, radiation: false, yukawa: false,
@@ -248,115 +216,52 @@ class Simulation {
         };
         this._renderOpts.heatmapOpts = this._heatmapOpts;
 
-        // C13: Cache sidebar plot visibility check elements (lazily resolved after DOM is ready)
+        // Lazily resolved sidebar visibility elements
         this._particleTabEl = null;
         this._controlPanelEl = null;
 
-        selectBackend().then(async ({ backend, device }) => {
-            this.backend = backend;
-            this._gpuDevice = device || null;
-            updateBackendBadge(backend);
-            console.log(`[physsim] Backend: ${backend}${device ? ' (WebGPU available)' : ''}`);
-
-            if (backend === BACKEND_GPU && device) {
-                try {
-                    const gpuBackend = await GPUBackend.create(this, device);
-                    this._gpuBackend = gpuBackend;
-                    this._gpuPhysics = gpuBackend.physics;
-                    this._gpuRenderer = gpuBackend.renderer;
-                    this._gpuReady = true;
-
-                    console.log('[physsim] GPU backend initialized');
-                    if (this._onGPUReady) this._onGPUReady();
-
-                    // Register device.lost handler for error recovery
-                    device.lost.then((info) => {
-                        console.error('[physsim] GPU device lost:', info.message);
-                        this._gpuReady = false;
-                        this.backend = BACKEND_CPU;
-                        updateBackendBadge(BACKEND_CPU);
-                        gpuBackend.canvas.remove();
-
-                        // Restore from auto-save if available
-                        if (gpuBackend.autoSave) {
-                            loadState(gpuBackend.autoSave, this);
-                            showToast(tI18n('gpu.lostRestored', 'GPU lost \u2014 restored from auto-save (CPU mode)'));
-                        } else {
-                            showToast(tI18n('gpu.lostSwitched', 'GPU lost \u2014 switched to CPU mode'));
-                        }
-
-                        this._dirty = true;
-                        if (this._onGPULost) this._onGPULost();
-                        _attemptGPURecovery();
-                    });
-
-                } catch (e) {
-                    console.error('[physsim] GPU init failed, falling back to CPU:', e);
-                    this._gpuReady = false;
-                    this.backend = BACKEND_CPU;
-                    updateBackendBadge(BACKEND_CPU);
-                }
-            }
-        });
-
         this.init();
+        this.startGPU();
     }
 
-    get runtimeBackend() {
-        return (this.backend === BACKEND_GPU && this._gpuReady && this._gpuBackend)
-            ? this._gpuBackend
-            : this._cpuPhysics;
+    async startGPU() {
+        const device = await requestDevice();
+        if (!device) { showWebGPURequired(); return; }
+        await this._attachDevice(device);
     }
 
-    useGPUBackend() {
-        if (!this._gpuReady || !this._gpuBackend) return false;
-        this.backend = BACKEND_GPU;
-        this._gpuBackend.activateFromCPU(this);
-        updateBackendBadge(BACKEND_GPU);
-        this._dirty = true;
-        return true;
-    }
-
-    useCPUBackend() {
-        this.backend = BACKEND_CPU;
-        const gpuCanvas = document.getElementById('gpuCanvas');
-        if (gpuCanvas) gpuCanvas.style.display = 'none';
-        updateBackendBadge(BACKEND_CPU);
-        this._dirty = true;
-    }
-
-    _restoreParticleFromSaveData(pd) {
-        const p = new Particle(pd.x, pd.y, pd.mass, pd.charge);
-        p.baseMass = pd.baseMass ?? pd.mass;
-        p.antimatter = pd.antimatter || false;
-        p.w.set(pd.wx, pd.wy);
-        p.angw = pd.angw;
-        const wSq = pd.wx * pd.wx + pd.wy * pd.wy;
-        const gamma = Math.sqrt(1 + wSq);
-        p.vel.set(pd.wx / gamma, pd.wy / gamma);
-        p.angVel = this.physics.relativityEnabled
-            ? pd.angw / Math.sqrt(1 + pd.angw * pd.angw * p.radius * p.radius)
-            : pd.angw;
-        p.creationTime = this.physics.simTime;
-        p.updateColor();
-        this.particles.push(p);
-        return p;
-    }
-
-    // A11: Lazy field initialization — create on first use
-    ensureHiggsField() {
-        if (!this.higgsField) {
-            this.higgsField = new HiggsField();
-            this.renderer.higgsField = this.higgsField;
+    /** Build the GPU backend on a device, optionally restoring a saved state into it. */
+    async _attachDevice(device, restore = null) {
+        let backend;
+        try {
+            backend = await GPUBackend.create(this, device);
+        } catch (e) {
+            console.error('[geon] GPU init failed:', e);
+            showWebGPURequired();
+            return;
         }
-        return this.higgsField;
+        this.gpu = backend;
+        this._gpuPhysics = backend.physics;
+        this._gpuRenderer = backend.renderer;
+        if (restore) loadState(restore, this);
+        device.lost.then((info) => this._onDeviceLost(backend, info));
+        this._dirty = true;
     }
-    ensureAxionField() {
-        if (!this.axionField) {
-            this.axionField = new AxionField();
-            this.renderer.axionField = this.axionField;
-        }
-        return this.axionField;
+
+    /** Recreate the device and restore the latest auto-save. */
+    async _onDeviceLost(backend, info) {
+        if (this.gpu !== backend) return;
+        console.error('[geon] GPU device lost:', info.message);
+        const restore = backend.autoSave;
+        this.gpu = null;
+        this._gpuPhysics = null;
+        this._gpuRenderer = null;
+        backend.canvas.remove();
+        if (info.reason === 'destroyed') return;
+        const device = await requestDevice();
+        if (!device) { showWebGPURequired(); return; }
+        await this._attachDevice(device, restore);
+        showToast(tI18n(restore ? 'gpu.lostRestored' : 'gpu.lostReset'));
     }
 
     init() {
@@ -372,7 +277,6 @@ class Simulation {
 
         // Re-apply DOM translations after UI setup in case any modules
         // mutated text content during their wiring (e.g. mode-btn label).
-        // Also re-translate on language change so dynamic content updates.
         if (window._i18n) window._i18n.applyDOM();
 
         // Save/Load buttons
@@ -489,13 +393,10 @@ class Simulation {
         this.canvas.height = this.height;
         this.domainW = this.width / WORLD_SCALE;
         this.domainH = this.height / WORLD_SCALE;
-        this._domainDiagonal = 2 * Math.sqrt(this.domainW * this.domainW + this.domainH * this.domainH);
-        this.renderer.resize(this.width, this.height);
-        this.renderer.domainW = this.domainW;
-        this.renderer.domainH = this.domainH;
+        this.overlay.resize(this.width, this.height);
         this.input.updateRect();
-        if (this._gpuBackend) this._gpuBackend.resize(this);
-        // R11: Refresh cached layout dimensions for sidebar plots
+        if (this.gpu) this.gpu.resize(this);
+        // Refresh cached layout dimensions for sidebar plots
         this.phasePlot.cacheSize();
         this.effPotPlot.cacheSize();
         // Preserve top-left world position across resize
@@ -506,144 +407,64 @@ class Simulation {
         this._dirty = true;
     }
 
+    /**
+     * Spawn a particle at (x, y) with coordinate velocity (vx, vy).
+     * options: mass, charge (rounded to BOSON_CHARGE quanta), spin (surface speed)
+     * or angw (proper angular velocity), antimatter, skipBaseline.
+     * @returns {number} GPU slot, or -1 if the pool is full or WebGPU is not up.
+     */
     addParticle(x, y, vx, vy, options = {}) {
-        const backend = this.runtimeBackend;
-        if (!backend.canAddParticle(this)) return;
-        // Always maintain CPU-side particle array (needed for presets, sidebar, etc.)
-        const p = new Particle(x, y);
-        p.mass = options.mass ?? 10;
-        p.baseMass = options.baseMass ?? p.mass;
-        p.charge = Math.round((options.charge ?? 0) / BOSON_CHARGE) * BOSON_CHARGE;
-        p.antimatter = this.physics.blackHoleEnabled ? false : (options.antimatter ?? false);
-        p.radius = Math.cbrt(p.mass);
-        p.radiusSq = p.radius * p.radius;
-        p.bodyRadiusSq = p.radiusSq;
-        p.invMass = 1 / p.mass;
-
-        p.creationTime = this.physics.simTime;
-        p.updateColor();
+        const gpu = this.gpu;
+        if (!gpu || !gpu.canAddParticle()) return -1;
+        const mass = options.mass ?? 10;
+        const charge = Math.round((options.charge ?? 0) / BOSON_CHARGE) * BOSON_CHARGE;
+        const antimatter = this.settings.blackHoleEnabled ? false : (options.antimatter ?? false);
 
         // Spin is surface velocity by default; internal callers can pass angw directly.
+        let angw;
         if (options.angw !== undefined) {
-            p.angw = options.angw;
+            angw = options.angw;
         } else {
-            let sv = options.spin ?? 0;
-            sv = clamp(sv, -MAX_SPEED_RATIO, MAX_SPEED_RATIO);
+            const sv = clamp(options.spin ?? 0, -MAX_SPEED_RATIO, MAX_SPEED_RATIO);
             const absSV = Math.abs(sv);
-            p.angw = absSV > 0 ? Math.sign(sv) * absSV / (Math.cbrt(p.mass) * Math.sqrt(1 - absSV * absSV)) : 0;
-        }
-        setVelocity(p, vx, vy);
-        p.angVel = this.physics.relativityEnabled ? angwToAngVel(p.angw, Math.sqrt(p.bodyRadiusSq)) : p.angw;
-        if (this.physics.blackHoleEnabled) {
-            p.radius = kerrNewmanRadius(p.mass, p.bodyRadiusSq, p.angVel, p.charge);
-            p.radiusSq = p.radius * p.radius;
-            p.updateColor();
+            angw = absSV > 0 ? Math.sign(sv) * absSV / (Math.cbrt(mass) * Math.sqrt(1 - absSV * absSV)) : 0;
         }
 
-        if (!backend.addParticle(this, p, { x, y, vx, vy })) return;
+        // Proper velocity w = γv, with |v| clamped below c
+        const speedSq = vx * vx + vy * vy;
+        if (speedSq >= 1) {
+            const s = MAX_SPEED_RATIO / Math.sqrt(speedSq);
+            vx *= s;
+            vy *= s;
+        }
+        const gamma = 1 / Math.sqrt(Math.max(1 - MAX_SPEED_RATIO * MAX_SPEED_RATIO, 1 - vx * vx - vy * vy));
 
-        this.particles.push(p);
+        const idx = gpu.addParticle({ x, y, vx: vx * gamma, vy: vy * gamma, mass, charge, angw, antimatter });
+        if (idx < 0) return -1;
         if (!options.skipBaseline) this.stats.resetBaseline();
         this._dirty = true;
+        return idx;
     }
 
-    /** Backend-agnostic reset: clears all simulation state. */
+    /** Clear the simulation: particles, bosons, fields, selection. */
     reset() {
-        // CPU state — pre-allocate backing store to avoid reallocation
-        this.particles = [];
-        this.particles.length = MAX_PARTICLES;
-        this.particles.length = 0;
-        this.deadParticles = [];
-        this.clearBosons();
         this.totalRadiated = 0;
         this.totalRadiatedPx = 0;
         this.totalRadiatedPy = 0;
-        this.selectedParticle = null;
-        this.physics._forcesInit = false;
-        if (this.higgsField) this.higgsField.reset();
-        if (this.axionField) this.axionField.reset();
-        // GPU state (if active)
-        if (this._gpuBackend) this._gpuBackend.reset(this);
+        this.select(-1);
+        if (this.gpu) this.gpu.reset(this);
     }
 
-    /** Release all active photons/pions/leptons to their pools and clear the arrays. */
-    clearBosons() {
-        for (let i = 0; i < this.photons.length; i++) MasslessBoson.release(this.photons[i]);
-        for (let i = 0; i < this.pions.length; i++) Pion.release(this.pions[i]);
-        for (let i = 0; i < this.leptons.length; i++) Lepton.release(this.leptons[i]);
-        this.photons.length = 0;
-        this.pions.length = 0;
-        this.leptons.length = 0;
-    }
-
-    emitPhotonBurst(x, y, energy, radius, emitterId) {
-        const n = Math.min(Math.max(1, Math.floor(energy / SPAWN_MIN_ENERGY)), MAX_PHOTONS - this.photons.length);
-        if (n <= 0) return;
-        const offset = spawnOffset(radius);
-        const ePerPh = energy / n;
-        for (let j = 0; j < n; j++) {
-            const angle = Math.random() * TWO_PI;
-            const cosA = Math.cos(angle), sinA = Math.sin(angle);
-            this._emitPhoton(x, y, cosA, sinA, ePerPh, offset, emitterId);
+    /** Select a particle by GPU slot (-1 clears); the sidebar fills on the next stats readback. */
+    select(idx) {
+        if (idx !== this.selectedIdx) {
+            this.phasePlot.reset();
+            this.effPotPlot.reset();
         }
-    }
-
-    _emitPhoton(x, y, dirX, dirY, energy, offset, emitterId) {
-        this.photons.push(MasslessBoson.acquire(
-            x + dirX * offset, y + dirY * offset,
-            dirX, dirY, energy, emitterId
-        ));
-        this.totalRadiated += energy;
-        this.totalRadiatedPx += energy * dirX;
-        this.totalRadiatedPy += energy * dirY;
-    }
-
-    emitPhotonBurstWithMomentum(x, y, energy, px, py, radius, emitterId) {
-        if (energy <= EPSILON) return;
-        const available = MAX_PHOTONS - this.photons.length;
-        if (available <= 0) return;
-
-        const offset = spawnOffset(radius);
-        if (available === 1) {
-            const pMag = Math.sqrt(px * px + py * py);
-            let dirX, dirY;
-            if (pMag > EPSILON) {
-                dirX = px / pMag;
-                dirY = py / pMag;
-            } else {
-                const angle = Math.random() * TWO_PI;
-                dirX = Math.cos(angle);
-                dirY = Math.sin(angle);
-            }
-            this._emitPhoton(x, y, dirX, dirY, energy, offset, emitterId);
-            return;
-        }
-
-        let betaX = px / energy;
-        let betaY = py / energy;
-        let betaSq = betaX * betaX + betaY * betaY;
-        if (betaSq > 1) {
-            const invBeta = 1 / Math.sqrt(betaSq);
-            betaX *= invBeta;
-            betaY *= invBeta;
-            betaSq = 1;
-        }
-
-        let perpX, perpY;
-        if (betaSq > EPSILON) {
-            const invBeta = 1 / Math.sqrt(betaSq);
-            perpX = -betaY * invBeta;
-            perpY = betaX * invBeta;
-        } else {
-            const angle = Math.random() * TWO_PI;
-            perpX = Math.cos(angle);
-            perpY = Math.sin(angle);
-        }
-
-        const spread = Math.sqrt(Math.max(0, 1 - betaSq));
-        const ePh = 0.5 * energy;
-        this._emitPhoton(x, y, betaX + spread * perpX, betaY + spread * perpY, ePh, offset, emitterId);
-        this._emitPhoton(x, y, betaX - spread * perpX, betaY - spread * perpY, ePh, offset, emitterId);
+        this.selectedIdx = idx;
+        if (idx < 0) this.stats.updateSelectedGPU(null, this.settings);
+        this._statsDirty = true;
+        this._dirty = true;
     }
 
     markDirty() { this._dirty = true; }
@@ -651,7 +472,7 @@ class Simulation {
     loop(timestamp) {
       this._loopScheduled = false;
       try { this._loopBody(timestamp); }
-      catch (e) { console.error('[physsim] loop error:', e); }
+      catch (e) { console.error('[geon] loop error:', e); }
       if (!this._hidden) this._scheduleLoop();
     }
 
@@ -665,16 +486,20 @@ class Simulation {
         const rawDt = Math.min((timestamp - this.lastTime) / 1000, MAX_FRAME_DT);
         this.lastTime = timestamp;
 
-        const backend = this.runtimeBackend;
+        const gpu = this.gpu;
+        if (!gpu) {
+            this.overlay.draw(this.camera, this.input);
+            return;
+        }
         if (this.running) {
             this._dirty = true;
             this.accumulator += rawDt * this.speedScale;
             const maxAccum = PHYSICS_DT * MAX_SUBSTEPS * ACCUMULATOR_CAP;
             if (this.accumulator > maxAccum) this.accumulator = maxAccum;
-            backend.step(this);
+            gpu.step(this);
         }
 
-        backend.pollInput(this);
+        this.input.pollGPUHitResult();
 
         // Refresh hover tooltip periodically (every 8th frame, matching stats rate)
         if (this.running && !(++this._ttFrame & STATS_THROTTLE_MASK)) {
@@ -684,17 +509,15 @@ class Simulation {
         // Skip render entirely when nothing has changed (paused, no interaction)
         if (this._dirty) {
             this._dirty = false;
-            backend.render(this);
+            gpu.render(this);
         }
-
     }
-
 }
 
 const sim = new Simulation();
 window.sim = sim;
 
-// A5: Halt rAF loop when tab is hidden, resume with reset lastTime on visible
+// Halt rAF loop when tab is hidden, resume with reset lastTime on visible
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
         sim._hidden = true;

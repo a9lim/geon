@@ -229,6 +229,14 @@ The tie is explicit and per mode, which is what Codex asked for.
   - `tests/physics-validation.html` with six oracles: grid-gravity FFT, the
     field-clock redshift `ω = e^{Φ}m_a`, the γ = 5 π⁰ beam, π± at rest, Hawking
     mass loss at γ = 1 and 2, and the γ = 2 evaporation-time ratio.
+- **M0′ (2026-10-23): WebGPU only.** The CPU integrator, Canvas renderer, CPU
+  fields, bosons and heatmap are gone (about 8,250 lines). `sim.settings`
+  (`physics-settings.js`) replaced the CPU `Physics` as the toggle store; a small
+  `Overlay` draws the drag line; selection is a GPU slot index. The phase plot and
+  effective potential read the selected body and the heaviest other body from the
+  stats readback. A lost device is recreated and the auto-save restored; browsers
+  without WebGPU get an opening popup naming the supported browsers (caniuse,
+  October 2026).
 
 ### 2.2 Physics bugs and gaps found by the 2.0 scouting
 
@@ -281,16 +289,10 @@ The tie is explicit and per mode, which is what Codex asked for.
     Roche/disintegration, the Klein/RP² topologies or the external fields.
   - Annihilation is only incidental (Peccei–Quinn).
   - Geon still can't make a geon (§11.3).
-- **Share-by-URL (audit §4):** not done. The only query parameters are `cpu`
-  and `lang`.
+- **Share-by-URL (audit §4):** not done. The only query parameter is `lang`.
   - Plan: a `#state=` fragment holding the serialized state, gzipped with
     `CompressionStream` and base64url-encoded, plus `?preset=`.
   - That lets blog posts embed live Geon states through the iframe directive.
-  - Note that `?cpu=1` goes away with the CPU path.
-- **GPU-hidden diagnostics (audit §6):** the phase-space plot and the
-  effective-potential panel are hidden in GPU mode
-  (`src/stats-display.js:151-152`). With the CPU path retired they would
-  vanish entirely, so porting them is **a prerequisite** of §4.
 - **GPU structure (audit §5):** status as of this writing. Recheck each
   before acting.
   - `gpu-physics.js` is 4442 lines. The audit recommended two extractions:
@@ -361,7 +363,7 @@ Versions set the order. Milestone IDs are stable names, not an order:
 | ID | Version | Contents | Gate |
 |---|---|---|---|
 | **M0** (done 2026-10-23, §2.1) | 1.5 | **GPU only; don't fix CPU copies slated for deletion.** The §5.1 clock fix (per-process clocks, emission boosts); the Roche timestep and Eggleton q; the 3+1 KG coefficients (§2.2); the lengths split (ε for particles, ℓ for field gravity, §1.2); seed the browser test page (§10.3) with the pion-beam and moving-BH oracles. | none |
-| **M0′** | 1.5 | Retire the CPU path (§4): port the phase plot and effective potential to readback; device-loss recovery; a "requires WebGPU" notice; delete about 8,100 lines; update the docs. Can share a session with M0. | M0 |
+| **M0′** (done 2026-10-23, §2.1) | 1.5 | Retire the CPU path (§4): port the phase plot and effective potential to readback; device-loss recovery; a "requires WebGPU" notice; delete about 8,100 lines; update the docs. Can share a session with M0. | M0 |
 | **M1** | 1.5 | **Relativity you can see.** The world-line store (§10.2); τ and θ state; the spoke shader; clocks; spoke precession; domain decoupled from viewport (§10.4). | M0′ |
 | **M2** | 1.5 | **Frames.** The slicer; lab, ZMF, particle and custom frames (view-only); lagged and true-now modes; the scrubber; the 1+1 Minkowski panel; the grid as lab rulers. | M1 |
 | **M3** | 1.5 | **Honest cosmology.** Comoving rewrite; the a(t) selector and self-consistent background; redshift; Hubble friction; the ledger; horizons; misalignment and Kibble–Zurek presets. | M2 (grid) |
@@ -383,61 +385,12 @@ Versions set the order. Milestone IDs are stable names, not an order:
 | Preset coverage (§2.3) | every version | Each version ships presets for its own features. The annihilation and photon-geon presets can land any time. |
 | GW overlay, light-cone camera, Bell's spaceship, time reversal, Maxwell–Jüttner (§11) | unslotted | |
 
-## 4. Retiring the CPU path (M0′, M)
+## 4. Retiring the CPU path (M0′, done)
 
-**Decided:** WebGPU becomes the only backend. That means no Canvas physics or
-renderer, no `?cpu=1`, and no CPU fallback when the device is lost.
-
-**Port first, because only the CPU path has these:**
-- **Phase-space plot and effective-potential panel.**
-  - The effective potential is analytic JS over the toggles and
-    selected-particle parameters. It needs the reference (heaviest) body's
-    state in the readback.
-  - The phase plot needs the selected and reference bodies' `r` and `v_r`
-    every frame.
-  - When these land in GPU mode they become the showcase for the PW and Kerr
-    plunge.
-- **Device-loss recovery.** Today a lost device falls back to the CPU. After
-  retirement, recreate the device and restore from the existing GPU
-  auto-save snapshot.
-- **No-WebGPU visitors.** Plasma just throws (`src/gpu/device.js:37-38`).
-  Geon should render a proper notice naming supported browsers, perhaps with a
-  recorded clip, in the shared HUD style.
-- **Save/load and stats.** `save-load.js` depends on `particle.js`, and
-  `stats-display.js` imports CPU `energy.js`. GPU readback serialization and
-  `updateEnergyGPU` already exist, so drop the CPU paths.
-- **Backend abstraction.** `backend-interface.js` and the
-  `sim.runtimeBackend` indirection collapse to one backend. Keep the frame
-  loop's fixed-timestep accrual.
-
-**Delete (about 8,100 lines):**
-- `integrator.js`, `forces.js`, `collisions.js`, `quadtree.js`,
-  `cpu-physics.js`;
-- `renderer.js`, `canvas-renderer.js`, `heatmap.js`;
-- `signal-delay.js`, `potential.js`, `energy.js`;
-- `scalar-field.js`, `higgs-field.js`, `axion-field.js`;
-- `particle.js`, `pion.js`, `lepton.js`, `massless-boson.js`,
-  `boson-utils.js`.
-
-**Keep:**
-- `config.js`, `relativity.js` (used by `gpu-backend.js`),
-  `physics-contract.js`, `fft.js`;
-- `topology.js`, `effective-potential.js`, `phase-plot.js`, `plot-labels.js`;
-- `ui.js`, `input.js` with `vec2.js`, `presets.js`, `save-load.js`,
-  `stats-display.js`, `reference.js`, `i18n.js`.
-
-**Docs to update:**
-- Geon `AGENTS.md`: the two-backend architecture, the capacity table and the
-  CPU gotchas.
-- `README.md` and `about.md`: the tech, backend and accessibility sections.
-- The parent `tests/wgsl-transpile/README.md`, which says "Geon keeps its own
-  CPU backend".
-
-**What this makes obsolete:**
-- the June audit's plan to extract render concerns from `particle.js` and
-  `scalar-field.js` for a headless CPU engine;
-- the transpiler as a GPU↔CPU parity oracle;
-- the decomposition of `integrator.js`'s 1100-line `update()`.
+Landed 2026-10-23 (§2.1). What it made obsolete: the June audit's plan to
+extract render concerns from the CPU particle and field classes for a headless
+CPU engine, the transpiler as a GPU↔CPU parity oracle, and the decomposition of
+`integrator.js`'s `update()`.
 
 ## 5. Geon 1.5: relativity you can see, frames, cosmology
 

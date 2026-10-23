@@ -1,8 +1,8 @@
 // ─── Effective Potential Plot ───
-// V_eff(r) = V(r) + L²/(2μr²) for selected particle vs most massive body.
-// Draws curve + current-position marker on a sidebar canvas.
+// V_eff(r) = V(r) + L²/(2μr²) for the selected particle vs the most massive other body.
+// Fed from the GPU stats readback; draws curve + current-position marker on a sidebar canvas.
 
-import { TWO_PI, SOFTENING_SQ, BH_SOFTENING_SQ, YUKAWA_COUPLING, TORUS, BH_PW_MIN_GAP, blackHoleRadialTerms } from './config.js';
+import { TWO_PI, SOFTENING_SQ, BH_SOFTENING_SQ, YUKAWA_COUPLING, BOUND_LOOP, BH_PW_MIN_GAP, blackHoleRadialTerms } from './config.js';
 import { minImage } from './topology.js';
 import { drawPlotLabels } from './plot-labels.js';
 
@@ -35,50 +35,54 @@ export default class EffectivePotentialPlot {
         this._cachedWidth = this.canvas.clientWidth || 180;
     }
 
-    update(particles, selectedParticle, physics) {
-        if (!this.enabled || !selectedParticle) { this._valid = false; return; }
+    reset() {
+        this._valid = false;
+        this._lastSelId = -1;
+        this._lastRefId = -1;
+    }
 
-        const sel = selectedParticle;
-
-        // Find most massive other particle as reference body
-        let ref = null, maxM = 0;
-        for (const p of particles) {
-            if (p === sel) continue;
-            if (p.mass > maxM) { maxM = p.mass; ref = p; }
-        }
-        if (!ref) { this._valid = false; return; }
+    /**
+     * @param {Object} sel - selected body from the stats readback (index, posX, posY,
+     *   velX, velY, mass, charge, angVel, magMoment, angMomentum, axMod, yukMod, higgsMod)
+     * @param {Object|null} ref - reference body (index, the same kinematics, radius, higgsMod)
+     * @param {Object} settings - physics toggles and parameters
+     * @param {Object} geom - domainW, domainH, boundaryMode, topology
+     */
+    update(sel, ref, settings, geom) {
+        if (!this.enabled || !sel || !ref) { this._valid = false; return; }
+        const physics = settings;
 
         // R12: Build toggle key and check if curve needs recomputation
         const toggleKey = `${physics.gravityEnabled}${physics.coulombEnabled}${physics.magneticEnabled}${physics.gravitomagEnabled}${physics.yukawaEnabled}${physics.blackHoleEnabled}${Math.round(ref.mass * 100)}${Math.round(ref.charge * 100)}${Math.round(ref.angVel * 100)}`;
 
         // Relative state (minimum-image for periodic boundaries)
         let dx, dy;
-        if (physics.periodic) {
-            minImage(ref.pos.x, ref.pos.y, sel.pos.x, sel.pos.y,
-                     physics._topologyConst || TORUS, physics.domainW, physics.domainH,
-                     physics.domainW * 0.5, physics.domainH * 0.5, _miOut);
+        if (geom.boundaryMode === BOUND_LOOP) {
+            minImage(ref.posX, ref.posY, sel.posX, sel.posY,
+                     geom.topology, geom.domainW, geom.domainH,
+                     geom.domainW * 0.5, geom.domainH * 0.5, _miOut);
             dx = _miOut.x; dy = _miOut.y;
         } else {
-            dx = sel.pos.x - ref.pos.x;
-            dy = sel.pos.y - ref.pos.y;
+            dx = sel.posX - ref.posX;
+            dy = sel.posY - ref.posY;
         }
         const r = Math.sqrt(dx * dx + dy * dy) || 1;
 
         // R12: Skip full curve recomputation when key inputs haven't changed
         const r10 = Math.round(r * 10);
-        if (sel.id === this._lastSelId && ref.id === this._lastRefId &&
+        if (sel.index === this._lastSelId && ref.index === this._lastRefId &&
             r10 === this._lastR10 && toggleKey === this._lastToggleKey && this._valid) {
             // Only update marker position (cheap)
             this.currentR = r;
             return;
         }
-        this._lastSelId = sel.id;
-        this._lastRefId = ref.id;
+        this._lastSelId = sel.index;
+        this._lastRefId = ref.index;
         this._lastR10 = r10;
         this._lastToggleKey = toggleKey;
 
-        const dvx = sel.vel.x - ref.vel.x;
-        const dvy = sel.vel.y - ref.vel.y;
+        const dvx = sel.velX - ref.velX;
+        const dvy = sel.velY - ref.velY;
 
         // Angular momentum (scalar in 2D): L = μ * (r × v)
         const mu = (sel.mass * ref.mass) / (sel.mass + ref.mass); // reduced mass

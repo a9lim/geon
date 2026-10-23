@@ -1,9 +1,8 @@
 // ─── UI Setup ───
 // Wires all panel controls, toggles, presets, shortcuts, and info tips to the sim.
 import { loadPreset, PRESETS, PRESET_ORDER } from './presets.js';
-import { WORLD_SCALE, SCALAR_GRID, GPU_SCALAR_GRID, COL_MERGE, COL_BOUNCE, BOUND_DESPAWN, BOUND_BOUNCE, BOUND_LOOP, SPEED_OPTIONS, colFromString, boundFromString, topoFromString } from './config.js';
+import { WORLD_SCALE, COL_BOUNCE, BOUND_BOUNCE, BOUND_LOOP, SPEED_OPTIONS, colFromString, boundFromString, topoFromString } from './config.js';
 import { REFERENCE } from './reference.js';
-import { BACKEND_GPU } from './backend-interface.js';
 import { quickSave, quickLoad, downloadState, uploadState } from './save-load.js';
 
 const HINT_FADE_DELAY = 5000;
@@ -11,14 +10,9 @@ const HINT_FADE_DELAY = 5000;
 let antimatterMode = false;
 export function getAntimatterMode() { return antimatterMode; }
 
-// C3: Persistent GPU toggle proxy — avoids Object.create() allocation on every slider drag.
-// Object.assign copies all own enumerable properties from sim.physics, then we add extras.
-const _gpuToggleProxy = {};
-function _buildGPUToggles(sim) {
-    Object.assign(_gpuToggleProxy, sim.physics);
-    _gpuToggleProxy.heatmapEnabled = sim.heatmap ? sim.heatmap.enabled : false;
-    _gpuToggleProxy.heatmapMode    = sim.heatmap ? sim.heatmap.mode    : 'all';
-    return _gpuToggleProxy;
+// Push the settings store and modes to the GPU (a no-op until WebGPU is up).
+function _syncGPU(sim) {
+    if (sim.gpu) sim.gpu.applySettings(sim);
 }
 
 export function setupUI(sim) {
@@ -131,11 +125,7 @@ export function setupUI(sim) {
     const boundaryToggles = document.getElementById('boundary-toggles');
 
     const _syncModesToGPU = () => {
-        if (sim._gpuPhysics) {
-            sim._gpuPhysics.boundaryMode = sim.boundaryMode;
-            sim._gpuPhysics.topologyMode = sim.topology;
-            sim._gpuPhysics._collisionMode = sim.collisionMode;
-        }
+        if (sim.gpu) sim.gpu.syncModes(sim);
     };
     _forms.bindModeGroup(collisionToggles, 'collision', (v) => {
         sim.collisionMode = colFromString(v);
@@ -157,7 +147,6 @@ export function setupUI(sim) {
     const settingsBtn = document.getElementById('settings-btn');
     if (settingsBtn) {
         _settings.create(settingsBtn, [
-            { type: 'toggle', label: 'GPU acceleration', id: 'gpu-toggle', checked: false, disabled: true },
             { type: 'toggle', label: 'Barnes-Hut', id: 'barneshut-toggle', checked: false },
             { type: 'toggle', label: 'Trails', id: 'trailsToggle', checked: true },
             { type: 'toggle', label: 'Velocity vectors', id: 'velocityToggle', checked: false },
@@ -230,7 +219,7 @@ export function setupUI(sim) {
         { target: 'friction-group', show: () => sim.collisionMode === COL_BOUNCE || sim.boundaryMode === BOUND_BOUNCE },
         { target: 'topology-group', show: () => sim.boundaryMode === BOUND_LOOP && !tEl['expansion-toggle'].checked },
     ], {
-        onDisable: (el) => { sim.physics[propById[el.id]] = false; }
+        onDisable: (el) => { sim.settings[propById[el.id]] = false; }
     });
 
     const updateAllDeps = () => {
@@ -253,47 +242,17 @@ export function setupUI(sim) {
             boundaryToggles.classList.remove('ctrl-disabled');
         }
 
-        // Sync toggle state to GPU backend
-        if (sim._gpuPhysics && sim._gpuPhysics.setToggles) {
-            sim._gpuPhysics.setToggles(_buildGPUToggles(sim));
-            _syncModesToGPU();
-        }
+        _syncGPU(sim);
     };
 
     // Push slider-only changes to GPU (toggles call updateAllDeps which already syncs)
-    const _syncSlidersToGPU = () => {
-        if (sim._gpuPhysics && sim._gpuPhysics.setToggles) {
-            // C3: Use persistent proxy object instead of Object.create per call
-            sim._gpuPhysics.setToggles(_buildGPUToggles(sim));
-            _syncModesToGPU();
-        }
-    };
+    const _syncSlidersToGPU = () => _syncGPU(sim);
 
     // Wire every toggle: sync physics prop + re-evaluate all deps
     toggleDefs.forEach(({ id, prop }) => {
         tEl[id].addEventListener('change', () => {
-            sim.physics[prop] = tEl[id].checked;
+            sim.settings[prop] = tEl[id].checked;
             tEl[id].setAttribute('aria-checked', String(tEl[id].checked));
-            // A11: Lazy field initialization on first toggle-on
-            if (id === 'higgs-toggle' && tEl[id].checked) sim.ensureHiggsField();
-            if (id === 'axion-toggle' && tEl[id].checked) sim.ensureAxionField();
-            // Higgs: restore masses when toggled off
-            if (id === 'higgs-toggle' && !tEl[id].checked) {
-                for (const p of sim.particles) { p.mass = p.baseMass; p.updateColor(); }
-            }
-            // Axion: reset axMod/yukMod to 1 and clear field when toggled off
-            if (id === 'axion-toggle' && !tEl[id].checked) {
-                for (const p of sim.particles) { p.axMod = 1; p.yukMod = 1; }
-                if (sim.axionField) sim.axionField.reset();
-            }
-            // BH toggle: Kerr-Newman radii; no hair — strip antimatter
-            if (id === 'blackhole-toggle') {
-                if (tEl[id].checked) {
-                    for (const p of sim.particles) { p.antimatter = false; p.updateColor(); }
-                } else {
-                    for (const p of sim.particles) p.updateColor();
-                }
-            }
             updateAllDeps();
             sim._dirty = true;
             _haptics.trigger('light');
@@ -302,93 +261,21 @@ export function setupUI(sim) {
 
     updateAllDeps();
 
-    // ─── GPU backend toggle ───
-    const gpuToggle = document.getElementById('gpu-toggle');
-    // Enable the toggle once GPU is ready (async init in main.js)
-    sim._onGPUReady = () => {
-        gpuToggle.disabled = false;
-        gpuToggle.checked = true;
-        gpuToggle.setAttribute('aria-checked', 'true');
-        const row = gpuToggle.closest('.settings-dd-row') || gpuToggle.closest('.checkbox-label');
-        if (row) row.classList.remove('ctrl-disabled');
-    };
-    sim._onGPULost = () => {
-        gpuToggle.disabled = true;
-        gpuToggle.checked = false;
-        gpuToggle.setAttribute('aria-checked', 'false');
-        const row = gpuToggle.closest('.settings-dd-row') || gpuToggle.closest('.checkbox-label');
-        if (row) row.classList.add('ctrl-disabled');
-    };
-    gpuToggle.addEventListener('change', async () => {
-        const on = gpuToggle.checked;
-        gpuToggle.setAttribute('aria-checked', String(on));
-        if (on && sim._gpuReady) {
-            sim.useGPUBackend();
-        } else {
-            // Read back current GPU particle state before switching to CPU
-            if (sim._gpuReady && sim._gpuBackend) {
-                try {
-                    await sim._gpuBackend.snapshotToCPU(sim);
-                    // Read back scalar field data (GPU 128×128 → CPU 64×64)
-                    const fieldData = await sim._gpuPhysics.readbackFieldData();
-                    const ratio = GPU_SCALAR_GRID / SCALAR_GRID; // 2
-                    const cpuGrid = SCALAR_GRID;
-                    const _downsample = (gpuArr) => {
-                        const cpu = new Float64Array(cpuGrid * cpuGrid);
-                        const invBlock = 1 / (ratio * ratio);
-                        for (let cy = 0; cy < cpuGrid; cy++) {
-                            for (let cx = 0; cx < cpuGrid; cx++) {
-                                let sum = 0;
-                                for (let dy = 0; dy < ratio; dy++) {
-                                    for (let dx = 0; dx < ratio; dx++) {
-                                        sum += gpuArr[(cy * ratio + dy) * GPU_SCALAR_GRID + (cx * ratio + dx)];
-                                    }
-                                }
-                                cpu[cy * cpuGrid + cx] = sum * invBlock;
-                            }
-                        }
-                        return cpu;
-                    };
-                    if (fieldData.higgsField && sim.physics.higgsEnabled) {
-                        const hf = sim.ensureHiggsField();
-                        hf.field.set(_downsample(fieldData.higgsField));
-                        hf.fieldDot.set(_downsample(fieldData.higgsFieldDot));
-                    }
-                    if (fieldData.axionField && sim.physics.axionEnabled) {
-                        const af = sim.ensureAxionField();
-                        af.field.set(_downsample(fieldData.axionField));
-                        af.fieldDot.set(_downsample(fieldData.axionFieldDot));
-                    }
-
-                    sim.clearBosons();
-                    sim.stats.resetBaseline();
-                } catch (e) {
-                    console.warn('[physsim] GPU readback failed, CPU state may be stale:', e);
-                }
-            }
-            sim.useCPUBackend();
-        }
-        const gpuInd = document.getElementById('gpu-indicator');
-        if (gpuInd) gpuInd.hidden = sim.backend !== BACKEND_GPU;
-        sim._dirty = true;
-        _haptics.trigger('light');
-    });
-
     // ─── Visual toggles ─── (bindToggle fires the 'light' haptic itself)
     _forms.bindToggle(document.getElementById('trailsToggle'), (v) => {
-        sim.renderer.trails = v;
+        sim.view.trails = v;
         sim._dirty = true;
     });
     _forms.bindToggle(document.getElementById('velocityToggle'), (v) => {
-        sim.renderer.showVelocity = v;
+        sim.view.showVelocity = v;
         sim._dirty = true;
     });
     _forms.bindToggle(document.getElementById('forceToggle'), (v) => {
-        sim.renderer.showForce = v;
+        sim.view.showForce = v;
         sim._dirty = true;
     });
     _forms.bindToggle(document.getElementById('forceComponentsToggle'), (v) => {
-        sim.renderer.showForceComponents = v;
+        sim.view.showForceComponents = v;
         sim._dirty = true;
     });
     const potentialToggle = document.getElementById('potentialToggle');
@@ -398,11 +285,7 @@ export function setupUI(sim) {
         const modeRow = potentialModeBar?.closest('.settings-dd-row');
         if (modeRow) modeRow.style.display = e.target.checked ? '' : 'none';
         else if (potentialModeBar) potentialModeBar.style.display = e.target.checked ? '' : 'none';
-        // Sync heatmap state to GPU (C3: persistent proxy, no Object.create)
-        if (sim._gpuPhysics) {
-            // heatmap.enabled already updated above; _buildGPUToggles reads it
-            sim._gpuPhysics.setToggles(_buildGPUToggles(sim));
-        }
+        _syncGPU(sim);
         sim._dirty = true;
         _haptics.trigger('light');
     });
@@ -435,7 +318,7 @@ export function setupUI(sim) {
     _forms.bindSlider(chargeSlider, chargeLabel, () => _haptics.trigger('selection'), _fmt2);
     _forms.bindSlider(spinSlider, spinLabel, () => _haptics.trigger('selection'), v => v.toFixed(2) + 'c');
     _forms.bindSlider(frictionSlider, frictionLabel, v => {
-        sim.physics.bounceFriction = v;
+        sim.settings.bounceFriction = v;
         _syncSlidersToGPU();
         _haptics.trigger('selection');
     }, _fmt2);
@@ -444,7 +327,7 @@ export function setupUI(sim) {
     const yukawaMuSlider = document.getElementById('yukawaMuInput');
     const yukawaMuLabel = document.getElementById('yukawaMuValue');
     _forms.bindSlider(yukawaMuSlider, yukawaMuLabel, v => {
-        sim.physics.yukawaMu = v;
+        sim.settings.yukawaMu = v;
         _syncSlidersToGPU();
         _haptics.trigger('selection');
     }, _fmt2);
@@ -452,8 +335,7 @@ export function setupUI(sim) {
     const axionMassSlider = document.getElementById('axionMassInput');
     const axionMassLabel = document.getElementById('axionMassValue');
     _forms.bindSlider(axionMassSlider, axionMassLabel, v => {
-        sim.physics.axionMass = v;
-        if (sim.axionField) sim.axionField.mass = v;
+        sim.settings.axionMass = v;
         _syncSlidersToGPU();
         _haptics.trigger('selection');
     }, _fmt2);
@@ -461,7 +343,7 @@ export function setupUI(sim) {
     const hubbleSlider = document.getElementById('hubbleInput');
     const hubbleLabel = document.getElementById('hubbleValue');
     _forms.bindSlider(hubbleSlider, hubbleLabel, v => {
-        sim.physics.hubbleParam = v;
+        sim.settings.hubbleParam = v;
         _syncSlidersToGPU();
         _haptics.trigger('selection');
     }, v => v.toFixed(4));
@@ -470,8 +352,7 @@ export function setupUI(sim) {
     const higgsMassLabel = document.getElementById('higgsMassValue');
     if (higgsMassSlider) {
         _forms.bindSlider(higgsMassSlider, higgsMassLabel, v => {
-            sim.physics.higgsMass = v;
-            if (sim.higgsField) sim.higgsField.mass = v;
+            sim.settings.higgsMass = v;
             _syncSlidersToGPU();
             _haptics.trigger('selection');
         }, _fmt2);
@@ -481,14 +362,14 @@ export function setupUI(sim) {
     const _fmtDeg = deg => deg + '°';
     const _extSlider = (prop, slider, label, angleGroup, angleSlider, angleLabel, angleProp) => {
         _forms.bindSlider(slider, label, v => {
-            sim.physics[prop] = v;
+            sim.settings[prop] = v;
             if (angleGroup) angleGroup.style.display = v !== 0 ? '' : 'none';
             _syncSlidersToGPU();
             _haptics.trigger('selection');
         }, _fmt2);
         if (angleSlider) {
             _forms.bindSlider(angleSlider, angleLabel, deg => {
-                sim.physics[angleProp] = deg * Math.PI / 180;
+                sim.settings[angleProp] = deg * Math.PI / 180;
                 _syncSlidersToGPU();
                 _haptics.trigger('selection');
             }, _fmtDeg);
@@ -505,7 +386,7 @@ export function setupUI(sim) {
         document.getElementById('extElectricAngleInput'), document.getElementById('extElectricAngleValue'),
         'extElectricAngle');
     _forms.bindSlider(document.getElementById('extBzInput'), document.getElementById('extBzValue'), v => {
-        sim.physics.extBz = v;
+        sim.settings.extBz = v;
         _syncSlidersToGPU();
         _haptics.trigger('selection');
     }, _fmt2);
@@ -514,8 +395,9 @@ export function setupUI(sim) {
 
     // ─── Step button ───
     const stepSim = () => {
-        if (!sim.running) {
-            sim.runtimeBackend.stepOnce(sim);
+        if (!sim.running && sim.gpu) {
+            sim.gpu.stepOnce();
+            sim._statsDirty = true;
             sim._dirty = true;
         }
     };
@@ -534,7 +416,7 @@ export function setupUI(sim) {
     // ─── Theme toggle ───
     const syncRendererTheme = () => {
         const isLight = document.documentElement.dataset.theme !== 'dark';
-        sim.renderer.setTheme(isLight);
+        sim.overlay.setTheme(isLight);
         if (sim._gpuRenderer) sim._gpuRenderer.setTheme(isLight);
         sim._dirty = true;
     };
@@ -580,19 +462,19 @@ export function setupUI(sim) {
         { key: 'V',          label: _T('shortcut.toggleVel',         'Toggle velocity vectors'),       group: G_VIEW(), action: () => {
             const el = document.getElementById('velocityToggle');
             el.checked = !el.checked;
-            sim.renderer.showVelocity = el.checked;
+            sim.view.showVelocity = el.checked;
             sim._dirty = true;
         }},
         { key: 'F',          label: _T('shortcut.toggleAccel',       'Toggle acceleration vectors'),   group: G_VIEW(), action: () => {
             const el = document.getElementById('forceToggle');
             el.checked = !el.checked;
-            sim.renderer.showForce = el.checked;
+            sim.view.showForce = el.checked;
             sim._dirty = true;
         }},
         { key: 'C',          label: _T('shortcut.toggleAccelComp',   'Toggle acceleration components'), group: G_VIEW(), action: () => {
             const el = document.getElementById('forceComponentsToggle');
             el.checked = !el.checked;
-            sim.renderer.showForceComponents = el.checked;
+            sim.view.showForceComponents = el.checked;
             sim._dirty = true;
         }},
         { key: 'T',          label: _T('shortcut.toggleTheme',       'Toggle theme'),                  group: G_VIEW(), action: toggleTheme },
@@ -620,7 +502,7 @@ export function setupUI(sim) {
     let _aboutHandle = null;
     const _buildAboutConfig = () => ({
         title: _T('about.title', 'Geon'),
-        lastUpdated: '2026-07-17',
+        lastUpdated: '2026-10-23',
         description: _T('about.description'),
         controls: [
             { label: _T('about.controls.addParticle'),        value: _T('about.controls.addParticleVal') },

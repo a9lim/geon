@@ -7,7 +7,7 @@ updated: 2026-10-23
 
 # Geon — Interactive Particle Physics Simulator
 
-Geon is a real-time N-body simulator that models how particles move under gravity, electromagnetism, and relativistic effects. It runs in the browser using WebGPU compute shaders for parallel force calculation.
+Geon is a real-time N-body simulator that models how particles move under gravity, electromagnetism, and relativistic effects. It runs in the browser on WebGPU compute shaders.
 
 ## Forces
 
@@ -43,7 +43,7 @@ Designed for undergraduate physics education. Students can toggle individual for
 
 ## Technical Details
 
-WebGPU compute shaders handle simulation and instanced rendering when available. Devices without WebGPU switch to the CPU physics backend and Canvas 2D renderer. Simulation state and stepping remain client-side in either mode.
+WebGPU compute shaders run the whole simulation and WebGPU instanced rendering draws it; there is no CPU fallback, and browsers without WebGPU see a notice instead. If the GPU device is lost, Geon recreates it and restores the latest auto-save. Simulation state and stepping stay client-side.
 
 ## Topology Modes
 
@@ -57,6 +57,6 @@ Optional signal delay mode computes forces from delayed source positions rather 
 
 Geon provides keyboard shortcuts, light and dark themes, labeled simulation controls, and numerical readouts for conserved quantities and selected particles. The canvas contains continuous motion and optional particle trails; users sensitive to motion can pause, single-step, or choose a lower-particle preset.
 
-## GPU and CPU Backends
+## GPU Compute
 
-WebGPU compute shaders handle pairwise force summation with Barnes-Hut tree acceleration when available. The GPU backend supports up to 512 particles with 4096 photons, compared to 128 particles on CPU. Devices without WebGPU use the CPU integrator and Canvas 2D renderer. Backend selection is automatic but can be forced to CPU via a query parameter. Scalar field evolution (Higgs, axion) uses a 128x128 grid on GPU and 64x64 on CPU, with cubic B-spline interpolation for C2 continuity.
+Forces are summed pairwise or with a lock-free Barnes-Hut tree built on the GPU. The simulation holds up to 512 particles, 4096 photons, and 2048 pions and leptons. Scalar field evolution (Higgs, axion) uses a 128 × 128 grid with cubic B-spline interpolation for C2 continuity.

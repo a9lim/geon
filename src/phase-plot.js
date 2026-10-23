@@ -1,6 +1,7 @@
 // ─── Phase Space Plot ───
-// r vs v_r relative to the most massive body; 512-sample ring buffer.
-import { TWO_PI, PHASE_BUFFER_LEN, TORUS } from './config.js';
+// r vs v_r relative to the most massive other body; 512-sample ring buffer.
+// Fed from the GPU stats readback (selected and reference bodies).
+import { TWO_PI, PHASE_BUFFER_LEN, BOUND_LOOP } from './config.js';
 import { minImage } from './topology.js';
 import { drawPlotLabels } from './plot-labels.js';
 
@@ -29,39 +30,42 @@ export default class PhasePlot {
         this._cachedWidth = this.canvas.clientWidth || 180;
     }
 
-    update(particles, selectedParticle, physics) {
-        if (!this.enabled || !selectedParticle) return;
+    reset() {
+        this.trackedId = -1;
+        this.head = 0;
+        this.count = 0;
+    }
 
-        const sel = selectedParticle;
-        if (sel.id !== this.trackedId) {
-            this.trackedId = sel.id;
+    /**
+     * @param {Object} sel - selected body: index, posX, posY, velX, velY
+     * @param {Object|null} ref - reference body (same fields), or null for none
+     * @param {Object} geom - domainW, domainH, boundaryMode, topology
+     */
+    update(sel, ref, geom) {
+        if (!this.enabled || !sel) return;
+
+        if (sel.index !== this.trackedId) {
+            this.trackedId = sel.index;
             this.head = 0;
             this.count = 0;
         }
 
-        // Radial quantities measured relative to most massive body
-        let refX = 0, refY = 0, refVx = 0, refVy = 0, maxM = 0;
-        for (const p of particles) {
-            if (p === sel) continue;
-            if (p.mass > maxM) {
-                maxM = p.mass;
-                refX = p.pos.x; refY = p.pos.y;
-                refVx = p.vel.x; refVy = p.vel.y;
-            }
-        }
+        // Radial quantities measured relative to the reference body (origin if none)
+        const refX = ref ? ref.posX : 0, refY = ref ? ref.posY : 0;
+        const refVx = ref ? ref.velX : 0, refVy = ref ? ref.velY : 0;
 
         let dx, dy;
-        if (physics && physics.periodic) {
-            minImage(refX, refY, sel.pos.x, sel.pos.y,
-                     physics._topologyConst || TORUS, physics.domainW, physics.domainH,
-                     physics.domainW * 0.5, physics.domainH * 0.5, _miOut);
+        if (geom.boundaryMode === BOUND_LOOP) {
+            minImage(refX, refY, sel.posX, sel.posY,
+                     geom.topology, geom.domainW, geom.domainH,
+                     geom.domainW * 0.5, geom.domainH * 0.5, _miOut);
             dx = _miOut.x; dy = _miOut.y;
         } else {
-            dx = sel.pos.x - refX; dy = sel.pos.y - refY;
+            dx = sel.posX - refX; dy = sel.posY - refY;
         }
         const r = Math.sqrt(dx * dx + dy * dy) || 1;
         const rx = dx / r, ry = dy / r;
-        const dvx = sel.vel.x - refVx, dvy = sel.vel.y - refVy;
+        const dvx = sel.velX - refVx, dvy = sel.velY - refVy;
         const vr = dvx * rx + dvy * ry;
 
         this.rBuf[this.head] = r;

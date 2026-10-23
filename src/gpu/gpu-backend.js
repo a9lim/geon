@@ -1,14 +1,11 @@
 /**
- * GPU runtime adapter.
- *
- * Keeps WebGPU-specific stepping, event readback handling, rendering, and
- * particle upload behind the same coarse backend surface used by CPUPhysics.
+ * GPU runtime: owns GPUPhysics and GPURenderer for one device, and connects them
+ * to the Simulation — stepping, event readbacks, rendering, stats, auto-save.
  */
 import {
-    TWO_PI, PHYSICS_DT, MAX_SPEED_RATIO, SPAWN_COUNT, spawnOffset,
+    TWO_PI, PHYSICS_DT, SPAWN_COUNT, spawnOffset,
     GPU_HEATMAP_GRID, STATS_THROTTLE_MASK, INERTIA_K, EPSILON,
 } from '../config.js';
-import { angwToAngVel } from '../relativity.js';
 import GPUPhysics from './gpu-physics.js';
 import GPURenderer from './gpu-renderer.js';
 
@@ -29,10 +26,10 @@ export default class GPUBackend {
         await renderer.init();
         // The theme was synced before this async backend existed; adopt it now
         // (after init, which creates the light/dark pipeline pairs setTheme swaps).
-        renderer.setTheme(sim.renderer.isLight);
+        renderer.setTheme(sim.overlay.isLight);
 
         const backend = new GPUBackend(device, gpuCanvas, physics, renderer);
-        backend.syncFromCPU(sim);
+        backend.applySettings(sim);
         return backend;
     }
 
@@ -50,15 +47,9 @@ export default class GPUBackend {
         return this.physics.aliveCount < this.physics.buffers.maxParticles;
     }
 
-    addParticle(sim, p, spawn) {
-        const idx = this.physics.addParticle({
-            x: spawn.x, y: spawn.y, vx: p.w.x, vy: p.w.y,
-            mass: p.mass, charge: p.charge, angw: p.angw,
-            antimatter: p.antimatter,
-        });
-        if (idx < 0) return false;
-        p._gpuIdx = idx;
-        return true;
+    /** @param {{x, y, vx, vy, mass, charge, angw, antimatter}} spec — vx, vy are proper velocity. */
+    addParticle(spec) {
+        return this.physics.addParticle(spec);
     }
 
     reset() {
@@ -78,57 +69,20 @@ export default class GPUBackend {
         this.renderer.setTheme(isLight);
     }
 
-    syncFromCPU(sim) {
-        const gpuToggles = Object.create(sim.physics);
-        gpuToggles.heatmapEnabled = sim.heatmap && sim.heatmap.enabled;
-        gpuToggles.heatmapMode = sim.heatmap ? sim.heatmap.mode : 'all';
-        this.physics.setToggles(gpuToggles);
+    /** Push the settings store and the modes into GPUPhysics. */
+    applySettings(sim) {
+        const toggles = Object.create(sim.settings);
+        toggles.heatmapEnabled = sim.heatmap.enabled;
+        toggles.heatmapMode = sim.heatmap.mode;
+        toggles.collisionMode = sim.collisionMode;
+        this.physics.setToggles(toggles);
         this.syncModes(sim);
-        if (sim.particles.length > 0 && this.physics.aliveCount === 0) {
-            for (const p of sim.particles) {
-                p._gpuIdx = this.physics.addParticle({
-                    x: p.pos.x, y: p.pos.y,
-                    vx: p.w.x, vy: p.w.y,
-                    mass: p.mass, charge: p.charge,
-                    angw: p.angw,
-                    antimatter: p.antimatter,
-                });
-            }
-        }
     }
 
     syncModes(sim) {
         this.physics.boundaryMode = sim.boundaryMode;
         this.physics.topologyMode = sim.topology;
         this.physics._collisionMode = sim.collisionMode;
-    }
-
-    activateFromCPU(sim) {
-        this.canvas.style.display = '';
-        sim.ctx.clearRect(0, 0, sim.width, sim.height);
-        this.physics.setToggles(Object.assign(Object.create(sim.physics), {
-            heatmapEnabled: sim.heatmap && sim.heatmap.enabled,
-            heatmapMode: sim.heatmap ? sim.heatmap.mode : 'all',
-        }));
-        this.syncModes(sim);
-        this.physics.reset();
-        for (const p of sim.particles) {
-            p._gpuIdx = this.physics.addParticle({
-                x: p.pos.x, y: p.pos.y,
-                vx: p.w.x, vy: p.w.y,
-                mass: p.mass, charge: p.charge,
-                angw: p.angw, antimatter: p.antimatter,
-            });
-        }
-    }
-
-    async snapshotToCPU(sim) {
-        const gpuState = await this.physics.serialize(sim);
-        sim.particles.length = 0;
-        for (const pd of gpuState.particles) {
-            sim._restoreParticleFromSaveData(pd);
-        }
-        return gpuState;
     }
 
     stepOnce() {
@@ -157,15 +111,15 @@ export default class GPUBackend {
     }
 
     render(sim) {
-        const ph = sim.physics;
+        const ph = sim.settings;
         this.renderer.updateCamera(sim.camera);
-        this.renderer.showForce = sim.renderer.showForce;
-        this.renderer.showForceComponents = sim.renderer.showForceComponents;
-        this.renderer.showVelocity = sim.renderer.showVelocity;
-        this.renderer.showTrails = sim.renderer.trails;
+        this.renderer.showForce = sim.view.showForce;
+        this.renderer.showForceComponents = sim.view.showForceComponents;
+        this.renderer.showVelocity = sim.view.showVelocity;
+        this.renderer.showTrails = sim.view.trails;
         this.renderer.setDomain(sim.domainW, sim.domainH);
 
-        this.physics.setTrailsEnabled(sim.renderer.trails);
+        this.physics.setTrailsEnabled(sim.view.trails);
         const trailBufs = this.physics.getTrailBuffers();
         if (trailBufs && !this.renderer._trailReady) {
             this.renderer.initTrailRendering(trailBufs);
@@ -225,24 +179,40 @@ export default class GPUBackend {
         }
 
         this.renderer.render(this.physics.aliveCount, renderOpts);
-        sim.renderer.drawDragOverlay(sim.camera);
+        sim.overlay.draw(sim.camera, sim.input);
         this._renderStats(sim);
     }
 
     _renderStats(sim) {
-        if (sim.running && !(sim._sbFrame & STATS_THROTTLE_MASK)) {
-            const selIdx = sim.selectedParticle ? (sim.selectedParticle._gpuIdx ?? -1) : -1;
-            this.physics.requestStats(selIdx);
+        if ((sim.running && !(sim._sbFrame & STATS_THROTTLE_MASK)) || sim._statsDirty) {
+            this.physics.requestStats(sim.selectedIdx);
+            sim._statsDirty = false;
         }
         sim._sbFrame++;
         const gpuStats = this.physics.readStats();
-        if (gpuStats) {
-            sim.stats.updateEnergyGPU(gpuStats, sim);
-            if (gpuStats.selected) {
-                sim.stats.updateSelectedGPU(gpuStats.selected, sim.physics);
-            } else if (sim.selectedParticle) {
-                sim.stats.updateSelectedGPU(null, sim.physics);
-            }
+        if (!gpuStats) return;
+        sim.stats.updateEnergyGPU(gpuStats, sim);
+
+        // A selected particle that died (merged, evaporated, removed) drops the selection.
+        const sel = gpuStats.selected;
+        const alive = sel && (sel.flags & 1) !== 0;
+        if (sim.selectedIdx >= 0 && !alive) sim.select(-1);
+        sim.stats.updateSelectedGPU(sim.selectedIdx >= 0 ? sel : null, sim.settings);
+        if (sim.selectedIdx < 0) return;
+
+        if (!sim._particleTabEl) {
+            sim._particleTabEl = document.getElementById('tab-particle');
+            sim._controlPanelEl = document.getElementById('control-panel');
+        }
+        const particleTabActive = sim._particleTabEl && sim._particleTabEl.classList.contains('active') &&
+            sim._controlPanelEl && sim._controlPanelEl.classList.contains('open');
+        if (particleTabActive) {
+            const sel2 = { ...sel, index: sim.selectedIdx };
+            const geom = { domainW: sim.domainW, domainH: sim.domainH, boundaryMode: sim.boundaryMode, topology: sim.topology };
+            sim.phasePlot.update(sel2, gpuStats.reference, geom);
+            sim.effPotPlot.update(sel2, gpuStats.reference, sim.settings, geom);
+            sim.phasePlot.draw(sim.overlay.isLight);
+            sim.effPotPlot.draw(sim.overlay.isLight);
         }
     }
 
@@ -288,25 +258,14 @@ export default class GPUBackend {
             const mSq = evt.energy * evt.energy - pMag * pMag;
             if (mSq <= EPSILON * EPSILON) continue;
             const mass = Math.sqrt(mSq);
-            let vx = 0, vy = 0;
-            if (pMag > EPSILON) {
-                const speed = Math.min(pMag / evt.energy, MAX_SPEED_RATIO);
-                vx = evt.px / pMag * speed;
-                vy = evt.py / pMag * speed;
-            }
             const bodyRadius = Math.cbrt(mass);
             const inertia = INERTIA_K * mass * bodyRadius * bodyRadius;
             const angw = inertia > EPSILON ? evt.angL / inertia : 0;
-            sim.addParticle(evt.x, evt.y, vx, vy, {
-                mass, baseMass: mass, charge: evt.charge, angw, skipBaseline: true,
+            // Proper velocity of the collapsed body: w = P/m
+            this.physics.addParticle({
+                x: evt.x, y: evt.y, vx: evt.px / mass, vy: evt.py / mass,
+                mass, charge: evt.charge, angw,
             });
-            const spawned = sim.particles[sim.particles.length - 1];
-            if (spawned) {
-                spawned.angw = angw;
-                spawned.angVel = sim.physics.relativityEnabled
-                    ? angwToAngVel(angw, bodyRadius)
-                    : angw;
-            }
             sim.totalRadiated -= evt.radiatedEnergy ?? evt.energy;
             sim.totalRadiatedPx -= evt.radiatedPx ?? evt.px;
             sim.totalRadiatedPy -= evt.radiatedPy ?? evt.py;

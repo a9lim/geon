@@ -120,5 +120,6 @@ fn main() {
         hitResult[6] = bitcast<u32>(der.angVel);
         hitResult[7] = bitcast<u32>(p.posX);
         hitResult[8] = bitcast<u32>(p.posY);
+        hitResult[9] = p.flags;
     }
 }

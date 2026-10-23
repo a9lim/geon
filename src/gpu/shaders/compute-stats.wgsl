@@ -55,8 +55,8 @@ struct AxYukMod {
 // [8]  totalMass     [9]  aliveCount   [10] pe           [11] darwinFieldE
 // [12] darwinFieldPx [13] darwinFieldPy [14] higgsFieldE [15] axionFieldE
 // [16] higgsPfiE     [17] axionPfiE    [18] fieldMomX    [19] fieldMomY
-// Selected particle [32-85]:
-//   [32] posX .. [85] axion force (same layout as before, shifted from 16→32)
+// Selected particle [32-72]: [32] posX .. [69] axion force, [70-72] axMod, yukMod, higgsMod
+// Reference body [80-91]: heaviest other alive particle (mass [84] = -1 when none)
 
 fn toggle(bit: u32) -> bool { return (params.toggles0 & bit) != 0u; }
 
@@ -610,7 +610,36 @@ fn statsPFISel() {
         stats[64] = af.f4.x; stats[65] = af.f4.y;
         stats[66] = af.f4.z; stats[67] = af.f4.w;
         stats[68] = af.f5.x; stats[69] = af.f5.y;
+        let mods = axYukMod[si];
+        stats[70] = mods.axMod; stats[71] = mods.yukMod; stats[72] = mods.higgsMod;
     } else {
         stats[36] = -1.0; // mass = -1 signals no selected particle
+    }
+
+    // ─── Pass 7: Reference body (offset 80): the heaviest alive particle other ───
+    // than the selected one, which the phase plot and effective potential measure against.
+    var refIdx: i32 = -1;
+    var refMass: f32 = 0.0;
+    for (var i = 0u; i < n; i++) {
+        if (i32(i) == selIdx) { continue; }
+        let p = particles[i];
+        if ((p.flags & FLAG_ALIVE) == 0u) { continue; }
+        if (p.mass > refMass) { refMass = p.mass; refIdx = i32(i); }
+    }
+    if (refIdx >= 0) {
+        let ri = u32(refIdx);
+        let p = particles[ri];
+        let d = derived[ri];
+        stats[80] = p.posX;  stats[81] = p.posY;
+        stats[82] = d.velX;  stats[83] = d.velY;
+        stats[84] = p.mass;  stats[85] = p.charge;
+        stats[86] = d.angVel;
+        stats[87] = d.magMoment;
+        stats[88] = d.angMomentum;
+        stats[89] = sqrt(d.radiusSq);
+        stats[90] = axYukMod[ri].higgsMod;
+        stats[91] = bitcast<f32>(ri);
+    } else {
+        stats[84] = -1.0; // no reference body
     }
 }

@@ -101,7 +101,7 @@
       ],
       "keywords": "physics simulator, N-body, relativity, gravity, electromagnetism, Boris integrator, Barnes-Hut, Higgs field, axion, Hawking radiation, Schwinger effect, superradiance, black hole, charge quantization, WebGPU, educational",
       "operatingSystem": "Any (Web Browser)",
-      "browserRequirements": "Modern browser with WebGPU or Canvas support",
+      "browserRequirements": "Requires WebGPU",
       "sameAs": "https://github.com/a9lim/geon",
       "codeRepository": "https://github.com/a9lim/geon",
       "license": "https://www.gnu.org/licenses/agpl-3.0.html",
@@ -181,7 +181,7 @@
           "name": "Does Geon require WebGPU?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "No. Geon uses WebGPU compute and instanced rendering when available, then switches to CPU physics and Canvas 2D rendering when WebGPU is unavailable or the device is lost. Force CPU mode with the ?cpu=1 URL parameter."
+            "text": "Yes. Geon runs its physics as WebGPU compute shaders and draws with WebGPU instanced rendering; it has no CPU fallback. WebGPU is on by default in Chrome and Edge, in Safari 26 on macOS 26 and iOS 26, and in Firefox on Windows and on Apple Silicon Macs running macOS 26. If the GPU device is lost, Geon recreates it and restores the latest auto-save."
           }
         },
         {
@@ -197,7 +197,7 @@
           "name": "What are the system requirements for Geon?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Geon needs a modern browser with ES modules and Canvas support. A WebGPU-capable browser enables the larger GPU backend; otherwise the simulator uses its CPU physics and Canvas 2D fallback."
+            "text": "Geon needs a browser with WebGPU and ES modules. It simulates up to 512 particles and 4096 photons on the GPU, with 128 × 128 scalar-field grids."
           }
         },
         {
@@ -271,7 +271,7 @@
     <nav id="topbar" class="sim-toolbar glass" role="toolbar" aria-label="Simulation controls">
         <div class="topbar-left">
             <a href="/" class="sim-home" title="a9l.im"><img src="/logo.svg" alt="a9l.im" height="28"></a>
-            <h1 class="sim-brand">Geon<span id="gpu-indicator" class="gpu-indicator" data-i18n="topbar.gpuOn" hidden>on GPU</span></h1>
+            <h1 class="sim-brand">Geon</h1>
         </div>
         <div class="topbar-right sim-toolbar-actions">
             <button id="mode-btn" class="tool-btn" aria-label="Normal mode" aria-pressed="false" title="Normal mode (X)" data-icon="modeNormal"></button>

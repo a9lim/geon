@@ -1,6 +1,5 @@
 import Vec2 from './vec2.js';
 import { PINCH_DEBOUNCE, DRAG_THRESHOLD, SHOOT_VELOCITY_SCALE } from './config.js';
-import { BACKEND_GPU } from './backend-interface.js';
 import { getAntimatterMode } from './ui.js';
 
 export default class InputHandler {
@@ -18,7 +17,6 @@ export default class InputHandler {
         this.spinInput = document.getElementById('spinInput');
 
         this.tooltip = createSimTooltip();
-        this.hoveredParticle = null;
         this._screenX = 0;
         this._screenY = 0;
 
@@ -33,7 +31,7 @@ export default class InputHandler {
         this._hoverPending = false;
         this._hoverE = null;
 
-        // Deferred click for GPU mode (1-frame async hit test)
+        // Deferred click: GPU hit tests resolve a frame or two later
         this._pendingClick = null; // { pos: Vec2, rightButton: bool }
 
         sim.camera.bindWheel(canvas);
@@ -144,26 +142,16 @@ export default class InputHandler {
                 const isShortTap = this.dragStart.dist(endPos) < DRAG_THRESHOLD;
                 const amMode = getAntimatterMode();
 
-                if (isShortTap) {
-                    // Hit-test: check if a particle is under the tap
-                    if (this.sim.backend === BACKEND_GPU && this.sim._gpuReady) {
-                        // GPU mode: defer action until GPU hit test result arrives
-                        this.sim._gpuPhysics.hitTest(endPos.x, endPos.y);
-                        this._pendingClick = { pos: endPos, rightButton: amMode };
-                        this.sim._dirty = true;
-                        return;
-                    }
-                    // CPU mode: immediate hit test
-                    const hit = this._cpuFindParticleAt(endPos);
-                    if (hit) {
-                        this._resolveClickHit(hit, amMode);
-                        this.sim._dirty = true;
-                        return;
-                    }
+                if (isShortTap && this.sim._gpuPhysics) {
+                    // Defer the action until the GPU hit test resolves
+                    this.sim._gpuPhysics.hitTest(endPos.x, endPos.y);
+                    this._pendingClick = { pos: endPos, rightButton: amMode };
+                    this.sim._dirty = true;
+                    return;
                 }
 
-                // No hit or long drag: spawn particle
-                this.spawnParticle(endPos, amMode && !this.sim.physics.blackHoleEnabled);
+                // Long drag: spawn particle
+                this.spawnParticle(endPos, amMode && !this.sim.settings.blackHoleEnabled);
                 this.sim._dirty = true;
                 return;
             }
@@ -176,41 +164,10 @@ export default class InputHandler {
 
     // ─── Particle deletion ───
 
-    _deleteParticle(p) {
-        this.sim.physics._retireParticle(p);
-        // GPU path: mark particle dead on GPU side with death metadata for signal delay
-        if (this.sim._gpuReady && this.sim.backend === BACKEND_GPU && p._gpuIdx != null) {
-            this.sim._gpuPhysics.removeParticle(p._gpuIdx, p._deathMass || p.mass, p._deathAngVel || p.angVel);
-        }
-        // A9: swap-and-pop instead of filter (O(1) vs O(N), no allocation)
-        const arr = this.sim.particles;
-        const idx = arr.indexOf(p);
-        if (idx !== -1) {
-            arr[idx] = arr[arr.length - 1];
-            arr.pop();
-        }
-        if (this.sim.selectedParticle === p) this.sim.selectedParticle = null;
-        this.sim._dirty = true;
-        _haptics.trigger('light');
-    }
-
-    _deleteByGpuIdx(gpuIdx) {
-        // Find CPU counterpart first to get death metadata
-        const arr = this.sim.particles;
-        let deathMass = 0, deathAngVel = 0;
-        for (let i = arr.length - 1; i >= 0; i--) {
-            if (arr[i]._gpuIdx === gpuIdx) {
-                const p = arr[i];
-                this.sim.physics._retireParticle(p);
-                deathMass = p._deathMass || p.mass;
-                deathAngVel = p._deathAngVel || p.angVel;
-                if (this.sim.selectedParticle === p) this.sim.selectedParticle = null;
-                arr[i] = arr[arr.length - 1];
-                arr.pop();
-                break;
-            }
-        }
-        this.sim._gpuPhysics.removeParticle(gpuIdx, deathMass, deathAngVel);
+    /** Retire a GPU particle; it keeps sourcing signal-delayed forces until its signal clears. */
+    _deleteParticle(hit) {
+        this.sim._gpuPhysics.removeParticle(hit.index, hit.mass, hit.angVel);
+        if (this.sim.selectedIdx === hit.index) this.sim.select(-1);
         this.sim._dirty = true;
         _haptics.trigger('light');
     }
@@ -223,19 +180,7 @@ export default class InputHandler {
 
         const pos = this._getPosNew(e.clientX, e.clientY);
 
-        // In GPU mode, right-click on particle handled via deferred hit test (onMouseUp)
-        // In CPU mode, handle immediately
-        if (isRight && this.sim.backend !== BACKEND_GPU) {
-            const hit = this._cpuFindParticleAt(pos);
-            const bhOn = this.sim.physics.blackHoleEnabled;
-            if (hit) {
-                if (bhOn) this._deleteParticle(hit);
-                else if (hit.antimatter) { this.sim.selectedParticle = hit; this.sim._dirty = true; }
-                else this._deleteParticle(hit);
-                return;
-            }
-        }
-
+        // A right-click on a particle resolves through the deferred hit test in onMouseUp
         this.isDragging = true;
         this._rightButton = isRight;
         this.dragStart = pos;
@@ -257,24 +202,9 @@ export default class InputHandler {
             this._hoverE = e;
             requestAnimationFrame(() => {
                 this._hoverPending = false;
-                const ev = this._hoverE;
-                // GPU mode: dispatch hit test for hover, result handled in pollGPUHitResult
-                if (this.sim.backend === BACKEND_GPU && this.sim._gpuReady) {
-                    this.sim._gpuPhysics.hitTest(this.currentPos.x, this.currentPos.y);
-                    // Tooltip updated when poll returns result — hide stale tooltip
-                    this.hoveredParticle = null;
-                    this.tooltip.hide();
-                } else {
-                    const hit = this._cpuFindParticleAt(this.currentPos);
-                    this.hoveredParticle = hit;
-                    if (hit) {
-                        const speed = Math.sqrt(hit.vel.x * hit.vel.x + hit.vel.y * hit.vel.y);
-                        const spin = (hit.angVel * hit.radius).toFixed(3);
-                        this.tooltip.show(ev.clientX, ev.clientY, `m=${hit.mass.toFixed(2)}  q=${hit.charge.toFixed(2)}  s=${spin}c  v=${speed.toFixed(3)}c`);
-                    } else {
-                        this.tooltip.hide();
-                    }
-                }
+                // The tooltip updates when pollGPUHitResult sees the answer; hide the stale one
+                if (this.sim._gpuPhysics) this.sim._gpuPhysics.hitTest(this.currentPos.x, this.currentPos.y);
+                this.tooltip.hide();
             });
         } else {
             this._hoverE = e; // Update to latest event for pending rAF
@@ -288,86 +218,42 @@ export default class InputHandler {
 
         const endPos = this._getPosNew(e.clientX, e.clientY);
 
-        // Short click: select, delete, or spawn
-        if (this.dragStart.dist(endPos) < DRAG_THRESHOLD) {
-            if (this.sim.backend === BACKEND_GPU && this.sim._gpuReady) {
-                // GPU mode: defer action until GPU hit test result arrives
-                this.sim._gpuPhysics.hitTest(endPos.x, endPos.y);
-                this._pendingClick = { pos: endPos, rightButton: this._rightButton };
-                return;
-            }
-            // CPU mode: immediate
-            const hit = this._cpuFindParticleAt(endPos);
-            if (hit) {
-                this._resolveClickHit(hit, this._rightButton);
-                return;
-            }
+        // Short click: select, delete, or spawn, once the GPU hit test resolves
+        if (this.dragStart.dist(endPos) < DRAG_THRESHOLD && this.sim._gpuPhysics) {
+            this.sim._gpuPhysics.hitTest(endPos.x, endPos.y);
+            this._pendingClick = { pos: endPos, rightButton: this._rightButton };
+            return;
         }
 
-        // Long drag or no hit: spawn
-        this.spawnParticle(endPos, this._rightButton && !this.sim.physics.blackHoleEnabled);
+        // Long drag: spawn
+        this.spawnParticle(endPos, this._rightButton && !this.sim.settings.blackHoleEnabled);
     }
 
-    /** Resolve a click that hit a particle (select or delete based on type). */
-    _resolveClickHit(p, rightButton) {
-        const bhOn = this.sim.physics.blackHoleEnabled;
-        if (bhOn) {
-            if (rightButton) this._deleteParticle(p);
-            else this.sim.selectedParticle = p;
-        } else {
-            if (p.antimatter === rightButton) this.sim.selectedParticle = p;
-            else this._deleteParticle(p);
-        }
+    /**
+     * Resolve a click that hit a particle. A click of the particle's own kind
+     * selects it (left for matter, right for antimatter); the other kind deletes.
+     * Black-hole mode has no antimatter: left selects, right deletes.
+     */
+    _resolveClickHit(hit, rightButton) {
+        const bhOn = this.sim.settings.blackHoleEnabled;
+        const selects = bhOn ? !rightButton : hit.antimatter === rightButton;
+        if (selects) this.sim.select(hit.index);
+        else this._deleteParticle(hit);
         this.sim._dirty = true;
     }
 
-    // ─── Hit testing ───
-
-    /** CPU-mode hit test using quadtree range query. */
-    _cpuFindParticleAt(worldPos) {
-        const physics = this.sim.physics;
-        const root = physics._lastRoot;
-        if (root < 0) return null;
-        const searchR = 4; // conservative max particle radius
-        const candidates = physics.pool.queryReuse(root, worldPos.x, worldPos.y, searchR, searchR);
-        let best = null;
-        let bestDist = Infinity;
-        for (let i = 0; i < candidates.length; i++) {
-            const p = candidates[i].isGhost ? candidates[i].original : candidates[i];
-            const d = p.pos.dist(worldPos);
-            if (d < p.radius && d < bestDist) {
-                bestDist = d;
-                best = p;
-            }
-        }
-        return best;
-    }
-
-    /**
-     * Refresh the hover tooltip with current particle data.
-     * CPU mode: re-reads live particle properties.
-     * GPU mode: re-dispatches hit test at last cursor position for fresh readback.
-     * Call periodically from the main loop (e.g. every 8th frame via STATS_THROTTLE_MASK).
-     */
+    /** Re-run the hover hit test at the cursor for fresh tooltip data. Called every 8th frame. */
     refreshTooltip() {
-        if (!this.tooltip.el.classList.contains('visible')) return;
-        if (this.sim.backend === BACKEND_GPU && this.sim._gpuReady) {
-            // Re-dispatch hit test at the current world position for fresh data
-            this.sim._gpuPhysics.hitTest(this.currentPos.x, this.currentPos.y);
-        } else if (this.hoveredParticle) {
-            const hit = this.hoveredParticle;
-            const speed = Math.sqrt(hit.vel.x * hit.vel.x + hit.vel.y * hit.vel.y);
-            const spin = (hit.angVel * hit.radius).toFixed(3);
-            this.tooltip.el.textContent = `m=${hit.mass.toFixed(2)}  q=${hit.charge.toFixed(2)}  s=${spin}c  v=${speed.toFixed(3)}c`;
-        }
+        if (!this.tooltip.el.classList.contains('visible') || !this.sim._gpuPhysics) return;
+        this.sim._gpuPhysics.hitTest(this.currentPos.x, this.currentPos.y);
     }
 
     /**
-     * Poll for GPU hit test result. Call once per frame in GPU mode.
-     * Completes deferred click actions and updates hover state.
+     * Poll for a GPU hit test result once per frame. Completes a deferred click
+     * (select, delete, or spawn on a miss) or updates the hover tooltip.
      */
     pollGPUHitResult() {
-        if (!this.sim._gpuReady || this.sim.backend !== BACKEND_GPU) return;
+        if (!this.sim._gpuPhysics) return;
         const result = this.sim._gpuPhysics.readHitResult();
         if (result === null) return; // not ready yet
 
@@ -375,34 +261,17 @@ export default class InputHandler {
         this._pendingClick = null;
 
         if (result.index >= 0) {
-            // GPU found a particle at this index
-            const match = this.sim.particles.find(p => p._gpuIdx === result.index);
-            if (pending && match) {
-                // Complete deferred click
-                this._resolveClickHit(match, pending.rightButton);
-            } else if (pending && !match) {
-                // GPU found particle but no CPU counterpart — delete directly by GPU index
-                if (pending.rightButton) {
-                    this._deleteByGpuIdx(result.index);
-                } else {
-                    // Can't select without CPU particle — ignore
-                }
+            if (pending) {
+                this._resolveClickHit(result, pending.rightButton);
             } else {
-                // No pending click — this was a hover hit test, show tooltip with GPU-fresh data
-                this.hoveredParticle = match || null;
                 const speed = Math.sqrt(result.velX * result.velX + result.velY * result.velY);
                 const spin = (result.angVel * result.radius).toFixed(3);
                 this.tooltip.show(this._screenX, this._screenY, `m=${result.mass.toFixed(2)}  q=${result.charge.toFixed(2)}  s=${spin}c  v=${speed.toFixed(3)}c`);
             }
+        } else if (pending) {
+            this.spawnParticle(pending.pos, pending.rightButton && !this.sim.settings.blackHoleEnabled);
         } else {
-            // GPU returned -1: no particle at click position
-            if (pending) {
-                // Complete deferred click as spawn
-                this.spawnParticle(pending.pos, pending.rightButton && !this.sim.physics.blackHoleEnabled);
-            } else {
-                this.hoveredParticle = null;
-                this.tooltip.hide();
-            }
+            this.tooltip.hide();
         }
     }
 

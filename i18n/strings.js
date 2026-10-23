@@ -19,7 +19,6 @@ const UI_EN = {
 
     // ── Topbar ──
     'topbar.home': 'a9l.im',
-    'topbar.gpuOn': 'on GPU',
     'topbar.modeNormal': 'Normal mode',
     'topbar.modeNormalTitle': 'Normal mode (X)',
     'topbar.modeAntimatter': 'Antimatter mode',
@@ -188,8 +187,12 @@ const UI_EN = {
     'controls.referenceTitle': 'Reference',
 
     // ── GPU / system ──
-    'gpu.lostRestored': 'GPU lost — restored from auto-save (CPU mode)',
-    'gpu.lostSwitched': 'GPU lost — switched to CPU mode',
+    'gpu.lostRestored': 'GPU device lost — restored from auto-save',
+    'gpu.lostReset': 'GPU device lost — restarted empty',
+    'webgpu.title': 'Geon needs WebGPU',
+    'webgpu.body': 'The simulation runs as WebGPU compute shaders, and this browser isn\u2019t providing WebGPU, so nothing can run here.',
+    'webgpu.browsers': 'WebGPU is on by default in Chrome and Edge, in Safari 26 on macOS 26 and iOS 26, and in Firefox on Windows and on Apple Silicon Macs running macOS 26. On Linux it depends on the GPU driver.',
+    'webgpu.close': 'Close',
 
     // ── Save / Load toasts ──
     'toast.cleared': 'Simulation cleared',
@@ -366,7 +369,6 @@ const UI_JA = {
 
     // ── Topbar ──
     'topbar.home': 'a9l.im',
-    'topbar.gpuOn': 'GPU動作中',
     'topbar.modeNormal': '通常モード',
     'topbar.modeNormalTitle': '通常モード (X)',
     'topbar.modeAntimatter': '反物質モード',
@@ -533,8 +535,12 @@ const UI_JA = {
     'controls.referenceTitle': 'リファレンス',
 
     // ── GPU / system ──
-    'gpu.lostRestored': 'GPUが失われました — オートセーブから復元 (CPUモード)',
-    'gpu.lostSwitched': 'GPUが失われました — CPUモードに切り替え',
+    'gpu.lostRestored': 'GPUデバイスが失われました — オートセーブから復元',
+    'gpu.lostReset': 'GPUデバイスが失われました — 空の状態で再開',
+    'webgpu.title': 'GeonにはWebGPUが必要です',
+    'webgpu.body': 'このシミュレーションはWebGPUの計算シェーダーで動作しますが、このブラウザではWebGPUが利用できないため実行できません。',
+    'webgpu.browsers': 'WebGPUはChromeとEdge、macOS 26とiOS 26のSafari 26、WindowsおよびmacOS 26を搭載したAppleシリコンのMacのFirefoxで標準で有効です。LinuxではGPUドライバーに依存します。',
+    'webgpu.close': '閉じる',
 
     // ── Save / Load toasts ──
     'toast.cleared': 'シミュレーションをクリアしました',

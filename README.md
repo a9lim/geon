@@ -38,15 +38,20 @@ substepping advances them.
 - **Scalar fields.** A Higgs field with a Mexican-hat potential that sets particle
   masses, and an axion field that modulates the electromagnetic coupling and, with
   Yukawa on, couples with opposite sign to matter and antimatter (a Peccei–Quinn toy).
-  Both evolve on a grid, carry self-gravity, and are excited by collisions.
+  Both evolve on a grid and are excited by collisions. With gravity on they evolve in a
+  curved metric sourced by their own energy and the particles' mass, so field
+  oscillations slow near heavy bodies.
+- **Proper time.** Pion decay, Hawking evaporation, Schwinger discharge, superradiance,
+  and mass transfer run on each body's own clock: a fast pion beam lives longer in the
+  lab, and a moving black hole takes longer to evaporate.
 - **Charge quantization.** Every charge is a multiple of 0.1, and emission, absorption,
   decay, and discharge move charge in whole units.
 - **Space.** Despawn, bounce, or periodic boundaries; periodic space can be a torus, a
   Klein bottle, or the real projective plane. Cosmological expansion adds a Hubble flow.
 - **Analysis.** Energy, momentum, and angular-momentum totals with drift percentages; a
   per-force breakdown for the selected particle; a potential heatmap (gravity,
-  electric, Yukawa, or all); and, on the CPU backend, a phase-space plot and an
-  effective-potential curve for the selected particle against the heaviest body.
+  electric, Yukawa, or all); and a phase-space plot and an effective-potential curve
+  for the selected particle against the heaviest other body.
 - **Presets.** Fifteen scenarios, from Kepler orbits and binary inspiral through
   Hawking evaporation, atoms, nuclei, and pion exchange to the Higgs boson, axion
   bursts, and an expanding universe.
@@ -77,16 +82,15 @@ the parent site by absolute path. From a checkout of
     npm install && npm run build
     python3 -m http.server --directory dist 8000   # http://localhost:8000/geon/
 
-WebGPU is used when the browser supports it; add `?cpu=1` to force the CPU backend.
+Geon needs WebGPU. `tests/physics-validation.html` checks the physics against analytic
+results in the browser.
 
 ## How it's built
 
-Vanilla JavaScript modules with two interchangeable backends. The WebGPU backend runs
-the physics as WGSL compute shaders (up to 512 particles, with a lock-free GPU tree and
-128 × 128 field grids) and draws with instanced rendering; the CPU backend runs the
-same physics in JavaScript (up to 128 particles, 64 × 64 grids) and draws with Canvas
-2D. Shared controls, theme, and typography come from the parent site, and KaTeX renders
-the reference pages. [AGENTS.md](AGENTS.md) maps the code.
+Vanilla JavaScript modules on WebGPU. The physics runs as WGSL compute shaders (up to
+512 particles, with a lock-free GPU tree and 128 × 128 field grids) and draws with
+instanced rendering. Shared controls, theme, and typography come from the parent site,
+and KaTeX renders the reference pages. [AGENTS.md](AGENTS.md) maps the code.
 
 ## License
 
