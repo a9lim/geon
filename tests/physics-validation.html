@@ -134,7 +134,8 @@ async function readParticles(gp) {
     const out = [];
     for (let i = 0; i < gp.aliveCount; i++) {
         const b = i * 9;
-        out.push({ x: f[b], y: f[b + 1], wx: f[b + 2], wy: f[b + 3], mass: f[b + 4], alive: (u[b + 8] & 1) !== 0 });
+        out.push({ x: f[b], y: f[b + 1], wx: f[b + 2], wy: f[b + 3], mass: f[b + 4], charge: f[b + 5],
+                   alive: (u[b + 8] & 1) !== 0 });
     }
     return out;
 }
@@ -628,6 +629,121 @@ cases.push({
         return { expected: `${deg(expected)} (p = ${fmt(on.p, 4)}, ${fmt(off.p, 4)})`,
                  measured: `${deg(measured)}; SR alone ${deg(off.adv)} vs πM/p ${deg(Math.PI * M / off.p)}`,
                  metric: `${fmt((measured / expected - 1) * 100, 2)}%`, pass: Math.abs(measured / expected - 1) < 0.05 };
+    },
+});
+
+// The stats' energy against the dynamics: a bound pair on an eccentric orbit, Newtonian T + V
+// from the particle readback beside the stats' total, sampled n times over T. Bodies start on
+// the x axis about their centre of mass at f times the softened circular speed of the
+// attraction k·r/(r² + ε²)^{3/2} (k = m₁m₂ for gravity, −q₁q₂ for Coulomb).
+async function eccentricPair({ on, m1, m2, q1 = 0, q2 = 0, coulomb = false, d, f = 0.85, T, dt = 2, n = 40 }) {
+    const rel = on.includes('relativityEnabled');
+    const k = coulomb ? -q1 * q2 : m1 * m2;
+    const gp = await makeSim({ on, domainW: 4096, domainH: 4096 });
+    const M = m1 + m2, mu = m1 * m2 / M, C = 2048;
+    const vrel = f * Math.sqrt(k * d * d / (mu * Math.pow(d * d + SOFTENING_SQ, 1.5)));
+    gp.addParticle({ x: C - d * m2 / M, y: C, vy: -vrel * m2 / M, mass: m1, charge: q1, bornAt: -Infinity });
+    gp.addParticle({ x: C + d * m1 / M, y: C, vy: vrel * m1 / M, mass: m2, charge: q2, bornAt: -Infinity });
+    gp.update(0.01);   // derived velocities for the first readback
+    const kinetic = (p) => { const w2 = p.wx * p.wx + p.wy * p.wy; return rel ? p.mass * w2 / (Math.sqrt(1 + w2) + 1) : 0.5 * p.mass * w2; };
+    const vel = (p) => { const g = rel ? Math.sqrt(1 + p.wx * p.wx + p.wy * p.wy) : 1; return [p.wx / g, p.wy / g]; };
+    const rows = [];
+    for (let i = 0; i <= n; i++) {
+        const s = await statsNow(gp);
+        const [a, b] = await readParticles(gp);
+        const dx = a.x - b.x, dy = a.y - b.y, rs = Math.sqrt(dx * dx + dy * dy + SOFTENING_SQ);
+        const V = (coulomb ? a.charge * b.charge : -a.mass * b.mass) / rs;
+        rows.push({ t: i * T / n, E: s.linearKE + s.pe + s.fieldEnergy, EN: kinetic(a) + kinetic(b) + V,
+                    fe: s.fieldEnergy, dx, dy, rs, a, b, v1: vel(a), v2: vel(b) });
+        if (i < n) await run(gp, T / n, dt);
+    }
+    gp.destroy();
+    return rows;
+}
+const spanOf = (rows, f) => { const xs = rows.map(f); return Math.max(...xs) - Math.min(...xs); };
+
+// 1PN energy: Newton, the 4m v × Bg rotation and the 1PN remainder are harmonic-gauge EIH, whose
+// conserved energy adds (m₁m₂/2r)[3(v₁² + v₂²) − 7v₁·v₂ − (n̂·v₁)(n̂·v₂)] + m₁m₂(m₁ + m₂)/(2r²)
+// and Σ⅜mv⁴ to T + V. Along the orbit T + V swings by the 1PN terms; the stats' total keeps only
+// the truncation error, O(M/r) of that swing, so it halves when the orbit is twice as wide.
+// Relativity off keeps signal delay out of the comparable-mass pair; the third run has it on,
+// with a test mass so the source barely moves, and (γ − 1)m supplies the ⅜mv⁴.
+cases.push({
+    name: '1PN energy: the EIH energy is conserved on an eccentric binary, to the next order',
+    async run() {
+        const eih = ['gravityEnabled', 'gravitomagEnabled', 'onePNEnabled'];
+        const ratio = async (opts) => {
+            const rows = await eccentricPair({ on: eih, m1: 1, m2: 1, ...opts });
+            return spanOf(rows, r => r.E) / spanOf(rows, r => r.EN);
+        };
+        const near = await ratio({ d: 100, T: 4000 });
+        const far = await ratio({ d: 200, T: 11000 });
+        const rows = await eccentricPair({ on: [...eih, 'relativityEnabled'], m1: 2, m2: 0.002, d: 100, T: 4000 });
+        const rel = spanOf(rows, r => r.E) / spanOf(rows, r => r.EN);
+        return { expected: 'stats swing ≪ T + V swing; ∝ M/r',
+                 measured: `${fmt(near, 3)} (d = 100), ${fmt(far, 3)} (d = 200); Relativity on ${fmt(rel, 3)}`,
+                 metric: `far/near ${fmt(far / near, 3)}`,
+                 pass: near < 0.2 && far / near < 0.7 && rel < 0.2 };
+    },
+});
+
+// Darwin: Liénard–Wiechert's field about the present position is Darwin's to O(v²), so with
+// Relativity on the conserved energy is T + V + (q₁q₂/2r)[v₁·v₂ + (n̂·v₁)(n̂·v₂)] (the stats'
+// field energy). At O(v³) the pair loses energy to its mutual radiation: each charge feels the
+// other's (2/3)q·ȧ, which averages to dE/dt = −(4/3)q₁q₂ a₁·a₂ (the cross term of the dipole
+// formula; the self terms are the Radiation toggle's). With that loss integrated along the orbit,
+// what remains of the Darwin swing is the next order. Without Relativity the magnetic force does
+// no work and the field energy is zero.
+cases.push({
+    name: 'Darwin energy: a Liénard–Wiechert pair conserves T + V + L_D, but for its mutual radiation',
+    async run() {
+        const rows = await eccentricPair({ on: ['coulombEnabled', 'magneticEnabled', 'relativityEnabled'],
+                                           m1: 1, m2: 1, q1: 1, q2: -1, coulomb: true, d: 200, T: 11000, n: 120 });
+        let W = 0;
+        const diss = (r) => {
+            const c = r.a.charge * r.b.charge / (r.rs ** 3);
+            const a1 = [c * r.dx / r.a.mass, c * r.dy / r.a.mass], a2 = [-c * r.dx / r.b.mass, -c * r.dy / r.b.mass];
+            return -(4 / 3) * r.a.charge * r.b.charge * (a1[0] * a2[0] + a1[1] * a2[1]);
+        };
+        rows[0].W = 0;
+        for (let i = 1; i < rows.length; i++) {
+            W += 0.5 * (diss(rows[i]) + diss(rows[i - 1])) * (rows[i].t - rows[i - 1].t);
+            rows[i].W = W;
+        }
+        const withDarwin = spanOf(rows, r => r.E - r.W), without = spanOf(rows, r => r.EN - r.W);
+        const loss = rows[rows.length - 1].E - rows[0].E;
+        const off = await eccentricPair({ on: ['coulombEnabled', 'magneticEnabled'], m1: 1, m2: 1, q1: 1, q2: -1,
+                                          coulomb: true, d: 200, T: 200, n: 2 });
+        const offField = Math.max(...off.map(r => Math.abs(r.fe)));
+        return { expected: `swing ≪ T + V's; loss ${fmt(W, 3)}; no field energy without Relativity`,
+                 measured: `${fmt(withDarwin / without, 3)} of T + V's swing; loss ${fmt(loss, 3)}; ${fmt(offField, 2)}`,
+                 metric: `loss ${fmt((loss / W - 1) * 100, 2)}%`,
+                 pass: withDarwin / without < 0.2 && Math.abs(loss / W - 1) < 0.15 && offField === 0 };
+    },
+});
+
+// Majumdar–Papapetrou at 1PN: extremal like charges (q = m) balance at every order in GR. Newton
+// and Coulomb cancel exactly, and at 1PN EIH's static repulsion m₁m₂(5m₁ + 4m₂)/r³ cancels
+// Bažański's attraction, as the energies m₁m₂(m₁ + m₂)/(2r²) and
+// ½(m₁q₂² + m₂q₁²)/r² − q₁q₂(m₁ + m₂)/r² do. Each 1PN term alone would move the pair by ~10²
+// in this time.
+cases.push({
+    name: 'Majumdar–Papapetrou: extremal charges (q = m) rest in balance at 1PN, with zero interaction energy',
+    async run() {
+        const gp = await makeSim({ on: ['gravityEnabled', 'coulombEnabled', 'gravitomagEnabled', 'onePNEnabled', 'relativityEnabled'],
+                                   domainW: 256, domainH: 256 });
+        gp.addParticle({ x: 113, y: 128, mass: 1, charge: 1, bornAt: -Infinity });
+        gp.addParticle({ x: 143, y: 128, mass: 0.5, charge: 0.5, bornAt: -Infinity });
+        await run(gp, 2000, 2);
+        const [a, b] = await readParticles(gp);
+        const s = await statsNow(gp);
+        gp.destroy();
+        const moved = Math.abs(Math.hypot(b.x - a.x, b.y - a.y) - 30);
+        const static1PN = 1 * 0.5 * 1.5 / (2 * (900 + SOFTENING_SQ));
+        return { expected: `Δr = 0; PE 0 (each 1PN term ${fmt(static1PN, 2)})`,
+                 measured: `Δr = ${fmt(moved, 2)}; PE ${fmt(s.pe, 2)}`,
+                 metric: fmt(Math.abs(s.pe) / static1PN, 2),
+                 pass: moved < 1e-3 && Math.abs(s.pe) < 1e-4 * static1PN };
     },
 });
 

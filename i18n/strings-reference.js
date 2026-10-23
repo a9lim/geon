@@ -648,25 +648,29 @@ const REF_EN = {
 
     'ref.energy.title': 'Energy conservation',
     'ref.energy.body': `
-<p>Total energy is tracked as the sum of five components:</p>
+<p>The total is the sum of the Stats tab's lines:</p>
 <ul>
-<li><b>Linear KE</b>: $\\sum_i(\\gamma_i-1)m_i$ — relativistic translational kinetic energy</li>
-<li><b>Spin KE</b>: $\\sum_i\\frac{1}{2}I_i\\omega_i^2$ — rotational kinetic energy</li>
-<li><b>Potential</b>: gravitational + Coulomb + magnetic/GM dipole + 1PN corrections + Yukawa</li>
-<li><b>Field</b>: Darwin velocity-dependent corrections at $O(v^2/c^2)$</li>
-<li><b>Radiated</b>: cumulative energy carried away by photons and gravitons</li>
+<li><b>Mass (mc²)</b>: $\\sum_i m_i$, the rest mass</li>
+<li><b>Linear KE</b>: $\\sum_i(\\gamma_i-1)m_i$ with Relativity on, $\\sum_i\\frac{1}{2}m_iv_i^2$ without</li>
+<li><b>Angular KE</b>: the bodies' rotational kinetic energy</li>
+<li><b>Potential</b>: the gravitational, Coulomb, magnetic and gravitomagnetic dipole, and Yukawa potentials; with 1PN on, also the EIH, Bažański and scalar Breit energies</li>
+<li><b>Field</b>: the scalar fields' energy and, with Relativity and Coulomb on, the Darwin interaction energy $\\frac{q_1q_2}{2r}\\big[\\mathbf{v}_1\\cdot\\mathbf{v}_2 + (\\hat{\\mathbf{n}}\\cdot\\mathbf{v}_1)(\\hat{\\mathbf{n}}\\cdot\\mathbf{v}_2)\\big]$</li>
+<li><b>Radiated</b>: the photon, pion and lepton pools, radiation the bodies have lost but not yet emitted, and radiation that has left the pools</li>
 </ul>
 
-<h3>Conservation quality</h3>
-<p>Energy is exactly conserved (to machine precision) with gravity + Coulomb only, in pairwise mode. Additional forces affect conservation differently:</p>
+<h3>What is conserved</h3>
+<p>Each term is the conserved energy of its force as applied: for a Lagrangian $L$, $E = \\sum_i \\mathbf{v}_i\\cdot\\partial L/\\partial\\mathbf{v}_i - L$. A term of second order in the velocities enters with the sign it has in $L$, a static one with the opposite sign.</p>
 <ul>
-<li><b>Magnetic / GM</b>: velocity-dependent forces carry energy in fields not fully modeled — small drift expected</li>
-<li><b>Radiation</b>: energy leaves the system (tracked in the "Radiated" line)</li>
+<li><b>Without Relativity</b>: the magnetic and gravitomagnetic Lorentz forces do no work, so kinetic plus potential energy is conserved up to the integrator's error.</li>
+<li><b>Liénard–Wiechert</b> (Relativity on): the field reduces to Darwin's at $O(v^2)$, so the Darwin energy keeps the total. At $O(v^3)$ a pair of charges loses $\\frac{4}{3}q_1q_2\\,\\mathbf{a}_1\\cdot\\mathbf{a}_2$ per unit time to its mutual radiation, which no line receives.</li>
+<li><b>1PN</b>: a pair's energy holds to the next order in $v^2$. Three or more bodies drift, since the pairwise forces leave out EIH's three-body terms.</li>
+<li><b>Signal delay outside EM</b>: gravity, Yukawa and the dipole forces act from the retarded position, which pumps energy into orbits of comparable masses at $O(v)$ (Laplace's aberration argument).</li>
+<li><b>Radiation</b>: energy leaves the bodies for the Radiated line</li>
 <li><b>Barnes-Hut</b>: approximate force evaluation breaks exact symmetry — small drift</li>
 <li><b>Axion</b>: external oscillating field injects and extracts energy — no conservation expected</li>
-<li><b>Expansion</b>: Hubble drag dissipates peculiar kinetic energy — no conservation expected</li>
+<li><b>Expansion</b>: the energy the expansion takes is the Redshift and expansion work line, which the drift includes</li>
 </ul>
-<p>The "Drift" line tracks cumulative numerical error as a percentage of the initial total energy, giving a real-time measure of simulation accuracy.</p>
+<p>The Drift line is the change in the total, expansion work included, as a percentage of the run's energy scale.</p>
 `,
 
     'ref.pion.title': 'Pion exchange (Yukawa force carriers)',
@@ -1418,25 +1422,29 @@ const REF_JA = {
 
     'ref.energy.title': 'エネルギー保存',
     'ref.energy.body': `
-<p>全エネルギーは5成分の和として追跡されます：</p>
+<p>全エネルギーは統計タブの各行の和です：</p>
 <ul>
-<li><b>並進KE</b>：$\\sum_i(\\gamma_i-1)m_i$ — 相対論的並進運動エネルギー</li>
-<li><b>スピンKE</b>：$\\sum_i\\frac{1}{2}I_i\\omega_i^2$ — 回転運動エネルギー</li>
-<li><b>ポテンシャル</b>：重力 + クーロン + 磁気/重力磁気双極子 + 1PN補正 + 湯川</li>
-<li><b>場</b>：$O(v^2/c^2)$ のダーウィン速度依存補正</li>
-<li><b>放射</b>：光子と重力子により持ち去られた累積エネルギー</li>
+<li><b>質量 (mc²)</b>：$\\sum_i m_i$、静止質量</li>
+<li><b>並進運動エネルギー</b>：相対論が有効なら $\\sum_i(\\gamma_i-1)m_i$、無効なら $\\sum_i\\frac{1}{2}m_iv_i^2$</li>
+<li><b>回転運動エネルギー</b>：物体の回転の運動エネルギー</li>
+<li><b>ポテンシャル</b>：重力・クーロン・磁気双極子・重力磁気双極子・湯川のポテンシャル。1PN が有効なら EIH・バザンスキ・スカラー・ブライトのエネルギーも含む</li>
+<li><b>場</b>：スカラー場のエネルギーと、相対論とクーロンが有効ならダーウィン相互作用エネルギー $\\frac{q_1q_2}{2r}\\big[\\mathbf{v}_1\\cdot\\mathbf{v}_2 + (\\hat{\\mathbf{n}}\\cdot\\mathbf{v}_1)(\\hat{\\mathbf{n}}\\cdot\\mathbf{v}_2)\\big]$</li>
+<li><b>放射</b>：光子・パイオン・レプトンのプール、物体が失ったがまだ放出していない放射、プールを離れた放射</li>
 </ul>
 
-<h3>保存の質</h3>
-<p>重力 + クーロンのみ・ペアワイズモードでは、エネルギーは厳密に保存されます（機械精度）。追加の力は保存に異なる影響を与えます：</p>
+<h3>何が保存されるか</h3>
+<p>各項は、適用されている力の保存エネルギーです。ラグランジアン $L$ に対して $E = \\sum_i \\mathbf{v}_i\\cdot\\partial L/\\partial\\mathbf{v}_i - L$ なので、速度について2次の項は $L$ と同じ符号で、静的な項は逆の符号で入ります。</p>
 <ul>
-<li><b>磁気 / 重力磁気</b>：速度依存力は完全にはモデル化されない場の中にエネルギーを運ぶ — 小さなドリフトが見込まれる</li>
-<li><b>放射</b>：エネルギーが系を離れる（「放射」行で追跡）</li>
+<li><b>相対論なし</b>：磁気と重力磁気のローレンツ力は仕事をしないので、運動エネルギーとポテンシャルの和は積分器の誤差の範囲で保存されます。</li>
+<li><b>リエナール＝ヴィーヘルト</b>（相対論あり）：場は $O(v^2)$ でダーウィンの場に帰着するので、ダーウィンエネルギーが全エネルギーを保ちます。$O(v^3)$ では電荷の対が相互の放射により単位時間あたり $\\frac{4}{3}q_1q_2\\,\\mathbf{a}_1\\cdot\\mathbf{a}_2$ を失い、これはどの行にも計上されません。</li>
+<li><b>1PN</b>：二体のエネルギーは $v^2$ の次の次数まで保たれます。三体以上では、対ごとの力が EIH の三体項を含まないためドリフトします。</li>
+<li><b>電磁気以外の信号遅延</b>：重力・湯川・双極子力は遅延位置から働くため、同程度の質量の軌道に $O(v)$ でエネルギーを注ぎ込みます（ラプラスの光行差の議論）。</li>
+<li><b>放射</b>：エネルギーが物体から「放射」行へ移る</li>
 <li><b>バーンズ＝ハット</b>：近似的な力評価が厳密な対称性を破る — 小さなドリフト</li>
 <li><b>アクシオン</b>：外部振動場がエネルギーを注入・抽出する — 保存は期待されない</li>
-<li><b>宇宙膨張</b>：ハッブルドラッグが固有運動エネルギーを散逸する — 保存は期待されない</li>
+<li><b>宇宙膨張</b>：膨張が奪うエネルギーは「赤方偏移と膨張の仕事」行に入り、ドリフトはそれを含む</li>
 </ul>
-<p>「ドリフト」行は初期全エネルギーに対する累積数値誤差を百分率で追跡し、シミュレーション精度のリアルタイム指標となります。</p>
+<p>「ドリフト」行は、膨張の仕事を含む全エネルギーの変化を、その実行のエネルギースケールに対する百分率で示します。</p>
 `,
 
     'ref.pion.title': 'パイオン交換（湯川力の媒介子）',

@@ -103,12 +103,18 @@ clears itself; each stats readback carries the selection it was requested for
   leptons carry 0 or ±`BOSON_CHARGE`, and emission, absorption, decay, Schwinger
   discharge, extremal shedding, and Roche transfer move whole quanta.
 - Energy totals include rest mass plus kinetic, spin, potential, field, and radiated
-  terms. Radiated is the boson pools (`boson-ledger.wgsl`: photons, pions and leptons),
-  the radiation bodies have lost but not yet emitted (the `RadiationState`
-  accumulators), and escaped radiation: the pool culls bound memory, so what they
-  remove goes to `GPUPhysics.ledger.escapedE` instead of vanishing. Stats readbacks
-  carry the state version, scale factor and ledger as of their request, so a readback
-  in flight across a reset, spawn or removal can't set the drift baseline.
+  terms. The potential and field terms are each force's conserved energy
+  (`compute-stats.wgsl` `statsPE`): T + V alone without Relativity or 1PN, since the
+  magnetic and gravitomagnetic Lorentz forces do no work; with Relativity and Coulomb,
+  Darwin's +(q₁q₂/2r)[v₁·v₂ + (n̂·v₁)(n̂·v₂)] and its field momentum, which
+  Liénard–Wiechert's field reduces to at O(v²); with 1PN, the EIH, Bažański and scalar
+  Breit energies (two-body forms, summed over pairs). Radiated is the boson pools
+  (`boson-ledger.wgsl`: photons, pions and leptons), the radiation bodies have lost but
+  not yet emitted (the `RadiationState` accumulators), and escaped radiation: the pool
+  culls bound memory, so what they remove goes to `GPUPhysics.ledger.escapedE` instead
+  of vanishing. Stats readbacks carry the state version, scale factor and ledger as of
+  their request, so a readback in flight across a reset, spawn or removal can't set the
+  drift baseline.
 
 ### Integrator
 
@@ -588,8 +594,14 @@ canvas text needs no font-load redraw.
   arc offsets relative to `getTorqueOffset()`.
 - The `magnetic` preset drives a body to about 0.99c, as it did before the 2026-10-23
   force-law fixes.
-- `compute-stats.wgsl`'s velocity-dependent energies (Darwin field energy, the EIH and
-  Bažański 1PN terms) predate the 2026-10-23 force audit and don't match the forces now
-  applied, so 1PN and magnetic runs show a drift that is bookkeeping, not dynamics.
+- With Relativity on, gravity's signal delay unbinds comparable-mass orbits at O(v)
+  (Laplace's aberration; `docs/ROADMAP.md` §2.2), so the inspiral preset's binary gains
+  energy despite its quadrupole radiation.
+- The precession preset starts its planet at 1.3× circular speed (about 0.63c) at r = 10,
+  inside the softening length (ε = 8), far outside 1PN's range: with 1PN on it escapes
+  the domain at once instead of tracing a rosette (Newton alone gives a bound one).
+- The nucleus preset's Yukawa well (coupling 14, m = 2) drives bodies to about 3c with
+  Relativity off, and its energy drifts by tens of percent with pass-through collisions
+  too: the integrator at those speeds, not the stats.
 - Schwinger and extremal-shedding leptons carry kinetic energy the hole never pays
   (see Black holes); now that the pools count, the hawking preset's drift shows it.

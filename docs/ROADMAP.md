@@ -388,6 +388,27 @@ The tie is explicit and per mode, which is what Codex asked for.
     energy; the field friction was a first-order split (now Strang halves); the bath's
     draws relied on fdC (now its own counter-keyed pass, which moved the Kibble–Zurek
     slope to 0.22).
+- **The stats' energies for the audited forces (2026-10-23):** `statsPE` books each
+  force's conserved energy, E = Σv·∂L/∂v − L of its Lagrangian (Codex verified each,
+  EIH and scalar Breit symbolically):
+  - Darwin with Relativity on and Coulomb, magnetic toggle or not:
+    +(q₁q₂/2r)[v₁·v₂ + (n̂·v₁)(n̂·v₂)] (the stale code booked −), with its field
+    momentum. Without Relativity the magnetic and gravitomagnetic Lorentz forces do
+    no work, so T + V alone; the stale Darwin and "Darwin gravity" terms are gone;
+  - EIH: (m₁m₂/2r)[3(v₁² + v₂²) − 7v₁·v₂ − (n̂·v₁)(n̂·v₂)] + m₁m₂(m₁ + m₂)/(2r²) (both
+    signs were flipped and the G² coefficient was 1), plus ⅜mv⁴ in the kinetic energy
+    when 1PN runs without Relativity;
+  - Bažański's static term, [½(m₁q₂² + m₂q₁²) − q₁q₂(m₁ + m₂)]/r², from a test charge
+    in Reissner–Nordström (harmonic r = R − M), symmetrized; differentiating it and
+    adding EIH's order-reduced Coulomb accelerations reproduces the force's 6m₁ + 5m₂;
+  - scalar Breit: (Ke^{−μr}/2r)[−v₁² − v₂² + v₁·v₂ − α(n̂·v₁)(n̂·v₂)];
+  - `stats[26]` takes each term's dE/d(ln a) (velocity factors redshift as 1/a).
+  - Oracles (35): an eccentric EIH binary, where the stats' swing is 0.12 of T + V's
+    at d = 100 and 0.06 at d = 200 (the truncation, ∝ M/r), 0.13 with Relativity on;
+    a Liénard–Wiechert pair, 0.09 of T + V's swing once the mutual radiation
+    −(4/3)q₁q₂a₁·a₂ is integrated, with the measured loss within 2% of it;
+    Majumdar–Papapetrou, extremal charges q = m at rest balance at 1PN (Δr = 0 over
+    t = 2000, interaction energy 10⁻⁷ of each 1PN term).
 
 ### 2.2 Physics bugs and gaps found by the 2.0 scouting
 
@@ -423,9 +444,18 @@ The tie is explicit and per mode, which is what Codex asked for.
     (radiation) in between, wrong for frozen or kinetic fields and relativistic
     matter; planar matter and radiation are anisotropic, driving an isotropic a;
   - the Kibble–Zurek bath's temperature isn't rescaled under expansion.
-- **The stats' velocity-dependent energies predate the force audit:**
-  `compute-stats.wgsl` still books Darwin field energy and the old EIH and
-  Bažański energies, so 1PN and magnetic runs drift by bookkeeping.
+- **The stats' energies are the two-body, unsoftened forms** (Codex, 2026-10-23):
+  - 1PN is pairwise: summing two-body EIH misses EIH's three-body terms and the order
+    reduction's other-body accelerations, so three or more bodies drift at 1PN even in
+    weak fields; Breit's order reduction likewise uses the pair's Yukawa accelerations
+    only, so mixed-force runs aren't closed by the sector energies;
+  - σ³ softening at the retarded distance isn't a conservative softening of Darwin
+    (it leaves an O(v·ε²/r²) term), and the 1PN forces soften the final accelerations,
+    not a softened Lagrangian;
+  - LW's O(v³) mutual radiation, dE/dt ≈ −(4/3)q₁q₂a₁·a₂, leaves without photons or
+    a ledger entry (a charged pair's drift is mostly this);
+  - tidal torque (Gravity) dissipates spin energy, and spin-orbit's transfer ignores
+    the dipole potentials' dependence on spin.
 - **World lines have no event log** (deferred from M2, §10.2): births, deaths
   and merges exist as creation times, death snapshots and breaks, which is all
   the slicer needs; boson emission and absorption leave no record.
@@ -440,10 +470,19 @@ The tie is explicit and per mode, which is what Codex asked for.
   precession `Ω₁ = (2 + 3m₂/2m₁)·L_N/r³` also has the "2" from the
   companion's motion, the gravitomagnetic field the orbit already feels as
   `Bgz`; θ ignores it. Needs the GEM factor derived and a binary oracle.
-- **Signal delay is still a toy outside EM.** Gravity, Yukawa and the dipole
-  forces act from the retarded position with the factor `1/(1 − n·v)³`, capped
-  at 100; only charges have true moving-source (Liénard–Wiechert) fields. Their
-  gravitational counterpart (linearized gravity from the world line) is open.
+- **Signal delay is still a toy outside EM, and it unbinds gravitational orbits.**
+  Gravity, Yukawa and the dipole forces act from the retarded position with the factor
+  `1/(1 − n·v)³`, capped at 100; only charges have true moving-source
+  (Liénard–Wiechert) fields. At O(v) the toy pulls toward where the source was,
+  F₁ ≈ −m₁m₂(R̂/r² + v₂/r²), so a pair gains −2m₁m₂v₁·v₂/r², about 4πv of its binding
+  energy per orbit (Laplace's aberration argument; in GR velocity-dependent terms
+  cancel it, Carlip, arXiv:gr-qc/9909087). Measured 2026-10-23: an equal-mass binary at v = 0.16
+  (m = 4, d = 80) loses 80% of its binding energy in one orbit and separates to 5.7× in
+  two; with EIH on too, to 8.8×. The perihelion oracle passes because its test mass
+  orbits a source that barely moves. Barnes–Hut aggregates use present positions, so the tree
+  and pairwise paths disagree here. Codex's recommendation: equal-time near-zone forces
+  for Newton, EIH and Breit, keeping only the causal birth and death fronts; a quadratic
+  extrapolation of the retarded state fixes 1PN but leaves an O(v³) secular term.
 - **Liénard–Wiechert's model boundaries** (Codex review, 2026-10-23):
   - the fields are regularized: σ³ softening and the κ floor at 0.215, which
     suppresses forward fields of sources faster than about 0.785c;
@@ -466,7 +505,7 @@ The tie is explicit and per mode, which is what Codex asked for.
 ### 2.3 Still open from the June audit
 
 - **Tests (audit §1, its top item):** `tests/physics-validation.html` runs
-  32 analytic oracles against the production `GPUPhysics` (§10.3). No Node
+  35 analytic oracles against the production `GPUPhysics` (§10.3). No Node
   kernel tests yet. The audit's route, a headless CPU engine as a GPU↔CPU
   parity oracle, died with the CPU path.
 - **Preset coverage (audit §3):** 23 presets, five of them relativity's

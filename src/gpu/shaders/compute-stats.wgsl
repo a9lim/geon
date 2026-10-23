@@ -3,7 +3,8 @@
 //
 // Four entry points dispatched sequentially:
 //   statsKEMom:  (1,1,1) @workgroup_size(64) — Passes 1+2: KE, momentum, COM, angular momentum
-//   statsPE:     (1,1,1) @workgroup_size(1)  — Pass 3: PE + Darwin field energy (O(N²))
+//   statsPE:     (1,1,1) @workgroup_size(1)  — Pass 3: PE, the 1PN energies, Darwin field
+//                                              energy and momentum (O(N²))
 //   statsField:  (1,1,1) @workgroup_size(64) — Pass 4: Scalar field energy + momentum
 //   statsPFISel: (1,1,1) @workgroup_size(1)  — Passes 5+6: PFI + selected particle
 //
@@ -55,9 +56,10 @@ struct AxYukMod {
 // [4]  orbAngMom     [5]  spinAngMom   [6]  comX         [7]  comY
 // [8]  totalMass     [9]  aliveCount   [10] pe           [11] darwinFieldE
 // [12] darwinFieldPx [13] darwinFieldPy [14] higgsFieldE [15] axionFieldE
+//      (pe holds the 1PN energies too: EIH, Bažański, scalar Breit)
 // [16] higgsPfiE     [17] axionPfiE    [18] fieldMomX    [19] fieldMomY
 // [20-25] boson pools (boson-ledger.wgsl): photon E, px, py; pion and lepton E, px, py
-// [26] peScale = Σ d·∂V/∂d over pairs, dPE/d(ln a) for a uniform stretch (expansion's ledger)
+// [26] peScale = dE/d(ln a) of [10] and [11] for a uniform stretch (expansion's ledger)
 // [27] radiation lost by bodies but not yet emitted (boson-ledger.wgsl)
 // [96-103] cosmoAccum since the last readback: [96] expansion work; [97] escaped energy that
 //          redshifts (photons, leptons' kinetic), [98-100] its comoving a·(E, px, py) with all
@@ -116,6 +118,8 @@ fn statsKEMom(@builtin(local_invocation_id) lid: vec3u) {
     let tid = lid.x;
     let n = params.aliveCount;
     let relOn = toggle(RELATIVITY_BIT);
+    // Without Relativity, EIH's kinetic energy carries its ⅜mv⁴ (statsPE)
+    let eihKinetic = !relOn && toggle(ONE_PN_BIT) && toggle(GRAVITOMAG_BIT);
 
     // ─── Pass 1: Each thread accumulates KE, momentum, COM for its partition ───
     var localLinearKE: f32 = 0.0;
@@ -143,6 +147,7 @@ fn statsKEMom(@builtin(local_invocation_id) lid: vec3u) {
             } else {
                 let vSq = d.velX * d.velX + d.velY * d.velY;
                 localLinearKE += 0.5 * m * vSq;
+                if (eihKinetic) { localLinearKE += 0.375 * m * vSq * vSq; }
                 localSpinKE += 0.5 * INERTIA_K * m * d.bodyRSq * d.angVel * d.angVel;
             }
             localPx += m * p.velWX;
@@ -236,8 +241,8 @@ fn statsKEMom(@builtin(local_invocation_id) lid: vec3u) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Entry 2: statsPE — O(N²) pairwise PE + Darwin field energy
-// Dispatch (1,1,1) with workgroup_size(1). Unchanged from original.
+// Entry 2: statsPE — O(N²) pairwise PE, the velocity-dependent energies, Darwin momentum
+// Dispatch (1,1,1) with workgroup_size(1).
 // ═══════════════════════════════════════════════════════════════════════════
 
 @compute @workgroup_size(1)
@@ -254,8 +259,16 @@ fn statsPE() {
     let softeningSq = select(SOFTENING_SQ, BH_SOFTENING_SQ, bhOn);
     let yukMu = params.yukawaMu;
 
+    let relOn = toggle(RELATIVITY_BIT);
+    let darwinOn = relOn && coulOn;
+    let eihOn = onePNOn && gmOn;
+    // EIH's ⅜mv⁴ is in statsKEMom's kinetic energy without Relativity; it redshifts as v⁴
+    let eihKinetic = eihOn && !relOn;
+
     var pe: f32 = 0.0;
-    var peScale: f32 = 0.0;   // Σ d·∂V/∂d of the static potentials
+    // dE/d(ln a) of the interaction energies for a uniform stretch, peculiar velocities ∝ 1/a:
+    // d·∂V/∂d for a static potential, and two more powers of 1/a for each v² factor
+    var peScale: f32 = 0.0;
     var darwinE: f32 = 0.0;
     var darwinPx: f32 = 0.0;
     var darwinPy: f32 = 0.0;
@@ -265,6 +278,10 @@ fn statsPE() {
         if ((pi.flags & FLAG_ALIVE) == 0u) { continue; }
         let di = derived[i];
         let modi = axYukMod[i];
+        if (eihKinetic) {
+            let viSq = di.velX * di.velX + di.velY * di.velY;
+            peScale -= 1.5 * pi.mass * viSq * viSq;
+        }
         for (var j = i + 1u; j < n; j++) {
             let pj = particles[j];
             if ((pj.flags & FLAG_ALIVE) == 0u) { continue; }
@@ -325,58 +342,55 @@ fn statsPE() {
                 peScale -= 3.0 * v * stretch;
             }
 
-            // Velocity-dependent terms
+            // ─── Velocity-dependent energies ───
+            // Each is the conserved energy of the force as applied, E = Σ v·∂L/∂v − L of its
+            // Lagrangian: a term of degree 2 in the velocities enters as +L, a static one as −L.
+            // The magnetic and gravitomagnetic Lorentz forces do no work, so without Relativity
+            // or 1PN the energy is T + V alone. n̂ = r/r with the forces' softened r.
+            let viSq = di.velX * di.velX + di.velY * di.velY;
+            let vjSq = dj.velX * dj.velX + dj.velY * dj.velY;
             let viDotVj = di.velX * dj.velX + di.velY * dj.velY;
-            let viDotR = di.velX * rx + di.velY * ry;
-            let vjDotR = dj.velX * rx + dj.velY * ry;
-            let velTerm = viDotVj + viDotR * vjDotR;
-            let sumVx = di.velX + dj.velX;
-            let sumVy = di.velY + dj.velY;
-            let svDotR = sumVx * rx + sumVy * ry;
+            let viDotN = di.velX * rx + di.velY * ry;
+            let vjDotN = dj.velX * rx + dj.velY * ry;
 
-            // 1PN terms (replace Darwin field energy when active)
-            if (onePNOn) {
-                // EIH
-                if (gmOn) {
-                    let viSq = di.velX * di.velX + di.velY * di.velY;
-                    let vjSq = dj.velX * dj.velX + dj.velY * dj.velY;
-                    pe -= pi.mass * pj.mass * invR * (
-                        1.5 * (viSq + vjSq) - 3.5 * viDotVj - 0.5 * viDotR * vjDotR
-                        + (pi.mass + pj.mass) * invR
-                    );
-                }
-                // Darwin EM
-                if (magOn) {
-                    pe -= 0.5 * pi.charge * pj.charge * invR * velTerm;
-                }
-                // Bazanski
-                if (magOn && gmOn) {
-                    let crossCoeff = pi.charge * pj.charge * (pi.mass + pj.mass)
-                        - (pi.charge * pi.charge * pj.mass + pj.charge * pj.charge * pi.mass);
-                    pe += 0.5 * crossCoeff * invR * invR;
-                }
-            } else {
-                // Darwin field energy (when 1PN off)
-                if (magOn) {
-                    let qqInvR = pi.charge * pj.charge * invR * axModPair;
-                    darwinE -= 0.5 * qqInvR * velTerm;
-                    let coeff = qqInvR * 0.5;
-                    darwinPx += coeff * (sumVx + rx * svDotR);
-                    darwinPy += coeff * (sumVy + ry * svDotR);
-                }
-                if (gmOn) {
-                    let mmInvR = pi.mass * pj.mass * invR;
-                    darwinE += 0.5 * mmInvR * velTerm;
-                    let coeff = mmInvR * 0.5;
-                    darwinPx -= coeff * (sumVx + rx * svDotR);
-                    darwinPy -= coeff * (sumVy + ry * svDotR);
-                }
-                // Bazanski cross-term
-                if (magOn && gmOn) {
-                    let crossCoeff = pi.charge * pj.charge * (pi.mass + pj.mass)
-                        - (pi.charge * pi.charge * pj.mass + pj.charge * pj.charge * pi.mass);
-                    darwinE += 0.5 * crossCoeff * invR * invR;
-                }
+            // Darwin (Relativity + Coulomb): Liénard–Wiechert's field about the present position
+            // is Darwin's to O(v²), so E = T + V + L_D with L_D = (q₁q₂/2r)[v₁·v₂ + (n̂·v₁)(n̂·v₂)],
+            // whether or not the bodies feel B (it does no work, and the induction field's
+            // source-acceleration terms cancel in dE/dt identically). The field momentum
+            // q₁A₂(x₁) + q₂A₁(x₂) goes with it.
+            if (darwinOn) {
+                let qqInvR = pi.charge * pj.charge * invR * axModPair;
+                let e2 = 0.5 * qqInvR * (viDotVj + viDotN * vjDotN);
+                darwinE += e2;
+                peScale -= (stretch + 2.0) * e2;
+                let sumVx = di.velX + dj.velX;
+                let sumVy = di.velY + dj.velY;
+                let svDotN = sumVx * rx + sumVy * ry;
+                darwinPx += 0.5 * qqInvR * (sumVx + rx * svDotN);
+                darwinPy += 0.5 * qqInvR * (sumVy + ry * svDotN);
+            }
+
+            // EIH (Gravitomagnetic + 1PN): Newton, the 4m v × Bg rotation and shared-1pn.wgsl's
+            // remainder are harmonic-gauge EIH together, whose energy is
+            // (m₁m₂/2r)[3(v₁² + v₂²) − 7v₁·v₂ − (n̂·v₁)(n̂·v₂)] + m₁m₂(m₁ + m₂)/(2r²) beyond
+            // Newton, with Σ⅜mv⁴ in the kinetic energy ((γ − 1)m carries it with Relativity on)
+            if (eihOn) {
+                let mmInvR = pi.mass * pj.mass * invR;
+                let e2 = 0.5 * mmInvR * (3.0 * (viSq + vjSq) - 7.0 * viDotVj - viDotN * vjDotN);
+                let e0 = 0.5 * mmInvR * invR * (pi.mass + pj.mass);
+                pe += e2 + e0;
+                peScale -= (stretch + 2.0) * e2 + 2.0 * stretch * e0;
+            }
+
+            // Bažański's static Gq² term (Gravitomagnetic + Coulomb + 1PN): the test charge in
+            // Reissner–Nordström (harmonic r = R − M), symmetrized,
+            // L = [q₁q₂(m₁ + m₂) − ½(m₁q₂² + m₂q₁²)]/r². With EIH's static term this vanishes
+            // for extremal like charges q = m at rest, the Majumdar–Papapetrou balance.
+            if (eihOn && coulOn) {
+                let e0 = (0.5 * (pi.mass * pj.charge * pj.charge + pj.mass * pi.charge * pi.charge)
+                    - pi.charge * pj.charge * (pi.mass + pj.mass)) * invR * invR;
+                pe += e0;
+                peScale -= 2.0 * stretch * e0;
             }
 
             // Yukawa PE (Higgs-modulated μ when both enabled)
@@ -387,10 +401,14 @@ fn statsPE() {
                     let yukPE = -YUKAWA_COUPLING * yukModPair * pi.mass * pj.mass * exp(-mur) * invR;
                     pe += yukPE;
                     peScale -= yukPE * (1.0 + mur) * stretch;
-                    // Scalar Breit (Yukawa 1PN)
+                    // Scalar Breit (Yukawa + 1PN), from shared-1pn.wgsl's Lagrangian
+                    // L = (K e^{−μr}/r)[1 + ½(−v₁² − v₂² + v₁·v₂ − α(n̂·v₁)(n̂·v₂))], α = 1 + μr
                     if (onePNOn) {
-                        pe += 0.5 * YUKAWA_COUPLING * yukModPair * pi.mass * pj.mass * exp(-mur) * invR
-                            * (viDotVj + viDotR * vjDotR * (1.0 + mur));
+                        let nn = viDotN * vjDotN;
+                        let e2 = -0.5 * yukPE * (-viSq - vjSq + viDotVj - (1.0 + mur) * nn);
+                        pe += e2;
+                        // α = 1 + μr stretches too
+                        peScale -= ((1.0 + mur) * stretch + 2.0) * e2 - 0.5 * yukPE * mur * stretch * nn;
                     }
                 }
             }
