@@ -581,8 +581,6 @@ canvas text needs no font-load redraw.
   arc offsets relative to `getTorqueOffset()`.
 - The `magnetic` preset drives a body to about 0.99c, as it did before the 2026-10-23
   force-law fixes.
-- `preset-select`'s shared-dropdown label may not refresh when a preset loads from the
-  keyboard; `FramePanel._sync()` shows the fix (dispatch `change` after setting the value).
 - The Kepler preset places its planets at random angles without zeroing the total
   momentum, so the system drifts at up to ~0.1c.
 - `compute-stats.wgsl`'s velocity-dependent energies (Darwin field energy, the EIH and

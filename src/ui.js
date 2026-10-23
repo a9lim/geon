@@ -502,7 +502,8 @@ export function setupUI(sim) {
             key: String(i + 1),
             label: _T('preset.' + key + '.name', PRESETS[key].name),
             group: G_PRES(),
-            action: () => { loadPreset(key, sim); document.getElementById('preset-select').value = key; sim._dirty = true; },
+            // Through the dropdown's own change handler, so its label redraws too
+            action: () => { presetSelect.value = key; presetSelect.dispatchEvent(new Event('change')); },
         })),
         { key: 'V',          label: _T('shortcut.toggleVel',         'Toggle velocity vectors'),       group: G_VIEW(), action: () => {
             const el = document.getElementById('velocityToggle');
