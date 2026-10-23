@@ -62,6 +62,9 @@ substepping advances them.
   decay, and discharge move charge in whole units.
 - **Space.** Despawn, bounce, or periodic boundaries; periodic space can be a torus, a
   Klein bottle, or the real projective plane.
+- **Lensing.** The grid can become a backdrop seen through the bodies as a thin
+  gravitational lens, with Einstein rings, and a backdrop star whose magnification
+  traces a microlensing light curve.
 - **Cosmology.** With expansion on, the periodic domain is a slice of an expanding FRW
   universe: an imposed history or one set by the contents through the Friedmann
   equation, redshift, Hubble friction on the fields, the Hubble radius and event
@@ -71,11 +74,11 @@ substepping advances them.
   per-force breakdown for the selected particle; a potential heatmap (gravity,
   electric, Yukawa, or all); and a phase-space plot and an effective-potential curve
   for the selected particle against the heaviest other body.
-- **Presets.** Twenty-two scenarios, from Kepler orbits and binary inspiral through
+- **Presets.** Twenty-three scenarios, from Kepler orbits and binary inspiral through
   Hawking evaporation, a relativistic wheel, Thomas and geodetic precession, the twin
   paradox on a line and on a torus, atoms,
   nuclei, and pion exchange to the Higgs boson, axion bursts, an expanding universe,
-  axion misalignment, and Kibble–Zurek walls.
+  axion misalignment, Kibble–Zurek walls, and microlensing.
 - **Save and load.** Quick save to the browser, or download and upload the state as
   JSON (domain, particles with their clocks, toggles, settings, and camera). Each
   preset sets its own domain size; the window is a camera onto it.

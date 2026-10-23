@@ -1,7 +1,7 @@
 ---
 name: Geon
 title: Geon — Interactive Particle Physics Simulator
-description: Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-two browser presets.
+description: Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-three browser presets.
 updated: 2026-10-23
 ---
 
@@ -39,13 +39,17 @@ On a torus the lab is a preferred frame: opposite edges are identified at equal 
 
 With expansion on, the periodic domain becomes a slice of an expanding Friedmann–Robertson–Walker universe. Bodies at rest keep their comoving positions while the space between them grows; peculiar momenta and photon energies fall as 1/a; scalar fields feel Hubble friction; and bound systems keep their size. The history can be imposed (de Sitter, matter, radiation, ΛCDM) or follow from the universe's own contents through the Friedmann equation, with matter, radiation and field energy each diluting at its own rate. Signals travel on light cones that are straight in comoving coordinates and conformal time, and because Maxwell's equations are conformally invariant a charge's Liénard–Wiechert field stays exact, its radiation dimmed by the redshift. The Stats tab shows the scale factor, the Hubble rate, the Hubble radius and the event horizon, and books the energy the expansion takes or gives as its own line, so the energy drift still measures numerical error. An axion field frozen by Hubble friction starts oscillating once the Hubble rate falls below its mass and then dilutes like cold matter (misalignment), and a Higgs field quenched through its symmetry-breaking transition freezes into domains, and a slower quench leaves fewer walls between them: the Kibble–Zurek mechanism (Kibble, 1976; Zurek, 1985).
 
+## Lensing
+
+With lensing on, the grid becomes a backdrop far behind the plane, seen through the bodies' masses as a thin gravitational lens. Each pixel shows the backdrop where its ray came from, β = θ − α(θ), with the deflection α summed from every body's two-dimensional logarithmic potential; a lone mass bends the rulers into an Einstein ring of radius √(4MD), where D sets how far behind the plane the backdrop lies. A backdrop star can be placed in the sheet: its images appear as arcs and rings, and its magnification, measured by shooting a ray through every cell of the view, traces a microlensing light curve as a mass drifts past it, (u² + 2)/(u√(u² + 4)) for a single lens (Paczyński, 1986). The thin-lens approximation has no black-hole shadow, so the photon-capture disk around a black hole is drawn as an imposed overlay.
+
 ## Scalar Fields
 
 The Higgs and axion fields evolve on a 128 × 128 grid. With gravity on, they evolve in the metric ds² = −e^{2Φ}dt² + e^{−2Φ}dx², whose Klein–Gordon equation reduces to the weak-field form at small Φ and stays well behaved in deep wells. The potential Φ comes from the fields' own energy and the particles' mass, solved by FFT convolution over a sheet of thickness 8, so field oscillations near a massive body slow by the gravitational redshift factor e^Φ.
 
 ## Presets
 
-Twenty-two curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, the twin paradox on a line and on a torus, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, an expanding universe, axion misalignment, and Kibble–Zurek domain walls. Each preset sets initial conditions and force parameters for one compact demonstration.
+Twenty-three curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, the twin paradox on a line and on a torus, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, an expanding universe, axion misalignment, Kibble–Zurek domain walls, and microlensing. Each preset sets initial conditions and force parameters for one compact demonstration.
 
 ## Black Hole Physics
 

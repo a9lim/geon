@@ -182,6 +182,29 @@ const REF_EN = {
 <p>Trails, force arrows, the heatmap and the field overlays are lab-only. Bosons are drawn along straight paths back to their emission. On the Klein bottle and the projective plane only each body's primary image is drawn.</p>
 `,
 
+    'ref.lensing.title': 'Gravitational lensing',
+    'ref.lensing.body': `
+<p>Mass bends light. With lensing on, the background grid becomes a backdrop: a sheet far behind the plane, seen through the bodies' masses as a thin gravitational lens, looking along the axis perpendicular to the plane.</p>
+
+<h3>The lens equation</h3>
+<p>A ray that reaches the eye at angle $\\boldsymbol\\theta$ left the backdrop at</p>
+<p>$$\\boldsymbol\\beta = \\boldsymbol\\theta - \\boldsymbol\\alpha(\\boldsymbol\\theta), \\qquad \\boldsymbol\\alpha(\\boldsymbol\\theta) = \\sum_i 4M_iD\\,\\frac{\\boldsymbol\\theta - \\boldsymbol\\theta_i}{|\\boldsymbol\\theta - \\boldsymbol\\theta_i|^2},$$</p>
+<p>the gradient of a two-dimensional logarithmic potential, twice what Newtonian gravity would give a fast particle. $D = D_{LS}/(D_L D_S)$ sets how far behind the plane the backdrop lies (the Backdrop distance slider). Each pixel draws the grid at $\\boldsymbol\\beta$, so the rulers bend around every mass.</p>
+
+<h3>Einstein rings</h3>
+<p>A backdrop point directly behind a lone mass is seen on a ring of radius</p>
+<p>$$\\theta_E = \\sqrt{4MD}.$$</p>
+<p>Off-axis it splits into two images, one outside the ring and one inside.</p>
+
+<h3>Microlensing</h3>
+<p>The backdrop star is a small disk in the backdrop. Lensing magnifies it by the total area of its images over its own area, $\\mu = \\sum_{\\text{images}} |\\det \\partial\\boldsymbol\\beta/\\partial\\boldsymbol\\theta|^{-1}$. For one point lens at separation $u$ (in Einstein radii),</p>
+<p>$$\\mu(u) = \\frac{u^2 + 2}{u\\sqrt{u^2 + 4}},$$</p>
+<p>so a lens drifting past the star brightens it along a symmetric light curve, the signature astronomers use to find dark objects and planets. Geon measures $\\mu$ by shooting a ray through every cell of the view and counting those that land on the star, which works for any arrangement of lenses.</p>
+
+<h3>Limits</h3>
+<p>This is the weak, thin-lens approximation. It has no black-hole shadow: around black holes Geon draws the photon-capture disk of radius $3\\sqrt3\\,M$ as an imposed overlay, not a computed one. The photons moving in the plane are deflected separately, by twice the Newtonian pull. Lensing is drawn in the lab frame only.</p>
+`,
+
     'ref.radiation.title': 'Radiation',
     'ref.radiation.body': `
 <p>Accelerating charges radiate electromagnetic waves; orbiting masses radiate gravitational waves. Both carry energy and momentum out of the system, causing orbits to decay. Three radiation channels are modeled.</p>
@@ -926,6 +949,29 @@ const REF_JA = {
 
 <h3>制限</h3>
 <p>軌跡、力の矢印、ヒートマップ、場の表示は実験室系のみです。ボソンは放出点まで直線をさかのぼって描きます。クラインの壺と射影平面では各物体の主像のみを描きます。</p>
+`,
+
+    'ref.lensing.title': '重力レンズ',
+    'ref.lensing.body': `
+<p>質量は光を曲げます。レンズ効果をオンにすると、背景の格子は平面のはるか奥にある背景の面になり、平面に垂直な軸に沿って、物体の質量を薄い重力レンズとして通して見えます。</p>
+
+<h3>レンズ方程式</h3>
+<p>角度 $\\boldsymbol\\theta$ で目に届く光線は、背景の次の位置から出ています。</p>
+<p>$$\\boldsymbol\\beta = \\boldsymbol\\theta - \\boldsymbol\\alpha(\\boldsymbol\\theta), \\qquad \\boldsymbol\\alpha(\\boldsymbol\\theta) = \\sum_i 4M_iD\\,\\frac{\\boldsymbol\\theta - \\boldsymbol\\theta_i}{|\\boldsymbol\\theta - \\boldsymbol\\theta_i|^2}$$</p>
+<p>これは2次元の対数ポテンシャルの勾配で、ニュートン重力が速い粒子に与える曲がりの2倍です。$D = D_{LS}/(D_L D_S)$ は背景が平面のどれだけ奥にあるかを決めます（「背景までの距離」スライダー）。各画素は $\\boldsymbol\\beta$ の位置の格子を描くので、物差しはどの質量のまわりでも曲がります。</p>
+
+<h3>アインシュタイン・リング</h3>
+<p>孤立した質量の真後ろにある背景の点は、半径</p>
+<p>$$\\theta_E = \\sqrt{4MD}$$</p>
+<p>のリングとして見えます。軸からずれると、リングの外と内の2つの像に分かれます。</p>
+
+<h3>マイクロレンズ</h3>
+<p>背景の星は背景にある小さな円盤です。レンズは星を、像の面積の合計と星自身の面積の比 $\\mu = \\sum_{\\text{像}} |\\det \\partial\\boldsymbol\\beta/\\partial\\boldsymbol\\theta|^{-1}$ だけ増光します。点レンズからの距離が $u$（アインシュタイン半径単位）のとき</p>
+<p>$$\\mu(u) = \\frac{u^2 + 2}{u\\sqrt{u^2 + 4}}$$</p>
+<p>なので、星の前を横切るレンズは星を左右対称な光度曲線に沿って明るくします。天文学者が暗い天体や惑星を見つけるのに使う特徴です。Geonは表示のすべてのセルに光線を通し、星に届いたものを数えて $\\mu$ を求めるので、レンズがいくつあっても使えます。</p>
+
+<h3>制限</h3>
+<p>これは弱い薄レンズ近似です。ブラックホールの影は生じないので、ブラックホールのまわりには半径 $3\\sqrt3\\,M$ の光子捕獲円盤を、計算ではなく課した表示として描きます。平面内を動く光子は別に、ニュートン重力の2倍で曲げられます。レンズ効果は実験室系でのみ描かれます。</p>
 `,
 
     'ref.radiation.title': '放射',

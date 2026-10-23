@@ -1176,9 +1176,9 @@ cases.push({
 // ── Lensing (M4) ──
 
 /** Build the lens map over a square of side `side` centred on (cx, cy), and wait for the probe. */
-async function lensMap(gp, cx, cy, side, distance, star = null) {
+async function lensMap(gp, cx, cy, side, distance, star = null, massTotal = undefined) {
     gp.lensHits = null;
-    gp.dispatchLens({ left: cx - side / 2, top: cy - side / 2, width: side, height: side, distance, star });
+    gp.dispatchLens({ left: cx - side / 2, top: cy - side / 2, width: side, height: side, distance, star, massTotal });
     await gp.device.queue.onSubmittedWorkDone();
     while (star && !gp.lensHits) await new Promise(r => setTimeout(r, 2));
     return new Float32Array(await readBuffer(gp, gp.lensBuffers.map, 512 * 512 * 16));
@@ -1213,14 +1213,15 @@ cases.push({
 cases.push({
     name: 'Microlensing: a point lens magnifies a backdrop star by (u² + 2)/(u√(u² + 4))',
     async run() {
-        // Inverse ray shooting: cells whose rays land on the star, times the cell area, over
-        // its area. θ_E = 8, a star of radius θ_E/10 (finite-source effects below 1% at u ≥ 0.5)
+        // Inverse ray shooting on the probe's window: cells whose rays land on the star, times
+        // the cell area, over its area. θ_E = 8, a star of radius θ_E/10 (finite-source
+        // effects below 1% at u ≥ 0.5)
         const M = 16, D = 1, thetaE = 8, rs = 0.8, side = 48;
         const gp = await makeSim({ domainW: 128, domainH: 128 });
         gp.addParticle({ x: 64, y: 64, mass: M });
         const rows = [];
         for (const u of [0.5, 1, 2]) {
-            await lensMap(gp, 64, 64, side, D, { x: 64 + u * thetaE, y: 64, r: rs });
+            await lensMap(gp, 64, 64, side, D, { x: 64 + u * thetaE, y: 64, r: rs }, M);
             const mu = gp.lensHits.magnification;
             rows.push({ u, mu, exp: (u * u + 2) / (u * Math.sqrt(u * u + 4)) });
         }

@@ -8,11 +8,15 @@
 //
 // Black holes: the weak thin-lens formula has no shadow, so cells within the photon-capture
 // radius 3√3·M of a hole are flagged, an imposed and labelled disk (3.0's ray tracing would
-// find it). Periodic domains use each lens's nearest image.
+// find it). On a periodic domain each lens sits at its image nearest a reference point (the
+// view's centre, or the probe's star), not the nearest image per pixel: the 1/θ deflection
+// decays too slowly for a minimum-image seam, which would tear the backdrop.
 //
 // The microlensing probe is a backdrop star of radius r_s at β_s: a cell whose ray lands
 // inside it adds to `hits`, so the magnification is hits·cellArea/(π r_s²) (inverse ray
-// shooting: Σ over images of |det A|⁻¹, for any number of lenses).
+// shooting: Σ over images of |det A|⁻¹, for any number of lenses). The probe runs as a
+// second pass on its own window around the star (countOnly: no map write), so its
+// resolution doesn't depend on the zoom.
 
 struct LensParams {
     viewLeft: f32,
@@ -32,9 +36,9 @@ struct LensParams {
     domainW: f32,
     domainH: f32,
     blackHole: u32,
-    _pad0: u32,
-    _pad1: u32,
-    _pad2: u32,
+    countOnly: u32,     // the probe's pass: count, don't write the map
+    refX: f32,          // periodic: each lens's image nearest this point
+    refY: f32,
 };
 
 @group(0) @binding(0) var<uniform> lp: LensParams;
@@ -51,15 +55,16 @@ fn lensDeflection(@builtin(global_invocation_id) gid: vec3u) {
     for (var i = 0u; i < lp.aliveCount; i++) {
         let p = particles[i];
         if ((p.flags & FLAG_ALIVE) == 0u || p.mass <= 0.0) { continue; }
-        var d = theta - vec2(p.posX, p.posY);
+        var lens = vec2(p.posX, p.posY);
         if (lp.periodic != 0u) {
-            d = -fullMinImageP(theta.x, theta.y, p.posX, p.posY, lp.domainW, lp.domainH, lp.topology);
+            lens = vec2(lp.refX, lp.refY) + fullMinImageP(lp.refX, lp.refY, p.posX, p.posY, lp.domainW, lp.domainH, lp.topology);
         }
+        let d = theta - lens;
         let rSq = dot(d, d);
         alpha += (lp.deflect * p.mass / (rSq + lp.softSq)) * d;
         if (lp.blackHole != 0u && rSq < 27.0 * p.mass * p.mass) { shadow = 1.0; }
     }
-    lensMap[gid.y * lp.res + gid.x] = vec4(alpha, shadow, 0.0);
+    if (lp.countOnly == 0u) { lensMap[gid.y * lp.res + gid.x] = vec4(alpha, shadow, 0.0); }
 
     if (lp.probeOn != 0u && shadow == 0.0) {
         let beta = theta - alpha - vec2(lp.starX, lp.starY);

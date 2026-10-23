@@ -11,11 +11,11 @@ import { REFERENCE_STRINGS } from './strings-reference.js';
 const UI_EN = {
     // ── document <head> ──
     'meta.title': "Geon — Interactive Particle Physics Simulator | a9l.im",
-    'meta.description': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-two browser presets.",
+    'meta.description': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-three browser presets.",
     'meta.ogTitle': "Geon — Interactive Particle Physics Simulator",
-    'meta.ogDescription': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-two browser presets.",
+    'meta.ogDescription': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-three browser presets.",
     'meta.twitterTitle': "Geon — Interactive Particle Physics Simulator",
-    'meta.twitterDescription': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-two browser presets.",
+    'meta.twitterDescription': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-three browser presets.",
 
     // ── Topbar ──
     'topbar.home': 'a9l.im',
@@ -267,7 +267,7 @@ const UI_EN = {
 
     // ── About panel ──
     'about.title': 'Geon',
-    'about.description': 'Spawn particles and watch them interact through gravity, electromagnetism, and exotic forces. Fling matter into orbit, toggle scalar fields, switch between 22 preset scenarios, and explore relativistic black hole physics in real time.',
+    'about.description': 'Spawn particles and watch them interact through gravity, electromagnetism, and exotic forces. Fling matter into orbit, toggle scalar fields, switch between 23 preset scenarios, and explore relativistic black hole physics in real time.',
     'about.controls.addParticle': 'Add particle',
     'about.controls.addParticleVal': 'Click on canvas',
     'about.controls.fling': 'Fling particle',
@@ -417,9 +417,11 @@ const UI_EN = {
     'edu.h.fields': 'Scalar fields',
     'edu.p.fields': 'Two scalar fields — Higgs and axion — live on a PQS grid with C² interpolation. The Higgs field modulates particle mass through its local vacuum expectation value, while the axion field couples to charge. Both evolve via Störmer-Verlet integration and exert gradient forces on particles.',
     'edu.h.presets': 'Presets',
-    'edu.p.presets': 'Twenty-two curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, the twin paradox on a line and on a torus, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, an expanding universe, axion misalignment, and Kibble–Zurek domain walls.',
+    'edu.p.presets': 'Twenty-three curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, the twin paradox on a line and on a torus, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, an expanding universe, axion misalignment, Kibble–Zurek domain walls, and microlensing.',
     'edu.h.expansion': 'Cosmological expansion',
     'edu.p.expansion': "With expansion on, the periodic domain becomes a slice of an expanding Friedmann–Robertson–Walker universe. Bodies at rest keep their comoving positions while the space between them grows; peculiar momenta and photon energies fall as 1/a; scalar fields feel Hubble friction; and bound systems keep their size. The history can be imposed (de Sitter, matter, radiation, ΛCDM) or follow from the universe's own contents through the Friedmann equation, with matter, radiation and field energy each diluting at its own rate. Signals travel on light cones that are straight in comoving coordinates and conformal time, and because Maxwell's equations are conformally invariant a charge's Liénard–Wiechert field stays exact, its radiation dimmed by the redshift. The Stats tab shows the scale factor, the Hubble rate, the Hubble radius and the event horizon, and books the energy the expansion takes or gives as its own line, so the energy drift still measures numerical error. An axion field frozen by Hubble friction starts oscillating once the Hubble rate falls below its mass and then dilutes like cold matter (misalignment), and a Higgs field quenched through its symmetry-breaking transition freezes into domains, and a slower quench leaves fewer walls between them: the Kibble–Zurek mechanism (Kibble, 1976; Zurek, 1985).",
+    'edu.h.lensing': 'Gravitational lensing',
+    'edu.p.lensing': "With lensing on, the grid becomes a backdrop far behind the plane, seen through the bodies' masses as a thin gravitational lens. Each pixel shows the backdrop where its ray came from, β = θ − α(θ), with the deflection α summed from every body's two-dimensional logarithmic potential; a lone mass bends the rulers into an Einstein ring of radius √(4MD), where D sets how far behind the plane the backdrop lies. A backdrop star can be placed in the sheet: its images appear as arcs and rings, and its magnification, measured by shooting a ray through every cell of the view, traces a microlensing light curve as a mass drifts past it, (u² + 2)/(u√(u² + 4)) for a single lens (Paczyński, 1986). The thin-lens approximation has no black-hole shadow, so the photon-capture disk around a black hole is drawn as an imposed overlay.",
     'edu.h.frames': 'Frames',
     'edu.p.frames': "The view can be drawn for observers other than the lab: the zero-momentum frame, the selected particle's rest frame, a boost at a chosen speed and direction, or a frame rotating at a chosen rate. Geon records every body's world line and redraws the scene on the observer's surface of simultaneity, so in a boosted frame moving rulers contract, clocks synchronized in the lab disagree across the view, and a fast wheel can be followed in its own rest frame, where it is round. The observer's present is set far enough into the lab's past that everything shown has already been computed, and the Frame tab reports how far behind the lab it is. A background grid of rulers at rest in the lab contracts and shears with the observer, and a spacetime diagram plots nearby world lines in the observer's coordinates with its light cone and proper-time ticks.",
     'edu.h.gm': 'Gravitomagnetism and frame-dragging',
@@ -440,11 +442,11 @@ const UI_EN = {
 const UI_JA = {
     // ── document <head> ──
     'meta.title': 'Geon | a9l.im',
-    'meta.description': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。11種の力、スカラー場、22の教育用プリセットを備えたインタラクティブな多体シミュレータ。WebGPUによりブラウザ上でリアルタイム動作。',
+    'meta.description': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。11種の力、スカラー場、23の教育用プリセットを備えたインタラクティブな多体シミュレータ。WebGPUによりブラウザ上でリアルタイム動作。',
     'meta.ogTitle': 'Geon — インタラクティブ粒子物理シミュレータ',
-    'meta.ogDescription': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。22の教育用プリセットを備えたインタラクティブな多体シミュレータ、ブラウザ上でリアルタイム動作。',
+    'meta.ogDescription': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。23の教育用プリセットを備えたインタラクティブな多体シミュレータ、ブラウザ上でリアルタイム動作。',
     'meta.twitterTitle': 'Geon — インタラクティブ粒子物理シミュレータ',
-    'meta.twitterDescription': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。22の教育用プリセットを備えたインタラクティブな多体シミュレータ。',
+    'meta.twitterDescription': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。23の教育用プリセットを備えたインタラクティブな多体シミュレータ。',
 
     // ── Topbar ──
     'topbar.home': 'a9l.im',
@@ -694,7 +696,7 @@ const UI_JA = {
 
     // ── About panel ──
     'about.title': 'Geon',
-    'about.description': '粒子を生成し、重力・電磁気・エキゾチックな力を介した相互作用を観察します。物質を軌道に投げ込み、スカラー場を切り替え、22のプリセットを切り替えながら、相対論的ブラックホール物理をリアルタイムで探ってください。',
+    'about.description': '粒子を生成し、重力・電磁気・エキゾチックな力を介した相互作用を観察します。物質を軌道に投げ込み、スカラー場を切り替え、23のプリセットを切り替えながら、相対論的ブラックホール物理をリアルタイムで探ってください。',
     'about.controls.addParticle': '粒子を追加',
     'about.controls.addParticleVal': 'キャンバスをクリック',
     'about.controls.fling': '粒子を投げる',
@@ -844,9 +846,11 @@ const UI_JA = {
     'edu.h.fields': 'スカラー場',
     'edu.p.fields': '2つのスカラー場 — ヒッグスとアクシオン — はC²補間付きのPQS格子上で定義されます。ヒッグス場は局所的な真空期待値を通じて粒子質量を変調し、アクシオン場は電荷に結合します。両者ともストーマー＝ヴェルレ法で時間発展し、勾配力で粒子に作用します。',
     'edu.h.presets': 'プリセット',
-    'edu.p.presets': '22のプリセットが、ケプラー運動、相対論的歳差、連星インスパイラル、ホーキング蒸発、相対論的な車輪、トーマス歳差と測地歳差、直線上とトーラス上の双子のパラドックス、原子・原子核のトイ系、制動放射、磁気双極子、パイオン交換、ヒッグス場とアクシオン場、ペッチェイ＝クイン力学、膨張する宇宙、アクシオンのミスアラインメント、キブル＝ズレック機構の磁壁を扱います。',
+    'edu.p.presets': '23のプリセットが、ケプラー運動、相対論的歳差、連星インスパイラル、ホーキング蒸発、相対論的な車輪、トーマス歳差と測地歳差、直線上とトーラス上の双子のパラドックス、原子・原子核のトイ系、制動放射、磁気双極子、パイオン交換、ヒッグス場とアクシオン場、ペッチェイ＝クイン力学、膨張する宇宙、アクシオンのミスアラインメント、キブル＝ズレック機構の磁壁、マイクロレンズを扱います。',
     'edu.h.expansion': '宇宙膨張',
     'edu.p.expansion': '膨張をオンにすると、周期的な領域は膨張するフリードマン＝ロバートソン＝ウォーカー宇宙の一断面になります。静止した物体は共動座標に留まり、その間の空間が伸びます。特異運動量と光子のエネルギーは 1/a で減り、スカラー場はハッブル摩擦を受け、束縛系は大きさを保ちます。膨張の歴史は課すこと（ド・ジッター、物質優勢、放射優勢、ΛCDM）も、宇宙自身の内容物からフリードマン方程式で決めることもでき、物質・放射・場のエネルギーはそれぞれ固有の割合で薄まります。信号は共動座標と共形時間で真っ直ぐな光円錐の上を伝わり、マクスウェル方程式が共形不変なので、電荷のリエナール＝ヴィーヘルト場は厳密なまま、その放射は赤方偏移の分だけ弱まります。統計タブにはスケール因子、ハッブル率、ハッブル半径、事象の地平面が表示され、膨張が奪い与えるエネルギーは別の行に記録されるので、エネルギーのドリフトは数値誤差を表し続けます。ハッブル摩擦で凍結したアクシオン場はハッブル率が質量を下回ると振動を始めて冷たい物質のように薄まり（ミスアラインメント）、対称性の破れる転移をクエンチしたヒッグス場は領域に凍結し、クエンチが遅いほど領域の間の壁は少なくなります。これがキブル＝ズレック機構です（Kibble, 1976; Zurek, 1985）。',
+    'edu.h.lensing': '重力レンズ',
+    'edu.p.lensing': 'レンズ効果をオンにすると、格子は平面のはるか奥の背景になり、物体の質量を薄い重力レンズとして通して見えます。各画素には光線が来た背景の位置 β = θ − α(θ) が映り、曲がり α はすべての物体の2次元対数ポテンシャルから足し合わせます。孤立した質量は物差しを半径 √(4MD) のアインシュタイン・リングに曲げ、D は背景が平面のどれだけ奥にあるかを決めます。背景には星を置くことができ、その像は弧やリングとして現れます。表示のすべてのセルに光線を通して測った増光率は、質量が星の前を横切るとマイクロレンズの光度曲線を描き、単一のレンズでは (u² + 2)/(u√(u² + 4)) です（Paczyński, 1986）。薄レンズ近似にはブラックホールの影がないので、ブラックホールのまわりの光子捕獲円盤は課した表示として描きます。',
     'edu.h.frames': '座標系',
     'edu.p.frames': '実験室以外の観測者から見た様子も描けます。運動量ゼロ系、選択した粒子の静止系、速さと向きを指定したブースト、指定した角速度の回転系です。Geonはすべての物体の世界線を記録し、観測者の同時刻面で場面を描き直します。ブーストした系では動く物差しが縮み、実験室で同期した時計が視野の場所ごとに食い違い、高速の車輪をその静止系で追えば丸く見えます。観測者の「今」は実験室の過去へ十分にずらしてあり、表示されるものはすべて計算済みです。どれだけ遅れているかは座標系タブに表示されます。実験室に静止した背景の格子は観測者に応じて縮み、歪みます。時空図は近くの世界線を観測者の座標で、光円錐と固有時の目盛りとともに描きます。',
     'edu.h.gm': '重力磁気とフレームドラッギング',

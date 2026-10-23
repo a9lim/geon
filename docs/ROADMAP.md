@@ -366,6 +366,19 @@ The tie is explicit and per mode, which is what Codex asked for.
     slower quenches, n ∝ τ_Q^{−0.18}, below both mean-field 1/4 and 2D Ising ≈ 0.32
     (counted after ordering, so coarsening and weak-noise delays flatten it).
 
+- **M4 (2026-10-23): lensing** (§5.5).
+  - The grid as a lensed backdrop: a 512² deflection map over the view each frame
+    (`lens-deflection.wgsl`), α = Σ 4MD(θ − θᵢ)/|θ − θᵢ|² with a log-slider backdrop
+    distance D, the rulers drawn at β = θ − α; an imposed 3√3·M capture disk for
+    black holes.
+  - The microlensing probe: a backdrop star whose images show on the grid and whose
+    magnification comes from inverse ray shooting, plotted as a light curve.
+  - Preset: microlensing, a mass drifting past the star (23).
+  - Oracles (32): |α| = 4MD/θ so β = 0 on θ_E = √(4MD) (0.04%); the point lens's
+    μ(u) = (u² + 2)/(u√(u² + 4)) at u = 0.5, 1, 2 (0.5%, on the probe's own 1024²
+    window around the star). On a torus each lens sits at its image nearest the view's
+    centre (or the star): per-pixel minimum images tore the backdrop at the seam.
+
 ### 2.2 Physics bugs and gaps found by the 2.0 scouting
 
 - **KG leftovers.** The exponential-metric form is in (§2.1). Still open: the
@@ -443,11 +456,12 @@ The tie is explicit and per mode, which is what Codex asked for.
 ### 2.3 Still open from the June audit
 
 - **Tests (audit §1, its top item):** `tests/physics-validation.html` runs
-  29 analytic oracles against the production `GPUPhysics` (§10.3). No Node
+  32 analytic oracles against the production `GPUPhysics` (§10.3). No Node
   kernel tests yet. The audit's route, a headless CPU engine as a GPU↔CPU
   parity oracle, died with the CPU path.
-- **Preset coverage (audit §3):** 22 presets, five of them relativity's
-  (M1, M2) and three cosmology's (M3), and none turns on boson interaction.
+- **Preset coverage (audit §3):** 23 presets, five of them relativity's
+  (M1, M2), three cosmology's (M3) and one lensing (M4), and none turns on boson
+  interaction.
   - Nothing exercises superradiance, Schwinger discharge, kugelblitz,
     Roche/disintegration, the Klein/RP² topologies or the external fields.
   - Annihilation is only incidental (Peccei–Quinn).
@@ -530,7 +544,7 @@ Versions set the order. Milestone IDs are stable names, not an order:
 | **M1** (done 2026-10-23, §2.1) | 1.5 | **Relativity you can see.** The world-line store (§10.2); τ and θ state; the spoke shader; clocks; spoke precession; domain decoupled from viewport (§10.4). | M0′ |
 | **M2** (done 2026-10-23 but for the covariance meter and slingshot twin, §2.1) | 1.5 | **Frames.** The slicer; lab, ZMF, particle and custom frames (view-only); lagged and true-now modes; the scrubber; the 1+1 Minkowski panel; the grid as lab rulers. | M1 |
 | **M3** (done 2026-10-23, §2.1) | 1.5 | **Honest cosmology.** Comoving rewrite; the a(t) selector and self-consistent background; redshift; Hubble friction; the ledger; horizons; misalignment and Kibble–Zurek presets. | M2 (grid) |
-| **M4** | 1.5 | **Lensing.** Lens mode on the grid; microlensing probe. | M2 (grid) |
+| **M4** (done 2026-10-23, §2.1) | 1.5 | **Lensing.** Lens mode on the grid; microlensing probe. | M2 (grid) |
 | **2.0** | 2.0 | The visual overhaul. Milestones are defined with its scope. | 1.5 |
 | **M8** | 2.1 | **The brush, then refractive media.** The layer system and brush UI (§7.1); n grids, Fresnel optics, dispersion, Cherenkov, gravity as an index (§7.2). | 2.0 |
 | **M5** | 2.1 | **Dust.** The PM collisionless species (§7.3). | M8 (brush), M3 (structure formation) |
@@ -726,7 +740,14 @@ The design as planned:
 - `E′ = γ(E − v·p)`;
 - round-trip ageing for all three twins.
 
-### 5.5 The background grid (M2/M4, M)
+### 5.5 The background grid (M2/M4, done)
+
+Landed: the lab rulers with frames (M2), comoving rulers (M3), the lens and the
+microlensing probe (M4, §2.1). The lens map is a direct sum over bodies on a 512² grid
+over the view rather than an FFT; caustics show as the grid's folds and the probe's
+image pairs. The clock lattice is not built.
+
+The design as planned:
 
 a9's call: a grid rather than stars, because it reads at every scale.
 

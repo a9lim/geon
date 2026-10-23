@@ -39,12 +39,13 @@ src/physics-contract.js  toggle/parameter keys shared by save/load and the GPU s
 src/ui.js                controls, toggle dependencies, settings dropdown, shortcuts, about
 src/input.js             spawn, select, delete through GPU hit tests
 src/overlay.js           the 2D canvas above the GPU canvas: the spawn-drag line
-src/presets.js           22 presets (PRESET_ORDER); each may set its domain
+src/presets.js           23 presets (PRESET_ORDER); each may set its domain
 src/cosmology.js         the scale factor a(t): schedules, the Friedmann closure, horizons
 src/cosmology-panel.js   the Stats tab's expansion readouts and the overlay's horizons
 src/frames.js            the observer the view is drawn for (sim.frames), FrameParams
 src/frame-panel.js       the Frame tab: frame choice, parameters, readouts, scrubber
 src/minkowski.js         the Frame tab's 1+1 spacetime diagram
+src/lens-panel.js        the Frame tab's Backdrop section: lensing, the microlensing probe
 src/save-load.js         quick save (localStorage), JSON download/upload
 src/stats-display.js     conservation readouts, selected-particle panel
 src/phase-plot.js, effective-potential.js, plot-labels.js   Particle-tab plots
@@ -56,7 +57,7 @@ src/gpu/gpu-buffers.js   allocation and packed struct sizes
 src/gpu/gpu-constants.js generated WGSL constants and toggle bits
 src/gpu/gpu-renderer.js  instanced rendering, light/dark pipeline pairs
 src/gpu/pass-graph.js    per-frame dispatch plan
-src/gpu/shaders/         62 WGSL files; shared-*.wgsl are prepended includes
+src/gpu/shaders/         63 WGSL files; shared-*.wgsl are prepended includes
 tests/physics-validation.html   analytic oracles against a headless GPUPhysics
 ```
 
@@ -328,6 +329,30 @@ canvas while a frame is active.
   In the lab its axes are lab x and t through the camera's centre.
 - **Shortcuts:** B cycles frames (skipping the particle frame without a selection),
   L returns to the lab, G toggles the grid.
+
+### Lensing
+
+The Frame tab's Backdrop section (`lens-panel.js`, `sim.lens`) turns the grid into a
+backdrop seen through the bodies as a thin lens, viewed along z, in the lab frame only.
+
+- **The map** (`lens-deflection.wgsl`, `GPUPhysics.dispatchLens`, from
+  `GPUBackend.render()` each rendered frame): one thread per cell of a `LENS_RES`² (512)
+  grid over the view, 10% oversized, writes α(θ) = Σ 4M·D(θ − θᵢ)/(|θ − θᵢ|² + 0.01), the
+  gradient of the 2D log potential, with D = D_LS/(D_L·D_S) on a log slider (θ_E =
+  √(4MD)); on a periodic domain each lens sits at its image nearest the view's centre
+  (a per-pixel minimum image would tear the backdrop at the seam, since α falls only as
+  1/θ). Black holes flag an imposed 3√3·M capture disk, since the weak thin lens has no
+  shadow.
+- **Drawing** (`grid-render.wgsl`): each pixel samples the map bilinearly and draws the
+  rulers at β = θ − α; the domain edge is in the slab and stays unlensed; capture disks
+  take the ground's ink.
+- **The probe:** a backdrop star of radius r at β_s, placed where the view's centre was.
+  Cells whose rays land on it light up in the accent (its images, arcs, Einstein rings)
+  and are counted (`lensBuffers.hits`) on a second, `countOnly` pass over a 1024² window
+  around the star (±3θ_E for the total mass, at least 20 star radii), so μ =
+  hits·cellArea/(πr²) by inverse ray shooting, for any lens configuration, read back a
+  frame late (`lensHits`) and plotted as a light curve. Images outside the window are
+  missed.
 
 ### Black holes
 

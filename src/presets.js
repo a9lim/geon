@@ -603,6 +603,34 @@ export const PRESETS = {
             sim.addParticle(sim.domainW / 2, sim.domainH / 2, 0, 0, { mass: 1e-3, charge: 0, spin: 0 });
         },
     },
+
+    // ─── Lensing ───
+
+    microlensing: {
+        name: 'Microlensing',
+        desc: 'A mass drifts in front of a backdrop star: the star splits into two images and brightens along the Paczyński light curve',
+        domain: [96, 96],
+        toggles: {
+            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: false, onepn: false, blackhole: false,
+            radiation: false, spinorbit: false, disintegration: false,
+            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
+        },
+        settings: { collision: 'pass', boundary: 'loop', topology: 'torus', speed: 16 },
+        visuals: { trails: false, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            // θ_E = √(4MD) = 8.9 at D = 1; the lens passes 0.3 θ_E from the star, so μ peaks
+            // near 3.4
+            const cx = sim.domainW / 2, cy = sim.domainH / 2, M = 20;
+            const thetaE = Math.sqrt(4 * M);
+            sim.addParticle(cx - 36, cy + 0.3 * thetaE, 0.3, 0, { mass: M, charge: 0, spin: 0 });
+            sim.lens.distance = 1;
+            const slider = document.getElementById('lensDistanceInput');
+            if (slider) { slider.value = 0; slider.dispatchEvent(new Event('input')); }
+            sim.lensPanel.setLensing(true);
+            sim.lensPanel.setProbe(true, { x: cx, y: cy, r: 0.6 });
+        },
+    },
 };
 
 export const PRESET_ORDER = [
@@ -610,7 +638,7 @@ export const PRESET_ORDER = [
     'wheel', 'thomas', 'geodetic', 'twinBounce', 'twinTorus',
     'atom', 'bremsstrahlung', 'magnetic',
     'nucleus', 'axion', 'pionexchange', 'higgs', 'higgsboson', 'axionburst', 'pecceiQuinn',
-    'expansion', 'misalignment', 'kibbleZurek',
+    'expansion', 'misalignment', 'kibbleZurek', 'microlensing',
 ];
 
 // ─── Toggle/Setting Application ───

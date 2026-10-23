@@ -108,6 +108,7 @@ const _lensF32 = new Float32Array(_lensData);
 const _lensU32 = new Uint32Array(_lensData);
 // The lens map's resolution, and a small core so a ray through a body stays finite
 export const LENS_RES = 512;
+const PROBE_RES = 1024;   // the probe's ray-shooting grid, finer: magnifications to ~1%
 const LENS_CORE_SQ = 0.01;
 const _ledgerAData = new Float32Array(4);           // boson-ledger.wgsl LedgerA
 // The energy accounts the stats can't see (stats-display.js): escaped radiation (redshifting),
@@ -662,6 +663,7 @@ export default class GPUPhysics {
         const d = this.device;
         this.lensBuffers = {
             params: d.createBuffer({ label: 'lensParams', size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+            probeParams: d.createBuffer({ label: 'lensProbeParams', size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
             map: d.createBuffer({ label: 'lensMap', size: LENS_RES * LENS_RES * 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }),
             hits: d.createBuffer({ label: 'lensHits', size: 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST }),
             staging: d.createBuffer({ label: 'lensHitsStaging', size: 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }),
@@ -669,46 +671,62 @@ export default class GPUPhysics {
         const pl = await createLensPipeline(d, wgslConstants);
         const lb = this.lensBuffers;
         this._lensPipeline = pl.pipeline;
-        this._lensBG = d.createBindGroup({
+        const bg = (params) => d.createBindGroup({
             label: 'lens_g0', layout: pl.layout,
-            entries: [lb.params, this.buffers.particleState, lb.map, lb.hits].map((buffer, i) => ({ binding: i, resource: { buffer } })),
+            entries: [params, this.buffers.particleState, lb.map, lb.hits].map((buffer, i) => ({ binding: i, resource: { buffer } })),
         });
+        this._lensBG = bg(lb.params);
+        this._lensProbeBG = bg(lb.probeParams);
         this._lensPending = false;
         this.lensHits = null;   // the probe's last count, with the cell area and star radius it used
     }
 
     /**
      * Build the lens map over the rectangle `p` = { left, top, width, height } (lab) for the
-     * backdrop distance `p.distance`, and count the probe's rays when `p.star` = { x, y, r }
-     * is set (read back a frame late into `lensHits`).
+     * backdrop distance `p.distance`, and, when `p.star` = { x, y, r } is set, count the
+     * probe's rays on a window around the star (read back a frame late into `lensHits`).
+     * The window spans 3θ_E either side for the total mass's Einstein radius (`p.massTotal`,
+     * else the last stats), which holds the bright images, and at least 20 star radii.
      */
     dispatchLens(p) {
         if (!this._lensPipeline) return;
-        const cellW = p.width / LENS_RES, cellH = p.height / LENS_RES;
-        const f = _lensF32, u = _lensU32;
-        f[0] = p.left; f[1] = p.top; f[2] = cellW; f[3] = cellH;
-        u[4] = LENS_RES; u[5] = this.aliveCount;
-        f[6] = 4 * p.distance;
-        f[7] = LENS_CORE_SQ;
-        f[8] = p.star ? p.star.x : 0; f[9] = p.star ? p.star.y : 0; f[10] = p.star ? p.star.r * p.star.r : 0;
-        u[11] = p.star ? 1 : 0;
-        u[12] = this.boundaryMode === BOUND_LOOP ? 1 : 0; u[13] = this.topologyMode;
-        f[14] = this.domainW; f[15] = this.domainH;
-        u[16] = this._blackHoleEnabled ? 1 : 0;
-        this.device.queue.writeBuffer(this.lensBuffers.params, 0, _lensData);
+        const writeParams = (buf, left, top, w, h, star, countOnly, res) => {
+            const f = _lensF32, u = _lensU32;
+            f[0] = left; f[1] = top; f[2] = w / res; f[3] = h / res;
+            u[4] = res; u[5] = this.aliveCount;
+            f[6] = 4 * p.distance;
+            f[7] = LENS_CORE_SQ;
+            f[8] = star ? star.x : 0; f[9] = star ? star.y : 0; f[10] = star ? star.r * star.r : 0;
+            u[11] = star ? 1 : 0;
+            u[12] = this.boundaryMode === BOUND_LOOP ? 1 : 0; u[13] = this.topologyMode;
+            f[14] = this.domainW; f[15] = this.domainH;
+            u[16] = this._blackHoleEnabled ? 1 : 0; u[17] = countOnly ? 1 : 0;
+            f[18] = left + w / 2; f[19] = top + h / 2;   // the rectangle's centre
+            this.device.queue.writeBuffer(buf, 0, _lensData);
+        };
+        writeParams(this.lensBuffers.params, p.left, p.top, p.width, p.height, null, false, LENS_RES);
         const enc = this.device.createCommandEncoder({ label: 'lens' });
         enc.clearBuffer(this.lensBuffers.hits);
         const pass = enc.beginComputePass({ label: 'lensDeflection' });
         pass.setPipeline(this._lensPipeline);
         pass.setBindGroup(0, this._lensBG);
         pass.dispatchWorkgroups(LENS_RES / 8, LENS_RES / 8);
+        let cellArea = 0;
+        if (p.star) {
+            const mTot = p.massTotal ?? (this._statsData ? Math.max(this._statsData[8], 0) : 1);
+            const half = Math.max(3 * Math.sqrt(4 * mTot * p.distance), 20 * p.star.r);
+            writeParams(this.lensBuffers.probeParams, p.star.x - half, p.star.y - half, 2 * half, 2 * half, p.star, true, PROBE_RES);
+            cellArea = (2 * half / PROBE_RES) ** 2;
+            pass.setBindGroup(0, this._lensProbeBG);
+            pass.dispatchWorkgroups(PROBE_RES / 8, PROBE_RES / 8);
+        }
         pass.end();
         const readHits = p.star && !this._lensPending;
         if (readHits) enc.copyBufferToBuffer(this.lensBuffers.hits, 0, this.lensBuffers.staging, 0, 4);
         this.device.queue.submit([enc.finish()]);
         if (!readHits) return;
         this._lensPending = true;
-        const cellArea = cellW * cellH, r = p.star.r, t = this.simTime;
+        const r = p.star.r, t = this.simTime;
         this.lensBuffers.staging.mapAsync(GPUMapMode.READ).then(() => {
             const n = new Uint32Array(this.lensBuffers.staging.getMappedRange().slice(0))[0];
             this.lensBuffers.staging.unmap();
