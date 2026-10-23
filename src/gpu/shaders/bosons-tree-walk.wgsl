@@ -86,7 +86,8 @@ fn updatePhotonsTree(@builtin(global_invocation_id) gid: vec3u) {
     var stack: array<u32, 48>;
     var top: i32 = 0;
     stack[0] = 0u;
-    top = 1;
+    // Lensing is part of gravity: no walk with Gravity off.
+    top = select(0, 1, (u.toggles0 & GRAVITY_BIT) != 0u);
     while (top > 0) {
         top--;
         let nIdx = stack[u32(top)];
@@ -131,7 +132,7 @@ fn updatePhotonsTree(@builtin(global_invocation_id) gid: vec3u) {
     ph.posX += phVX * dt;
     ph.posY += phVY * dt;
     ph.lifetime += dt;
-    if (ph.lifetime > PHOTON_LIFETIME) { ph.flags &= ~1u; }
+    if (ph.lifetime > PHOTON_CULL_AGE) { ph.flags &= ~1u; } // pool cull, non-physical
     photons[i] = ph;
 }
 
@@ -154,7 +155,7 @@ fn updatePionsTree(@builtin(global_invocation_id) gid: vec3u) {
     let wSq = piWX * piWX + piWY * piWY;
     let gamma = sqrt(1.0 + wSq);
     let vSq = wSq / max(gamma * gamma, EPSILON);
-    let grFactor = 1.0 + vSq;
+    let grFactor = select(0.0, 1.0 + vSq, (u.toggles0 & GRAVITY_BIT) != 0u);
     let coulombOn = (u.toggles0 & COULOMB_BIT) != 0u;
     let piCharge = pi.charge;
     let coulombScale = select(0.0, -piCharge * dt, coulombOn && abs(piCharge) > EPSILON);
@@ -214,10 +215,11 @@ fn updatePionsTree(@builtin(global_invocation_id) gid: vec3u) {
     pi.posY += velY * dt;
     pi.age += 1u;
 
-    // Lepton lifetime: track via energy field (repurposed), despawn when exceeded
+    // Lepton pool cull: age tracked in the energy field (repurposed). Leptons are
+    // stable; the cull only bounds the pool.
     if (pi.kind == 1u) {
         pi.energy += dt;
-        if (pi.energy > LEPTON_LIFETIME) {
+        if (pi.energy > LEPTON_CULL_AGE) {
             pi.flags &= ~1u; // mark dead
         }
     }

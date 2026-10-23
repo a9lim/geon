@@ -95,7 +95,8 @@ fn pqsEnergyCoeffs(pqs: PQSResult, cellArea: f32, bcMode: u32, topoMode: u32) ->
 }
 
 // ─── Higgs Source Deposit ───
-// Deposits g * baseMass per particle.
+// Deposits g * baseMass per particle, times dτ/dt = 1/γ: a scalar source couples
+// through the particle's proper time. (The metric's e^{5Φ} is applied in the kick.)
 @compute @workgroup_size(256)
 fn depositHiggsSource(@builtin(global_invocation_id) gid: vec3<u32>) {
     let pid = gid.x;
@@ -112,13 +113,13 @@ fn depositHiggsSource(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (cellW < EPSILON || cellH < EPSILON) { return; }
 
     let pqs = pqsWeights(p.posX, p.posY, 1.0 / cellW, 1.0 / cellH);
-    let value = uniforms.higgsCoupling * bm;
+    let value = uniforms.higgsCoupling * bm * restFrameDt(1.0, vec2<f32>(p.velWX, p.velWY), uniforms.relativityEnabled != 0u);
     atomicDeposit(pqs, value, uniforms.boundaryMode, uniforms.topologyMode);
 }
 
 // ─── Axion Source Deposit ───
-// Deposits g*q² (EM, when Coulomb on) + g*m*sign (PQ, when Yukawa on).
-// Can be negative (PQ coupling flips for antimatter).
+// Deposits g*q² (EM, when Coulomb on) + g*m*sign/γ (PQ, when Yukawa on; scalar,
+// so through the particle's proper time). Can be negative (PQ flips for antimatter).
 @compute @workgroup_size(256)
 fn depositAxionSource(@builtin(global_invocation_id) gid: vec3<u32>) {
     let pid = gid.x;
@@ -143,13 +144,32 @@ fn depositAxionSource(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (m > EPSILON) {
             let isAntimatter = (flag & 4u) != 0u;
             let sign = select(1.0, -1.0, isAntimatter);
-            value += g * m * sign;
+            value += g * m * sign * restFrameDt(1.0, vec2<f32>(p.velWX, p.velWY), uniforms.relativityEnabled != 0u);
         }
     }
     if (abs(value) < EPSILON) { return; }
 
     let pqs = pqsWeights(p.posX, p.posY, 1.0 / cellW, 1.0 / cellH);
     atomicDeposit(pqs, value, uniforms.boundaryMode, uniforms.topologyMode);
+}
+
+// ─── Particle Mass Deposit (grid gravity source) ───
+// Rest mass per cell, for the particles' part of the fields' metric potential.
+@compute @workgroup_size(256)
+fn depositMass(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let pid = gid.x;
+    if (pid >= uniforms.particleCount) { return; }
+
+    let p = particles[pid];
+    if ((p.flags & 1u) == 0u) { return; }
+    if (p.mass < EPSILON) { return; }
+
+    let cellW = uniforms.domainW / f32(GRID);
+    let cellH = uniforms.domainH / f32(GRID);
+    if (cellW < EPSILON || cellH < EPSILON) { return; }
+
+    let pqs = pqsWeights(p.posX, p.posY, 1.0 / cellW, 1.0 / cellH);
+    atomicDeposit(pqs, p.mass, uniforms.boundaryMode, uniforms.topologyMode);
 }
 
 // ─── Superradiant Instability ───
@@ -196,7 +216,10 @@ fn depositSuperradiance(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (I_bh < EPSILON) { return; }
     let maxByMass = max(0.0, M - MIN_MASS);
     let maxBySpin = abs(angw) * I_bh * muA;
-    let dE = min(rate * uniforms.dt, min(maxByMass, maxBySpin));
+    // On the hole's clock (dτ = dt/γ). Ω_H > μ_a is itself frame-dependent for a
+    // hole moving through the lab-grid field, so this holds for slow holes only.
+    let dTau = restFrameDt(uniforms.dt, vec2<f32>(p.velWX, p.velWY), uniforms.relativityEnabled != 0u);
+    let dE = min(rate * dTau, min(maxByMass, maxBySpin));
     if (dE < EPSILON) { return; }
 
     let cellW = uniforms.domainW / f32(GRID);

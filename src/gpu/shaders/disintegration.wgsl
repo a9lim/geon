@@ -20,6 +20,10 @@ struct DisintUniforms {
     periodic: u32,
     topologyMode: u32,
     features: u32,
+    dt: f32,
+    relOn: u32,
+    _pad0: u32,
+    _pad1: u32,
 };
 
 const DISINT_FRAGMENT: u32 = 0u;
@@ -53,6 +57,7 @@ struct DisintEvent {
 
 @group(2) @binding(0) var<storage, read_write> pions: array<Pion>;
 @group(2) @binding(1) var<storage, read_write> piCount: atomic<u32>;
+@group(2) @binding(2) var<storage, read_write> radState: array<RadiationState>;
 
 @compute @workgroup_size(256)
 fn checkDisintegration(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -85,6 +90,13 @@ fn checkDisintegration(@builtin(global_invocation_id) gid: vec3<u32>) {
                 var emitted: u32 = 0u;
                 var seed = (pid * 2654435761u) ^ du.particleCount;
                 let offset = max(particleAux[pid].radius * SPAWN_OFFSET_MUL, SPAWN_OFFSET_FLOOR);
+                // Leptons leave isotropically in the hole's rest frame at the
+                // fixed toy speed 1/√3, boosted to the lab; pShed sums their lab
+                // momentum for the recoil.
+                let wHole = vec2<f32>(p.velWX, p.velWY);
+                let restSpeed = 0.57735;
+                let restGamma = 1.0 / sqrt(1.0 - restSpeed * restSpeed);
+                var pShed = vec2<f32>(0.0);
                 for (var ci = 0u; ci < 64u; ci++) {
                     if (ci >= shedUnits) { break; }
                     let li = atomicAdd(&piCount, 1u);
@@ -94,15 +106,16 @@ fn checkDisintegration(@builtin(global_invocation_id) gid: vec3<u32>) {
                     }
                     seed = seed * 747796405u + 2891336453u;
                     let angle = f32(seed) / 4294967296.0 * TWO_PI;
-                    let cosA = cos(angle);
-                    let sinA = sin(angle);
-                    let speed = min(sqrt(max(ELECTRON_MASS * 3.0 * ELECTRON_MASS, 0.0)) / max(3.0 * ELECTRON_MASS, EPSILON), MAX_SPEED_RATIO);
-                    let gammaL = 1.0 / sqrt(max(1.0 - speed * speed, EPSILON));
+                    let dir = vec2<f32>(cos(angle), sin(angle));
+                    let lab = boostToLab(ELECTRON_MASS * restGamma,
+                                         ELECTRON_MASS * restGamma * restSpeed * dir, wHole);
+                    pShed += lab.yz;
+                    let labDir = lab.yz / max(length(lab.yz), EPSILON);
                     var lep: Pion;
-                    lep.posX = p.posX + cosA * offset;
-                    lep.posY = p.posY + sinA * offset;
-                    lep.wX = gammaL * speed * cosA;
-                    lep.wY = gammaL * speed * sinA;
+                    lep.posX = p.posX + labDir.x * offset;
+                    lep.posY = p.posY + labDir.y * offset;
+                    lep.wX = lab.y / ELECTRON_MASS;
+                    lep.wY = lab.z / ELECTRON_MASS;
                     lep.mass = ELECTRON_MASS;
                     lep.charge = sign * BOSON_CHARGE;
                     lep.energy = 0.0;
@@ -123,6 +136,11 @@ fn checkDisintegration(@builtin(global_invocation_id) gid: vec3<u32>) {
                 particles[pid].mass = newMass;
                 if (m > EPSILON) {
                     particles[pid].baseMass *= newMass / m;
+                }
+                if (emitted > 0u && newMass > EPSILON) {
+                    let wNew = (wHole * m - pShed) / newMass;
+                    particles[pid].velWX = wNew.x;
+                    particles[pid].velWY = wNew.y;
                 }
 
                 let newBodyRSq = pow(max(newMass, EPSILON), 2.0 / 3.0);
@@ -297,11 +315,14 @@ fn checkDisintegration(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
 
-    // Roche lobe overflow (Eggleton 1983)
+    // Roche lobe overflow (Eggleton 1983): r_L/a = 0.49q^{2/3}/(0.6q^{2/3} + ln(1 + q^{1/3})),
+    // q = donor/companion. Transfer is a rate on the donor's clock, accumulated
+    // in radState until a quantum of at least minMass can leave.
+    var rocheOverflow = false;
     if (strongestDist > EPSILON && m > du.minMass * 4.0) {
         let rocheDist = strongestDist;
         let oMass = particles[strongestIdx].mass;
-        let qRatio = m / (m + oMass);
+        let qRatio = m / max(oMass, EPSILON);
         let q13 = pow(qRatio, 1.0 / 3.0);
         let q23 = q13 * q13;
         let rRoche = rocheDist * 0.49 * q23 / (0.6 * q23 + log(1.0 + q13));
@@ -309,10 +330,15 @@ fn checkDisintegration(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (r > rRoche * du.rocheThreshold) {
             let l1Mag = sqrt(strongestDx * strongestDx + strongestDy * strongestDy);
             if (l1Mag > EPSILON) {
+                rocheOverflow = true;
                 let l1x = strongestDx / l1Mag;
                 let l1y = strongestDy / l1Mag;
                 let overflow = r / rRoche - du.rocheThreshold;
-                let dM = min(overflow * du.rocheTransferRate * m, m * 0.1);
+                let dTau = restFrameDt(du.dt, vec2<f32>(p.velWX, p.velWY), du.relOn != 0u);
+                var rs = radState[pid];
+                rs.rocheAccum += overflow * du.rocheTransferRate * m * dTau;
+                let dM = min(rs.rocheAccum, m * 0.1);
+                radState[pid] = rs;
 
                 if (dM >= du.minMass) {
                     let slot = atomicAdd(&eventCounter, 1u);
@@ -332,9 +358,22 @@ fn checkDisintegration(@builtin(global_invocation_id) gid: vec3<u32>) {
                         evt.charge = dq;
                         evt.radius = q - dq;
                         events[slot] = evt;
+
+                        // The donor gives up the mass here, so several events in
+                        // one frame can't each spawn from the same unreduced mass.
+                        let newM = m - dM;
+                        particles[pid].mass = newM;
+                        particles[pid].baseMass *= newM / m;
+                        particles[pid].charge = q - dq;
+                        particleAux[pid].radius = pow(newM, 1.0 / 3.0);
+                        rs.rocheAccum = 0.0;
+                        radState[pid] = rs;
                     }
                 }
             }
         }
+    }
+    if (!rocheOverflow && radState[pid].rocheAccum != 0.0) {
+        radState[pid].rocheAccum = 0.0;
     }
 }

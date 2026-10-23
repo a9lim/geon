@@ -21,7 +21,10 @@ code as it is; the CPU sections stay accurate until that retirement lands.
   Pipelines are created synchronously, so a compile error shows up as a WebGPU
   validation error rather than a throw; a missing shader file does throw, and init then
   logs `[physsim] GPU init failed, falling back to CPU`.
-- There is no test suite yet (`docs/ROADMAP.md` §10.3 plans one).
+- `tests/physics-validation.html` runs analytic oracles against a headless `GPUPhysics`
+  (open `http://localhost:8000/geon/tests/physics-validation.html`, press Run; `runAll()`
+  from the console). Every new feature adds its oracle there (`docs/ROADMAP.md` §1.1).
+  The stager skips `tests/`, so it never deploys.
 
 ## Layout
 
@@ -55,7 +58,8 @@ src/gpu/gpu-buffers.js   allocation and packed struct sizes
 src/gpu/gpu-constants.js generated WGSL constants and toggle bits
 src/gpu/gpu-renderer.js  instanced rendering, light/dark pipeline pairs
 src/gpu/pass-graph.js    per-frame dispatch plan
-src/gpu/shaders/         54 WGSL files; shared-*.wgsl are prepended includes
+src/gpu/shaders/         55 WGSL files; shared-*.wgsl are prepended includes
+tests/physics-validation.html   analytic oracles against a headless GPUPhysics
 ```
 
 ## How it works
@@ -162,18 +166,22 @@ Removed particles keep sourcing forces until their signal has crossed the domain
   `checkDisintegration().chargeSheds` → `CPUPhysics._handleExtremalChargeShed()`, GPU
   `disintegration.wgsl` with `DISINT_FEATURE_EXTREMAL`.
 - **Hawking** (Black hole + Radiation): Kerr–Newman temperature, Stefan–Boltzmann
-  power, none at extremality. Below `MIN_MASS` a hole sheds leftover charge as leptons
-  and ends in a photon burst.
-- **Schwinger** (Black hole + Coulomb + Radiation; rate in the comment above the CPU
-  block in `integrator.js`, GPU `schwingerDischarge` in `radiation.wgsl`): each event
-  emits one same-sign lepton and costs the hole one charge quantum and `ELECTRON_MASS`
-  but not the lepton's kinetic energy; subtracting that too makes the discharge run
-  away.
+  power, none at extremality, on the hole's clock (`dM = P·dt/γ`). Mass leaves at fixed
+  proper velocity; each photon is drawn isotropically in the rest frame, boosted, and the
+  hole takes the recoil. Below `MIN_MASS` a hole sheds leftover charge as leptons and
+  ends in two back-to-back rest-frame photons carrying its four-momentum.
+- **Schwinger** (Black hole + Coulomb + Radiation; GPU `schwingerDischarge` in
+  `radiation.wgsl`): the rate runs on the hole's clock, and each event emits one
+  same-sign lepton in the hole's rest frame, boosted, with exact momentum recoil. It
+  costs the hole one charge quantum and `ELECTRON_MASS` but not the lepton's kinetic
+  energy; subtracting that too makes the discharge run away. Extremal shedding emits
+  the same way.
 - **Superradiance** (Black hole + Axion): the rate scales as α² instead of the real
   α⁸, which is too steep to see. Accepted dE enters axion `fieldDot` as an
   energy-normalized impulse and the hole loses `dM = dE`, `dJ = dE/μ_a`, so it
-  saturates at `Ω_H ≤ μ_a`. CPU `AxionField._depositSuperradiance()`; GPU
-  `depositSuperradiance` (`field-deposit.wgsl`) reads φ² from `axYukMod[pid].w`, written
+  saturates at `Ω_H ≤ μ_a`. The rate uses `dt/γ`, valid for slow holes (`Ω_H > μ` is
+  frame-dependent for a hole crossing the lab grid). CPU `AxionField._depositSuperradiance()`;
+  GPU `depositSuperradiance` (`field-deposit.wgsl`) reads φ² from `axYukMod[pid].w`, written
   earlier in the substep by `applyAxionForces`, and has its own three-group layout.
 
 ### Bosons
@@ -184,8 +192,12 @@ Removed particles keep sourcing forces until their signal has crossed the domain
 - Absorption adds the boson's full four-momentum (`_absorbFourMomentum()`), so the
   target's invariant mass changes with its proper velocity; charged pions move charge.
   `emitterId` blocks self-absorption, and nothing is absorbed before `BOSON_MIN_AGE`.
-- Pion decay is a per-tick probability on CPU; the GPU decays once per frame with
-  `1 − (1 − p)^N` for N ticks.
+- Pion decay runs on the pion's clock: once per frame, `P = 1 − exp(−ln2·Δτ/T½)` with
+  `Δτ = dt/γ` (`PION_HALF_LIFE` 32, `CHARGED_PION_HALF_LIFE` 64; pions always dilate,
+  since they always carry true proper velocity). The CPU path still uses a per-tick
+  probability. `restFrameDt()` and `boostToLab()` live in `shared-relativity.wgsl`.
+- `PHOTON_CULL_AGE` and `LEPTON_CULL_AGE` are pool culls in lab time, not lifetimes.
+- Boson lensing (photons 2× Newtonian, pions `1 + v²`) follows the Gravity toggle.
 - Leptons come from Schwinger discharge, extremal shedding, evaporation remnants, and
   charged-pion decay. Photon → pair conversion is deliberately absent.
 - **Annihilation** (Merge mode, matter meets antimatter) emits two photons conserving
@@ -205,10 +217,22 @@ Removed particles keep sourcing forces until their signal has crossed the domain
 `ScalarField` (`scalar-field.js`) is a PQS (cubic B-spline, 4×4 stencil) grid with C²
 interpolation and gradients, arrays `field` / `fieldDot`, values clamped to
 `±SCALAR_FIELD_MAX`; 64² on CPU, 128² on GPU. Fields step by Störmer–Verlet KDK each
-substep. Self-gravity is an FFT convolution with a softened Green's function;
-`computeSelfGravity(domainW, domainH, softeningSq, bcMode, topoConst)` takes the
-boundary mode, not a periodic flag, and runs twice per KDK (GPU: `field-selfgrav` and
-the Stockham `field-fft.wgsl`, with `fft.js` building the Green's function).
+substep; on the GPU both fields share one joint KDK (`_dispatchFieldStep`).
+
+**Grid gravity (GPU).** With Gravity on, the fields evolve in the metric
+`ds² = −e^{2Φ}dt² + e^{−2Φ}d𝐱²`, where the Klein–Gordon equation is exactly
+`φ̈ = e^{4Φ}∇²φ − e^{2Φ}V′ + 4Φ̇φ̇` (the 3+1 weak-field form at small Φ, with no
+gradient-coupling term). Particle sources couple through proper time: `1/γ` at deposit,
+`e^{5Φ}` in the kick. Damping is a proper-time rate (`× e^{Φ}`). `field-gravity.wgsl`
+builds Φ on one shared grid (`createGravityGridBuffers`): Φ_F from both fields' energy
+(also the field → particle force) and Φ_P from the particles' rest mass, each an FFT
+convolution with `−1/√(r² + ℓ²)`, `ℓ = SHEET_THICKNESS` (8, independent of the particle
+softening ε). `metricPhi = Φ_F + Φ_P` is solved before the first half-kick and after the
+drift; Φ̇ is the backward difference between consecutive post-drift solves. The FFT
+stage parameters are a static uniform table picked by dynamic offset: a
+`queue.writeBuffer` per stage would land before the whole encoder ran (that bug left
+Φ ≡ 0 until 2026-10-23). The circular convolution treats every boundary mode as
+periodic. The CPU path still uses its weak-field form with the particle softening.
 
 The couplings are documented in the headers of `higgs-field.js` (mass =
 `baseMass·max(|φ|, HIGGS_MASS_FLOOR)`) and `axion-field.js` (`axMod` for EM, a
@@ -221,7 +245,8 @@ term, so field kinetic energy rises by exactly the event energy (CPU
 
 - **Shaders.** `fetchShader()` loads `src/gpu/shaders/<file>?v=${SHADER_VERSION}`;
   `getSharedPrefix()` prepends `buildWGSLConstants()` (generated from `config.js` and
-  the palette), `shared-structs`, `shared-topology`, and `shared-rng.wgsl`. Tree
+  the palette), `shared-structs`, `shared-topology`, `shared-rng`, and
+  `shared-relativity.wgsl`. Tree
   walkers add `shared-tree-nodes.wgsl`; many shaders also prepend `common.wgsl`.
 - **Buffers.** Packed structs (`shared-structs.wgsl`, sizes in `gpu-buffers.js`) keep
   each stage within the 10 storage buffers `selectBackend()` requests.

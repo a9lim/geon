@@ -61,7 +61,7 @@ struct RadiationState {
     d3IContrib: f32,
     d3QContrib: f32,
     schwingerAccum: f32,
-    _pad1: f32,
+    rocheAccum: f32,   // donor mass awaiting Roche transfer
     _pad2: f32,
 };
 

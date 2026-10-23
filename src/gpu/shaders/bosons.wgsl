@@ -90,7 +90,8 @@ fn updatePhotons(@builtin(global_invocation_id) gid: vec3u) {
     var phVY = ph.velY;
 
     // Gravitational deflection: GR gives 2x Newtonian for null geodesic
-    for (var j = 0u; j < aliveN; j++) {
+    let lensN = select(0u, aliveN, (u.toggles0 & GRAVITY_BIT) != 0u);
+    for (var j = 0u; j < lensN; j++) {
         let pj = particles[j];
         if ((pj.flags & FLAG_ALIVE) == 0u) { continue; }
         let dx = pj.posX - phPosX;
@@ -118,9 +119,9 @@ fn updatePhotons(@builtin(global_invocation_id) gid: vec3u) {
     ph.posX += phVX * dt;
     ph.posY += phVY * dt;
 
-    // Accumulate lifetime + despawn check
+    // Age + pool cull (non-physical; bounds the photon pool)
     ph.lifetime += dt;
-    if (ph.lifetime > PHOTON_LIFETIME) {
+    if (ph.lifetime > PHOTON_CULL_AGE) {
         ph.flags &= ~1u; // mark dead
     }
     photons[i] = ph;
@@ -147,7 +148,7 @@ fn updatePions(@builtin(global_invocation_id) gid: vec3u) {
     let vSq = wSq / max(gamma * gamma, EPSILON);
 
     // Gravitational deflection: (1+v^2) factor for massive particle
-    let grFactor = 1.0 + vSq;
+    let grFactor = select(0.0, 1.0 + vSq, (u.toggles0 & GRAVITY_BIT) != 0u);
     let coulombOn = (u.toggles0 & COULOMB_BIT) != 0u;
     let piCharge = pi.charge;
     for (var j = 0u; j < aliveN; j++) {
@@ -183,10 +184,11 @@ fn updatePions(@builtin(global_invocation_id) gid: vec3u) {
     pi.posY += velY * dt;
     pi.age += 1u;
 
-    // Lepton lifetime: track via energy field (repurposed), despawn when exceeded
+    // Lepton pool cull: age tracked in the energy field (repurposed). Leptons are
+    // stable; the cull only bounds the pool.
     if (pi.kind == 1u) {
         pi.energy += dt;
-        if (pi.energy > LEPTON_LIFETIME) {
+        if (pi.energy > LEPTON_CULL_AGE) {
             pi.flags &= ~1u; // mark dead
         }
     }
@@ -291,13 +293,13 @@ fn decayPions(@builtin(global_invocation_id) gid: vec3u) {
     if ((piState.flags & 1u) == 0u) { return; }
     if (piState.kind != 0u) { return; } // only pions decay
 
-    // Decay probability: base prob is calibrated per PHYSICS_DT.
-    // GPU update() spans N = dt/PHYSICS_DT ticks per frame, so scale:
-    // P_eff = 1 - (1 - p)^N  (probability of decaying in at least one of N trials)
+    // Decay on the pion's own clock: u.dt holds the whole frame's lab interval
+    // here, and the pion ages by Δτ = dt/γ of it. Pions always carry true
+    // proper velocity, so they dilate whatever the Relativity toggle says.
     let isNeutral = abs(piState.charge) < EPSILON;
-    let baseProb = select(CHARGED_PION_DECAY_PROB, PION_DECAY_PROB, isNeutral);
-    let ticks = max(u.dt / PHYSICS_DT, 1.0);
-    let prob = 1.0 - pow(1.0 - baseProb, ticks);
+    let halfLife = select(CHARGED_PION_HALF_LIFE, PION_HALF_LIFE, isNeutral);
+    let dTau = restFrameDt(u.dt, vec2<f32>(piState.wX, piState.wY), true);
+    let prob = 1.0 - exp(-LN2 * dTau / halfLife);
 
     // Pseudo-random from pion index + frame count (varies each frame)
     let rng = pcgRand((i * 73856093u) ^ (u.frameCount * 19349663u));
@@ -454,8 +456,8 @@ fn decayPions(@builtin(global_invocation_id) gid: vec3u) {
                     var lep: Pion;
                     lep.posX = piDecayPosX2 - phDir.x * emitOffset;
                     lep.posY = piDecayPosY2 - phDir.y * emitOffset;
-                    lep.wX = elPxR;
-                    lep.wY = elPyR;
+                    lep.wX = elPxR / mE;   // proper velocity w = p/m
+                    lep.wY = elPyR / mE;
                     lep.mass = ELECTRON_MASS;
                     lep.charge = piDecayCharge; // +1 (positron) or -1 (electron)
                     lep.energy = 0.0;  // repurposed as lifetime tracker

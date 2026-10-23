@@ -7,12 +7,27 @@
 @group(0) @binding(2) var<storage, read> otherField: array<f32>;       // cross-field for portal coupling (was laplacian)
 @group(0) @binding(3) var<storage, read_write> source: array<f32>;     // rw for encoder compat
 @group(0) @binding(4) var<storage, read_write> thermal: array<f32>;    // rw for encoder compat
-@group(0) @binding(5) var<storage, read_write> sgPhiFull: array<f32>;  // rw for encoder compat
-@group(0) @binding(6) var<storage, read_write> sgGradX: array<f32>;    // rw for encoder compat
-@group(0) @binding(7) var<storage, read_write> sgGradY: array<f32>;    // rw for encoder compat
-@group(0) @binding(8) var<storage, read_write> fieldGradX: array<f32>;  // field gradients (rw for computeGridGradients)
-@group(0) @binding(9) var<storage, read_write> fieldGradY: array<f32>;
-@group(0) @binding(10) var<uniform> uniforms: FieldUniforms;
+@group(0) @binding(5) var<storage, read_write> metricPhi: array<f32>;     // rw for encoder compat
+@group(0) @binding(6) var<storage, read_write> metricPhiDot: array<f32>;  // rw for encoder compat
+@group(0) @binding(7) var<storage, read_write> fieldGradX: array<f32>;  // field gradients (rw for computeGridGradients)
+@group(0) @binding(8) var<storage, read_write> fieldGradY: array<f32>;
+@group(0) @binding(9) var<uniform> uniforms: FieldUniforms;
+
+// ─── Metric coefficients ───
+// Fields evolve in ds² = −e^{2Φ}dt² + e^{−2Φ}d𝐱² (Φ from field-gravity.wgsl),
+// where the Klein–Gordon equation is exactly
+//   φ̈ = e^{4Φ}∇²φ − e^{2Φ}V′ + 4Φ̇φ̇,
+// with no gradient-coupling term. It linearizes to the 3+1 weak-field form
+// (1+4Φ)∇²φ − (1+2Φ)V′ + 4Φ̇φ̇ and never degenerates. A point particle couples
+// through its proper time (e^{Φ}/γ dt, the 1/γ applied at deposit), so its
+// source carries e^{4Φ}·e^{Φ} = e^{5Φ}. Damping is a rate in proper time, so it
+// picks up one lapse factor e^{Φ}. Returns (e^{4Φ}, e^{2Φ}, e^{Φ}, Φ̇).
+fn metricCoeffs(idx: u32) -> vec4<f32> {
+    if (uniforms.gravityEnabled == 0u) { return vec4<f32>(1.0, 1.0, 1.0, 0.0); }
+    let lapse = exp(clamp(metricPhi[idx], -METRIC_PHI_CLAMP, METRIC_PHI_CLAMP));
+    let lapseSq = lapse * lapse;
+    return vec4<f32>(lapseSq * lapseSq, lapseSq, lapse, metricPhiDot[idx]);
+}
 
 // ─── Inline Laplacian helper ───
 // 5-point stencil with topology-aware border handling.
@@ -42,8 +57,7 @@ fn inlineLaplacian(ix: u32, iy: u32, idx: u32, invCWsq: f32, invCHsq: f32) -> f3
 
 // ─── Higgs KDK Half-Kick (Fused: inline Laplacian + NaN guard) ───
 // V(φ) = -½μ²φ² + ¼λφ⁴, VEV=1, λ=μ²=m_H²/2
-// ddphi = ∇²φ + μ²_eff·φ - μ²·φ³ - 2m_H·φ̇ + source/cellArea
-//   + self-grav: 4Φ·∇²φ + 2(∇Φ·∇φ)/cellArea² + 2Φ·(μ²_eff·φ - μ²·φ³)
+// ddphi = e^{4Φ}∇²φ + e^{2Φ}(μ²_eff·φ - μ²·φ³) + e^{5Φ}·source/cellArea - e^{Φ}·2m_H·φ̇ + 4Φ̇φ̇
 @compute @workgroup_size(8, 8)
 fn higgsHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
     let ix = gid.x;
@@ -94,28 +108,16 @@ fn higgsHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
     let fdLap = (fdL + fdR - 2.0 * fdC) * invCWsq + (fdT + fdB - 2.0 * fdC) * invCHsq;
     let viscosity = 0.5 * inverseSqrt(invCWsq + invCHsq) * fdLap;
 
-    var ddphi = lapI + muSqEff * phi - muSq * phi * phi * phi
-              - damp * fdC + srcTerm + viscosity;
-
-    // Higgs-Axion portal coupling: -λa²φ (only when both fields active)
-    var portalA: f32 = 0.0;
+    // −V′ (thermally shifted) and the Higgs–axion portal −λa²φ
+    var force = muSqEff * phi - muSq * phi * phi * phi;
     if (uniforms.higgsEnabled != 0u && uniforms.axionEnabled != 0u) {
-        portalA = otherField[idx];
-        ddphi -= HIGGS_AXION_COUPLING * portalA * portalA * phi;
+        let portalA = otherField[idx];
+        force -= HIGGS_AXION_COUPLING * portalA * portalA * phi;
     }
 
-    // Self-gravity correction (weak-field GR, clamp Φ for stability)
-    if (uniforms.gravityEnabled != 0u) {
-        let Phi = clamp(sgPhiFull[idx], -SELFGRAV_PHI_MAX, SELFGRAV_PHI_MAX);
-        ddphi += 4.0 * Phi * lapI
-               + 2.0 * (sgGradX[idx] * fieldGradX[idx] * invCWsq
-                       + sgGradY[idx] * fieldGradY[idx] * invCHsq)
-               + 2.0 * Phi * (muSqEff * phi - muSq * phi * phi * phi);
-        // Portal SG correction: -2Φ·λa²φ
-        if (uniforms.higgsEnabled != 0u && uniforms.axionEnabled != 0u) {
-            ddphi -= 2.0 * Phi * HIGGS_AXION_COUPLING * portalA * portalA * phi;
-        }
-    }
+    let mc = metricCoeffs(idx);
+    let ddphi = mc.x * lapI + mc.y * force + mc.x * mc.z * srcTerm
+              - mc.z * damp * fdC + viscosity + 4.0 * mc.w * fdC;
 
     var newFdot = fdC + ddphi * halfDt;
     // NaN/Inf guard: reset fieldDot and field to VEV (matching CPU higgs-field.js:112)
@@ -128,8 +130,7 @@ fn higgsHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 // ─── Axion KDK Half-Kick (Fused: inline Laplacian + NaN guard) ───
 // V(a) = ½m_a²a², vacuum at a=0
-// ddA = ∇²a - m_a²·a - g·m_a·ȧ + source/cellArea
-//   + self-grav: 4Φ·∇²a + 2(∇Φ·∇a)/cellArea² - 2Φ·m_a²·a
+// ddA = e^{4Φ}∇²a - e^{2Φ}·m_a²·a + e^{5Φ}·source/cellArea - e^{Φ}·g·m_a·ȧ + 4Φ̇ȧ
 @compute @workgroup_size(8, 8)
 fn axionHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
     let ix = gid.x;
@@ -178,26 +179,16 @@ fn axionHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
     let fdLap = (fdL + fdR - 2.0 * fdC) * invCWsq + (fdT + fdB - 2.0 * fdC) * invCHsq;
     let viscosity = 0.5 * inverseSqrt(invCWsq + invCHsq) * fdLap;
 
-    var ddA = lapI - mASq * aVal - damp * fdC + srcTerm + viscosity;
-
-    // Higgs-Axion portal coupling: -λφ²a (only when both fields active)
-    var portalPhi: f32 = 0.0;
+    // −V′ and the Higgs–axion portal −λφ²a
+    var force = -mASq * aVal;
     if (uniforms.higgsEnabled != 0u && uniforms.axionEnabled != 0u) {
-        portalPhi = otherField[idx];
-        ddA -= HIGGS_AXION_COUPLING * portalPhi * portalPhi * aVal;
+        let portalPhi = otherField[idx];
+        force -= HIGGS_AXION_COUPLING * portalPhi * portalPhi * aVal;
     }
 
-    if (uniforms.gravityEnabled != 0u) {
-        let Phi = clamp(sgPhiFull[idx], -SELFGRAV_PHI_MAX, SELFGRAV_PHI_MAX);
-        ddA += 4.0 * Phi * lapI
-             + 2.0 * (sgGradX[idx] * fieldGradX[idx] * invCWsq
-                     + sgGradY[idx] * fieldGradY[idx] * invCHsq)
-             - 2.0 * Phi * mASq * aVal;
-        // Portal SG correction: -2Φ·λφ²a
-        if (uniforms.higgsEnabled != 0u && uniforms.axionEnabled != 0u) {
-            ddA -= 2.0 * Phi * HIGGS_AXION_COUPLING * portalPhi * portalPhi * aVal;
-        }
-    }
+    let mc = metricCoeffs(idx);
+    let ddA = mc.x * lapI + mc.y * force + mc.x * mc.z * srcTerm
+            - mc.z * damp * fdC + viscosity + 4.0 * mc.w * fdC;
 
     var newFdot = fdC + ddA * (uniforms.dt * 0.5);
     // NaN/Inf guard on fieldDot only (Axion vacuum is 0.0, handled by drift fixup)

@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 79;
+const SHADER_VERSION = 81;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -31,8 +31,9 @@ async function _ensureSharedCache() {
             fetchShader('shared-topology.wgsl'),
             fetchShader('shared-tree-nodes.wgsl'),
             fetchShader('shared-rng.wgsl'),
-        ]).then(([structs, topo, treeNodes, rng]) => {
-            _sharedCache = { structs, topo, treeNodes, rng };
+            fetchShader('shared-relativity.wgsl'),
+        ]).then(([structs, topo, treeNodes, rng, rel]) => {
+            _sharedCache = { structs, topo, treeNodes, rng, rel };
             return _sharedCache;
         });
     }
@@ -47,7 +48,8 @@ let _cachedTreePrefix = null;
 let _cachedTreePrefixKey = null;
 
 /**
- * Build the standard prefix for all shaders: wgslConstants + shared-structs + shared-topology + shared-rng.
+ * Build the standard prefix for all shaders: wgslConstants + shared-structs + shared-topology
+ * + shared-rng + shared-relativity.
  * Shared files are fetched once and cached for the lifetime of the page.
  * The concatenated result is also cached per-wgslConstants to avoid repeated string allocations.
  * Exported so callers (e.g. gpu-renderer.js) can build shader modules without re-fetching.
@@ -56,7 +58,7 @@ export async function getSharedPrefix(wgslConstants) {
     if (wgslConstants === _cachedPrefixKey && _cachedPrefix !== null) return _cachedPrefix;
     const c = await _ensureSharedCache();
     _cachedPrefixKey = wgslConstants;
-    _cachedPrefix = wgslConstants + '\n' + c.structs + '\n' + c.topo + '\n' + c.rng;
+    _cachedPrefix = wgslConstants + '\n' + c.structs + '\n' + c.topo + '\n' + c.rng + '\n' + c.rel;
     return _cachedPrefix;
 }
 
@@ -1073,7 +1075,7 @@ export async function createFieldDepositPipelines(device, wgslConstants = '') {
     });
     const srLayout = device.createPipelineLayout({ bindGroupLayouts: [group0Layout, group1Layout, group2Layout] });
 
-    const baseEntryPoints = ['depositHiggsSource', 'depositAxionSource', 'depositThermal', 'finalizeDeposit', 'finalizeDepositAdd'];
+    const baseEntryPoints = ['depositHiggsSource', 'depositAxionSource', 'depositThermal', 'depositMass', 'finalizeDeposit', 'finalizeDepositAdd'];
     const pipelines = {};
     for (const entry of baseEntryPoints) {
         pipelines[entry] = device.createComputePipeline({
@@ -1100,41 +1102,25 @@ export async function createFieldEvolvePipelines(device, wgslConstants = '') {
     const code = fieldCommonWGSL + '\n' + evolveWGSL;
     const module = device.createShaderModule({ label: 'fieldEvolve', code });
 
-    const evolveGroup0Layout = device.createBindGroupLayout({
-        label: 'fieldEvolve_group0',
-        entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // otherField (portal coupling, was laplacian)
-            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // source (rw for encoder compat)
-            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // thermal (rw for encoder compat)
-            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // sgPhiFull (rw for encoder compat)
-            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // sgGradX (rw for encoder compat)
-            { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // sgGradY (rw for encoder compat)
-            { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // fieldGradX (rw for computeGridGradients)
-            { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // fieldGradY (rw for computeGridGradients)
-            { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-        ],
-    });
+    // Kicks and drift: metricPhi/metricPhiDot are read-only in practice; fieldGradX/Y
+    // are read_write only for computeGridGradients, which gets its own layout.
+    const entries = (gradAccess) => [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // field
+        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // fieldDot
+        { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // otherField (portal coupling)
+        { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // source (rw for encoder compat)
+        { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // thermal (rw for encoder compat)
+        { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // metricPhi (rw for encoder compat)
+        { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // metricPhiDot (rw for encoder compat)
+        { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: gradAccess } },  // fieldGradX
+        { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: gradAccess } },  // fieldGradY
+        { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+    ];
+    const evolveGroup0Layout = device.createBindGroupLayout({ label: 'fieldEvolve_group0', entries: entries('storage') });
     const evolveBindGroupLayouts = [evolveGroup0Layout];
     const evolvePipelineLayout = device.createPipelineLayout({ bindGroupLayouts: evolveBindGroupLayouts });
 
-    const gradGroup0Layout = device.createBindGroupLayout({
-        label: 'fieldGrad_group0',
-        entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // otherField (portal coupling)
-            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // source (rw for encoder compat)
-            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // thermal (rw for encoder compat)
-            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // sgPhiFull (rw for encoder compat)
-            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // sgGradX (rw for encoder compat)
-            { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // sgGradY (rw for encoder compat)
-            { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-        ],
-    });
+    const gradGroup0Layout = device.createBindGroupLayout({ label: 'fieldGrad_group0', entries: entries('storage') });
     const gradBindGroupLayouts = [gradGroup0Layout];
     const gradPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: gradBindGroupLayouts });
 
@@ -1223,8 +1209,7 @@ export async function createFieldForcesPipelines(device, wgslConstants = '') {
 
 /**
  * Create particle-field gravity pipeline (Phase 5).
- * F = -m·∇Φ via PQS interpolation of pre-computed potential gradients: O(N × 16).
- * Dispatched once per active field (Higgs, Axion) when gravity is enabled.
+ * F = -m·∇Φ_F via PQS interpolation of the gravity grid's field-potential gradient: O(N × 16).
  */
 export async function createFieldParticleGravPipeline(device, wgslConstants = '') {
     const prefix = await getSharedPrefix(wgslConstants);
@@ -1243,8 +1228,8 @@ export async function createFieldParticleGravPipeline(device, wgslConstants = ''
     const group1Layout = device.createBindGroupLayout({
         label: 'fieldParticleGrav_group1',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // sgGradX
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // sgGradY
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // phiFGradX
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // phiFGradY
         ],
     });
 
@@ -1260,65 +1245,52 @@ export async function createFieldParticleGravPipeline(device, wgslConstants = ''
 }
 
 /**
- * Create field self-gravity pipelines (Phase 5).
- * Energy density + SG gradients only — FFT convolution replaces coarse-grid O(SG⁴).
+ * Create grid-gravity pipelines (field-gravity.wgsl): field energy and particle
+ * mass packed for the FFT, the two potentials unpacked, and the metric combined.
  */
-export async function createFieldSelfGravPipelines(device, wgslConstants = '') {
+export async function createFieldGravityPipelines(device, wgslConstants = '') {
     const prefix = await getSharedPrefix(wgslConstants);
     const fieldCommonWGSL = prefix + '\n' + await fetchShader('field-common.wgsl');
-    const sgWGSL = await fetchShader('field-selfgrav.wgsl');
-    const code = fieldCommonWGSL + '\n' + sgWGSL;
-    const module = device.createShaderModule({ label: 'fieldSelfGrav', code });
+    const code = fieldCommonWGSL + '\n' + await fetchShader('field-gravity.wgsl');
+    const module = device.createShaderModule({ label: 'fieldGravity', code });
 
-    // Group 0: field arrays + uniform
-    const group0Layout = device.createBindGroupLayout({
-        label: 'fieldSelfGrav_group0',
-        entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // field
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // fieldDot
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // gradX
-            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // gradY
-            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // energyDensity
-            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },   // FieldUniforms
-        ],
+    const storage = (binding) => ({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } });
+    const uniform = { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } };
+    // Group 0, full: uniform + fftA + phiF + grads + phiP + metric (3) + massGrid
+    const gridLayout = device.createBindGroupLayout({
+        label: 'fieldGravity_grid',
+        entries: [uniform, ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map(storage)],
     });
-    // Group 1: SG output arrays
-    const group1Layout = device.createBindGroupLayout({
-        label: 'fieldSelfGrav_group1',
-        entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // sgPhiFull
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // sgGradX
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // sgGradY
-        ],
+    // packFieldEnergy only needs uniform + fftA from group 0, plus one field in group 1,
+    // which keeps it inside the per-stage storage-buffer limit.
+    const packLayout = device.createBindGroupLayout({
+        label: 'fieldGravity_pack',
+        entries: [uniform, storage(1)],
+    });
+    const fieldLayout = device.createBindGroupLayout({
+        label: 'fieldGravity_field',
+        entries: [0, 1, 2, 3].map(storage),
     });
 
-    // Group 2: FFT complex buffer (for fused energy density + pack / unpack + gradient)
-    const group2Layout = device.createBindGroupLayout({
-        label: 'fieldSelfGrav_group2',
-        entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // fftComplex (fftA)
-        ],
-    });
-
-    const bindGroupLayouts = [group0Layout, group1Layout, group2Layout];
-    const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts });
-
-    const entryPoints = [
-        'energyDensityHiggsAndPack', 'energyDensityAxionAndPack', 'unpackAndSGGradients',
-    ];
+    const gridPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [gridLayout] });
     const pipelines = {};
-    for (const entry of entryPoints) {
+    for (const entry of ['packMass', 'unpackPhiF', 'unpackPhiP', 'combineMetric', 'combineMetricDot']) {
         pipelines[entry] = device.createComputePipeline({
-            label: entry, layout: pipelineLayout,
+            label: entry, layout: gridPipelineLayout,
             compute: { module, entryPoint: entry },
         });
     }
+    pipelines.packFieldEnergy = device.createComputePipeline({
+        label: 'packFieldEnergy',
+        layout: device.createPipelineLayout({ bindGroupLayouts: [packLayout, fieldLayout] }),
+        compute: { module, entryPoint: 'packFieldEnergy' },
+    });
 
-    return { ...pipelines, bindGroupLayouts };
+    return { ...pipelines, gridLayout, packLayout, fieldLayout };
 }
 
 /**
- * Create FFT convolution pipelines for self-gravity Poisson solve.
+ * Create FFT convolution pipelines for the grid-gravity Poisson solve.
  * Stockham auto-sort butterfly passes + complex multiply + pack/unpack.
  */
 export async function createFFTPipelines(device, wgslConstants = '') {
@@ -1332,7 +1304,9 @@ export async function createFFTPipelines(device, wgslConstants = '') {
         entries: [
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // bufA
             { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },   // bufB
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },   // FFTParams
+            // FFTParams: one 256-byte record per butterfly stage, picked by dynamic offset.
+            // (A queue.writeBuffer per stage would land before the whole encoder runs.)
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform', hasDynamicOffset: true } },
         ],
     });
 
@@ -1536,6 +1510,7 @@ export async function createDisintegrationPipeline(device, wgslConstants = '') {
         entries: [
             { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // radiationState (Roche accumulator)
         ],
     });
 

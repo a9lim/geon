@@ -64,7 +64,7 @@ fn vertexPhoton(
         return out;
     }
 
-    let rawAlpha = max(0.0, 1.0 - ph.lifetime / PHOTON_LIFETIME);
+    let rawAlpha = max(0.0, 1.0 - ph.lifetime / PHOTON_CULL_AGE);
     // Alpha scale: 0.6 for light, 0.8 for dark (matches CPU renderer)
     let isDark = camera.isDarkMode;
     let alphaScale = select(0.6, 0.8, isDark > 0.5);

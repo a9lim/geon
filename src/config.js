@@ -40,11 +40,16 @@ export const DEFAULT_SPEED_SCALE = SPEED_OPTIONS[DEFAULT_SPEED_INDEX];
 export const MAX_FRAME_DT = 1 / 16;             // frame delta cap
 export const ACCUMULATOR_CAP = 2;            // max accumulator as multiple of PHYSICS_DT * MAX_SUBSTEPS
 
-// ── Softening ──
+// ── Lengths ──
+// ε: numerical softening for particle–particle forces only.
 export const SOFTENING = 8;
 export const SOFTENING_SQ = SOFTENING * SOFTENING;
 export const BH_SOFTENING = 4;               // reduced softening for black hole mode
 export const BH_SOFTENING_SQ = BH_SOFTENING * BH_SOFTENING;
+// ℓ: sheet thickness, the softening of grid gravity (field energy and particle
+// mass on the field grid). Physical, so black-hole mode does not change it.
+export const SHEET_THICKNESS = 8;
+export const SHEET_THICKNESS_SQ = SHEET_THICKNESS * SHEET_THICKNESS;
 export const BH_PW_MIN_GAP = 0.25;           // floor for Paczynski-Wiita horizon gap
 export const BOSON_SOFTENING_SQ = 4;         // photon/pion gravitational lensing
 export const BOSON_MIN_AGE = 4;              // minimum age (substeps) before any absorption
@@ -60,16 +65,18 @@ export const BH_THETA_SQ = BH_THETA * BH_THETA;
 export const QUADTREE_CAPACITY = 4;
 
 // ── Radiation & Bosons ──
-export const PHOTON_LIFETIME = 256;
+// Pool culls: photons and leptons are removed after this lab-time age.
+// Non-physical (leptons are stable, photons don't expire); they bound the pools.
+export const PHOTON_CULL_AGE = 256;
 export const MAX_PHOTONS = 1024;
 export const MAX_PIONS = 256;
 export const MAX_LEPTONS = 256;
 export const GPU_MAX_PHOTONS = 4096;
 export const GPU_MAX_PIONS = 1024;
 export const GPU_MAX_LEPTONS = 1024;
-export const LEPTON_LIFETIME = 512;
-const PION_HALF_LIFE = 32;                // pi0 half-life (fast EM decay)
-const CHARGED_PION_HALF_LIFE = 64;        // pi+/- half-life (slower weak decay)
+export const LEPTON_CULL_AGE = 512;
+export const PION_HALF_LIFE = 32;         // pi0 rest-frame half-life (fast EM decay)
+export const CHARGED_PION_HALF_LIFE = 64; // pi+/- rest-frame half-life (slower weak decay)
 export const PION_DECAY_PROB = 1 - Math.exp(-Math.LN2 / PION_HALF_LIFE * PHYSICS_DT);
 export const CHARGED_PION_DECAY_PROB = 1 - Math.exp(-Math.LN2 / CHARGED_PION_HALF_LIFE * PHYSICS_DT);
 export const ELECTRON_MASS = 0.01;                // decay product mass for pi+/- -> e+/- + photon
@@ -90,7 +97,8 @@ export const DEFAULT_HIGGS_MASS = 0.50;      // m_H (oscillation frequency), ~m_
 export const HIGGS_COUPLING = 1;             // g (source = g·baseMass, force = g·baseMass·∇φ)
 export const HIGGS_MASS_FLOOR = 0.05;        // min |φ| for mass: m ≥ 0.05·baseMass (caps accel at 20×)
 export const HIGGS_MASS_MAX_DELTA = 8;       // max mass change per unit time (prevents resonant throb)
-export const SELFGRAV_PHI_MAX = 0.25;        // clamp |Φ| to keep weak-field approx valid (1+4Φ>0 requires Φ>-0.25)
+export const SELFGRAV_PHI_MAX = 0.25;        // CPU field path only (retiring with it)
+export const METRIC_PHI_CLAMP = 8;           // NaN guard on the GPU metric potential; e^{±2Φ} stays finite in f32
 
 export const DEFAULT_AXION_MASS = 0.05;      // m_a (oscillation frequency)
 export const AXION_COUPLING = 0.05;          // g in L = -(1+g·a)F²/4
@@ -102,7 +110,7 @@ export const SPAWN_OFFSET_MULTIPLIER = 1.5;
 export const SPAWN_OFFSET_FLOOR = 1;
 export const SPAWN_MIN_ENERGY = 0.01;         // min energy per emitted photon (Hawking / annihilation)
 export const ROCHE_THRESHOLD = 0.9;
-export const ROCHE_TRANSFER_RATE = 0.01;
+export const ROCHE_TRANSFER_RATE = 0.1;      // fraction of donor mass per unit donor proper time, per unit overflow
 
 // ── Kugelblitz Collapse ──
 export const MIN_KUGELBLITZ_ENERGY = 0.2;    // minimum total boson energy for collapse (4 × MIN_MASS)

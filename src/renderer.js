@@ -1,4 +1,4 @@
-import { MAX_TRAIL_LENGTH, PHOTON_LIFETIME, INERTIA_K, TWO_PI, HALF_PI, VELOCITY_VECTOR_SCALE, FORCE_VECTOR_SCALE, FIELD_THROTTLE_MASK } from './config.js';
+import { MAX_TRAIL_LENGTH, PHOTON_CULL_AGE, INERTIA_K, TWO_PI, HALF_PI, VELOCITY_VECTOR_SCALE, FORCE_VECTOR_SCALE, FIELD_THROTTLE_MASK } from './config.js';
 const _PAL = window._PALETTE;
 const _r = window._r;
 
@@ -691,7 +691,7 @@ export default class Renderer {
                 const ph = photons[i];
                 if ((ph.type === 'grav') !== isGrav) continue;
                 if (ph.pos.x < vpL || ph.pos.x > vpR || ph.pos.y < vpT || ph.pos.y > vpB) continue;
-                const alpha = 1 - ph.lifetime / PHOTON_LIFETIME;
+                const alpha = 1 - ph.lifetime / PHOTON_CULL_AGE;
                 if (alpha <= 0) continue;
                 _photonBuckets[(alpha * 15.999) | 0].push(ph);
             }

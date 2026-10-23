@@ -390,26 +390,41 @@ export function createFieldBuffers(device, label, maxParticles) {
     const gridBytes = FIELD_GRID_SQ * 4; // f32
     const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
 
-    const complexBytes = FIELD_GRID_SQ * 2 * 4; // interleaved complex f32 (re,im pairs)
-
     return {
         field:         device.createBuffer({ label: `${label}-field`,         size: gridBytes, usage }),
         fieldDot:      device.createBuffer({ label: `${label}-fieldDot`,      size: gridBytes, usage }),
         source:        device.createBuffer({ label: `${label}-source`,        size: gridBytes, usage }),
         gradX:         device.createBuffer({ label: `${label}-gradX`,         size: gridBytes, usage }),
         gradY:         device.createBuffer({ label: `${label}-gradY`,         size: gridBytes, usage }),
-        energyDensity: device.createBuffer({ label: `${label}-energyDensity`, size: gridBytes, usage }),
         // Thermal grid (Higgs only, but allocated for both to keep layout uniform)
         thermal:       device.createBuffer({ label: `${label}-thermal`,       size: gridBytes, usage }),
-        // Self-gravity: FFT convolution on full grid
-        sgPhiFull:     device.createBuffer({ label: `${label}-sgPhiFull`,     size: gridBytes, usage }),
-        sgGradX:       device.createBuffer({ label: `${label}-sgGradX`,       size: gridBytes, usage }),
-        sgGradY:       device.createBuffer({ label: `${label}-sgGradY`,       size: gridBytes, usage }),
-        // FFT ping-pong buffers (interleaved complex: GRID*GRID*2 f32)
-        fftA:          device.createBuffer({ label: `${label}-fftA`,          size: complexBytes, usage }),
-        fftB:          device.createBuffer({ label: `${label}-fftB`,          size: complexBytes, usage }),
-        // Precomputed Green's function in Fourier space (uploaded from CPU)
-        greenHat:      device.createBuffer({ label: `${label}-greenHat`,      size: complexBytes, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST }),
+    };
+}
+
+/**
+ * Allocate the shared gravity grid both scalar fields evolve in (field-gravity.wgsl):
+ * FFT scratch and sheet Green's function, Φ_F (field energy) with its gradient,
+ * Φ_P (particle mass), and the metric potential with its previous value and Φ̇.
+ * @param {GPUDevice} device
+ */
+export function createGravityGridBuffers(device) {
+    const gridBytes = FIELD_GRID_SQ * 4;
+    const complexBytes = FIELD_GRID_SQ * 2 * 4; // interleaved complex f32 (re,im pairs)
+    const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+    const grid = (name) => device.createBuffer({ label: `grav-${name}`, size: gridBytes, usage });
+    return {
+        fftA:          device.createBuffer({ label: 'grav-fftA', size: complexBytes, usage }),
+        fftB:          device.createBuffer({ label: 'grav-fftB', size: complexBytes, usage }),
+        greenHat:      device.createBuffer({ label: 'grav-greenHat', size: complexBytes,
+                                             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST }),
+        phiF:          grid('phiF'),
+        phiFGradX:     grid('phiFGradX'),
+        phiFGradY:     grid('phiFGradY'),
+        phiP:          grid('phiP'),
+        metricPhi:     grid('metricPhi'),
+        metricPhiPrev: grid('metricPhiPrev'),
+        metricPhiDot:  grid('metricPhiDot'),
+        massGrid:      grid('massGrid'),
     };
 }
 

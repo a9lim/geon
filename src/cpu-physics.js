@@ -5,7 +5,7 @@
  * delegate through the same backend surface used by the GPU runtime.
  */
 import {
-    TWO_PI, PHOTON_LIFETIME, LEPTON_LIFETIME,
+    TWO_PI, PHOTON_CULL_AGE, LEPTON_CULL_AGE,
     PION_DECAY_PROB, CHARGED_PION_DECAY_PROB,
     PHYSICS_DT, MIN_MASS,
     SOFTENING_SQ, BH_SOFTENING_SQ, MAX_SPEED_RATIO, SPAWN_COUNT,
@@ -108,7 +108,7 @@ export default class CPUPhysics {
         for (let i = pLen - 1; i >= 0; i--) {
             const ph = sim.photons[i];
             ph.update(PHYSICS_DT, bosonInter ? lensParticles : null, pool, root, periodic, topo, dw, dh, hdw, hdh);
-            if (!ph.alive || ph.lifetime > PHOTON_LIFETIME) {
+            if (!ph.alive || ph.lifetime > PHOTON_CULL_AGE) {
                 ph.alive = false;
                 MasslessBoson.release(ph);
                 sim.photons[i] = sim.photons[--pLen];
@@ -135,7 +135,7 @@ export default class CPUPhysics {
         for (let i = lLen - 1; i >= 0; i--) {
             const lp = sim.leptons[i];
             lp.update(PHYSICS_DT, lensParticles, pool, root, bosonInter, coulomb, periodic, topo, dw, dh, hdw, hdh);
-            if (!lp.alive || lp.lifetime > LEPTON_LIFETIME) {
+            if (!lp.alive || lp.lifetime > LEPTON_CULL_AGE) {
                 lp.alive = false;
                 Lepton.release(lp);
                 sim.leptons[i] = sim.leptons[--lLen];

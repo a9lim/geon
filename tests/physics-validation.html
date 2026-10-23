@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Geon — physics validation | a9l.im</title>
+<meta name="robots" content="noindex, nofollow">
+<!-- Resolve the production modules and shader fetches exactly as /geon/ does. -->
+<base href="/geon/">
+<link rel="icon" href="/favicon.ico">
+<link rel="stylesheet" href="/fonts/fonts.css">
+<script src="/shared/tokens.js"></script>
+<script src="colors.js"></script>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+  body.sim-body { overflow: auto; padding: 24px; }
+  #wrap { max-width: 1080px; margin: 0 auto; font-family: var(--font-text); }
+  h1 { font-weight: 400; margin: 0 0 8px; }
+  .hint { color: var(--text-muted); margin: 4px 0 16px; font-size: var(--font-sm); line-height: 1.55; }
+  .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 16px 0; }
+  button.tool-btn { width: auto; height: auto; padding: 8px 16px; font-family: var(--font-text);
+                    font-size: var(--font-base); color: var(--text); box-shadow: inset 0 0 0 1px var(--border-strong); }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: var(--font-sm);
+          font-variant-numeric: lining-nums tabular-nums; }
+  th, td { padding: 8px 10px; text-align: right; vertical-align: top; border-bottom: 1px solid var(--border); }
+  th { color: var(--text); font-weight: 600; }
+  th:nth-child(-n+2), td:nth-child(-n+2) { text-align: left; }
+  td:nth-child(2) { white-space: normal; }
+  tr.pass td:first-child, tr.running td:first-child { color: var(--text-muted); }
+  tr.fail td:first-child { color: var(--accent); font-weight: 600; }
+  #log { font-family: var(--font-code); font-size: var(--font-sm); background: var(--bg-elevated);
+         padding: 12px; margin-top: 16px; white-space: pre-wrap; min-height: 84px; max-height: 260px; overflow: auto; }
+</style>
+</head>
+<body class="sim-body">
+<div id="wrap">
+  <h1>Physics validation</h1>
+  <p class="hint">
+    Analytic oracles run against the production <code>GPUPhysics</code>, headless, on this
+    browser's WebGPU device. Each row states the number the physics predicts and the number
+    the simulation produced. Run it in an installed, headed Chrome.
+  </p>
+  <div class="actions">
+    <button id="runBtn" class="tool-btn">Run</button>
+    <span id="status" class="hint">Idle.</span>
+  </div>
+  <table>
+    <thead><tr><th>Status</th><th>Case</th><th>Expected</th><th>Measured</th><th>Metric</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div id="log"></div>
+</div>
+
+<script type="module">
+import GPUPhysics from './src/gpu/gpu-physics.js';
+import { PION_SIZE, PARTICLE_STATE_SIZE } from './src/gpu/gpu-buffers.js';
+import {
+    PION_HALF_LIFE, CHARGED_PION_HALF_LIFE, MIN_MASS, BOSON_CHARGE,
+    SHEET_THICKNESS_SQ, BOUND_LOOP, GPU_SCALAR_GRID, PHYSICS_DT,
+} from './src/config.js';
+import { TOGGLE_KEYS } from './src/physics-contract.js';
+
+const rowsEl = document.getElementById('rows');
+const logEl = document.getElementById('log');
+const statusEl = document.getElementById('status');
+const fmt = (v, d = 4) => (typeof v === 'number' && isFinite(v)) ? v.toPrecision(d) : String(v);
+
+function logln(text) {
+    logEl.textContent += text + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ── Harness ──
+
+let _device = null;
+async function getDevice() {
+    if (_device) return _device;
+    if (!navigator.gpu) throw new Error('WebGPU unavailable');
+    const adapter = await navigator.gpu.requestAdapter();
+    _device = await adapter.requestDevice({
+        requiredLimits: {
+            maxStorageBufferBindingSize: 256 * 1024 * 1024,
+            maxBufferSize: 256 * 1024 * 1024,
+            maxComputeWorkgroupsPerDimension: 65535,
+            maxStorageBuffersPerShaderStage: Math.min(adapter.limits.maxStorageBuffersPerShaderStage, 10),
+            maxBindingsPerBindGroup: adapter.limits.maxBindingsPerBindGroup,
+        },
+    });
+    _device.addEventListener('uncapturederror', (e) => logln('GPU error: ' + e.error.message));
+    return _device;
+}
+
+/** A physics-store stand-in: every toggle off, default parameters, overrides on top. */
+function physicsWith(on = [], params = {}) {
+    const p = {
+        yukawaMu: 0.15, higgsMass: 0.5, axionMass: 0.05, hubbleParam: 0.001,
+        extGravity: 0, extGravityAngle: 0, extElectric: 0, extElectricAngle: 0, extBz: 0,
+        bounceFriction: 0.4, collisionMode: 0, yukawaCoupling: 14,
+    };
+    for (const k of TOGGLE_KEYS) p[k] = false;
+    for (const k of on) p[k] = true;
+    return Object.assign(p, params);
+}
+
+async function makeSim({ on = [], params = {}, domainW = 64, domainH = 48, boundary = 0 } = {}) {
+    const device = await getDevice();
+    const gp = new GPUPhysics(device, domainW, domainH);
+    await gp.init();
+    gp.boundaryMode = boundary;
+    gp.setToggles(physicsWith(on, params));
+    if (on.some(k => ['higgsEnabled', 'axionEnabled', 'blackHoleEnabled'].includes(k))) {
+        await gp._ensurePhase5Pipelines();
+    }
+    return gp;
+}
+
+async function readBuffer(gp, buf, bytes) {
+    const staging = gp.device.createBuffer({ size: bytes, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    const enc = gp.device.createCommandEncoder();
+    enc.copyBufferToBuffer(buf, 0, staging, 0, bytes);
+    gp.device.queue.submit([enc.finish()]);
+    await staging.mapAsync(GPUMapMode.READ);
+    const out = staging.getMappedRange().slice(0);
+    staging.unmap();
+    staging.destroy();
+    return out;
+}
+
+async function readParticles(gp) {
+    const raw = await readBuffer(gp, gp.buffers.particleState, gp.aliveCount * PARTICLE_STATE_SIZE);
+    const f = new Float32Array(raw), u = new Uint32Array(raw);
+    const out = [];
+    for (let i = 0; i < gp.aliveCount; i++) {
+        const b = i * 9;
+        out.push({ x: f[b], y: f[b + 1], wx: f[b + 2], wy: f[b + 3], mass: f[b + 4], alive: (u[b + 8] & 1) !== 0 });
+    }
+    return out;
+}
+
+/** Write pions straight into the pool: [{x, y, wx, wy, mass, charge}]. */
+function addPions(gp, list) {
+    const buf = new ArrayBuffer(list.length * PION_SIZE);
+    const f = new Float32Array(buf), u = new Uint32Array(buf);
+    list.forEach((p, i) => {
+        const b = i * 12;
+        f[b] = p.x; f[b + 1] = p.y; f[b + 2] = p.wx; f[b + 3] = p.wy;
+        f[b + 4] = p.mass; f[b + 5] = p.charge; f[b + 6] = 0;
+        u[b + 7] = 0xFFFFFFFF; u[b + 8] = 100; u[b + 9] = 1; u[b + 10] = 0; u[b + 11] = 0;
+    });
+    gp.device.queue.writeBuffer(gp.buffers.pionPool, 0, buf);
+    gp.device.queue.writeBuffer(gp.buffers.piCount, 0, new Uint32Array([list.length]));
+}
+
+async function countAlivePions(gp, n) {
+    const raw = await readBuffer(gp, gp.buffers.pionPool, n * PION_SIZE);
+    const u = new Uint32Array(raw);
+    let alive = 0;
+    for (let i = 0; i < n; i++) if ((u[i * 12 + 9] & 1) && u[i * 12 + 10] === 0) alive++;
+    return alive;
+}
+
+/** Advance lab time T in frames of dt. */
+async function run(gp, T, dt) {
+    const frames = Math.round(T / dt);
+    for (let i = 0; i < frames; i++) {
+        gp.update(dt);
+        if ((i & 63) === 63) await gp.device.queue.onSubmittedWorkDone();
+    }
+    await gp.device.queue.onSubmittedWorkDone();
+}
+
+// ── Cases ──
+// Each returns { expected, measured, metric, pass }.
+
+const cases = [];
+
+// Regression: the field-gravity FFT ran every butterfly stage with the last
+// stage's parameters and returned Φ ≡ 0. Check the particles' Φ_P against a
+// direct circular convolution of the same deposited mass grid.
+cases.push({
+    name: 'Grid gravity: FFT Φ_P = direct sheet convolution',
+    async run() {
+        const gp = await makeSim({ on: ['gravityEnabled', 'higgsEnabled'] });
+        gp.addParticle({ x: 20, y: 20, mass: 5 });
+        gp.addParticle({ x: 41.3, y: 30.2, mass: 8 });
+        gp.addParticle({ x: 50, y: 9.7, mass: 3 });
+        await run(gp, 2 * PHYSICS_DT, PHYSICS_DT);
+        const N = GPU_SCALAR_GRID, n2 = N * N;
+        const g = gp._gravGrid;
+        const mass = new Float32Array(await readBuffer(gp, g.massGrid, n2 * 4));
+        const phiP = new Float32Array(await readBuffer(gp, g.phiP, n2 * 4));
+        const cw = gp.domainW / N, ch = gp.domainH / N;
+        const src = [];
+        for (let i = 0; i < n2; i++) if (mass[i] !== 0) src.push([i % N, Math.floor(i / N), mass[i]]);
+        let maxErr = 0, maxPhi = 0;
+        for (let iy = 0; iy < N; iy += 3) for (let ix = 0; ix < N; ix += 3) {
+            let s = 0;
+            for (const [sx, sy, m] of src) {
+                let dx = ((ix - sx) % N + N) % N, dy = ((iy - sy) % N + N) % N;
+                if (dx > N / 2) dx -= N;
+                if (dy > N / 2) dy -= N;
+                s -= m / Math.sqrt((dx * cw) ** 2 + (dy * ch) ** 2 + SHEET_THICKNESS_SQ);
+            }
+            maxErr = Math.max(maxErr, Math.abs(s - phiP[iy * N + ix]));
+            maxPhi = Math.max(maxPhi, Math.abs(s));
+        }
+        gp.destroy();
+        const rel = maxErr / maxPhi;
+        return { expected: `max |Φ| ${fmt(maxPhi)}`, measured: `max err ${fmt(maxErr, 3)}`,
+                 metric: `rel ${fmt(rel, 2)}`, pass: maxPhi > 0.5 && rel < 1e-4 };
+    },
+});
+
+// The fields evolve in ds² = −e^{2Φ}dt² + e^{−2Φ}d𝐱², so a uniform axion field
+// oscillates at ω = e^{Φ}m_a: a field clock runs slow in a well. Released from
+// rest, it first crosses zero at t₀ = π/(2ω), so the deep probe (on the mass)
+// and the far one (the opposite corner of the torus) cross in the ratio
+// e^{Φ_far − Φ_deep}. The amplitude is small so the field's own gravity is
+// negligible next to the particle's.
+cases.push({
+    name: 'Field clocks redshift: axion ω = e^{Φ}m_a near a mass',
+    async run() {
+        const mA = 2;   // heavy, so gradient coupling between regions stays small
+        const gp = await makeSim({ on: ['gravityEnabled', 'axionEnabled'], params: { axionMass: mA }, boundary: BOUND_LOOP });
+        gp.addParticle({ x: 32, y: 24, mass: 10 });
+        const N = GPU_SCALAR_GRID;
+        gp.device.queue.writeBuffer(gp._axionBuffers.field, 0, new Float32Array(N * N).fill(0.01));
+        const deep = 64 * N + 64, far = 0;
+        const dt = 0.02;
+        const tZero = { deep: null, far: null };
+        let prev = null, t = 0, phi = null;
+        while ((tZero.deep === null || tZero.far === null) && t < 40) {
+            gp.update(dt);
+            t += dt;
+            const a = new Float32Array(await readBuffer(gp, gp._axionBuffers.field, N * N * 4));
+            if (!phi) phi = new Float32Array(await readBuffer(gp, gp._gravGrid.metricPhi, N * N * 4));
+            for (const [k, idx] of [['deep', deep], ['far', far]]) {
+                if (tZero[k] === null && prev && prev[idx] > 0 && a[idx] <= 0) {
+                    tZero[k] = t - dt * a[idx] / (a[idx] - prev[idx]);
+                }
+            }
+            prev = a;
+        }
+        gp.destroy();
+        const expected = Math.exp(phi[far] - phi[deep]);
+        const measured = tZero.deep / tZero.far;
+        const t0 = (p) => Math.PI / (2 * mA * Math.exp(p));
+        return {
+            expected: `t₀ = ${fmt(t0(phi[deep]))}, ${fmt(t0(phi[far]))}; ratio ${fmt(expected)}`,
+            measured: `t₀ = ${fmt(tZero.deep)}, ${fmt(tZero.far)}; ratio ${fmt(measured)}`,
+            metric: `${fmt((measured / expected - 1) * 100, 2)}%`,
+            pass: Math.abs(measured / expected - 1) < 0.02,
+        };
+    },
+});
+
+// π⁰ beam at γ = 5: survival N/N₀ = exp(−ln2·t/(γT½)) in lab time t.
+cases.push({
+    name: 'π⁰ beam at γ = 5 decays on proper time (lab t = γT½, 2γT½)',
+    async run() {
+        const gp = await makeSim({ on: ['yukawaEnabled'] });
+        gp.addParticle({ x: 63, y: 47, mass: 0.001 }); // the step needs one particle; far from the beam
+        const n = 1024, gamma = 5, w = Math.sqrt(gamma * gamma - 1);
+        addPions(gp, Array.from({ length: n }, (_, i) => ({ x: 4, y: 4 + (i % 32), wx: w, wy: 0, mass: 0.15, charge: 0 })));
+        const tHalf = gamma * PION_HALF_LIFE;
+        await run(gp, tHalf, 1);
+        const f1 = await countAlivePions(gp, n) / n;
+        await run(gp, tHalf, 1);
+        const f2 = await countAlivePions(gp, n) / n;
+        gp.destroy();
+        const sigma = (p) => Math.sqrt(p * (1 - p) / n);
+        const undilated = Math.exp(-Math.LN2 * tHalf / PION_HALF_LIFE);
+        return {
+            expected: `0.500, 0.250 (undilated ${fmt(undilated, 2)})`,
+            measured: `${fmt(f1, 3)}, ${fmt(f2, 3)}`,
+            metric: `${fmt((f1 - 0.5) / sigma(0.5), 2)}σ, ${fmt((f2 - 0.25) / sigma(0.25), 2)}σ`,
+            pass: Math.abs(f1 - 0.5) < 4 * sigma(0.5) && Math.abs(f2 - 0.25) < 4 * sigma(0.25),
+        };
+    },
+});
+
+// π± at rest: half-life T½ = 64 in its own (= lab) frame.
+cases.push({
+    name: 'π± at rest: half survive one half-life',
+    async run() {
+        const gp = await makeSim({ on: ['yukawaEnabled'] });
+        gp.addParticle({ x: 63, y: 47, mass: 0.001 });
+        const n = 1024;
+        addPions(gp, Array.from({ length: n }, (_, i) => ({ x: 4 + (i % 32), y: 4 + Math.floor(i / 32), wx: 0, wy: 0, mass: 0.15, charge: BOSON_CHARGE })));
+        await run(gp, CHARGED_PION_HALF_LIFE, 1);
+        const f = await countAlivePions(gp, n) / n;
+        gp.destroy();
+        const sigma = Math.sqrt(0.25 / n);
+        return { expected: '0.500', measured: fmt(f, 3), metric: `${fmt((f - 0.5) / sigma, 2)}σ`, pass: Math.abs(f - 0.5) < 4 * sigma };
+    },
+});
+
+// Schwarzschild Hawking power P = 1/(15360π M²) on the hole's clock:
+// M³ = M₀³ − 3C·t/γ, C = 1/(15360π).
+const HAWKING_C = 1 / (15360 * Math.PI);
+async function hawkingHole(gamma, T, dt) {
+    const gp = await makeSim({ on: ['blackHoleEnabled', 'radiationEnabled', 'relativityEnabled'], boundary: BOUND_LOOP });
+    const w = Math.sqrt(gamma * gamma - 1);
+    gp.addParticle({ x: 32, y: 24, vx: w, vy: 0, mass: 1 });
+    await run(gp, T, dt);
+    const [p] = await readParticles(gp);
+    gp.destroy();
+    return p;
+}
+
+cases.push({
+    name: 'Hawking mass loss runs on the hole\'s clock (γ = 1, 2; lab t = 2000)',
+    async run() {
+        const T = 2000;
+        const expect = (g) => Math.cbrt(1 - 3 * HAWKING_C * T / g);
+        const m1 = (await hawkingHole(1, T, 2)).mass;
+        const m2 = (await hawkingHole(2, T, 2)).mass;
+        const e1 = expect(1), e2 = expect(2);
+        const r1 = Math.abs(m1 - e1) / (1 - e1), r2 = Math.abs(m2 - e2) / (1 - e2);
+        return {
+            expected: `M = ${fmt(e1, 5)}, ${fmt(e2, 5)}`,
+            measured: `M = ${fmt(m1, 5)}, ${fmt(m2, 5)}`,
+            metric: `ΔM error ${fmt(r1 * 100, 2)}%, ${fmt(r2 * 100, 2)}%`,
+            pass: r1 < 0.02 && r2 < 0.02,
+        };
+    },
+});
+
+cases.push({
+    name: 'A hole at γ = 2 takes twice the lab time to evaporate (M₀ = 0.5)',
+    async run() {
+        const lifetime = async (gamma) => {
+            const gp = await makeSim({ on: ['blackHoleEnabled', 'radiationEnabled', 'relativityEnabled'], boundary: BOUND_LOOP });
+            gp.addParticle({ x: 32, y: 24, vx: Math.sqrt(gamma * gamma - 1), vy: 0, mass: 0.5 });
+            const dt = 2, poll = 10;
+            let t = 0;
+            for (;;) {
+                await run(gp, poll * dt, dt);
+                t += poll * dt;
+                const [p] = await readParticles(gp);
+                if (!p.alive || t > 20000) break;
+            }
+            gp.destroy();
+            return t;
+        };
+        const tauRest = (0.5 ** 3 - MIN_MASS ** 3) / (3 * HAWKING_C);
+        const t1 = await lifetime(1), t2 = await lifetime(2);
+        const ratio = t2 / t1;
+        return {
+            expected: `t = ${fmt(tauRest)}, ratio 2`,
+            measured: `t = ${fmt(t1)}, ${fmt(t2)}`,
+            metric: `ratio ${fmt(ratio, 4)}`,
+            pass: Math.abs(ratio - 2) < 0.06 && Math.abs(t1 / tauRest - 1) < 0.03,
+        };
+    },
+});
+
+// ── Runner ──
+
+async function runAll() {
+    rowsEl.textContent = '';
+    logEl.textContent = '';
+    let failed = 0;
+    for (const c of cases) {
+        const tr = document.createElement('tr');
+        tr.className = 'running';
+        tr.innerHTML = `<td>running</td><td></td><td></td><td></td><td></td>`;
+        tr.children[1].textContent = c.name;
+        rowsEl.appendChild(tr);
+        statusEl.textContent = c.name;
+        const t0 = performance.now();
+        try {
+            const r = await c.run();
+            tr.className = r.pass ? 'pass' : 'fail';
+            tr.children[0].textContent = r.pass ? 'pass' : 'FAIL';
+            tr.children[2].textContent = r.expected;
+            tr.children[3].textContent = r.measured;
+            tr.children[4].textContent = r.metric;
+            if (!r.pass) failed++;
+            logln(`${r.pass ? 'pass' : 'FAIL'}  ${c.name}  (${((performance.now() - t0) / 1000).toFixed(1)} s)`);
+        } catch (e) {
+            failed++;
+            tr.className = 'fail';
+            tr.children[0].textContent = 'ERROR';
+            tr.children[4].textContent = e.message;
+            logln(`ERROR ${c.name}: ${e.stack || e}`);
+        }
+    }
+    statusEl.textContent = failed ? `${failed} of ${cases.length} failed.` : `All ${cases.length} passed.`;
+    window.__results = { failed, total: cases.length };
+}
+
+document.getElementById('runBtn').addEventListener('click', runAll);
+window.runAll = runAll;
+</script>
+</body>
+</html>

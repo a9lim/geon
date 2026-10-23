@@ -25,7 +25,7 @@ struct FieldUniforms {
     relativityEnabled: u32,
     blackHoleEnabled: u32,
     particleCount: u32,
-    softeningSq: f32,
+    gravAccumulate: u32,    // packFieldEnergy adds to (1) or sets (0) the gravity FFT input
     currentFieldType: u32,  // 0=higgs, 1=axion (set before each field's dispatch)
     // Precomputed cell dimensions (avoids per-thread division)
     cellW: f32,

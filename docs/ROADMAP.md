@@ -36,12 +36,22 @@ Cost: **S** about one session · **M** a few sessions · **L** a milestone ·
 | 2026-10-23 | **Lengths: two knobs.** A sheet thickness ℓ (physical, and comoving when expansion is on) for fields and grid gravity; a numerical softening ε for particle forces only. | §1.2 |
 | 2026-10-23 | **3D views are parked for 3.0.** That covers the spacetime, inclined and embedding views. 1.5 ships the 1+1 Minkowski panel instead. | §9 |
 | 2026-10-23 | **Photons stay planar.** The planar emission surrogate is kept, labelled, with consistent recoil. | §1.2 |
+| 2026-10-23 | **KG in the exponential metric.** Fields evolve by `φ̈ = e^{4Φ}∇²φ − e^{2Φ}V′ + 4Φ̇φ̇`, the exact KG equation in `ds² = −e^{2Φ}dt² + e^{−2Φ}d𝐱²`; it linearizes to the 3+1 parent form and never degenerates. Φ includes the particles, not only the field's own energy. | §1.2, §2.2 |
+| 2026-10-23 | **ℓ = 8 for grid gravity**, a constant until M3; confinement corrections are absorbed into the existing mass and quartic parameters while ℓ is fixed. | §1.2 |
+| 2026-10-23 | **Hidden Disintegration stays**, with the Roche fixes; expose or delete it in 2.0's preset pass. | §2.2 |
+| 2026-10-23 | **No-WebGPU visitors get an opening popup**, not a full notice page. | §4 |
+| 2026-10-23 | **Saves go to `version: 2`** (domain, τ, θ) with a one-way v1 migration on load. | §4, §10.4 |
+| 2026-10-23 | **Clocks are a sweep ring:** an arc that fills once per proper-time period P, the same P for every body; τ and dτ/dt in the particle panel. | §5.2 |
+| 2026-10-23 | **The lapse is additive,** `√max(0, 1 + 2Φ_N − v²)` with Newtonian Φ: exact for free particles, static Schwarzschild clocks and circular orbits. | §5.2 |
+| 2026-10-23 | **Thomas precession takes non-gravitational acceleration only;** gravity gets the geodetic `(3/2)∇Φ×v`. | §5.3 |
+| 2026-10-23 | **World-line samples are 12 floats** (`t, x, y, wx, wy, ax, ay, τ, θ, angw, m, q`), so Liénard–Wiechert has its acceleration; the event log's schema is fixed in M1 and built in M2. | §10.2 |
+| 2026-10-23 | **The domain is state:** presets carry their size, the default sandbox is square, and the window is a camera. | §10.4 |
 
 ### Open
 
 1. **Default frame-view mode:** lagged (filled) or true-now (uncomputed region
    shown). §5.4.
-2. **Clock display:** a sweep ring (proposed), a pulse, or numeric only. §5.2.
+2. *(Decided: the sweep ring, §5.2.)*
 3. **Expansion outside loop mode:** keep it as a labelled "expanding cloud"
    with a centre, or disable it. §5.6.
 4. **Gas solver:** SPH (recommended; shares particle infrastructure with dust)
@@ -197,33 +207,38 @@ The tie is explicit and per mode, which is what Codex asked for.
   documented in `AGENTS.md`.
 - **Geon 2.0 scouting:** this document, `bda3baf` and later.
 - **Doc drift:** `AGENTS.md`'s preset count now matches `presets.js` (15).
+- **M0 (2026-10-23), GPU only:**
+  - Internal clocks on proper time (§5.1): pion decay, Hawking, Schwinger,
+    superradiance and Roche run on `dt/γ`; Hawking, Schwinger and extremal
+    shedding emit in the rest frame, boost, and recoil; the final Hawking burst
+    is two back-to-back rest-frame photons. Pion emission uses the invariant
+    rest-frame force `F∥² + γ²F⊥²`.
+  - Roche: q is donor/companion, transfer is a rate accumulated on the donor's
+    clock, and the shader takes the mass from the donor itself (several events
+    in one frame used to spawn from the same unreduced mass).
+  - KG in the exponential metric with Φ = Φ_F + Φ_P and Φ̇ (decision table);
+    particle sources carry `e^{5Φ}/γ`; ℓ = 8 for grid gravity.
+  - Found and fixed on the way: the field-gravity FFT wrote each stage's
+    parameters with `queue.writeBuffer` inside one encoder, so every stage ran
+    with the last one's and Φ was identically 0 (field self-gravity and the
+    field → particle force were off on the GPU); the dummy history bind group
+    aliased one buffer across two writable bindings, which drops every substep
+    until Relativity has been on once; π± → e decay stored the lepton's momentum
+    as its proper velocity (100× too slow); boson lensing ignored the Gravity
+    toggle; pool culls renamed `PHOTON_CULL_AGE` / `LEPTON_CULL_AGE`.
+  - `tests/physics-validation.html` with six oracles: grid-gravity FFT, the
+    field-clock redshift `ω = e^{Φ}m_a`, the γ = 5 π⁰ beam, π± at rest, Hawking
+    mass loss at γ = 1 and 2, and the γ = 2 evaporation-time ratio.
 
 ### 2.2 Physics bugs and gaps found by the 2.0 scouting
 
-- **No internal process is time-dilated.**
-  - Pion decay uses a fixed per-step probability: `src/config.js:73-74`,
-    `src/gpu/shaders/bosons.wgsl:298`. The GPU folds N ticks into
-    `1 − (1 − p)^N`.
-  - Hawking: `power·dt`, `src/gpu/shaders/radiation.wgsl:203`.
-  - Schwinger: `src/gpu/shaders/radiation.wgsl` (schwingerDischarge).
-  - Superradiance: `src/gpu/shaders/field-deposit.wgsl`
-    (depositSuperradiance).
-  - Spin update: no γ.
-  - Landau–Lifshitz radiation reaction is written covariantly and is fine.
-- **Roche transfer (hidden feature) has two bugs (Codex).**
-  - There is no timestep factor: `dM = overflow·ROCHE_TRANSFER_RATE·mass`, on
-    both backends.
-  - The Eggleton ratio is donor/total mass instead of donor/companion
-    (`src/integrator.js:1994`; GPU `disintegration.wgsl`).
-- **The weak-field KG coupling is wrong (Codex, verified).**
-  - Both fields carry a spurious `2∇Φ·∇φ` term and no `Φ̇φ̇` term
-    (`src/gpu/shaders/field-evolve.wgsl:110-111, 192-193`, plus the CPU
-    copies).
-  - The 3+1 parent form has `+4Φ̇φ̇` and no gradient term (§1.2). Projection
-    corrections and the missing thickness normalization of the field's
-    self-gravity source are separate follow-ups.
-  - `SELFGRAV_PHI_MAX = 0.25` is not weak-field: at the lower clamp,
-    `1 + 4Φ = 0`.
+- **Spin has no clock.** The spin update and spin phase take no γ; θ on
+  proper time lands with M1 (§5.3).
+- **KG leftovers.** The exponential-metric form is in (§2.1). Still open: the
+  projection corrections of §1.2, the thickness normalization of the field's
+  self-gravity source, and the fields' energy accounting in the metric (the
+  stats still sum the flat-space `½φ̇² + ½|∇φ|² + V`, and no gravitational
+  energy between fields and particles is counted).
 - **The Higgs Z₂ is explicitly biased.** The field resets to +1, exterior
   cells read +1, and particles deposit a positive linear source. Any
   domain-wall work must remove all three.
@@ -247,9 +262,9 @@ The tie is explicit and per mode, which is what Codex asked for.
   - Forces scale by `1/(1 − n·v)³`, capped at 100.
   - The heatmap uses delayed positions with a plain 1/r, which is not the
     Liénard–Wiechert potential.
-- **Pool culls pose as physics.** `PHOTON_LIFETIME = 256` and
-  `LEPTON_LIFETIME = 512` are pool culls. Leptons are documented as stable.
-  Any bound photon structure is destroyed.
+- **Pool culls destroy bound photons.** `PHOTON_CULL_AGE = 256` and
+  `LEPTON_CULL_AGE = 512` are now named as culls, but any bound photon
+  structure still dies at the age limit.
 - **No Thomas precession.** No code implements it, and spin has no
   orientation state at all.
 
@@ -345,7 +360,7 @@ Versions set the order. Milestone IDs are stable names, not an order:
 
 | ID | Version | Contents | Gate |
 |---|---|---|---|
-| **M0** (next session) | 1.5 | **GPU only; don't fix CPU copies slated for deletion.** The §5.1 clock fix (per-process clocks, emission boosts); the Roche timestep and Eggleton q; the 3+1 KG coefficients (§2.2); the lengths split (ε for particles, ℓ for field gravity, §1.2); seed the browser test page (§10.3) with the pion-beam and moving-BH oracles. | none |
+| **M0** (done 2026-10-23, §2.1) | 1.5 | **GPU only; don't fix CPU copies slated for deletion.** The §5.1 clock fix (per-process clocks, emission boosts); the Roche timestep and Eggleton q; the 3+1 KG coefficients (§2.2); the lengths split (ε for particles, ℓ for field gravity, §1.2); seed the browser test page (§10.3) with the pion-beam and moving-BH oracles. | none |
 | **M0′** | 1.5 | Retire the CPU path (§4): port the phase plot and effective potential to readback; device-loss recovery; a "requires WebGPU" notice; delete about 8,100 lines; update the docs. Can share a session with M0. | M0 |
 | **M1** | 1.5 | **Relativity you can see.** The world-line store (§10.2); τ and θ state; the spoke shader; clocks; spoke precession; domain decoupled from viewport (§10.4). | M0′ |
 | **M2** | 1.5 | **Frames.** The slicer; lab, ZMF, particle and custom frames (view-only); lagged and true-now modes; the scrubber; the 1+1 Minkowski panel; the grid as lab rulers. | M1 |
@@ -428,37 +443,12 @@ renderer, no `?cpu=1`, and no CPU fallback when the device is lost.
 
 The 1.5 feature designs. §4 (retiring the CPU path) is also part of 1.5.
 
-### 5.1 Internal clocks on proper time (M0, S)
+### 5.1 Internal clocks on proper time (M0, done)
 
-**[standard]** A process with rest-frame rate Γ₀ runs at Γ₀/γ in the lab.
-
-**Not one blanket factor (Codex).** Each process needs its clock defined
-before any boost or lapse is applied, and emitted quanta need transforming
-consistently.
-
-| Process | GPU site | Clock | Change |
-|---|---|---|---|
-| π⁰ / π± decay | `bosons.wgsl:298` (probabilities `config.js:73-74`) | pion proper time | `P = 1 − exp(−ln2·Δτ/T½)` with Δτ the whole dilated interval (`dt·m/E` per step). Replaces the `1 − (1 − p)^N` fold. |
-| Hawking evaporation | `radiation.wgsl:203` | hole's rest-frame asymptotic time | `dE = P·dt/γ`. Emit in the hole frame and boost, rather than isotropically in the lab. External lapse from *other* bodies applies once clocks land; the hole's own horizon lapse never does. |
-| Schwinger discharge | `radiation.wgsl` schwingerDischarge | same | `dRate·dt/γ`, with leptons emitted in the hole frame and boosted. |
-| Superradiance | `field-deposit.wgsl` depositSuperradiance | hole's asymptotic frame | `dt/γ` as a first step only: `Ω_H > μ` is frame-dependent for a hole moving through a lab-grid field. Document it as valid for slow holes. |
-| Roche transfer (hidden) | `disintegration.wgsl` | donor proper time | Add the missing timestep factor; fix q to donor/companion. |
-| Pion emission (Yukawa "Larmor") | `radiation.wgsl` | — | Check whether it needs the relativistic Liénard form, as EM gets via LL. Don't just add 1/γ. |
-| Photon/lepton lifetimes | `bosons.wgsl:121-123, 186-189` | none | Rename to culls and document them as non-physical; keep lab time; plan an exemption for bound photons. |
-
-**Design:**
-- A WGSL helper `restFrameDt(dt, w)` returns `dt/γ`, with γ from w, or from
-  E/m for bosons.
-- The gravitational lapse joins in §5.2, only where a process's clock calls
-  for it.
-- With relativity off it returns `dt`.
-
-**Oracles:**
-- **Pion beam:** with forces off, a pass-mode beam of π⁰ at fixed γ should
-  survive as `N(x) = N₀·exp(−x·ln2/(γβ·T½))`. At T½ = 32 the mean life is
-  about 46; at γ = 5 the decay length is about 230, against about 46
-  undilated.
-- **Moving hole:** a hole at γ = 2 takes twice the lab time to evaporate.
+Landed 2026-10-23 (§2.1). Every process uses `restFrameDt()` from
+`shared-relativity.wgsl`, which §5.2 extends with the gravitational lapse where a
+process's clock calls for it. Photon and lepton culls stay on lab time; a
+bound-photon exemption is still open (§2.2).
 
 ### 5.2 Proper-time clocks (M1, S–M)
 

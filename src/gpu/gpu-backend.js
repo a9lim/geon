@@ -269,8 +269,7 @@ export default class GPUBackend {
                     });
                 }
             } else {
-                const newMass = evt.mass - evt.transferMass;
-                this.physics.patchMassCharge(evt.particleIdx, newMass, newMass, evt.sourceCharge);
+                // The shader already took the transferred mass and charge from the donor.
                 this.physics.addParticle({
                     x: evt.spawnX, y: evt.spawnY,
                     vx: evt.spawnVX, vy: evt.spawnVY,

@@ -1,7 +1,7 @@
 // ─── Radiation Reaction Shaders ───
 // Four entry points:
 //   larmorRadiation — Landau-Lifshitz Larmor radiation (requires Coulomb + Radiation)
-//   hawkingRadiation — Kerr-Newman BH evaporation (requires Black Hole + Radiation)
+//   hawkingRadiation — Kerr-Newman BH evaporation on the hole's clock (requires Black Hole + Radiation)
 //   pionEmission — Scalar Larmor pion emission (requires Yukawa + Radiation)
 //   schwingerDischarge — Vacuum e+e- pair production (requires Black Hole + Coulomb)
 //
@@ -168,6 +168,60 @@ fn larmorRadiation(@builtin(global_invocation_id) gid: vec3u) {
 
 // ─── Hawking Radiation ───
 // Kerr-Newman BH evaporation. Requires Black Hole + Radiation.
+// The hole radiates on its own clock: dM = P·dτ with dτ = dt/γ. Mass leaves
+// at fixed proper velocity (isotropic rest-frame emission keeps the velocity),
+// and each photon is drawn isotropically in the hole's rest frame and boosted,
+// with the per-photon recoil that keeps lab momentum exact.
+
+// Emit one photon of rest-frame energy eRest in rest-frame direction dir from a
+// body at pos with proper velocity w. Returns the photon's lab momentum, or
+// zero if the pool is full (the energy is then dropped, as before).
+fn emitBoostedPhoton(pos: vec2<f32>, w: vec2<f32>, eRest: f32, dir: vec2<f32>,
+                     offset: f32, emitter: u32) -> vec2<f32> {
+    let lab = boostToLab(eRest, eRest * dir, w);
+    let pMag = length(lab.yz);
+    if (pMag < EPSILON) { return vec2<f32>(0.0); }
+    let phIdx = atomicAdd(&phCount, 1u);
+    if (phIdx >= MAX_PHOTONS) { atomicSub(&phCount, 1u); return vec2<f32>(0.0); }
+    let n = lab.yz / pMag;
+    var ph: Photon;
+    ph.posX = pos.x + n.x * offset;
+    ph.posY = pos.y + n.y * offset;
+    ph.velX = n.x; ph.velY = n.y;
+    ph.energy = pMag;
+    ph.emitterId = emitter;
+    ph.lifetime = 0.0; ph.flags = 1u;
+    photons[phIdx] = ph;
+    return lab.yz;
+}
+
+// Emit one lepton in rest-frame direction dir from a body with proper
+// velocity w, at rest-frame speed restSpeed. Returns (emitted, lab px, lab py);
+// emitted is 0 when the pool is full.
+fn emitBoostedLepton(pos: vec2<f32>, w: vec2<f32>, restSpeed: f32, dir: vec2<f32>,
+                     charge: f32, offset: f32, emitter: u32) -> vec3<f32> {
+    let li = atomicAdd(&piCount, 1u);
+    if (li >= PION_POOL_CAP) { atomicSub(&piCount, 1u); return vec3<f32>(0.0); }
+    let s = min(restSpeed, MAX_SPEED_RATIO);
+    let g = 1.0 / sqrt(max(1.0 - s * s, EPSILON));
+    let lab = boostToLab(ELECTRON_MASS * g, ELECTRON_MASS * g * s * dir, w);
+    let pLen = length(lab.yz);
+    let n = select(dir, lab.yz / max(pLen, EPSILON), pLen > EPSILON);
+    var lep: Pion;
+    lep.posX = pos.x + n.x * offset;
+    lep.posY = pos.y + n.y * offset;
+    lep.wX = lab.y / ELECTRON_MASS;
+    lep.wY = lab.z / ELECTRON_MASS;
+    lep.mass = ELECTRON_MASS;
+    lep.charge = charge;
+    lep.energy = 0.0;
+    lep.emitterId = emitter;
+    lep.age = 0u; lep.flags = 1u;
+    lep.kind = 1u; lep._pad1 = 0u;
+    pions[li] = lep;
+    return vec3<f32>(1.0, lab.yz);
+}
+
 @compute @workgroup_size(64)
 fn hawkingRadiation(@builtin(global_invocation_id) gid: vec3u) {
     let i = gid.x;
@@ -199,8 +253,9 @@ fn hawkingRadiation(@builtin(global_invocation_id) gid: vec3u) {
     }
     // else extremal: no radiation
 
-    let dt = u.dt;
-    let dE = min(power * dt, particles[i].mass);
+    let w = vec2<f32>(particles[i].velWX, particles[i].velWY);
+    let relOn = (u.toggles0 & RELATIVITY_BIT) != 0u;
+    let dE = min(power * restFrameDt(u.dt, w, relOn), particles[i].mass);
 
     let preMass = particles[i].mass;
     if (dE > 0.0) {
@@ -212,7 +267,9 @@ fn hawkingRadiation(@builtin(global_invocation_id) gid: vec3u) {
     if (dE <= 0.0 && particles[i].mass > MIN_MASS) { return; }
 
     var rs = radState[i];
-    rs.hawkAccum += dE;
+    rs.hawkAccum += dE;   // rest-frame energy awaiting emission
+    let pos = vec2<f32>(particles[i].posX, particles[i].posY);
+    let emitter = particleAux[i].particleId;
 
     // Full evaporation: mass dropped to or below MIN_MASS
     if (particles[i].mass <= MIN_MASS) {
@@ -224,47 +281,26 @@ fn hawkingRadiation(@builtin(global_invocation_id) gid: vec3u) {
             var seed = (i * 7654321u) ^ u.frameCount;
             for (var ci = 0u; ci < 16u; ci++) {
                 if (abs(remQ) < BOSON_CHARGE - EPSILON) { break; }
-                let li = atomicAdd(&piCount, 1u);
-                if (li >= PION_POOL_CAP) { atomicSub(&piCount, 1u); break; }
                 seed = seed * 747796405u + 2891336453u;
                 let lAngle = f32(seed) / 4294967296.0 * TWO_PI;
-                let lCos = cos(lAngle); let lSin = sin(lAngle);
-                let lSpeed = min(sqrt(max(ELECTRON_MASS * 3.0 * ELECTRON_MASS, 0.0)) / max(3.0 * ELECTRON_MASS, EPSILON), MAX_SPEED_RATIO);
-                let lGamma = 1.0 / sqrt(max(1.0 - lSpeed * lSpeed, EPSILON));
-                var lep: Pion;
-                lep.posX = particles[i].posX + lCos * SPAWN_OFFSET_FLOOR;
-                lep.posY = particles[i].posY + lSin * SPAWN_OFFSET_FLOOR;
-                lep.wX = lGamma * lSpeed * lCos;
-                lep.wY = lGamma * lSpeed * lSin;
-                lep.mass = ELECTRON_MASS;
-                lep.charge = csign * BOSON_CHARGE;
-                lep.energy = 0.0;
-                lep.emitterId = particleAux[i].particleId;
-                lep.age = 0u; lep.flags = 1u;
-                lep.kind = 1u; lep._pad1 = 0u;
-                pions[li] = lep;
+                // Fixed toy rest-frame speed 1/√3
+                let lep = emitBoostedLepton(pos, w, 0.57735, vec2<f32>(cos(lAngle), sin(lAngle)),
+                                            csign * BOSON_CHARGE, SPAWN_OFFSET_FLOOR, emitter);
+                if (lep.x == 0.0) { break; }
                 remQ -= csign * BOSON_CHARGE;
                 particles[i].mass -= ELECTRON_MASS;
             }
             particles[i].charge = remQ;
         }
 
-        // Emit all remaining mass + accumulated energy as final photon burst
+        // Emit the remaining rest energy as two photons, back-to-back in the
+        // hole's frame: that conserves the hole's full four-momentum.
         let finalEnergy = rs.hawkAccum + max(particles[i].mass, 0.0);
         if (finalEnergy > 0.0) {
-            let phIdx = atomicAdd(&phCount, 1u);
-            if (phIdx < MAX_PHOTONS) {
-                let angle = pcgRand((i * 12345u) ^ u.frameCount) * TWO_PI;
-                let cosA = cos(angle); let sinA = sin(angle);
-                var ph: Photon;
-                ph.posX = particles[i].posX + cosA * SPAWN_OFFSET_FLOOR;
-                ph.posY = particles[i].posY + sinA * SPAWN_OFFSET_FLOOR;
-                ph.velX = cosA; ph.velY = sinA;
-                ph.energy = finalEnergy;
-                ph.emitterId = particleAux[i].particleId;
-                ph.lifetime = 0.0; ph.flags = 1u;
-                photons[phIdx] = ph;
-            } else { atomicSub(&phCount, 1u); }
+            let angle = pcgRand((i * 12345u) ^ u.frameCount) * TWO_PI;
+            let dir = vec2<f32>(cos(angle), sin(angle));
+            emitBoostedPhoton(pos, w, 0.5 * finalEnergy, dir, SPAWN_OFFSET_FLOOR, emitter);
+            emitBoostedPhoton(pos, w, 0.5 * finalEnergy, -dir, SPAWN_OFFSET_FLOOR, emitter);
         }
         rs.hawkAccum = 0.0;
         radState[i] = rs;
@@ -293,23 +329,20 @@ fn hawkingRadiation(@builtin(global_invocation_id) gid: vec3u) {
     derived[i] = drd;
     particleAux[i].radius = newRadius;
 
-    // Emit photon when accumulated energy reaches threshold
+    // Emit a photon once the accumulated rest-frame energy reaches threshold.
     if (rs.hawkAccum >= MIN_MASS) {
-        let phIdx = atomicAdd(&phCount, 1u);
-        if (phIdx < MAX_PHOTONS) {
-            let angle = pcgRand((i * 12345u) ^ u.frameCount) * TWO_PI;
-            let cosA = cos(angle); let sinA = sin(angle);
-            let offset = max(newRadius * 1.5, 1.0);
-            var ph: Photon;
-            ph.posX = particles[i].posX + cosA * offset;
-            ph.posY = particles[i].posY + sinA * offset;
-            ph.velX = cosA; ph.velY = sinA;
-            ph.energy = rs.hawkAccum;
-            ph.emitterId = particleAux[i].particleId;
-            ph.lifetime = 0.0; ph.flags = 1u;
-            photons[phIdx] = ph;
+        let angle = pcgRand((i * 12345u) ^ u.frameCount) * TWO_PI;
+        let eRest = rs.hawkAccum;
+        let pPh = emitBoostedPhoton(pos, w, eRest, vec2<f32>(cos(angle), sin(angle)),
+                                    max(newRadius * 1.5, 1.0), emitter);
+        if (dot(pPh, pPh) > 0.0) {
+            // The hole already lost lab momentum w·eRest with its mass; the
+            // photon carries pPh. The difference is the photon's recoil.
+            let wNew = w + (w * eRest - pPh) / newM;
+            particles[i].velWX = wNew.x;
+            particles[i].velWY = wNew.y;
             rs.hawkAccum = 0.0;
-        } else { atomicSub(&phCount, 1u); }
+        }
     }
     radState[i] = rs;
 }
@@ -328,12 +361,22 @@ fn pionEmission(@builtin(global_invocation_id) gid: vec3u) {
 
     // Read Yukawa force from packed allForces.f3.zw
     let fYukX = allForces[i].f3.z; let fYukY = allForces[i].f3.w;
-    let fYukSq = fYukX * fYukX + fYukY * fYukY;
+    var fYukSq = fYukX * fYukX + fYukY * fYukY;
     if (fYukSq < EPSILON * EPSILON) { return; }
+    // Radiated power is a Lorentz invariant set by the rest-frame force:
+    // |F'|² = F∥² + γ²F⊥² (the scalar analogue of Liénard's γ⁶[a² − (v×a)²]).
+    if ((u.toggles0 & RELATIVITY_BIT) != 0u) {
+        let wE = vec2<f32>(particles[i].velWX, particles[i].velWY);
+        let wESq = dot(wE, wE);
+        if (wESq > EPSILON * EPSILON) {
+            let fPar = dot(vec2<f32>(fYukX, fYukY), wE) * inverseSqrt(wESq);
+            fYukSq += wESq * (fYukSq - fPar * fPar); // γ² − 1 = w²
+        }
+    }
 
     let dt = u.dt;
     let coupling = u.yukawaCoupling;
-    var dE = coupling / 3.0 * fYukSq * dt;
+    var dE = coupling / 3.0 * fYukSq * dt;   // invariant power × lab dt
 
     var rs = radState[i];
     rs.yukawaRadAccum += dE;
@@ -437,8 +480,10 @@ fn pionEmission(@builtin(global_invocation_id) gid: vec3u) {
 
 // ─── Schwinger Discharge ───
 // Vacuum e+e- pair production at BH horizon.
-// Γ = (e²Q²)/(π²Σ) × exp(-πE_cr Σ/|Q|), Σ = r₊² + a² (KN area factor).
-// Requires Black Hole + Coulomb.
+// Γ = (e²Q²)/(π²Σ) × exp(-πE_cr Σ/|Q|), Σ = r₊² + a² (KN area factor), on the
+// hole's clock (dτ = dt/γ). The escaping lepton is emitted in the hole's rest
+// frame and boosted; the hole takes the recoil that keeps lab momentum exact.
+// Requires Black Hole + Coulomb + Radiation.
 @compute @workgroup_size(64)
 fn schwingerDischarge(@builtin(global_invocation_id) gid: vec3u) {
     let i = gid.x;
@@ -470,7 +515,10 @@ fn schwingerDischarge(@builtin(global_invocation_id) gid: vec3u) {
     if (E_field <= 0.5 * SCHWINGER_E_CR) { return; }
 
     // Γ = (e²Q²)/(π²Σ) × exp(-πE_cr/E), E_cr/E = E_cr·Σ/|Q|
-    let dRate = SCHWINGER_COEFF * absQ * absQ / sigma * exp(-PI * SCHWINGER_E_CR / E_field) * u.dt;
+    let w = vec2<f32>(particles[i].velWX, particles[i].velWY);
+    let relOn = (u.toggles0 & RELATIVITY_BIT) != 0u;
+    let dRate = SCHWINGER_COEFF * absQ * absQ / sigma * exp(-PI * SCHWINGER_E_CR / E_field)
+              * restFrameDt(u.dt, w, relOn);
 
     var rs = radState[i];
     rs.schwingerAccum += dRate;
@@ -481,49 +529,36 @@ fn schwingerDischarge(@builtin(global_invocation_id) gid: vec3u) {
     rs.schwingerAccum = 0.0;
     radState[i] = rs;
 
-    // Same-sign lepton escapes; opposite-sign falls back into BH
-    let idx0 = atomicAdd(&piCount, 1u);
-    if (idx0 >= PION_POOL_CAP) {
-        atomicSub(&piCount, 1u);
-        return;
-    }
-
+    // Same-sign lepton escapes; opposite-sign falls back into BH.
+    // Rest-frame kinetic energy from the horizon electrostatic potential:
+    // eΦ_H - m_e, with Φ_H = |Q|r₊/(r₊² + a²) for Kerr-Newman.
     let angle = pcgRand((i * 3456789u) ^ u.frameCount) * TWO_PI;
-    let cosA = cos(angle); let sinA = sin(angle);
     let offset = max(particleAux[i].radius * SPAWN_OFFSET_MUL, SPAWN_OFFSET_FLOOR);
-    // KE from horizon electrostatic potential: eΦ_H - m_e
-    // Φ_H = |Q|r₊/(r₊² + a²) for Kerr-Newman
     let ePhi = BOSON_CHARGE * absQ * rPlus / sigma;
     let ke = max(ePhi - ELECTRON_MASS, 0.0);
-    let speed = select(min(sqrt(max(ke * (ke + 2.0 * ELECTRON_MASS), 0.0)) / max(ke + ELECTRON_MASS, EPSILON), MAX_SPEED_RATIO), 0.0, ke <= 0.0);
-    let gammaL = select(1.0 / sqrt(max(1.0 - speed * speed, EPSILON)), 1.0, ke <= 0.0);
-    let wx = gammaL * speed * cosA;
-    let wy = gammaL * speed * sinA;
+    let restSpeed = select(sqrt(max(ke * (ke + 2.0 * ELECTRON_MASS), 0.0)) / max(ke + ELECTRON_MASS, EPSILON), 0.0, ke <= 0.0);
     let sign = select(-1.0, 1.0, Q > 0.0);
+    let pos = vec2<f32>(particles[i].posX, particles[i].posY);
+    let lep = emitBoostedLepton(pos, w, restSpeed, vec2<f32>(cos(angle), sin(angle)),
+                                sign * BOSON_CHARGE, offset, particleAux[i].particleId);
+    if (lep.x == 0.0) { return; } // pool full
+    let pLep = lep.yz;
 
-    // Escaping lepton carries same-sign charge away from BH
-    var lep: Pion;
-    lep.posX = particles[i].posX + cosA * offset;
-    lep.posY = particles[i].posY + sinA * offset;
-    lep.wX = wx; lep.wY = wy;
-    lep.mass = ELECTRON_MASS;
-    lep.charge = sign * BOSON_CHARGE;
-    lep.energy = 0.0;
-    lep.emitterId = particleAux[i].particleId;
-    lep.age = 0u; lep.flags = 1u;
-    lep.kind = 1u; lep._pad1 = 0u;
-    pions[idx0] = lep;
-
-    // BH loses charge + one electron rest mass
+    // BH loses charge + one electron rest mass (not the lepton's kinetic
+    // energy: charging that too makes the discharge run away). Lab momentum
+    // is conserved exactly through the recoil.
     particles[i].charge -= sign * BOSON_CHARGE;
     let preMass = particles[i].mass;
     particles[i].mass -= ELECTRON_MASS;
     if (preMass > EPSILON) {
         particles[i].baseMass *= 1.0 - ELECTRON_MASS / preMass;
     }
+    M = particles[i].mass;
+    let wNew = (w * preMass - pLep) / max(M, EPSILON);
+    particles[i].velWX = wNew.x;
+    particles[i].velWY = wNew.y;
 
     // Update derived state after charge + mass change
-    M = particles[i].mass;
     let newBodyRSq = pow(M, 2.0 / 3.0);
     let newAngVel = angw / sqrt(1.0 + angw * angw * newBodyRSq);
     let newA = INERTIA_K * newBodyRSq * abs(newAngVel);
