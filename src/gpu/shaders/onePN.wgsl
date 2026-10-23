@@ -35,8 +35,8 @@ const MAX_STACK: u32 = 48u;
 @group(2) @binding(1) var<storage, read_write> f1pnOld: array<f32>; // rw for encoder compat
 
 // Group 3: signal delay history (interleaved) — used by getDelayedStateGPU()
-@group(3) @binding(0) var<storage, read_write> histData: array<f32>;
-@group(3) @binding(1) var<storage, read_write> histMeta: array<u32>;
+@group(3) @binding(0) var<storage, read_write> wlData: array<f32>;
+@group(3) @binding(1) var<storage, read_write> wlMeta: array<u32>;
 
 // ── Tree walk bindings (used by compute1PNTree only) ──
 // Group 1 binding 3: ghost original index mapping

@@ -13,13 +13,10 @@
  */
 
 import {
-    HISTORY_SIZE, GPU_MAX_PHOTONS, GPU_MAX_PIONS, MAX_TRAIL_LENGTH,
+    WORLDLINE_LEN, GPU_MAX_PHOTONS, GPU_MAX_PIONS, MAX_TRAIL_LENGTH,
     GPU_SCALAR_GRID, GPU_MAX_LEPTONS,
 } from '../config.js';
-import { HIST_STRIDE as HIST_STRIDE_CONST } from './gpu-constants.js';
-
-// Signal delay history constants
-const HISTORY_LEN = HISTORY_SIZE;
+import { WL_STRIDE, WL_META_STRIDE } from './gpu-constants.js';
 
 // Quadtree node size in bytes (20 u32 words = 80 bytes, must match tree-build.wgsl)
 const QTNODE_SIZE_BYTES = 80;
@@ -81,6 +78,14 @@ export function createParticleBuffers(device, maxParticles) {
 
     // Particle color (u32 per particle, not packed — only used by renderer)
     const color = storageBuffer('color', UINT_SIZE, maxParticles);
+
+    // Proper-time clocks (clocks.wgsl): τ, clock-ring phase, spoke angle θ, lapse dτ/dt
+    const clocks = storageBuffer('clocks', VEC4_SIZE, maxParticles);
+
+    // World lines (worldline.wgsl): WL_STRIDE f32 per sample, WORLDLINE_LEN samples per
+    // particle (~25 MB at 512 particles), plus WL_META_STRIDE u32 of ring metadata
+    const wlData = storageBuffer('wlData', WL_STRIDE * 4, maxParticles * WORLDLINE_LEN);
+    const wlMeta = storageBuffer('wlMeta', WL_META_STRIDE * 4, maxParticles);
 
     // ── Radiation state (packed struct) ──
     // RadiationState (48 bytes): accumulators, display, quadrupole contrib
@@ -297,6 +302,8 @@ export function createParticleBuffers(device, maxParticles) {
         derived, axYukMod,
         // Color (separate — renderer only)
         color,
+        // Clocks and world lines
+        clocks, wlData, wlMeta,
         // Forces (packed AllForces struct)
         allForces,
         // Radiation (packed RadiationState struct)
@@ -333,36 +340,6 @@ export function createParticleBuffers(device, maxParticles) {
         // Boson tree (Phase 4)
         bosonTreeNodes, bosonTreeCounter, bosonVisitorFlags, MAX_BOSON_NODES,
 
-        // Signal delay history (lazy-allocated)
-        historyAllocated: false,
-        histData: null,    // interleaved [posX, posY, velX, velY, angW, time] per sample (stride 6)
-        histMeta: null,    // [writeIdx, count, creationTimeBits, _pad] per particle (stride 4)
-
-        /**
-         * Lazily allocate signal delay history buffers.
-         * Called when relativity is first enabled.
-         * histData: interleaved f32, stride 6 per sample, HISTORY_LEN samples per particle
-         * histMeta: 4 u32 per particle (writeIdx, count, creationTimeBits, _pad)
-         */
-        allocateHistoryBuffers(dev) {
-            if (this.historyAllocated) return;
-            const HIST_STRIDE = HIST_STRIDE_CONST;
-            const dataSize = maxParticles * HISTORY_LEN * HIST_STRIDE * 4; // f32 each
-            this.histData = dev.createBuffer({
-                label: 'histData',
-                size: dataSize,
-                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-            });
-            // histMeta: 4 u32 per particle (writeIdx, count, creationTimeBits, _pad)
-            const metaSize = maxParticles * 4 * 4; // 4 u32 per particle
-            this.histMeta = dev.createBuffer({
-                label: 'histMeta',
-                size: metaSize,
-                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-            });
-            this.historyAllocated = true;
-        },
-
         /** Destroy all buffers */
         destroy() {
             for (const key of Object.keys(this)) {
@@ -370,7 +347,6 @@ export function createParticleBuffers(device, maxParticles) {
                     this[key].destroy();
                 }
             }
-            this.historyAllocated = false;
         }
     };
 }

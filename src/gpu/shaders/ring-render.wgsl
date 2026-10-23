@@ -1,4 +1,5 @@
-// ring-render.wgsl — Instanced dashed ring overlays for ergosphere and antimatter indicators.
+// ring-render.wgsl — Instanced dashed ring overlays for ergosphere and antimatter indicators,
+// Lorentz-contracted with their body. Dash phase runs on the uncontracted angle.
 //
 // Dispatched twice per frame (once for ergosphere, once for antimatter) with different
 // RingParams uniforms. Triangle-strip full-circle ribbon with fragment-shader dashing.
@@ -13,6 +14,10 @@ struct CameraUniforms {
     canvasWidth: f32,
     canvasHeight: f32,
     isDarkMode: f32,
+    relativityOn: f32,
+    blackHoleOn: f32,
+    showClocks: f32,
+    _pad: f32,
 };
 
 // Struct definitions (ParticleState, ParticleAux, ParticleDerived) provided by shared-structs.wgsl.
@@ -100,8 +105,18 @@ fn vs_main(
     let hw = ring.halfWidth;
     let edgeR = select(ringR - hw, ringR + hw, side == 1u);
 
-    let wx = p.posX + cos(angle) * edgeR;
-    let wy = p.posY + sin(angle) * edgeR;
+    // The ring belongs to the body, so it contracts with it along v (Relativity on)
+    var off = vec2f(cos(angle), sin(angle)) * edgeR;
+    if (camera.relativityOn > 0.5) {
+        let v = vec2f(der.velX, der.velY);
+        let speed = min(length(v), MAX_SPEED_RATIO);
+        if (speed > 1e-4) {
+            let n = v / length(v);
+            off -= (1.0 - sqrt(1.0 - speed * speed)) * dot(off, n) * n;
+        }
+    }
+    let wx = p.posX + off.x;
+    let wy = p.posY + off.y;
 
     let worldPos = camera.viewMatrix * vec4f(wx, wy, 0.0, 1.0);
     out.position = worldPos;

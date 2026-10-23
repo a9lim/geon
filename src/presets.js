@@ -1,6 +1,6 @@
 // ─── Preset Definitions ───
 // Each preset configures toggles, engine settings, visuals, and spawns particles.
-import { PI, TWO_PI, WORLD_SCALE, SOFTENING_SQ, DEFAULT_PION_MASS, DEFAULT_HIGGS_MASS, DEFAULT_AXION_MASS, SPEED_OPTIONS, DEFAULT_SPEED_INDEX } from './config.js';
+import { PI, TWO_PI, DEFAULT_DOMAIN, SOFTENING_SQ, DEFAULT_PION_MASS, DEFAULT_HIGGS_MASS, DEFAULT_AXION_MASS, SPEED_OPTIONS, DEFAULT_SPEED_INDEX } from './config.js';
 
 // Plummer-softened circular orbit velocity: F = coupling*r/(r²+ε²)^{3/2}, set F/m = v²/r
 const _vCirc = (coupling, r, m) => {
@@ -14,6 +14,16 @@ const _vGrav = (M, r) => {
     return Math.sqrt(M * r * r / (rSq * Math.sqrt(rSq)));
 };
 
+// Relativistic circular orbit speed under a softened central force of strength k
+// (F = k·r/(r²+ε²)^{3/2}) on mass m: solves γ·m·v²/r = F, i.e. v²/√(1−v²) = s.
+const _vCircRel = (k, r, m) => {
+    const rSq = r * r + SOFTENING_SQ;
+    const s = Math.abs(k) * r * r / (m * rSq * Math.sqrt(rSq));
+    const x = (-s * s + Math.sqrt(s ** 4 + 4 * s * s)) / 2; // v²
+    return Math.sqrt(x);
+};
+
+// Each preset may set `domain: [w, h]` in world units; the default is DEFAULT_DOMAIN square.
 export const PRESETS = {
     // ─── Gravity ───
 
@@ -117,6 +127,74 @@ export const PRESETS = {
                     { mass: masses[i], charge: 0, spin: 0 }
                 );
             }
+        },
+    },
+
+    // ─── Relativity ───
+
+    wheel: {
+        name: 'Relativistic wheel',
+        desc: 'A wheel spinning at 0.9c, moving at 0.9c: contracted, its spoke bent, its clock slow',
+        toggles: {
+            gravity: false, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: true, onepn: false, blackhole: false,
+            radiation: false, spinorbit: false, disintegration: false,
+            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
+        },
+        settings: { collision: 'pass', boundary: 'loop', topology: 'torus', speed: 16 },
+        visuals: { trails: false, clocks: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            // The same wheel twice, rim speed 0.9: at rest, and crossing the torus at 0.9c.
+            // The moving spoke bends by 2·v·v_rim ≈ 93° across the diameter.
+            sim.addParticle(cx, cy - 12, 0, 0, { mass: 40, charge: 0, spin: 0.9 });
+            sim.addParticle(cx, cy + 12, 0.9, 0, { mass: 40, charge: 0, spin: 0.9 });
+        },
+    },
+
+    thomas: {
+        name: 'Thomas precession',
+        desc: 'A non-spinning charge on a relativistic Coulomb orbit: its spoke turns back 2π(γ−1) per orbit',
+        toggles: {
+            gravity: false, coulomb: true, magnetic: false, gravitomag: false,
+            relativity: true, onepn: false, blackhole: false,
+            radiation: false, spinorbit: false, disintegration: false,
+            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
+        },
+        settings: { collision: 'pass', boundary: 'despawn', speed: 16 },
+        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            // v ≈ 0.80, γ ≈ 5/3: the spoke falls back ≈ 240° per orbit. The nucleus starts
+            // with the opposite momentum, so the pair's centre of mass stays put.
+            const nucM = 30, nucQ = 12, r = 16;
+            const v = _vCircRel(nucQ * 2, r, 1);
+            const p = v / Math.sqrt(1 - v * v);
+            sim.addParticle(cx, cy, 0, -p / nucM, { mass: nucM, charge: nucQ, spin: 0 });
+            sim.addParticle(cx + r, cy, 0, v, { mass: 1, charge: -2, spin: 0 });
+        },
+    },
+
+    geodetic: {
+        name: 'Geodetic precession',
+        desc: 'A gyroscope orbiting a mass: its spoke turns forward 3πM/r per orbit, as on Gravity Probe B',
+        toggles: {
+            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: true, onepn: false, blackhole: false,
+            radiation: false, spinorbit: false, disintegration: false,
+            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
+        },
+        settings: { collision: 'pass', boundary: 'despawn', speed: 16 },
+        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            // v ≈ 0.45 at r = 16: about 121° of geodetic precession per orbit, prograde,
+            // with the orbiting clock at about half rate (deeper, and it nearly stops).
+            const M = 5, m = 0.5, r = 16;
+            const v = _vCircRel(M, r, 1);
+            const p = m * v / Math.sqrt(1 - v * v);
+            sim.addParticle(cx, cy, 0, -p / M, { mass: M, charge: 0, spin: 0 });
+            sim.addParticle(cx + r, cy, 0, v, { mass: m, charge: 0, spin: 0 });
         },
     },
 
@@ -372,6 +450,7 @@ export const PRESETS = {
     pecceiQuinn: {
         name: 'Peccei\u2013Quinn',
         desc: 'CP violation \u2014 axion field makes Yukawa bind matter and antimatter differently',
+        domain: [80, 64],
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
             relativity: false, onepn: false, blackhole: false,
@@ -429,6 +508,7 @@ export const PRESETS = {
 
 export const PRESET_ORDER = [
     'kepler', 'precession', 'inspiral', 'hawking',
+    'wheel', 'thomas', 'geodetic',
     'atom', 'bremsstrahlung', 'magnetic',
     'nucleus', 'axion', 'pionexchange', 'higgs', 'higgsboson', 'axionburst', 'pecceiQuinn',
     'expansion',
@@ -466,6 +546,7 @@ const TOGGLE_ORDER = [
 
 const VISUAL_MAP = {
     trails: 'trailsToggle',
+    clocks: 'clocksToggle',
     velocity: 'velocityToggle',
     force: 'forceToggle',
     forceComponents: 'forceComponentsToggle',
@@ -496,9 +577,10 @@ export function loadPreset(name, sim) {
     const preset = PRESETS[name];
     if (!preset) return;
 
-    // 1. Clear state (backend-agnostic)
+    // 1. Clear state; each preset sets its own domain (square default)
     sim.reset();
-    sim.camera.reset(sim.domainW / 2, sim.domainH / 2, WORLD_SCALE);
+    const [domainW, domainH] = preset.domain ?? [DEFAULT_DOMAIN, DEFAULT_DOMAIN];
+    sim.setDomain(domainW, domainH);
 
     // 2. Apply physics toggles in dependency order
     for (const key of TOGGLE_ORDER) {
@@ -578,8 +660,9 @@ export function loadPreset(name, sim) {
         }
     }
 
-    // 6. Spawn particles
-    preset.spawn(sim);
+    // 6. Spawn particles (as initial conditions: see Simulation.addParticle)
+    sim._spawningPreset = true;
+    try { preset.spawn(sim); } finally { sim._spawningPreset = false; }
 
     // 7. Reset baseline and notify (i18n: prefer translated preset name)
     sim.stats.resetBaseline();

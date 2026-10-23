@@ -37,8 +37,8 @@ src/physics-settings.js  the toggle and parameter store (sim.settings)
 src/physics-contract.js  toggle/parameter keys shared by save/load and the GPU slot map
 src/ui.js                controls, toggle dependencies, settings dropdown, shortcuts, about
 src/input.js             spawn, select, delete through GPU hit tests
-src/overlay.js           the 2D canvas above the GPU canvas: the spawn-drag line
-src/presets.js           15 presets (PRESET_ORDER)
+src/overlay.js           the 2D canvas above the GPU canvas: domain edge, spawn-drag line
+src/presets.js           18 presets (PRESET_ORDER); each may set its domain
 src/save-load.js         quick save (localStorage), JSON download/upload
 src/stats-display.js     conservation readouts, selected-particle panel
 src/phase-plot.js, effective-potential.js, plot-labels.js   Particle-tab plots
@@ -50,7 +50,7 @@ src/gpu/gpu-buffers.js   allocation and packed struct sizes
 src/gpu/gpu-constants.js generated WGSL constants and toggle bits
 src/gpu/gpu-renderer.js  instanced rendering, light/dark pipeline pairs
 src/gpu/pass-graph.js    per-frame dispatch plan
-src/gpu/shaders/         55 WGSL files; shared-*.wgsl are prepended includes
+src/gpu/shaders/         56 WGSL files; shared-*.wgsl are prepended includes
 tests/physics-validation.html   analytic oracles against a headless GPUPhysics
 ```
 
@@ -58,10 +58,15 @@ tests/physics-validation.html   analytic oracles against a headless GPUPhysics
 
 ### State and the frame loop
 
-`Simulation` (`main.js`) owns the camera, modes, selection, and the settings store
-`sim.settings` (`physics-settings.js`), which `ui.js` writes and
+`Simulation` (`main.js`) owns the domain, camera, modes, selection, and the settings
+store `sim.settings` (`physics-settings.js`), which `ui.js` writes and
 `GPUBackend.applySettings()` copies into `GPUPhysics.setToggles()`. View flags (trails,
-vectors) live in `sim.view`, the potential heatmap's state in `sim.heatmap`.
+clocks, vectors) live in `sim.view`, the potential heatmap's state in `sim.heatmap`.
+
+The domain is state, not the window: `sim.domainW`/`domainH` in world units, square
+`DEFAULT_DOMAIN` (64) unless a preset sets `domain: [w, h]` or a save carries one.
+`sim.setDomain()` resizes the GPU domain and calls `fitCamera()`, which fits it to the
+window; resizing the window moves only the camera. Clear restores the default.
 
 `startGPU()` requests the device; without one the page shows the "Geon needs WebGPU"
 popup and stays empty. `_attachDevice()` builds the `GPUBackend` and registers the
@@ -74,12 +79,13 @@ The GPU buffers are the only particle state. `sim.addParticle()` converts a spaw
 velocity to proper velocity and writes a slot; selection is a slot index
 (`sim.select(idx)`), and the sidebar reads the selected body, and the heaviest other
 body as the plots' reference, from the stats readback. A selection whose particle dies
-clears itself.
+clears itself; each stats readback carries the selection it was requested for
+(`selectedIdx`), so one still in flight when the selection changes is ignored.
 
 ### Units and particle state
 
-- c = G = ħ = 1. World units are pixels / `WORLD_SCALE` (16); the domain is the window
-  size / 16, so resizing the window resizes the world.
+- c = G = ħ = 1. `WORLD_SCALE` (16) is pixels per world unit at zoom 1; the camera's
+  zoom is relative to it.
 - Linear and rotational state are proper velocities (`ParticleState.velW`, `angW`);
   `derived.vel` and `angVel` come from them in `cache-derived.wgsl` and equal them with
   relativity off. The spawn spin slider is a surface speed.
@@ -95,12 +101,14 @@ clears itself.
 
 `GPUPhysics.update()` gets the frame's whole tick count (`n·PHYSICS_DT`) and splits it
 into at most 32 substeps from the previous frame's `maxAccel` readback,
-`dtSafe = √(softening/a_max)` (no cyclotron limit). `_dispatchSubstep()` lists the order
-in its pass comments: forces, external and field forces come before the fused
-kick–rotate–kick, then spin-orbit and torques, radiation, drift, expansion, the 1PN
-velocity-Verlet correction, the field step, collisions, disintegration, bosons, and the
-boundary. Pion decay, boson interaction, dead-slot GC, history, quadrupole radiation,
-colors, and trails run once per frame after the substeps.
+`dtSafe = √(softening/a_max)` (no cyclotron limit), and submits each substep as its own
+command buffer so that substep's uniforms (`simTime` above all) are the ones its passes
+read. `_dispatchSubstep()` lists the order in its pass comments: forces, external and
+field forces come before the fused kick–rotate–kick, then spin-orbit and torques,
+radiation, drift, clocks, expansion, the 1PN velocity-Verlet correction, the field step,
+collisions, disintegration, bosons, the boundary, and a world-line sample whenever
+`simTime` crosses the next `WORLDLINE_DT` mark. Pion decay, boson interaction, dead-slot
+GC, quadrupole radiation, colors, and trails run once per frame after the substeps.
 
 The Boris rotation parameter is `(q/2m)·Bz + 2·Bgz`, scaled by dt/γ. Gravitomagnetism
 uses the GEM sign: a moving mass sources `Bgz = −m(v×r̂)/r²`, and the GM dipole force
@@ -123,10 +131,50 @@ Barnes–Hut picks tree walk over pairwise forces; collisions and hit tests use 
 either way. With Higgs on, the Yukawa range is `yukawaMu·√(higgsMod_i·higgsMod_j)`,
 `higgsMod = max(|φ|, HIGGS_MASS_FLOOR)` cached per particle in `axYukMod.z`.
 
-Signal delay solves the light-cone condition against a per-particle history ring,
-recorded only with Relativity on (`signal-delay-common.wgsl`). Removed particles keep
-sourcing forces until their signal has crossed the domain: retired slots keep death
-time, mass, and spin in `ParticleAux`.
+Signal delay solves the light-cone condition against each source's world line
+(`signal-delay-common.wgsl`, linear interpolation). Removed particles keep sourcing
+forces until their signal has crossed the domain: retired slots keep death time, mass,
+and spin in `ParticleAux`. A source's past before its first sample is extrapolated as
+uniform motion back to its creation time and is invalid before it, so a body spawned
+by hand sources nothing until its light arrives; preset and loaded bodies are created
+at `−∞` and act at once.
+
+### Proper time, the spoke, and world lines
+
+- **Clocks** (`clocks.wgsl`, after the drift; one `vec4` per slot in `buffers.clocks`:
+  τ, ring phase, θ, lapse). τ advances by `dτ = dt·√max(0, 1 + 2Φ_N − v²)`, with Φ_N
+  summed over particles with the force softening (`BH_SOFTENING` in black-hole mode;
+  never Paczyński–Wiita, which vanishes at 4M). Field gravity Φ_F is not in the lapse.
+  With Relativity off the lapse is 1.
+- **Spoke angle θ** is the in-plane transported axis, `θ = θ_FW + ω₀τ`; it never
+  touches `angW`. It advances by `ω·dτ` (ω the rest-frame rate, or Ω_H in black-hole
+  mode) plus three precessions in lab time: Thomas, `(γ²/(γ+1))·(a × v)` from the
+  non-gravitational acceleration only (`totalForce` minus the gravity, gravitomagnetic
+  dipole, 1PN and external-gravity parts, plus the Boris magnetic Lorentz force);
+  geodetic, `−(3/2)·(g × v)` with g the Newtonian field; and Lense–Thirring,
+  `Σ −J_j/r³`, with Gravitomagnetic on. Klein and RP² crossings mirror θ
+  (`boundary.wgsl`).
+- **The spoke** (`particle.wgsl`): each body is its rest-frame disk pushed through the
+  Lorentz map of its centre's velocity. The vertex shader contracts the quad by 1/γ
+  along v; the fragment shader maps each lab offset to its rest-frame offset
+  `Δ + (γ − 1)(Δ·n̂)n̂` and draws the spoke at `θ + ω·(−γvΔ∥)`, the angle it held at
+  that point's rest-frame time, so a spinning, moving spoke bends by `2·v·v_rim` across
+  the diameter. The spoke is drawn only on bodies at least 4 px in radius.
+- **The Clocks overlay** (K, settings dropdown; `clock-render.wgsl`): a faint ring per
+  body and an accent arc that fills once per `CLOCK_PERIOD` (16) of its proper time,
+  contracted with the body. The particle panel shows τ and dτ/dt.
+- **World lines** (`worldline.wgsl`): a ring of `WORLDLINE_LEN` (1024) samples per slot,
+  one every `WORLDLINE_DT` (1/8) of lab time, always recorded. A sample is 12 floats,
+  `t, x, y, wx, wy, ax, ay, τ, θ, angw, m, q` (`WL_STRIDE`), with a = dw/dt including
+  the Boris magnetic and gravitomagnetic rotation; meta is `writeIdx, count,
+  creationTime, _pad` (`WL_META_STRIDE`). `addParticle()` writes a birth sample; a
+  removal writes a death snapshot (`FLAG_DEATH_HIST`), and slot reuse resets the line
+  (`FLAG_REBORN`). Times are absolute f32 and positions are wrapped; the event log and
+  frame slicing are M2 (`docs/ROADMAP.md` §10.2).
+- **Continuity.** An inelastic merge keeps the heavier parent's slot, so its τ and θ
+  carry on; disintegration fragments and Roche transfers copy the parent's clock
+  (`addParticle({ inheritClockFrom })`, through `_clockScratch`, since
+  `copyBufferToBuffer` cannot copy within one buffer).
 
 ### Black holes
 
@@ -242,7 +290,9 @@ per stage would land before the whole encoder ran (that bug left Φ ≡ 0 until
 ### Rendering
 
 `GPURenderer` draws on `#gpuCanvas`, behind the 2D `#simCanvas` that `Overlay` uses for
-the spawn-drag line. It clears to `_PALETTE.{light,dark}.canvas`, with light/dark
+the domain's edge (a hairline in the `--border` mix) and the spawn-drag line. Bodies,
+their clock rings, and their ring overlays share the camera uniforms' `relativityOn`,
+`blackHoleOn`, and `showClocks` flags. It clears to `_PALETTE.{light,dark}.canvas`, with light/dark
 pipeline pairs that `setTheme()` swaps. `syncRendererTheme()` in `ui.js` sets both;
 `GPUBackend.create()` adopts `sim.overlay.isLight` after `renderer.init()` because it is
 created after the first sync. WGSL theme colors are light/dark constant pairs picked by
@@ -269,9 +319,11 @@ canvas text needs no font-load redraw.
 - **New toggle or parameter.** Update `physics-contract.js`, `physics-settings.js`,
   `ui.js` (`toggleDefs`, deps), `presets.js` `TOGGLE_MAP`, `save-load.js` `TOGGLE_SYNC`,
   and `GPUPhysics.setToggles()` with its bit, then check that saves round-trip it.
-- **Saves.** `version: 1` holds particles, toggles, parameters, modes, speed, friction,
-  and camera; fields and bosons are not saved. The quick-save key `nohair-quicksave`
-  and download name `nohair-state.json` are stored names; renaming them orphans saves.
+- **Saves.** `version: 2` holds the domain, particles with τ and θ, toggles,
+  parameters, modes, speed, friction, and camera; fields, bosons, and world lines are
+  not saved. `migrateState()` lifts a version 1 save (domain = this window / 16, clocks
+  at 0). The quick-save key `nohair-quicksave` and download name `nohair-state.json`
+  are stored names; renaming them orphans saves.
 - **GPU slots.** `GPUPhysics.addParticle()` initializes every per-particle buffer.
   `axYukMod` starts at `(1, 1, 1, 0)` because its components are multiplicative
   modulations (EM coupling, Yukawa coupling, Higgs range factor) that zeros would switch
@@ -279,8 +331,8 @@ canvas text needs no font-load redraw.
   Slots are recycled through the free stack, so a slot index names a particle only
   while it lives.
 - **Command ordering.** `queue.writeBuffer()` lands at submit, before any of the
-  encoder's passes, and the frame's substeps are encoded before one submit: anything
-  that must differ between passes or substeps goes through
+  encoder's passes. Substeps submit separately, so uniforms may differ between them;
+  anything that must differ between passes of one substep goes through
   `encoder.copyBufferToBuffer()`, `clearBuffer()`, or a dynamic offset into a static
   table (the FFT). Each readback channel's pending flag skips new copies while its
   staging buffer is mapped and clears in `finally`, so a lost device cannot wedge it.
@@ -290,11 +342,12 @@ canvas text needs no font-load redraw.
   race; NaN guards come before global-memory writes; render pipelines use premultiplied
   alpha with `srcFactor: 'one'`; entry points sharing a module declare shared bindings
   `read_write`.
-- **History stride.** The counter advances by the frame's tick count and subtracts
-  `HISTORY_STRIDE` rather than resetting.
-- **Topology.** Klein and RP² crossings flip velocity and spin; periodic modes add
-  ghost copies so tree forces cross the boundary, and history interpolation wraps
-  through `minImage()`.
+- **World-line cadence** is by lab time, not ticks: `_nextWorldLineTime` steps to the
+  next multiple of `WORLDLINE_DT`, so a sample lands at the end of the substep that
+  crosses it.
+- **Topology.** Klein and RP² crossings flip velocity and spin and mirror θ; periodic
+  modes add ghost copies so tree forces cross the boundary, and world-line
+  interpolation wraps through `minImage()`.
 - **Input.** The antimatter toolbar mode (X) drives touch only; mouse users spawn
   antimatter with right-click. Click resolution is `InputHandler._resolveClickHit()`:
   a click of the particle's own kind selects, the other kind deletes; black-hole mode

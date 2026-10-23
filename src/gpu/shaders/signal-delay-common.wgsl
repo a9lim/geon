@@ -1,10 +1,12 @@
 // ─── Signal Delay Common ───
-// Shared binary-search + quadratic light-cone solver for interleaved history buffers.
+// Binary-search + quadratic light-cone solver over the world-line store
+// (worldline.wgsl documents the sample layout: t at +0, x, y at +1, +2, proper
+// velocity at +3, +4, angw at +9). Segments between samples are taken as straight.
 // Prepended to consuming shaders (after shared-topology.wgsl which provides fullMinImageP).
-// Callers declare histData/histMeta bindings.
+// Callers declare wlData/wlMeta bindings.
 //
-// Requires constants: HIST_STRIDE, HIST_META_STRIDE, HISTORY_LEN, HISTORY_MASK,
-// EPSILON, EPSILON, TOPO_TORUS, TOPO_KLEIN.
+// Requires constants: WL_STRIDE, WL_META_STRIDE, WL_LEN, WL_MASK,
+// EPSILON, TOPO_TORUS, TOPO_KLEIN.
 
 struct DelayedState {
     x: f32, y: f32,
@@ -13,9 +15,15 @@ struct DelayedState {
     valid: bool,
 };
 
-// Helper: compute base index into interleaved histData for a given particle and sample
+// Helper: compute base index into wlData for a given particle and sample
 fn histSampleBase(srcIdx: u32, sampleIdx: u32) -> u32 {
-    return srcIdx * HISTORY_LEN * HIST_STRIDE + sampleIdx * HIST_STRIDE;
+    return srcIdx * WL_LEN * WL_STRIDE + sampleIdx * WL_STRIDE;
+}
+
+// Coordinate velocity of a sample (stored as proper velocity)
+fn wlVel(base: u32) -> vec2<f32> {
+    let w = vec2<f32>(wlData[base + 3u], wlData[base + 4u]);
+    return w * inverseSqrt(1.0 + dot(w, w));
 }
 
 fn getDelayedStateGPU(
@@ -30,25 +38,23 @@ fn getDelayedStateGPU(
     var result: DelayedState;
     result.valid = false;
 
-    let metaBase = srcIdx * HIST_META_STRIDE;
-    let writeIdx = histMeta[metaBase];
-    let count = histMeta[metaBase + 1u];
-    if (count < 2u) { return result; }
+    let metaBase = srcIdx * WL_META_STRIDE;
+    let writeIdx = wlMeta[metaBase];
+    let count = wlMeta[metaBase + 1u];
+    if (count == 0u) { return result; }
 
-    let start = (writeIdx - count + HISTORY_LEN) & HISTORY_MASK;
-    let newest = (writeIdx - 1u + HISTORY_LEN) & HISTORY_MASK;
+    let start = (writeIdx - count + WL_LEN) & WL_MASK;
+    let newest = (writeIdx - 1u + WL_LEN) & WL_MASK;
 
     // Read oldest/newest timestamps from interleaved data
     let oldestBase = histSampleBase(srcIdx, start);
     let newestBase = histSampleBase(srcIdx, newest);
-    let tOldest = histData[oldestBase + 5u]; // time field at offset 5
-    let tNewest = histData[newestBase + 5u];
-    let timeSpan = simTime - tOldest;
-    if (timeSpan < EPSILON) { return result; }
+    let tOldest = wlData[oldestBase];
+    let timeSpan = max(simTime - tOldest, 0.0);
 
     // Current distance to newest sample
-    let nxPos = histData[newestBase + 0u];
-    let nyPos = histData[newestBase + 1u];
+    let nxPos = wlData[newestBase + 1u];
+    let nyPos = wlData[newestBase + 2u];
     var cdx: f32; var cdy: f32;
     if (periodic) {
         let d = fullMinImageP(obsX, obsY, nxPos, nyPos, domW, domH, topoMode);
@@ -61,22 +67,23 @@ fn getDelayedStateGPU(
     // ─── Phase 1: Binary search for the segment containing the light-cone root ───
     // g(t) = |x_src(t) - x_obs| - (now - t) is strictly monotone increasing
     // (g' = d_hat·v + 1 > 0 for |v| < c), so binary search on segment boundaries works.
-    if (distSq <= 4.0 * timeSpan * timeSpan) {
+    // A one-sample world line (just born) goes straight to extrapolation.
+    if (count >= 2u && timeSpan >= EPSILON && distSq <= 4.0 * timeSpan * timeSpan) {
         var bsLo: i32 = 0;
         var bsHi: i32 = i32(count) - 2;
         for (var bsIter = 0; bsIter < 16; bsIter++) {
             if (bsLo >= bsHi) { break; }
             let mid = (bsLo + bsHi) >> 1;
-            let midBase = histSampleBase(srcIdx, (start + u32(mid + 1)) & HISTORY_MASK);
-            let tMid = histData[midBase + 5u];
+            let midBase = histSampleBase(srcIdx, (start + u32(mid + 1)) & WL_MASK);
+            let tMid = wlData[midBase];
 
             var bx: f32; var by: f32;
             if (periodic) {
-                let d = fullMinImageP(obsX, obsY, histData[midBase], histData[midBase + 1u], domW, domH, topoMode);
+                let d = fullMinImageP(obsX, obsY, wlData[midBase + 1u], wlData[midBase + 2u], domW, domH, topoMode);
                 bx = d.x; by = d.y;
             } else {
-                bx = histData[midBase] - obsX;
-                by = histData[midBase + 1u] - obsY;
+                bx = wlData[midBase + 1u] - obsX;
+                by = wlData[midBase + 2u] - obsY;
             }
             let g = sqrt(bx * bx + by * by) - (simTime - tMid);
 
@@ -92,14 +99,14 @@ fn getDelayedStateGPU(
                 let k = center + offset * dir;
                 if (k < 0 || k > i32(count) - 2) { continue; }
 
-                let loBase = histSampleBase(srcIdx, (start + u32(k)) & HISTORY_MASK);
-                let hiBase = histSampleBase(srcIdx, ((start + u32(k)) + 1u) & HISTORY_MASK);
-                let tLo = histData[loBase + 5u];
-                let segDt = histData[hiBase + 5u] - tLo;
+                let loBase = histSampleBase(srcIdx, (start + u32(k)) & WL_MASK);
+                let hiBase = histSampleBase(srcIdx, ((start + u32(k)) + 1u) & WL_MASK);
+                let tLo = wlData[loBase];
+                let segDt = wlData[hiBase] - tLo;
                 if (segDt < EPSILON) { continue; }
 
-                let xLo = histData[loBase]; let yLo = histData[loBase + 1u];
-                let xHi = histData[hiBase]; let yHi = histData[hiBase + 1u];
+                let xLo = wlData[loBase + 1u]; let yLo = wlData[loBase + 2u];
+                let xHi = wlData[hiBase + 1u]; let yHi = wlData[hiBase + 2u];
 
                 var dx: f32; var dy: f32;
                 var vx: f32; var vy: f32;
@@ -145,13 +152,11 @@ fn getDelayedStateGPU(
 
                 result.x = xLo + frac * (xHi - xLo);
                 result.y = yLo + frac * (yHi - yLo);
-                // Interpolate velocity from interleaved data
-                let loVx = histData[loBase + 2u]; let hiVx = histData[hiBase + 2u];
-                let loVy = histData[loBase + 3u]; let hiVy = histData[hiBase + 3u];
-                result.vx = loVx + frac * (hiVx - loVx);
-                result.vy = loVy + frac * (hiVy - loVy);
-                // Interpolate angw
-                let loAngw = histData[loBase + 4u]; let hiAngw = histData[hiBase + 4u];
+                // Interpolate velocity and angw
+                let vLo = wlVel(loBase); let vHi = wlVel(hiBase);
+                result.vx = vLo.x + frac * (vHi.x - vLo.x);
+                result.vy = vLo.y + frac * (vHi.y - vLo.y);
+                let loAngw = wlData[loBase + 9u]; let hiAngw = wlData[hiBase + 9u];
                 result.angw = loAngw + frac * (hiAngw - loAngw);
                 result.valid = true;
                 return result;
@@ -163,9 +168,11 @@ fn getDelayedStateGPU(
     if (isDead) { return result; }
 
     // ─── Phase 3: Extrapolation from oldest sample ───
+    // Before its first sample the source is taken to have moved uniformly, back to its
+    // birth (wlMeta creation time; −∞ for preset and loaded bodies).
     {
-        let xStart = histData[oldestBase];
-        let yStart = histData[oldestBase + 1u];
+        let xStart = wlData[oldestBase + 1u];
+        let yStart = wlData[oldestBase + 2u];
         var dx: f32; var dy: f32;
         if (periodic) {
             let d = fullMinImageP(obsX, obsY, xStart, yStart, domW, domH, topoMode);
@@ -174,8 +181,9 @@ fn getDelayedStateGPU(
             dx = xStart - obsX; dy = yStart - obsY;
         }
 
-        let vx = histData[oldestBase + 2u];
-        let vy = histData[oldestBase + 3u];
+        let vOld = wlVel(oldestBase);
+        let vx = vOld.x;
+        let vy = vOld.y;
         let rSq = dx * dx + dy * dy;
         let vSq = vx * vx + vy * vy;
         let dDotV = dx * vx + dy * vy;
@@ -205,7 +213,7 @@ fn getDelayedStateGPU(
         if (s_sol > 0.0) { s_sol = 0.0; }
 
         // Reject extrapolation past particle creation
-        let creationTimeBits = histMeta[srcIdx * HIST_META_STRIDE + 2u];
+        let creationTimeBits = wlMeta[srcIdx * WL_META_STRIDE + 2u];
         let creationTime = bitcast<f32>(creationTimeBits);
         if (tOldest + s_sol < creationTime) { return result; }
 
@@ -213,7 +221,7 @@ fn getDelayedStateGPU(
         result.y = yStart + vy * s_sol;
         result.vx = vx;
         result.vy = vy;
-        result.angw = histData[oldestBase + 4u];
+        result.angw = wlData[oldestBase + 9u];
         result.valid = true;
         return result;
     }

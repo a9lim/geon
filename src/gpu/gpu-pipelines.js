@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 81;
+const SHADER_VERSION = 84;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -115,7 +115,7 @@ export async function createPhase2Pipelines(device, wgslConstants = '') {
     // Group 0: uniforms
     // Group 1: particleState (rw) + derived (rw) + axYukMod (rw) + particleAux (rw) = 4 storage
     // Group 2: allForces (rw) + maxAccel (rw) = 2 storage
-    // Group 3: histData (rw) + histMeta (rw) = 2 storage
+    // Group 3: wlData (rw) + wlMeta (rw) = 2 storage
     // Total: 8 storage buffers per stage
     // Prepend signal-delay-common.wgsl for getDelayedStateGPU()
     const pairForceCode = commonWGSL + '\n' + signalDelayWGSL + '\n'
@@ -273,7 +273,7 @@ export async function createTreeBuildPipelines(device, wgslConstants = '') {
  *   Group 0: nodes (ro) + uniforms = 1 storage + 1 uniform
  *   Group 1: particleState (ro) + particleAux (ro) + derived (ro) + axYukMod (ro) + ghostOriginalIdx (ro) = 5 storage
  *   Group 2: allForces (rw) + maxAccel (rw) = 2 storage
- *   Group 3: histData (rw) + histMeta (rw) = 2 storage
+ *   Group 3: wlData (rw) + wlMeta (rw) = 2 storage
  *   Total: 10 storage buffers + 1 uniform
  */
 export async function createTreeForcePipeline(device, wgslConstants = '') {
@@ -317,8 +317,8 @@ export async function createTreeForcePipeline(device, wgslConstants = '') {
     const group3Layout = device.createBindGroupLayout({
         label: 'treeForce_group3',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histData
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histMeta
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // wlData
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // wlMeta
         ],
     });
 
@@ -455,47 +455,60 @@ export async function createDeadGCPipeline(device, wgslConstants = '') {
 }
 
 /**
- * Create Phase 4 compute pipelines: history, 1PN, radiation, bosons, boson-tree.
+ * Create Phase 4 compute pipelines: world lines, clocks, 1PN, radiation, bosons, boson-tree.
  */
 export async function createPhase4Pipelines(device, wgslConstants = '') {
     const prefix = await getSharedPrefix(wgslConstants);
 
-    // ── recordHistory (history.wgsl, entry: recordHistory) ──
-    // Group 0: uniform + particleState (ro) = 1 storage
-    // Group 1: history ring buffers + meta (7 bindings)
-    const historyCode = await fetchShader('history.wgsl', prefix);
-    const historyModule = device.createShaderModule({ label: 'history', code: historyCode });
+    const storage = (binding, readOnly = false) =>
+        ({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: readOnly ? 'read-only-storage' : 'storage' } });
+    const uniform0 = { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } };
 
-    const historyG0 = device.createBindGroupLayout({
-        label: 'history_g0',
-        entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleState (rw for encoder compat)
-        ],
+    // ── recordWorldLines (worldline.wgsl) ──
+    // Group 0: uniform + particleState (rw: clears FLAG_REBORN) + allForces + clocks
+    // Group 1: wlData + wlMeta
+    const worldLineModule = device.createShaderModule({
+        label: 'worldline', code: await fetchShader('worldline.wgsl', prefix),
     });
-    // Group 1: histData (rw) + histMeta (rw) = 2 storage (was 7 separate buffers)
-    const historyG1 = device.createBindGroupLayout({
-        label: 'history_g1',
-        entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histData
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histMeta
-        ],
-    });
-    const historyLayouts = [historyG0, historyG1];
-    const recordHistory = {
-        pipeline: device.createComputePipeline({
-            label: 'recordHistory',
-            layout: device.createPipelineLayout({ bindGroupLayouts: historyLayouts }),
-            compute: { module: historyModule, entryPoint: 'recordHistory' },
+    const worldLineLayouts = [
+        device.createBindGroupLayout({
+            label: 'worldline_g0',
+            entries: [uniform0, storage(1), storage(2, true), storage(3, true)],
         }),
-        bindGroupLayouts: historyLayouts,
+        device.createBindGroupLayout({ label: 'worldline_g1', entries: [storage(0), storage(1)] }),
+    ];
+    const recordWorldLines = {
+        pipeline: device.createComputePipeline({
+            label: 'recordWorldLines',
+            layout: device.createPipelineLayout({ bindGroupLayouts: worldLineLayouts }),
+            compute: { module: worldLineModule, entryPoint: 'recordWorldLines' },
+        }),
+        bindGroupLayouts: worldLineLayouts,
+    };
+
+    // ── advanceClocks (clocks.wgsl) ──
+    // Group 0: uniform + particleState + derived + allForces (read) + clocks (rw)
+    const clockModule = device.createShaderModule({
+        label: 'clocks', code: await fetchShader('clocks.wgsl', prefix),
+    });
+    const clockLayouts = [device.createBindGroupLayout({
+        label: 'clocks_g0',
+        entries: [uniform0, storage(1, true), storage(2, true), storage(3, true), storage(4)],
+    })];
+    const advanceClocks = {
+        pipeline: device.createComputePipeline({
+            label: 'advanceClocks',
+            layout: device.createPipelineLayout({ bindGroupLayouts: clockLayouts }),
+            compute: { module: clockModule, entryPoint: 'advanceClocks' },
+        }),
+        bindGroupLayouts: clockLayouts,
     };
 
     // ── 1PN (onePN.wgsl, entries: compute1PN, vvKick1PN) ──
     // Group 0: uniforms
     // Group 1: particleState (rw) + derived (rw) + axYukMod (rw) = 3 storage
     // Group 2: allForces (rw) + f1pnOld (rw) = 2 storage
-    // Group 3: histData (rw) + histMeta (rw) = 2 storage
+    // Group 3: wlData (rw) + wlMeta (rw) = 2 storage
     // Total: 7 storage + 1 uniform
     // Prepend signal-delay-common.wgsl for getDelayedStateGPU()
     const signalDelayWGSL_1PN = await fetchShader('signal-delay-common.wgsl');
@@ -530,8 +543,8 @@ export async function createPhase4Pipelines(device, wgslConstants = '') {
     const onePNG3 = device.createBindGroupLayout({
         label: 'onePN_g3',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histData
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histMeta
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // wlData
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // wlMeta
         ],
     });
     const onePNLayouts = [onePNG0, onePNG1, onePNG2, onePNG3];
@@ -559,7 +572,7 @@ export async function createPhase4Pipelines(device, wgslConstants = '') {
     // Group 0: uniforms (same)
     // Group 1: particleState (rw) + derived (rw) + axYukMod (rw) + ghostOriginalIdx (rw) = 4 storage
     // Group 2: allForces (rw) + f1pnOld (rw) = 2 storage (same)
-    // Group 3: histData (rw) + histMeta (rw) + treeNodes (rw) = 3 storage
+    // Group 3: wlData (rw) + wlMeta (rw) + treeNodes (rw) = 3 storage
 
     const onePNTreeG1 = device.createBindGroupLayout({
         label: 'onePNTree_g1',
@@ -573,8 +586,8 @@ export async function createPhase4Pipelines(device, wgslConstants = '') {
     const onePNTreeG3 = device.createBindGroupLayout({
         label: 'onePNTree_g3',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histData
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histMeta
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // wlData
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // wlMeta
             { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // treeNodes
         ],
     });
@@ -890,7 +903,8 @@ export async function createPhase4Pipelines(device, wgslConstants = '') {
     };
 
     return {
-        recordHistory,
+        recordWorldLines,
+        advanceClocks,
         compute1PN, vvKick1PN, compute1PNTree,
         larmorRadiation, hawkingRadiation, pionEmission, schwingerDischarge,
         quadrupoleCoM, quadrupoleContrib, quadrupoleApply,
@@ -1375,7 +1389,7 @@ export async function createFieldExcitationPipeline(device, wgslConstants = '') 
  *   heatmapLayout:
  *     Group 0: particleState (rw) + particleAux (rw) + treeNodes (rw) = 3
  *     Group 1: potential grids (3 rw) + HeatmapUniforms = 4
- *     Group 2: signal delay history (histData, histMeta) = 2
+ *     Group 2: signal delay history (wlData, wlMeta) = 2
  *   blurLayout: unchanged
  */
 export async function createHeatmapPipelines(device, wgslConstants = '') {
@@ -1403,12 +1417,12 @@ export async function createHeatmapPipelines(device, wgslConstants = '') {
             { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
         ],
     });
-    // Group 2: signal delay history buffers (histData + histMeta, interleaved format)
+    // Group 2: signal delay history buffers (wlData + wlMeta, interleaved format)
     const hmG2 = device.createBindGroupLayout({
         label: 'heatmap_g2_history',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histData
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // histMeta
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // wlData
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // wlMeta
         ],
     });
     const heatmapLayouts = [hmG0, hmG1, hmG2];
@@ -1582,18 +1596,19 @@ export async function createUpdateColorsPipeline(device, wgslConstants = '') {
  * Bindings: camera (uniform), particleState (ro), particleAux (ro), derived (ro).
  * Returns { arcPipeline, arrowPipeline, bindGroupLayout }.
  */
-export async function createSpinRenderPipeline(device, format, isLight, wgslConstants = '') {
+export async function createClockRenderPipeline(device, format, isLight, wgslConstants = '') {
     const prefix = await getSharedPrefix(wgslConstants);
-    const code = await fetchShader('spin-render.wgsl', prefix);
-    const module = device.createShaderModule({ label: 'spinRender', code });
+    const code = await fetchShader('clock-render.wgsl', prefix);
+    const module = device.createShaderModule({ label: 'clockRender', code });
 
     const bindGroupLayout = device.createBindGroupLayout({
-        label: 'spinRender_g0',
+        label: 'clockRender_g0',
         entries: [
             { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-            { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
-            { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
-            { binding: 3, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+            { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }, // particleState
+            { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }, // particleAux
+            { binding: 3, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }, // derived
+            { binding: 4, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }, // clocks
         ],
     });
 
@@ -1609,32 +1624,19 @@ export async function createSpinRenderPipeline(device, format, isLight, wgslCons
         };
 
     const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
-
-    // Arc pipeline (triangle-strip ribbon, ARC_SEGMENTS * 2 vertices per instance)
-    const arcPipeline = device.createRenderPipeline({
-        label: 'spinRender_arc',
+    const ribbon = (label, entryPoint) => device.createRenderPipeline({
+        label,
         layout: pipelineLayout,
-        vertex: { module, entryPoint: 'vs_main' },
-        fragment: {
-            module, entryPoint: 'fs_main',
-            targets: [{ format, blend: blendState }],
-        },
+        vertex: { module, entryPoint },
+        fragment: { module, entryPoint: 'fs_main', targets: [{ format, blend: blendState }] },
         primitive: { topology: 'triangle-strip' },
     });
 
-    // Arrowhead pipeline (triangle-list, 3 vertices per instance)
-    const arrowPipeline = device.createRenderPipeline({
-        label: 'spinRender_arrow',
-        layout: pipelineLayout,
-        vertex: { module, entryPoint: 'vs_arrow' },
-        fragment: {
-            module, entryPoint: 'fs_arrow',
-            targets: [{ format, blend: blendState }],
-        },
-        primitive: { topology: 'triangle-list' },
-    });
-
-    return { arcPipeline, arrowPipeline, bindGroupLayout };
+    return {
+        trackPipeline: ribbon('clockRender_track', 'vs_track'),
+        arcPipeline: ribbon('clockRender_arc', 'vs_main'),
+        bindGroupLayout,
+    };
 }
 
 /**
@@ -2011,6 +2013,7 @@ export async function createComputeStatsPipeline(device, wgslConstants = '') {
             { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
             { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+            { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // clocks
         ],
     });
 

@@ -42,6 +42,7 @@ struct AxYukMod {
 @group(0) @binding(3) var<storage, read> forces: array<AllForces>;
 @group(0) @binding(4) var<storage, read_write> stats: array<f32>;
 @group(0) @binding(5) var<storage, read> axYukMod: array<AxYukMod>;
+@group(0) @binding(6) var<storage, read> clocks: array<vec4<f32>>;   // τ, ring phase, θ, dτ/dt
 
 // Group 1: scalar field grids (optional — bound to dummy 4-byte buffers when field inactive)
 @group(1) @binding(0) var<storage, read> higgsField: array<f32>;
@@ -55,7 +56,8 @@ struct AxYukMod {
 // [8]  totalMass     [9]  aliveCount   [10] pe           [11] darwinFieldE
 // [12] darwinFieldPx [13] darwinFieldPy [14] higgsFieldE [15] axionFieldE
 // [16] higgsPfiE     [17] axionPfiE    [18] fieldMomX    [19] fieldMomY
-// Selected particle [32-72]: [32] posX .. [69] axion force, [70-72] axMod, yukMod, higgsMod
+// Selected particle [32-75]: [32] posX .. [69] axion force, [70-72] axMod, yukMod, higgsMod,
+//   [73-75] τ, dτ/dt, θ
 // Reference body [80-91]: heaviest other alive particle (mass [84] = -1 when none)
 
 fn toggle(bit: u32) -> bool { return (params.toggles0 & bit) != 0u; }
@@ -612,6 +614,8 @@ fn statsPFISel() {
         stats[68] = af.f5.x; stats[69] = af.f5.y;
         let mods = axYukMod[si];
         stats[70] = mods.axMod; stats[71] = mods.yukMod; stats[72] = mods.higgsMod;
+        let clk = clocks[si];
+        stats[73] = clk.x; stats[74] = clk.w; stats[75] = clk.z;   // τ, dτ/dt, θ
     } else {
         stats[36] = -1.0; // mass = -1 signals no selected particle
     }

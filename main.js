@@ -5,7 +5,7 @@ import EffectivePotentialPlot from './src/effective-potential.js';
 import StatsDisplay from './src/stats-display.js';
 import { setupUI } from './src/ui.js';
 import { init as initI18n, setLang as setI18nLang, getLang as getI18nLang, t as tI18n, onChange as onI18nChange } from './src/i18n.js';
-import { WORLD_SCALE, ZOOM_MIN, ZOOM_MAX, WHEEL_ZOOM_IN, DEFAULT_SPEED_SCALE, DEFAULT_SPEED_INDEX, PHYSICS_DT, MAX_SUBSTEPS, MAX_FRAME_DT, ACCUMULATOR_CAP, COL_PASS, BOUND_DESPAWN, TORUS, STATS_THROTTLE_MASK, BOSON_CHARGE, MAX_SPEED_RATIO } from './src/config.js';
+import { WORLD_SCALE, DEFAULT_DOMAIN, ZOOM_MIN, ZOOM_MAX, WHEEL_ZOOM_IN, DEFAULT_SPEED_SCALE, DEFAULT_SPEED_INDEX, PHYSICS_DT, MAX_SUBSTEPS, MAX_FRAME_DT, ACCUMULATOR_CAP, COL_PASS, BOUND_DESPAWN, TORUS, STATS_THROTTLE_MASK, BOSON_CHARGE, MAX_SPEED_RATIO } from './src/config.js';
 import { createPhysicsSettings } from './src/physics-settings.js';
 import { loadState, quickSave, quickLoad, downloadState, uploadState } from './src/save-load.js';
 import GPUBackend from './src/gpu/gpu-backend.js';
@@ -81,10 +81,11 @@ class Simulation {
 
         this.settings = createPhysicsSettings();
         this.overlay = new Overlay(this.canvas);
-        this.view = { trails: true, showVelocity: false, showForce: false, showForceComponents: false };
+        this.view = { trails: true, showClocks: false, showVelocity: false, showForce: false, showForceComponents: false };
         this.heatmap = { enabled: false, mode: 'all' };
-        this.domainW = this.width / WORLD_SCALE;
-        this.domainH = this.height / WORLD_SCALE;
+        // The domain is simulation state; the window is only a camera onto it
+        this.domainW = DEFAULT_DOMAIN;
+        this.domainH = DEFAULT_DOMAIN;
 
         this.phasePlot = new PhasePlot();
         this.effPotPlot = new EffectivePotentialPlot();
@@ -93,7 +94,7 @@ class Simulation {
         this.camera = createCamera({
             width: this.width, height: this.height,
             x: this.domainW / 2, y: this.domainH / 2,
-            zoom: WORLD_SCALE,
+            zoom: this._fitZoom(),
             minZoom: ZOOM_MIN, maxZoom: ZOOM_MAX,
             wheelFactor: WHEEL_ZOOM_IN,
             onUpdate() { sim._dirty = true; },
@@ -119,6 +120,7 @@ class Simulation {
         this._ttFrame = 0; // tooltip refresh throttle counter
         this._dirty = true; // render dirty flag — skip frames when nothing changed
         this._statsDirty = false; // request stats on the next frame even while paused
+        this._spawningPreset = false; // presets.js sets this around a preset's spawn()
 
         this.speedIndex = DEFAULT_SPEED_INDEX;
         this.dom = {
@@ -165,6 +167,8 @@ class Simulation {
             spin: document.getElementById('sel-spin'),
             speed: document.getElementById('sel-speed'),
             gamma: document.getElementById('sel-gamma'),
+            tau: document.getElementById('sel-tau'),
+            lapse: document.getElementById('sel-lapse'),
             force: document.getElementById('sel-force'),
             fbGravity: document.getElementById('fb-gravity'),
             fbGravityVal: document.getElementById('fb-gravity-val'),
@@ -391,8 +395,6 @@ class Simulation {
         this.height = window.innerHeight;
         this.canvas.width = this.width;
         this.canvas.height = this.height;
-        this.domainW = this.width / WORLD_SCALE;
-        this.domainH = this.height / WORLD_SCALE;
         this.overlay.resize(this.width, this.height);
         this.input.updateRect();
         if (this.gpu) this.gpu.resize(this);
@@ -404,6 +406,26 @@ class Simulation {
         this.camera.y += (this.height - oldH) / (2 * this.camera.zoom);
         this.camera.viewportW = this.width;
         this.camera.viewportH = this.height;
+        this._dirty = true;
+    }
+
+    /** Zoom that fits the whole domain in the window, with a margin. */
+    _fitZoom() {
+        const z = 0.92 * Math.min(this.width / this.domainW, this.height / this.domainH);
+        return Math.min(Math.max(z, ZOOM_MIN), ZOOM_MAX);
+    }
+
+    /** Center the camera on the domain and zoom to fit it. */
+    fitCamera() {
+        this.camera.reset(this.domainW / 2, this.domainH / 2, this._fitZoom());
+    }
+
+    /** Resize the simulated domain (world units). Particles are not moved. */
+    setDomain(w, h) {
+        this.domainW = w;
+        this.domainH = h;
+        if (this.gpu) this.gpu.setDomain(w, h);
+        this.fitCamera();
         this._dirty = true;
     }
 
@@ -439,7 +461,12 @@ class Simulation {
         }
         const gamma = 1 / Math.sqrt(Math.max(1 - MAX_SPEED_RATIO * MAX_SPEED_RATIO, 1 - vx * vx - vy * vy));
 
-        const idx = gpu.addParticle({ x, y, vx: vx * gamma, vy: vy * gamma, mass, charge, angw, antimatter });
+        // Preset bodies are initial conditions, moving uniformly forever as far as signal
+        // delay is concerned; anything spawned later is born now, and its field spreads at c.
+        const idx = gpu.addParticle({
+            x, y, vx: vx * gamma, vy: vy * gamma, mass, charge, angw, antimatter,
+            bornAt: this._spawningPreset ? -Infinity : null,
+        });
         if (idx < 0) return -1;
         if (!options.skipBaseline) this.stats.resetBaseline();
         this._dirty = true;
@@ -488,7 +515,7 @@ class Simulation {
 
         const gpu = this.gpu;
         if (!gpu) {
-            this.overlay.draw(this.camera, this.input);
+            this.overlay.draw(this.camera, this.input, this.domainW, this.domainH);
             return;
         }
         if (this.running) {

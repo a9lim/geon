@@ -117,6 +117,8 @@ export default class StatsDisplay {
         _set(dom.spin, surfaceV.toFixed(4) + 'c');
         _set(dom.speed, speed.toFixed(4) + 'c');
         _set(dom.gamma, gamma.toFixed(3));
+        if (dom.tau) _set(dom.tau, fmtRaw(sel.tau));
+        if (dom.lapse) _set(dom.lapse, sel.lapse.toFixed(4));
         _set(dom.force, fmt(forceMag));
 
         const forces = this._forceDescs;

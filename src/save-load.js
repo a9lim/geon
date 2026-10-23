@@ -1,4 +1,4 @@
-import { DEFAULT_SPEED_SCALE, SPEED_OPTIONS, DEFAULT_SPEED_INDEX, colFromString, boundFromString, topoFromString } from './config.js';
+import { DEFAULT_SPEED_SCALE, SPEED_OPTIONS, DEFAULT_SPEED_INDEX, WORLD_SCALE, colFromString, boundFromString, topoFromString } from './config.js';
 import { PARAMETER_KEYS } from './physics-contract.js';
 
 // Maps physics flag names to UI toggle element IDs (same order as presets.js TOGGLE_ORDER)
@@ -82,10 +82,30 @@ export async function saveState(sim) {
     return await sim._gpuPhysics.serialize(sim);
 }
 
-export function loadState(state, sim) {
-    if (!state || state.version !== 1 || !sim._gpuPhysics) return false;
+/**
+ * Bring a stored state up to the current format (version 2), or return null.
+ * Version 1 predates the domain and the clocks: its domain was the window it was
+ * saved in, which the best guess is this window, and every clock starts at zero.
+ */
+function migrateState(state) {
+    if (!state) return null;
+    if (state.version === 2) return state;
+    if (state.version !== 1) return null;
+    return {
+        ...state,
+        version: 2,
+        domain: { w: window.innerWidth / WORLD_SCALE, h: window.innerHeight / WORLD_SCALE },
+        particles: (state.particles || []).map(p => ({ ...p, tau: 0, theta: 0 })),
+    };
+}
 
-    // deserialize() calls reset() internally, then uploads particles to GPU
+export function loadState(stored, sim) {
+    const state = migrateState(stored);
+    if (!state || !sim._gpuPhysics) return false;
+
+    // The domain first: deserialize() places particles in it. Then deserialize()
+    // calls reset() internally and uploads particles to GPU.
+    sim.setDomain(state.domain.w, state.domain.h);
     const ok = sim._gpuPhysics.deserialize(state, sim);
     if (!ok) return false;
     sim.select(-1);

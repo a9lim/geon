@@ -49,8 +49,8 @@ var<workgroup> tile: array<TileParticle, TILE_SIZE>;
 
 // Bind group 3: signal delay history (interleaved) — 2 bindings
 // Bindings declared for pipeline layout; used by signal delay lookups (Task 8)
-@group(3) @binding(0) var<storage, read_write> histData: array<f32>;
-@group(3) @binding(1) var<storage, read_write> histMeta: array<u32>;
+@group(3) @binding(0) var<storage, read_write> wlData: array<f32>;
+@group(3) @binding(1) var<storage, read_write> wlMeta: array<u32>;
 
 // Aberration constants (ABERRATION_CLAMP_MIN/MAX, ABERRATION_THRESHOLD) from wgslConstants
 

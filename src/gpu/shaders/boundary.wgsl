@@ -1,6 +1,7 @@
 // Boundary wrap/bounce/despawn shader.
 // Supports all three topologies: Torus, Klein bottle, RP² (real projective plane).
-// Klein/RP² glide reflections flip velocities and angular velocity on axis crossing.
+// Klein/RP² glide reflections flip velocities, angular velocity, and the spoke angle θ
+// (an x mirror sends θ → π − θ, a y mirror θ → −θ) on axis crossing.
 // Bounce uses Hertz contact repulsion (F = delta^1.5) with tangential friction,
 // matching CPU _applyBoundaryForces(). Forces written to allForces.f4.xy for display.
 // Despawn writes death metadata (deathTime, deathMass, deathAngVel) for signal delay fade-out.
@@ -9,6 +10,14 @@
 @group(0) @binding(1) var<storage, read_write> particleState: array<ParticleState>;
 @group(0) @binding(2) var<storage, read_write> particleAux: array<ParticleAux>;
 @group(0) @binding(3) var<storage, read_write> allForces: array<AllForces>;
+@group(0) @binding(4) var<storage, read_write> clocks: array<vec4<f32>>;
+
+fn mirrorTheta(idx: u32, xMirror: bool) {
+    var c = clocks[idx];
+    let t = select(-c.z, PI - c.z, xMirror);
+    c.z = t - TWO_PI * floor((t + PI) / TWO_PI);
+    clocks[idx] = c;
+}
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -45,11 +54,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 x = w - x;
                 ps.velWX = -ps.velWX;
                 ps.angW = -ps.angW;
+                mirrorTheta(idx, true);
             } else if (y >= h) {
                 y -= h;
                 x = w - x;
                 ps.velWX = -ps.velWX;
                 ps.angW = -ps.angW;
+                mirrorTheta(idx, true);
             }
             ps.posX = x;
             ps.posY = y;
@@ -67,22 +78,26 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 y = h - y;
                 vy = -vy;
                 aw = -aw;
+                mirrorTheta(idx, false);
             } else if (x >= w) {
                 x -= w;
                 y = h - y;
                 vy = -vy;
                 aw = -aw;
+                mirrorTheta(idx, false);
             }
             if (y < 0.0) {
                 y += h;
                 x = w - x;
                 vx = -vx;
                 aw = -aw;
+                mirrorTheta(idx, true);
             } else if (y >= h) {
                 y -= h;
                 x = w - x;
                 vx = -vx;
                 aw = -aw;
+                mirrorTheta(idx, true);
             }
 
             ps.posX = x;

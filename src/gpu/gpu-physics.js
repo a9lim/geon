@@ -31,18 +31,18 @@
  *  - heatmap compute + blur   (Phase 5 — every HEATMAP_INTERVAL frames)
  *  - bosonInteraction         (Phase 4 — build boson tree + particle/boson gravity + pion Coulomb)
  *  - deadParticleGC           (Phase 3)
- *  - recordHistory            (Phase 4 — every HISTORY_STRIDE frames)
+ *  World lines are recorded at the end of any substep that crosses a WORLDLINE_DT mark.
  */
 import { createParticleBuffers, createUniformBuffer, writeFrameUniforms, writeSubstepUniforms, createFieldBuffers, createGravityGridBuffers, createAtomicGridBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createKugelblitzBuffers, createTrailBuffers, FIELD_GRID_RES, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
 import { fetchShader, createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createMergePhotonPipeline, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldGravityPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createBosonDispatchArgsPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline } from './gpu-pipelines.js';
-import { buildWGSLConstants, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT, GRAVITOMAG_BIT, ONE_PN_BIT, RELATIVITY_BIT, SPIN_ORBIT_BIT, RADIATION_BIT, BLACK_HOLE_BIT, DISINTEGRATION_BIT, EXPANSION_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BARNES_HUT_BIT, BOSON_INTER_BIT, FIELD_GRAV_BIT_T1, HERTZ_BOUNCE_BIT_T1, HIST_META_STRIDE } from './gpu-constants.js';
+import { buildWGSLConstants, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT, GRAVITOMAG_BIT, ONE_PN_BIT, RELATIVITY_BIT, SPIN_ORBIT_BIT, RADIATION_BIT, BLACK_HOLE_BIT, DISINTEGRATION_BIT, EXPANSION_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BARNES_HUT_BIT, BOSON_INTER_BIT, FIELD_GRAV_BIT_T1, HERTZ_BOUNCE_BIT_T1, WL_STRIDE, WL_META_STRIDE } from './gpu-constants.js';
 import { createGPUDispatchPlan, updateGPUDispatchPlan } from './pass-graph.js';
 import {
-    HISTORY_STRIDE, GPU_MAX_PHOTONS, GPU_MAX_PIONS, GPU_MAX_LEPTONS,
-    GPU_MAX_PARTICLES, GPU_HEATMAP_GRID, HEATMAP_INTERVAL_MASK, PHYSICS_DT,
+    WORLDLINE_DT, WORLDLINE_LEN, GPU_MAX_PHOTONS, GPU_MAX_PIONS, GPU_MAX_LEPTONS,
+    GPU_MAX_PARTICLES, GPU_HEATMAP_GRID, HEATMAP_INTERVAL_MASK,
     COL_MERGE, COL_BOUNCE, BOUND_LOOP,
     COL_NAMES, BOUND_NAMES, TOPO_NAMES,
-    SOFTENING, BH_SOFTENING, SOFTENING_SQ, BH_SOFTENING_SQ, SHEET_THICKNESS_SQ,
+    SOFTENING, BH_SOFTENING, SOFTENING_SQ, BH_SOFTENING_SQ, SHEET_THICKNESS_SQ, CLOCK_PERIOD,
     HIGGS_MASS_FLOOR, HIGGS_MASS_MAX_DELTA, HIGGS_COUPLING, AXION_COUPLING,
     TIDAL_STRENGTH, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, MIN_MASS, SPAWN_COUNT, BOSON_CHARGE,
 } from '../config.js';
@@ -95,8 +95,10 @@ const _addParticleAuxF32 = new Float32Array(_addParticleAuxData);
 const _addParticleAuxU32 = new Uint32Array(_addParticleAuxData);
 const _addParticleColorData = new Uint32Array(1);
 const _addParticleModData = new Float32Array(4);
+const _addParticleClockData = new Float32Array(4);   // τ, ring phase, θ, lapse
+const _birthSampleData = new Float32Array(12);       // one world-line sample (WL_STRIDE)
 const _addParticleRadData = new Float32Array(12);    // RADIATION_STATE_SIZE / 4
-const _addParticleMetaBuf = new ArrayBuffer(16);       // 4 u32 for histMeta (stride 4)
+const _addParticleMetaBuf = new ArrayBuffer(16);       // 4 u32 for wlMeta (stride 4)
 const _addParticleMetaU32 = new Uint32Array(_addParticleMetaBuf);
 const _addParticleMetaF32 = new Float32Array(_addParticleMetaBuf);
 const _zeroU32 = new Uint32Array([0]);                // reusable zero for counter resets
@@ -142,9 +144,10 @@ const _dsAuxU32     = new Uint32Array(_dsAuxData);
 const _dsColorData  = new Uint32Array(_DS_MAX);        // 4 bytes each
 const _dsModData    = new Float32Array(_DS_MAX * 4);   // VEC4_SIZE = 16
 const _dsRadData    = new Float32Array(_DS_MAX * 12);  // RADIATION_STATE_SIZE = 48 = 12 f32
-const _dsMetaData   = new ArrayBuffer(_DS_MAX * 16);  // histMeta: 4 u32 per particle
+const _dsMetaData   = new ArrayBuffer(_DS_MAX * 16);  // wlMeta: 4 u32 per particle
 const _dsMetaF32    = new Float32Array(_dsMetaData);
 const _dsMetaU32    = new Uint32Array(_dsMetaData);
+const _dsClockData  = new Float32Array(_DS_MAX * 4);   // clocks: τ, phase, θ, lapse
 
 export default class GPUPhysics {
     /**
@@ -169,19 +172,6 @@ export default class GPUPhysics {
         // Phase 1 pipelines
         this._boundaryPipeline = null;
         this._boundaryBindGroup = null;
-
-        // Dummy storage buffers standing in for unallocated history (data, meta).
-        // Two of them: binding one buffer to both writable slots is an aliasing error.
-        this._dummyHistBuf = device.createBuffer({
-            label: 'dummy-hist',
-            size: 4,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-        });
-        this._dummyHistMetaBuf = device.createBuffer({
-            label: 'dummy-hist-meta',
-            size: 4,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-        });
 
         // Encoder-side staging buffers for tree build resets.
         // queue.writeBuffer() happens at queue time (before encoder start), so it
@@ -253,8 +243,8 @@ export default class GPUPhysics {
         this._phase4 = null;
         this._phase4BindGroups = {};
 
-        // Phase 4: History stride counter
-        this._histStride = 0;
+        // World lines: the next lab time at which a sample is due
+        this._nextWorldLineTime = 0;
         this._frameCount = 0;
 
         // Phase 4: Toggle state for advanced passes
@@ -383,6 +373,7 @@ export default class GPUPhysics {
         this._statsPending = false;
         this._statsResultReady = false;
         this._statsData = null; // Float32Array(128) from readback
+        this._statsDataSel = -1; // the selection _statsData was computed for
         this._statsStagingFlip = false; // double-buffer flip
         this._statsFieldHasHiggs = false;
         this._statsFieldHasAxion = false;
@@ -424,6 +415,7 @@ export default class GPUPhysics {
                 { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
                 { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // particleAux
                 { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // allForces
+                { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // clocks
             ],
         });
 
@@ -441,6 +433,7 @@ export default class GPUPhysics {
                 { binding: 1, resource: { buffer: this.buffers.particleState } },
                 { binding: 2, resource: { buffer: this.buffers.particleAux } },
                 { binding: 3, resource: { buffer: this.buffers.allForces } },
+                { binding: 4, resource: { buffer: this.buffers.clocks } },
             ],
         });
 
@@ -568,6 +561,7 @@ export default class GPUPhysics {
                     { binding: 3, resource: { buffer: this.buffers.allForces } },
                     { binding: 4, resource: { buffer: this.buffers.statsBuffer } },
                     { binding: 5, resource: { buffer: this.buffers.axYukMod } },
+                    { binding: 6, resource: { buffer: this.buffers.clocks } },
                 ],
             });
             this._statsBindGroup1 = null;
@@ -594,15 +588,15 @@ export default class GPUPhysics {
             [this.uniformBuffer, b.particleState, b.derived, b.particleAux, b.axYukMod]);
 
         // pairForce: 4 bind groups (packed structs)
-        // Group 3 (history) requires lazy creation — use dummy buffers until history allocated
         this._bg_pairForce0 = bg('pairForce_g0', p2.pairForce.bindGroupLayouts[0],
             [this.uniformBuffer]);
         this._bg_pairForce1 = bg('pairForce_g1', p2.pairForce.bindGroupLayouts[1],
             [b.particleState, b.derived, b.axYukMod, b.particleAux]);
         this._bg_pairForce2 = bg('pairForce_g2', p2.pairForce.bindGroupLayouts[2],
             [b.allForces, b.maxAccelBuffer]);
-        // Group 3: history buffers — created lazily in _ensurePairForceHistoryBG()
-        this._bg_pairForce3 = null;
+        // Group 3: world lines (signal delay)
+        this._bg_pairForce3 = bg('pairForce_g3', p2.pairForce.bindGroupLayouts[3],
+            [b.wlData, b.wlMeta]);
 
         // externalFields (packed particleState + allForces)
         this._bg_extFields = bg('extFields', p2.externalFields.bindGroupLayouts[0],
@@ -783,126 +777,15 @@ export default class GPUPhysics {
             ],
         });
 
-        // Group 3: history buffers — created lazily in _ensureTreeForceHistoryBG()
-        this._treeForceGroup3 = null;
-        this._treeForceLayouts = layouts;
-    }
-
-    /**
-     * Ensure pair-force history bind group exists (lazy allocation).
-     * Uses dummy buffers when history not yet allocated.
-     */
-    _ensurePairForceHistoryBG() {
-        if (this._bg_pairForce3) return;
-        const b = this.buffers;
-        const p2 = this._phase2;
-        if (b.historyAllocated) {
-            this._bg_pairForce3 = this.device.createBindGroup({
-                label: 'pairForce_g3_history',
-                layout: p2.pairForce.bindGroupLayouts[3],
-                entries: [
-                    { binding: 0, resource: { buffer: b.histData } },
-                    { binding: 1, resource: { buffer: b.histMeta } },
-                ],
-            });
-        } else {
-            this._bg_pairForce3 = this.device.createBindGroup({
-                label: 'pairForce_g3_dummy',
-                layout: p2.pairForce.bindGroupLayouts[3],
-                entries: [
-                    { binding: 0, resource: { buffer: this._dummyHistBuf } },
-                    { binding: 1, resource: { buffer: this._dummyHistMetaBuf } },
-                ],
-            });
-            this._bg_pairForce3_isDummy = true;
-        }
-    }
-
-    /**
-     * Ensure tree-force history bind group exists (lazy allocation).
-     * Uses shared dummy buffer when history not yet allocated.
-     */
-    _ensureTreeForceHistoryBG() {
-        if (this._treeForceGroup3) return;
-        const b = this.buffers;
-        const layouts = this._treeForceLayouts;
-        if (b.historyAllocated) {
-            this._treeForceGroup3 = this.device.createBindGroup({
-                label: 'treeForce_g3_history',
-                layout: layouts[3],
-                entries: [
-                    { binding: 0, resource: { buffer: b.histData } },
-                    { binding: 1, resource: { buffer: b.histMeta } },
-                ],
-            });
-        } else {
-            this._treeForceGroup3 = this.device.createBindGroup({
-                label: 'treeForce_g3_dummy',
-                layout: layouts[3],
-                entries: [
-                    { binding: 0, resource: { buffer: this._dummyHistBuf } },
-                    { binding: 1, resource: { buffer: this._dummyHistMetaBuf } },
-                ],
-            });
-            this._treeForceGroup3_isDummy = true;
-        }
-    }
-
-    /**
-     * Upgrade dummy history bind groups to real ones when history buffers become available.
-     * Called from _ensureHistoryBindGroups.
-     */
-    _upgradeForceHistoryBGs() {
-        const b = this.buffers;
-        if (!b.historyAllocated) return;
-        if (this._bg_pairForce3_isDummy) {
-            const p2 = this._phase2;
-            this._bg_pairForce3 = this.device.createBindGroup({
-                label: 'pairForce_g3_history',
-                layout: p2.pairForce.bindGroupLayouts[3],
-                entries: [
-                    { binding: 0, resource: { buffer: b.histData } },
-                    { binding: 1, resource: { buffer: b.histMeta } },
-                ],
-            });
-            this._bg_pairForce3_isDummy = false;
-        }
-        if (this._treeForceGroup3_isDummy && this._treeForceLayouts) {
-            this._treeForceGroup3 = this.device.createBindGroup({
-                label: 'treeForce_g3_history',
-                layout: this._treeForceLayouts[3],
-                entries: [
-                    { binding: 0, resource: { buffer: b.histData } },
-                    { binding: 1, resource: { buffer: b.histMeta } },
-                ],
-            });
-            this._treeForceGroup3_isDummy = false;
-        }
-        if (this._onePNG3_isDummy && this._phase4) {
-            const p4 = this._phase4;
-            this._phase4BindGroups.onePNG3 = this.device.createBindGroup({
-                label: 'onePN_g3_history',
-                layout: p4.compute1PN.bindGroupLayouts[3],
-                entries: [
-                    { binding: 0, resource: { buffer: b.histData } },
-                    { binding: 1, resource: { buffer: b.histMeta } },
-                ],
-            });
-            this._onePNG3_isDummy = false;
-        }
-        if (this._onePNTreeG3_isDummy && this._phase4) {
-            const p4 = this._phase4;
-            this._phase4BindGroups.onePNTreeG3 = this.device.createBindGroup({
-                label: 'onePNTree_g3_history',
-                layout: p4.compute1PNTree.bindGroupLayouts[3],
-                entries: [
-                    { binding: 0, resource: { buffer: b.histData } },
-                    { binding: 1, resource: { buffer: b.histMeta } },
-                    { binding: 2, resource: { buffer: b.qtNodeBuffer } },
-                ],
-            });
-            this._onePNTreeG3_isDummy = false;
-        }
+        // Group 3: world lines (signal delay)
+        this._treeForceGroup3 = this.device.createBindGroup({
+            label: 'treeForce_g3',
+            layout: layouts[3],
+            entries: [
+                { binding: 0, resource: { buffer: b.wlData } },
+                { binding: 1, resource: { buffer: b.wlMeta } },
+            ],
+        });
     }
 
     /**
@@ -993,13 +876,13 @@ export default class GPUPhysics {
                 entries: buffers.map((buf, i) => ({ binding: i, resource: { buffer: buf } })),
             });
 
-        // ── recordHistory ──
-        // Bind groups created lazily when history buffers are allocated
-        this._phase4BindGroups.historyG0Buffers = [
-            this.uniformBuffer, b.particleState,
-        ];
-        this._phase4BindGroups.historyG0 = null; // lazy
-        this._phase4BindGroups.historyG1 = null; // lazy
+        // ── World lines and clocks ──
+        this._phase4BindGroups.worldLineG0 = bg('worldline_g0', p4.recordWorldLines.bindGroupLayouts[0],
+            [this.uniformBuffer, b.particleState, b.allForces, b.clocks]);
+        this._phase4BindGroups.worldLineG1 = bg('worldline_g1', p4.recordWorldLines.bindGroupLayouts[1],
+            [b.wlData, b.wlMeta]);
+        this._phase4BindGroups.clocksG0 = bg('clocks_g0', p4.advanceClocks.bindGroupLayouts[0],
+            [this.uniformBuffer, b.particleState, b.derived, b.allForces, b.clocks]);
 
         // ── 1PN (compute1PN + vvKick1PN share bind groups) ──
         this._phase4BindGroups.onePNG0 = bg('onePN_g0', p4.compute1PN.bindGroupLayouts[0],
@@ -1008,30 +891,14 @@ export default class GPUPhysics {
             [b.particleState, b.derived, b.axYukMod]);
         this._phase4BindGroups.onePNG2 = bg('onePN_g2', p4.compute1PN.bindGroupLayouts[2],
             [b.allForces, b.f1pnOld]);
-        // Group 3 (history) — dummy until history allocated (pipeline layout requires all groups)
-        this._phase4BindGroups.onePNG3 = this.device.createBindGroup({
-            label: 'onePN_g3_dummy',
-            layout: p4.compute1PN.bindGroupLayouts[3],
-            entries: [
-                { binding: 0, resource: { buffer: this._dummyHistBuf } },
-                { binding: 1, resource: { buffer: this._dummyHistMetaBuf } },
-            ],
-        });
-        this._onePNG3_isDummy = true;
+        this._phase4BindGroups.onePNG3 = bg('onePN_g3', p4.compute1PN.bindGroupLayouts[3],
+            [b.wlData, b.wlMeta]);
 
         // ── 1PN Tree Walk (compute1PNTree — shares G0, G2 with pairwise) ──
         this._phase4BindGroups.onePNTreeG1 = bg('onePNTree_g1', p4.compute1PNTree.bindGroupLayouts[1],
             [b.particleState, b.derived, b.axYukMod, b.ghostOriginalIdx]);
-        this._phase4BindGroups.onePNTreeG3 = this.device.createBindGroup({
-            label: 'onePNTree_g3_dummy',
-            layout: p4.compute1PNTree.bindGroupLayouts[3],
-            entries: [
-                { binding: 0, resource: { buffer: this._dummyHistBuf } },
-                { binding: 1, resource: { buffer: this._dummyHistMetaBuf } },
-                { binding: 2, resource: { buffer: b.qtNodeBuffer } },
-            ],
-        });
-        this._onePNTreeG3_isDummy = true;
+        this._phase4BindGroups.onePNTreeG3 = bg('onePNTree_g3', p4.compute1PNTree.bindGroupLayouts[3],
+            [b.wlData, b.wlMeta, b.qtNodeBuffer]);
 
         // ── Radiation (larmorRadiation, hawkingRadiation, pionEmission share bind groups) ──
         this._phase4BindGroups.radG0 = bg('radiation_g0', p4.larmorRadiation.bindGroupLayouts[0],
@@ -1091,32 +958,6 @@ export default class GPUPhysics {
             this._phase4BindGroups.kbG3 = bg('kugelblitz_g3', p4.checkKugelblitz.bindGroupLayouts[3],
                 [this._kbBuffers.events, this._kbBuffers.counter]);
         }
-    }
-
-    /**
-     * Ensure history bind groups exist (lazy allocation).
-     * Called when relativity is first enabled.
-     */
-    _ensureHistoryBindGroups() {
-        if (this._phase4BindGroups.historyG0) return;
-        if (!this.buffers.historyAllocated) {
-            this.buffers.allocateHistoryBuffers(this.device);
-        }
-        const b = this.buffers;
-        const p4 = this._phase4;
-        const bg = (label, layout, buffers) =>
-            this.device.createBindGroup({
-                label, layout,
-                entries: buffers.map((buf, i) => ({ binding: i, resource: { buffer: buf } })),
-            });
-
-        this._phase4BindGroups.historyG0 = bg('history_g0', p4.recordHistory.bindGroupLayouts[0],
-            [this.uniformBuffer, b.particleState]);
-        this._phase4BindGroups.historyG1 = bg('history_g1', p4.recordHistory.bindGroupLayouts[1],
-            [b.histData, b.histMeta]);
-
-        // Upgrade dummy force history bind groups (pair-force, tree-force, 1PN) to real ones
-        this._upgradeForceHistoryBGs();
     }
 
     /**
@@ -1242,7 +1083,6 @@ export default class GPUPhysics {
             this._dispatchGhostGen(encoder);
             this._dispatchTreeBuild(encoder);
 
-            this._ensureTreeForceHistoryBG(); // upgrades onePNTreeG3 from dummy
             const passCompute = encoder.beginComputePass({ label: 'compute1PNTree' });
             passCompute.setPipeline(p4.compute1PNTree.pipeline);
             passCompute.setBindGroup(0, bgs.onePNG0);
@@ -1350,8 +1190,8 @@ export default class GPUPhysics {
     }
 
     /**
-     * Dispatch pion decay (once per frame, NOT per substep).
-     * Decay probability is calibrated per PHYSICS_DT, matching CPU path.
+     * Dispatch pion decay (once per frame, NOT per substep), on each pion's proper time
+     * over the frame's whole lab interval.
      */
     _dispatchPionDecay(encoder) {
         // G12: Pions only exist when Yukawa is on; skip entirely otherwise.
@@ -1503,23 +1343,23 @@ export default class GPUPhysics {
         }
     }
 
-    /**
-     * Dispatch signal delay history recording (Phase 4, Pass 23).
-     * Runs once every HISTORY_STRIDE frames when relativity is enabled.
-     */
-    _dispatchRecordHistory(encoder) {
-        if (!this._relativityEnabled) return;
-        if (!this._phase4BindGroups.historyG0) return;
+    /** Advance every particle's proper-time clock and spoke angle (clocks.wgsl). */
+    _dispatchClocks(encoder) {
+        const pass = encoder.beginComputePass({ label: 'advanceClocks' });
+        pass.setPipeline(this._phase4.advanceClocks.pipeline);
+        pass.setBindGroup(0, this._phase4BindGroups.clocksG0);
+        pass.dispatchWorkgroups(Math.ceil(this.aliveCount / 64));
+        pass.end();
+    }
 
-        const workgroups = Math.ceil(this.aliveCount / 64);
-        const p4 = this._phase4;
+    /** Append a world-line sample for every particle (worldline.wgsl). */
+    _dispatchRecordWorldLines(encoder) {
         const bgs = this._phase4BindGroups;
-
-        const pass = encoder.beginComputePass({ label: 'recordHistory' });
-        pass.setPipeline(p4.recordHistory.pipeline);
-        pass.setBindGroup(0, bgs.historyG0);
-        pass.setBindGroup(1, bgs.historyG1);
-        pass.dispatchWorkgroups(workgroups);
+        const pass = encoder.beginComputePass({ label: 'recordWorldLines' });
+        pass.setPipeline(this._phase4.recordWorldLines.pipeline);
+        pass.setBindGroup(0, bgs.worldLineG0);
+        pass.setBindGroup(1, bgs.worldLineG1);
+        pass.dispatchWorkgroups(Math.ceil(this.aliveCount / 64));
         pass.end();
     }
 
@@ -1900,7 +1740,17 @@ export default class GPUPhysics {
      * Add a particle to the GPU buffers.
      * Reuses free slots from dead GC when available, otherwise appends.
      */
-    addParticle({ x, y, vx = 0, vy = 0, mass: m = 1, charge: q = 0, angw = 0, antimatter = false }) {
+    /**
+     * Write a new particle into a free slot. vx, vy are proper velocity. The clock starts
+     * at τ = tau, θ = theta, unless inheritClockFrom names a slot whose clock to copy
+     * (a fragment or a transferred mass carries its parent's age and orientation).
+     * bornAt is the lab time signal delay treats as the particle's birth: now by default,
+     * so its field spreads out at c; −Infinity for initial conditions, which are taken
+     * to have moved uniformly forever.
+     * @returns {number} slot index, or -1 when the pool is full
+     */
+    addParticle({ x, y, vx = 0, vy = 0, mass: m = 1, charge: q = 0, angw = 0, antimatter = false,
+                  tau = 0, theta = 0, inheritClockFrom = -1, bornAt = null }) {
         let idx;
         if (this._cpuFreeSlots.length > 0) {
             // Reuse a slot freed by dead GC
@@ -1949,6 +1799,26 @@ export default class GPUPhysics {
         _addParticleRadData.fill(0);
         this.device.queue.writeBuffer(this.buffers.radiationState, idx * RADIATION_STATE_SIZE, _addParticleRadData);
 
+        // Clock: fresh, or copied from the parent's slot (still intact while retired)
+        if (inheritClockFrom >= 0) {
+            // A buffer can't be copied onto itself, so go through a 16-byte scratch
+            if (!this._clockScratch) {
+                this._clockScratch = this.device.createBuffer({
+                    label: 'clockScratch', size: 16, usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+                });
+            }
+            const enc = this.device.createCommandEncoder({ label: 'inheritClock' });
+            enc.copyBufferToBuffer(this.buffers.clocks, inheritClockFrom * 16, this._clockScratch, 0, 16);
+            enc.copyBufferToBuffer(this._clockScratch, 0, this.buffers.clocks, idx * 16, 16);
+            this.device.queue.submit([enc.finish()]);
+        } else {
+            _addParticleClockData[0] = tau;
+            _addParticleClockData[1] = tau - CLOCK_PERIOD * Math.floor(tau / CLOCK_PERIOD);
+            _addParticleClockData[2] = theta;
+            _addParticleClockData[3] = 1;
+            this.device.queue.writeBuffer(this.buffers.clocks, idx * 16, _addParticleClockData);
+        }
+
         // Reset trail ring buffer for this slot (clear writeIdx + count)
         if (this._trailBuffers) {
             const tb = this._trailBuffers;
@@ -1956,18 +1826,14 @@ export default class GPUPhysics {
             this.device.queue.writeBuffer(tb.trailCount, idx * 4, _zeroU32);
         }
 
-        // Initialize history metadata (4 u32: writeIdx, count, creationTimeBits, _pad)
-        if (this.buffers.historyAllocated) {
-            _addParticleMetaU32[0] = 0;  // writeIdx
-            _addParticleMetaU32[1] = 0;  // count
-            _addParticleMetaF32[2] = this.simTime; // creationTime as f32 bits
-            _addParticleMetaU32[3] = 0;  // _pad
-            this.device.queue.writeBuffer(
-                this.buffers.histMeta,
-                idx * HIST_META_STRIDE * 4, // 4 u32 per particle
-                _addParticleMetaBuf
-            );
-        }
+        // World line: one sample at birth, so signal delay has a state to extrapolate
+        // from before the first recorded one. Meta: writeIdx, count, creation time, _pad.
+        this._writeBirthSample(idx, x, y, vx, vy, m, q, angw, tau, theta);
+        _addParticleMetaU32[0] = 1;
+        _addParticleMetaU32[1] = 1;
+        _addParticleMetaF32[2] = bornAt ?? this.simTime;
+        _addParticleMetaU32[3] = 0;
+        this.device.queue.writeBuffer(this.buffers.wlMeta, idx * WL_META_STRIDE * 4, _addParticleMetaBuf);
         return idx;
     }
 
@@ -1989,6 +1855,14 @@ export default class GPUPhysics {
         _deathMetaF32[1] = deathMass;
         _deathMetaF32[2] = deathAngVel;
         this.device.queue.writeBuffer(this.buffers.particleAux, idx * PARTICLE_AUX_SIZE + 8, _deathMetaData);
+    }
+
+    /** Write a particle's first world-line sample (ring slot 0) at the current time. */
+    _writeBirthSample(idx, x, y, wx, wy, m, q, angw, tau, theta) {
+        const f = _birthSampleData;
+        f[0] = this.simTime; f[1] = x; f[2] = y; f[3] = wx; f[4] = wy;
+        f[5] = 0; f[6] = 0; f[7] = tau; f[8] = theta; f[9] = angw; f[10] = m; f[11] = q;
+        this.device.queue.writeBuffer(this.buffers.wlData, idx * WORLDLINE_LEN * WL_STRIDE * 4, f);
     }
 
     /**
@@ -2035,10 +1909,6 @@ export default class GPUPhysics {
         this._bosonInterEnabled = physics.bosonInterEnabled;
         this._yukawaCoupling = physics.yukawaCoupling ?? 14;
 
-        // Lazily allocate history buffers when relativity is first enabled
-        if (this._relativityEnabled && this._phase4) {
-            this._ensureHistoryBindGroups();
-        }
         this._yukawaMu = physics.yukawaMu;
         this._higgsMass = physics.higgsMass ?? 0.5;
         this._axionMass = physics.axionMass ?? 0.05;
@@ -3078,7 +2948,7 @@ export default class GPUPhysics {
         _heatmapUniformU32[10] = (this._gravityEnabled && (hm === 'all' || hm === 'gravity')) ? 1 : 0;
         _heatmapUniformU32[11] = (this._coulombEnabled && (hm === 'all' || hm === 'electric')) ? 1 : 0;
         _heatmapUniformU32[12] = (this._yukawaEnabled && (hm === 'all' || hm === 'yukawa')) ? 1 : 0;
-        _heatmapUniformU32[13] = (this._relativityEnabled && this.buffers.historyAllocated) ? 1 : 0; // useDelay
+        _heatmapUniformU32[13] = this._relativityEnabled ? 1 : 0; // useDelay
         _heatmapUniformU32[14] = this.boundaryMode === BOUND_LOOP ? 1 : 0;
         _heatmapUniformU32[15] = this.topologyMode;
         _heatmapUniformU32[16] = this.aliveCount;
@@ -3110,49 +2980,15 @@ export default class GPUPhysics {
                         { binding: 3, resource: { buffer: this._heatmapUniformBuffer } },
                     ],
                 }),
-                g2: null, // history bind group (created lazily when history buffers allocated)
+                g2: this.device.createBindGroup({
+                    label: 'heatmap_g2_worldlines',
+                    layout: hm.heatmapLayouts[2],
+                    entries: [
+                        { binding: 0, resource: { buffer: this.buffers.wlData } },
+                        { binding: 1, resource: { buffer: this.buffers.wlMeta } },
+                    ],
+                }),
             };
-        }
-
-        // Ensure history bind group exists (dummy when history not yet allocated)
-        if (!this._heatmapBGs.g2) {
-            const hm = this._heatmapPipelines;
-            if (this.buffers.historyAllocated) {
-                const b = this.buffers;
-                this._heatmapBGs.g2 = this.device.createBindGroup({
-                    label: 'heatmap_g2_history',
-                    layout: hm.heatmapLayouts[2],
-                    entries: [
-                        { binding: 0, resource: { buffer: b.histData } },
-                        { binding: 1, resource: { buffer: b.histMeta } },
-                    ],
-                });
-            } else {
-                this._heatmapBGs.g2 = this.device.createBindGroup({
-                    label: 'heatmap_g2_dummy',
-                    layout: hm.heatmapLayouts[2],
-                    entries: [
-                        { binding: 0, resource: { buffer: this._dummyHistBuf } },
-                        { binding: 1, resource: { buffer: this._dummyHistMetaBuf } },
-                    ],
-                });
-                this._heatmapBGs._g2IsDummy = true;
-            }
-        }
-
-        // Upgrade from dummy to real history bind group when buffers become available
-        if (this._heatmapBGs._g2IsDummy && this.buffers.historyAllocated) {
-            const b = this.buffers;
-            const hm = this._heatmapPipelines;
-            this._heatmapBGs.g2 = this.device.createBindGroup({
-                label: 'heatmap_g2_history',
-                layout: hm.heatmapLayouts[2],
-                entries: [
-                    { binding: 0, resource: { buffer: b.histData } },
-                    { binding: 1, resource: { buffer: b.histMeta } },
-                ],
-            });
-            this._heatmapBGs._g2IsDummy = false;
         }
 
         const gridWG = Math.ceil(GPU_HEATMAP_GRID / 8);
@@ -3160,7 +2996,7 @@ export default class GPUPhysics {
         // Compute heatmap — use BH tree walk when BH on, signal delay off, non-periodic
         // (periodic boundaries require minImage wrapping which the tree walk doesn't handle)
         {
-            const useDelay = this._relativityEnabled && this.buffers.historyAllocated;
+            const useDelay = this._relativityEnabled;
             const isPeriodic = this.boundaryMode === BOUND_LOOP;
             const useTree = this._barnesHutEnabled && !useDelay && !isPeriodic;
             const pipeline = useTree
@@ -3302,12 +3138,12 @@ export default class GPUPhysics {
         });
         updateGPUDispatchPlan(this, this._dispatchPlan);
 
-        const commandBuffers = [];
+        // One submit per substep: each substep's queue.writeBuffer() calls (simTime above
+        // all) must land before that substep's passes, not before the whole frame's.
         for (let step = 0; step < numSubsteps; step++) {
             this.simTime += dtSub;
-            commandBuffers.push(this._dispatchSubstep(dtSub));
+            this.device.queue.submit([this._dispatchSubstep(dtSub)]);
         }
-        this.device.queue.submit(commandBuffers);
 
         this._frameCount++;
 
@@ -3321,9 +3157,7 @@ export default class GPUPhysics {
                 this.dispatchHeatmap(encoder, this._lastCamera);
             }
 
-            // Pion decay: dispatched once per frame. Probability scaled by dt/PHYSICS_DT
-            // in the shader to match CPU (which checks once per PHYSICS_DT tick).
-            // Write total dt (not substep dt) so the shader can compute tick count.
+            // Pion decay: once per frame, so the shader gets the frame's whole dt.
             // FRAGILE: assumes dt is at byte offset 0 in SimUniforms — do not reorder struct
             _postSubDt[0] = dt;
             this.device.queue.writeBuffer(this.uniformBuffer, 0, _postSubDt);
@@ -3335,21 +3169,7 @@ export default class GPUPhysics {
             // Dead particle garbage collection
             this._dispatchDeadGC(encoder);
 
-            // Record signal delay history (every HISTORY_STRIDE physics steps)
-            // CPU increments _histStride once per Physics.update() call (= one PHYSICS_DT).
-            // GPU update() processes multiple PHYSICS_DT steps per frame, so increment
-            // by the number of physics steps to match CPU recording frequency.
-            // Clears FLAG_REBORN after resetting stale history for recycled slots
-            {
-                const physicsSteps = Math.round(dt / PHYSICS_DT);
-                this._histStride += physicsSteps;
-            }
-            if (this._relativityEnabled && this._histStride >= HISTORY_STRIDE) {
-                this._histStride -= HISTORY_STRIDE;
-                this._dispatchRecordHistory(encoder);
-            }
-
-            // Quadrupole radiation (once per frame, after history recording — matches CPU order)
+            // Quadrupole radiation (once per frame)
             // Uses PHYSICS_DT constant in shader (not u.dt which holds dtSub from last substep)
             this._dispatchQuadrupole(encoder);
 
@@ -3437,7 +3257,6 @@ export default class GPUPhysics {
         // Pass 5: force computation — BH tree walk or O(N^2) pairwise
         if (this._barnesHutEnabled) {
             // Tree walk force computation (O(N log N))
-            this._ensureTreeForceHistoryBG();
             const passTree = encoder.beginComputePass({ label: 'treeForce' });
             passTree.setPipeline(this._treeForcePipeline);
             passTree.setBindGroup(0, this._treeForceGroup0);
@@ -3448,7 +3267,6 @@ export default class GPUPhysics {
             passTree.end();
         } else {
             // Pairwise force computation (O(N^2) tiled)
-            this._ensurePairForceHistoryBG();
             const pass5 = encoder.beginComputePass({ label: 'pairForce' });
             pass5.setPipeline(p2.pairForce.pipeline);
             pass5.setBindGroup(0, this._bg_pairForce0);
@@ -3527,6 +3345,9 @@ export default class GPUPhysics {
         pass12.dispatchWorkgroups(workgroups);
         pass12.end();
 
+        // Pass 12b: proper-time clocks and spoke angles (after the drift: new velocities)
+        this._dispatchClocks(encoder);
+
         // Pass 13: cosmological expansion
         this._dispatchExpansion(encoder, dtSub);
 
@@ -3562,6 +3383,12 @@ export default class GPUPhysics {
         passBoundary.setBindGroup(0, this._boundaryBindGroup);
         passBoundary.dispatchWorkgroups(workgroups);
         passBoundary.end();
+
+        // Pass 25: world-line sample, when this substep crosses a WORLDLINE_DT mark
+        if (this.simTime >= this._nextWorldLineTime) {
+            this._dispatchRecordWorldLines(encoder);
+            this._nextWorldLineTime = (Math.floor(this.simTime / WORLDLINE_DT) + 1) * WORLDLINE_DT;
+        }
 
         return encoder.finish();
     }
@@ -3663,15 +3490,25 @@ export default class GPUPhysics {
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
         });
 
+        const clockByteLen = count * 16;
+        const stagingClock = this.device.createBuffer({
+            size: Math.max(clockByteLen, 16),
+            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+        });
+
         const encoder = this.device.createCommandEncoder({ label: 'serialize-readback' });
         encoder.copyBufferToBuffer(this.buffers.particleState, 0, stagingState, 0, stateByteLen);
+        if (clockByteLen > 0) encoder.copyBufferToBuffer(this.buffers.clocks, 0, stagingClock, 0, clockByteLen);
         this.device.queue.submit([encoder.finish()]);
 
-        await stagingState.mapAsync(GPUMapMode.READ);
+        await Promise.all([stagingState.mapAsync(GPUMapMode.READ), stagingClock.mapAsync(GPUMapMode.READ)]);
         const stateRaw = new ArrayBuffer(stateByteLen);
         new Uint8Array(stateRaw).set(new Uint8Array(stagingState.getMappedRange()));
+        const clockF32 = new Float32Array(stagingClock.getMappedRange().slice(0));
         stagingState.unmap();
         stagingState.destroy();
+        stagingClock.unmap();
+        stagingClock.destroy();
 
         // Parse packed ParticleState structs (9 × 4 bytes each)
         const stateF32 = new Float32Array(stateRaw);
@@ -3679,7 +3516,8 @@ export default class GPUPhysics {
         const STRIDE = PARTICLE_STATE_SIZE / 4; // 9 u32/f32 per particle
 
         const state = {
-            version: 1,
+            version: 2,
+            domain: { w: this.domainW, h: this.domainH },
             particles: [],
             toggles: {},
             settings: {
@@ -3710,6 +3548,8 @@ export default class GPUPhysics {
                 angw: stateF32[base + 6],   // angW
                 baseMass: stateF32[base + 7], // baseMass
                 antimatter: !!(flags & FLAG_ANTIMATTER),
+                tau: clockF32[i * 4],         // proper time
+                theta: clockF32[i * 4 + 2],   // spoke angle
             });
         }
 
@@ -3790,7 +3630,7 @@ export default class GPUPhysics {
      * @returns {boolean} Success
      */
     deserialize(state, sim) {
-        if (!state || state.version !== 1) return false;
+        if (!state || state.version !== 2) return false;
 
         this.reset();
 
@@ -3841,10 +3681,17 @@ export default class GPUPhysics {
             const rBase = idx * 12;
             for (let k = 0; k < 12; k++) _dsRadData[rBase + k] = 0;
 
-            // histMeta (4 u32 = 16 bytes per particle): writeIdx, count, creationTimeBits, _pad
+            // Clock: τ, ring phase, θ, lapse
+            const tau = pd.tau || 0;
+            _dsClockData[idx * 4 + 0] = tau;
+            _dsClockData[idx * 4 + 1] = tau - CLOCK_PERIOD * Math.floor(tau / CLOCK_PERIOD);
+            _dsClockData[idx * 4 + 2] = pd.theta || 0;
+            _dsClockData[idx * 4 + 3] = 1;
+
+            // World-line meta (4 u32 = 16 bytes per particle): writeIdx, count, creationTimeBits, _pad
             const hBase = idx * 4;
-            _dsMetaU32[hBase + 0] = 0;          // writeIdx
-            _dsMetaU32[hBase + 1] = 0;          // count
+            _dsMetaU32[hBase + 0] = 1;          // writeIdx (the birth sample is written below)
+            _dsMetaU32[hBase + 1] = 1;          // count
             _dsMetaF32[hBase + 2] = -Infinity;  // creationTime — always existing particle
             _dsMetaU32[hBase + 3] = 0;          // _pad
         }
@@ -3859,9 +3706,13 @@ export default class GPUPhysics {
             this.device.queue.writeBuffer(b.color,          0, _dsColorData,  0, count);                          // Uint32Array, elements (1 u32 per particle)
             this.device.queue.writeBuffer(b.axYukMod,       0, _dsModData,    0, count * 4);                      // Float32Array, elements (4 f32 per particle)
             this.device.queue.writeBuffer(b.radiationState, 0, _dsRadData,    0, count * 12);                     // Float32Array, elements (12 f32 per particle)
-            if (b.historyAllocated) {
-                this.device.queue.writeBuffer(b.histMeta, 0, _dsMetaData, 0, count * HIST_META_STRIDE * 4);      // ArrayBuffer, bytes
-            }
+            this.device.queue.writeBuffer(b.wlMeta, 0, _dsMetaData, 0, count * WL_META_STRIDE * 4);          // ArrayBuffer, bytes
+            this.device.queue.writeBuffer(b.clocks, 0, _dsClockData, 0, count * 4);                            // Float32Array, elements
+        }
+        for (let idx = 0; idx < count; idx++) {
+            const pd = particles[idx];
+            this._writeBirthSample(idx, pd.x, pd.y, pd.wx || 0, pd.wy || 0, pd.mass || 1, pd.charge || 0,
+                pd.angw || 0, pd.tau || 0, pd.theta || 0);
         }
 
         this.aliveCount = count;
@@ -3882,7 +3733,7 @@ export default class GPUPhysics {
     reset() {
         this.aliveCount = 0;
         this.simTime = 0;
-        this._histStride = 0;
+        this._nextWorldLineTime = 0;
         this._frameCount = 0;
         this._heatmapFrame = 0;
         this._pendingMergeEvents = [];
@@ -4052,10 +3903,11 @@ export default class GPUPhysics {
     /**
      * Dispatch the stats compute shader and start async readback.
      * @param {number} selectedGpuIdx  GPU buffer index of selected particle, or -1
+     * @returns {boolean} false if skipped (not ready, or a readback still in flight)
      */
     requestStats(selectedGpuIdx = -1) {
-        if (!this._statsPipelines || !this._statsUniformBuffer) return;
-        if (this._statsPending) return; // readback still in flight
+        if (!this._statsPipelines || !this._statsUniformBuffer) return false;
+        if (this._statsPending) return false; // readback still in flight
 
         // Write uniforms (StatsUniforms: 48 bytes = 12 u32/f32)
         _statsUniformU32[0] = this.aliveCount;
@@ -4129,12 +3981,14 @@ export default class GPUPhysics {
         this._statsPending = true;
         staging.mapAsync(GPUMapMode.READ).then(() => {
             this._statsData = new Float32Array(staging.getMappedRange().slice(0));
+            this._statsDataSel = selectedGpuIdx;
             staging.unmap();
             this._statsResultReady = true;
             this._statsPending = false;
         }).catch(() => {
             this._statsPending = false;
         });
+        return true;
     }
 
     /**
@@ -4157,6 +4011,7 @@ export default class GPUPhysics {
             higgsFieldEnergy: d[14], axionFieldEnergy: d[15],
             pfiEnergy: d[16] + d[17], // higgs + axion particle-field interaction
             scalarFieldMomX: d[18], scalarFieldMomY: d[19],
+            selectedIdx: this._statsDataSel, // the selection this readback describes
             selected: null,
             reference: null,
         };
@@ -4187,6 +4042,7 @@ export default class GPUPhysics {
                 forceHiggs:      { x: d[66], y: d[67] },
                 forceAxion:      { x: d[68], y: d[69] },
                 axMod: d[70], yukMod: d[71], higgsMod: d[72],
+                tau: d[73], lapse: d[74], theta: d[75],
             };
         }
         if (d[84] > 0) {
@@ -4216,9 +4072,8 @@ export default class GPUPhysics {
 
         // Core buffers
         this.buffers.destroy();
+        _d(this._clockScratch);
         this.uniformBuffer.destroy();
-        _d(this._dummyHistBuf);
-        _d(this._dummyHistMetaBuf);
         _d(this._qtCounterSrc);
         _d(this._qtBoundsSrc);
         _d(this._bosonRootSrc);
@@ -4293,8 +4148,6 @@ export default class GPUPhysics {
         this._hitResultStaging = null;
         this._statsUniformBuffer = null;
         this._statsDummyBuffer = null;
-        this._dummyHistBuf = null;
-        this._dummyHistMetaBuf = null;
         this._qtCounterSrc = null;
         this._qtBoundsSrc = null;
         this._bosonRootSrc = null;

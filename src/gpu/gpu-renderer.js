@@ -2,13 +2,13 @@
  * @fileoverview GPURenderer — WebGPU instanced rendering for particles + bosons.
  *
  * Phase 1: particles. Phase 4: photon/pion boson rendering.
- * Also: spin rings, trails, field overlays, heatmap, force arrows.
+ * Also: clock rings, trails, field overlays, heatmap, force arrows.
  *
  * Dual-pipeline per renderer type: light mode uses standard alpha blending,
  * dark mode uses additive blending ('lighter' equivalent, matching CPU Canvas 2D).
  * On theme change setTheme() swaps _pipeline / _photonPipeline / _pionPipeline.
  */
-import { fetchShader, getSharedPrefix, createBosonRenderPipelines, createFieldRenderPipeline, createHeatmapRenderPipeline, createArrowRenderPipeline, createSpinRenderPipeline, createTorqueRenderPipeline, createRingRenderPipeline, createTrailRenderPipeline } from './gpu-pipelines.js';
+import { fetchShader, getSharedPrefix, createBosonRenderPipelines, createFieldRenderPipeline, createHeatmapRenderPipeline, createArrowRenderPipeline, createClockRenderPipeline, createTorqueRenderPipeline, createRingRenderPipeline, createTrailRenderPipeline } from './gpu-pipelines.js';
 import { TRAIL_LEN } from './gpu-buffers.js';
 import { buildWGSLConstants, paletteRGB } from './gpu-constants.js';
 import { HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA, GPU_MAX_PHOTONS, GPU_MAX_PIONS, GPU_MAX_LEPTONS } from '../config.js';
@@ -136,11 +136,11 @@ export default class GPURenderer {
         this._arrowBindGroups = null;    // Array<GPUBindGroup>[13]
         this._arrowReady = false;
 
-        // Spin ring rendering (arc + arrowhead pipelines)
-        this._spinArcPipeline = null;
-        this._spinArrowPipeline = null;
-        this._spinBindGroup = null;
-        this._spinReady = false;
+        // Clock ring rendering (track + elapsed-arc pipelines)
+        this._clockTrackPipeline = null;
+        this._clockArcPipeline = null;
+        this._clockBindGroup = null;
+        this._clockReady = false;
 
         // Torque arc rendering (arc + arrowhead pipelines)
         this._torqueArcPipeline = null;
@@ -169,11 +169,14 @@ export default class GPURenderer {
         this._trailUniformBuffer = null;
         this._trailReady = false;
 
-        // Visual toggle state (synced from CPU renderer via main.js)
+        // Visual toggle state (synced from sim.view and sim.settings by GPUBackend.render)
         this.showForce = false;
         this.showForceComponents = false;
         this.showVelocity = false;
-        this.showTrails = true; // default on (matches CPU)
+        this.showTrails = true;
+        this.showClocks = false;
+        this.relativityOn = false;  // Lorentz-contracted bodies and bent spokes
+        this.blackHoleOn = false;   // spokes turn at the horizon's Ω_H
     }
 
     /** Create render pipeline. Must be called after GPUPhysics.init(). */
@@ -201,6 +204,8 @@ export default class GPURenderer {
                 { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }, // particleState
                 { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }, // particleAux
                 { binding: 3, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }, // color
+                { binding: 4, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }, // derived
+                { binding: 5, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }, // clocks
             ],
         });
 
@@ -245,6 +250,8 @@ export default class GPURenderer {
                 { binding: 1, resource: { buffer: this.buffers.particleState } },
                 { binding: 2, resource: { buffer: this.buffers.particleAux } },
                 { binding: 3, resource: { buffer: this.buffers.color } },
+                { binding: 4, resource: { buffer: this.buffers.derived } },
+                { binding: 5, resource: { buffer: this.buffers.clocks } },
             ],
         });
 
@@ -256,8 +263,8 @@ export default class GPURenderer {
         // --- Arrow render pipeline (force/velocity vectors) ---
         await this._initArrowRendering();
 
-        // --- Spin ring render pipeline ---
-        await this._initSpinRendering();
+        // --- Clock ring render pipelines ---
+        await this._initClockRendering();
 
         // --- Torque arc render pipeline ---
         await this._initTorqueRendering();
@@ -396,28 +403,29 @@ export default class GPURenderer {
         }
     }
 
-    /** Create spin ring render pipelines (arc line-strip + arrowhead triangles). */
-    async _initSpinRendering() {
+    /** Create clock ring render pipelines (full track + elapsed arc). */
+    async _initClockRendering() {
         try {
-            const { arcPipeline, arrowPipeline, bindGroupLayout } =
-                await createSpinRenderPipeline(this.device, this.format, this.isLight, this._wgslConstants || '');
-            this._spinArcPipeline = arcPipeline;
-            this._spinArrowPipeline = arrowPipeline;
+            const { trackPipeline, arcPipeline, bindGroupLayout } =
+                await createClockRenderPipeline(this.device, this.format, this.isLight, this._wgslConstants || '');
+            this._clockTrackPipeline = trackPipeline;
+            this._clockArcPipeline = arcPipeline;
 
             const b = this.buffers;
-            this._spinBindGroup = this.device.createBindGroup({
-                label: 'spinRender',
+            this._clockBindGroup = this.device.createBindGroup({
+                label: 'clockRender',
                 layout: bindGroupLayout,
                 entries: [
                     { binding: 0, resource: { buffer: this.cameraBuffer } },
                     { binding: 1, resource: { buffer: b.particleState } },
                     { binding: 2, resource: { buffer: b.particleAux } },
                     { binding: 3, resource: { buffer: b.derived } },
+                    { binding: 4, resource: { buffer: b.clocks } },
                 ],
             });
-            this._spinReady = true;
+            this._clockReady = true;
         } catch (e) {
-            console.warn('[physsim] Spin render pipeline creation failed, skipping:', e.message);
+            console.warn('[geon] Clock render pipeline creation failed, skipping:', e.message);
         }
     }
 
@@ -588,6 +596,10 @@ export default class GPURenderer {
         f[33] = this.canvasWidth;
         f[34] = this.canvasHeight;
         f[35] = this.isLight ? 0.0 : 1.0;
+        f[36] = this.relativityOn ? 1.0 : 0.0;
+        f[37] = this.blackHoleOn ? 1.0 : 0.0;
+        f[38] = this.showClocks ? 1.0 : 0.0;
+        f[39] = 0.0;
 
         this.device.queue.writeBuffer(this.cameraBuffer, 0, _cameraData);
     }
@@ -726,31 +738,29 @@ export default class GPURenderer {
             }
         }
 
-        // Pass 3b: Spin ring rendering (arcs + arrowheads)
-        if (this._spinReady && aliveCount > 0) {
+        // Pass 3b: Clock rings (the Clocks overlay)
+        if (this._clockReady && this.showClocks && aliveCount > 0) {
             try {
-                const spinEncoder = this.device.createCommandEncoder({ label: 'spin-render' });
-                const spinPass = spinEncoder.beginRenderPass({
-                    label: 'spin render',
+                const clockEncoder = this.device.createCommandEncoder({ label: 'clock-render' });
+                const clockPass = clockEncoder.beginRenderPass({
+                    label: 'clock render',
                     colorAttachments: [{
                         view: textureView,
                         loadOp: 'load',
                         storeOp: 'store',
                     }],
                 });
-                // Arc triangle-strip ribbon: 32 segments × 2 vertices = 64
-                spinPass.setPipeline(this._spinArcPipeline);
-                spinPass.setBindGroup(0, this._spinBindGroup);
-                spinPass.draw(64, aliveCount);
-                // Arrowhead triangles: 3 vertices per instance
-                spinPass.setPipeline(this._spinArrowPipeline);
-                spinPass.setBindGroup(0, this._spinBindGroup);
-                spinPass.draw(3, aliveCount);
-                spinPass.end();
-                this.device.queue.submit([spinEncoder.finish()]);
+                // Triangle-strip ribbons: 48 segments × 2 vertices
+                clockPass.setBindGroup(0, this._clockBindGroup);
+                clockPass.setPipeline(this._clockTrackPipeline);
+                clockPass.draw(96, aliveCount);
+                clockPass.setPipeline(this._clockArcPipeline);
+                clockPass.draw(96, aliveCount);
+                clockPass.end();
+                this.device.queue.submit([clockEncoder.finish()]);
             } catch (e) {
-                console.warn('[physsim] Spin render failed, disabling:', e.message);
-                this._spinReady = false;
+                console.warn('[geon] Clock render failed, disabling:', e.message);
+                this._clockReady = false;
             }
         }
 
@@ -1249,10 +1259,10 @@ export default class GPURenderer {
             this._pionPipeline   = isLight ? this._pionPipelineLight   : this._pionPipelineDark;
         }
 
-        // Rebuild spin pipeline (blend mode depends on theme).
-        if (this._spinReady) {
-            this._spinReady = false;
-            this._initSpinRendering();
+        // Rebuild clock pipelines (blend mode depends on theme).
+        if (this._clockReady) {
+            this._clockReady = false;
+            this._initClockRendering();
         }
 
         // Rebuild trail pipeline (blend mode depends on theme).

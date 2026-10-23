@@ -1,5 +1,12 @@
 // Instanced particle rendering — vertex + fragment.
-// Each instance = one particle. Renders as a screen-aligned quad, fragment discards outside circle.
+// Each body is its rest-frame disk, carrying one spoke at body angle θ, pushed through
+// the Lorentz map of its centre's velocity (with Relativity on):
+//   - a lab offset Δ maps to the rest-frame offset Δ + (γ − 1)(Δ·n̂)n̂, so the disk
+//     contracts by 1/γ along v;
+//   - the same lab instant is rest-frame time t′ − t′_c = −γvΔ∥ (relativity of
+//     simultaneity), when the spoke stood at θ + ω·(t′ − t′_c). The spoke bends, by
+//     2·v·v_rim across the diameter; a spoke perpendicular to v stays straight.
+// ω is the body's rest-frame rotation rate, or the horizon's Ω_H for a black hole.
 
 struct CameraUniforms {
     viewMatrix: mat4x4<f32>,
@@ -8,19 +15,27 @@ struct CameraUniforms {
     canvasWidth: f32,
     canvasHeight: f32,
     isDarkMode: f32,   // 0.0 = light, 1.0 = dark
+    relativityOn: f32,
+    blackHoleOn: f32,
+    showClocks: f32,
+    _pad: f32,
 };
 
-// Struct definitions (ParticleState, ParticleAux) provided by shared-structs.wgsl.
+// Struct definitions (ParticleState, ParticleAux, ParticleDerived) provided by shared-structs.wgsl.
 
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
 @group(0) @binding(1) var<storage, read> particles: array<ParticleState>;
 @group(0) @binding(2) var<storage, read> particleAux: array<ParticleAux>;
 @group(0) @binding(3) var<storage, read> color: array<u32>;
+@group(0) @binding(4) var<storage, read> derived: array<ParticleDerived>;
+@group(0) @binding(5) var<storage, read> clocks: array<vec4<f32>>;   // z = θ
 
 struct VertexOut {
     @builtin(position) position: vec4<f32>,
-    @location(0) uv: vec2<f32>,       // -1..+1 within quad
+    @location(0) offset: vec2<f32>,                     // lab offset from the centre, world units
     @location(1) particleColor: vec4<f32>,
+    @location(2) @interpolate(flat) boost: vec4<f32>,   // n̂.xy, γ, v
+    @location(3) @interpolate(flat) body: vec4<f32>,    // radius, θ, ω, drawn radius
 };
 
 // Quad vertices: 2 triangles forming a [-1,1] square
@@ -37,30 +52,42 @@ fn vs_main(
     var out: VertexOut;
 
     let p = particles[instanceIndex];
-    let flag = p.flags;
     // Skip non-alive particles by pushing off-screen
-    if ((flag & 1u) == 0u) {
+    if ((p.flags & 1u) == 0u) {
         out.position = vec4(0.0, 0.0, -2.0, 1.0);
         return out;
     }
 
-    let px = p.posX;
-    let py = p.posY;
     let r = particleAux[instanceIndex].radius;
+    let d = derived[instanceIndex];
 
-    // Transform world position to clip space via camera
-    let worldPos = camera.viewMatrix * vec4(px, py, 0.0, 1.0);
+    var n = vec2<f32>(1.0, 0.0);
+    var gamma = 1.0;
+    var speed = 0.0;
+    if (camera.relativityOn > 0.5) {
+        speed = min(length(vec2(d.velX, d.velY)), MAX_SPEED_RATIO);
+        if (speed > 1e-4) {
+            n = vec2(d.velX, d.velY) / length(vec2(d.velX, d.velY));
+            gamma = 1.0 / sqrt(1.0 - speed * speed);
+        }
+    }
 
-    // Quad corner offset in pixels, then to clip space
-    let quadCorner = QUAD_POS[vertexIndex];
-    let pixelRadius = max(r * camera.zoom, 2.0); // minimum 2px
-    let offsetPx = quadCorner * pixelRadius;
+    var omega = d.angVel;
+    if (camera.blackHoleOn > 0.5) {
+        let a = INERTIA_K * d.bodyRSq * abs(d.angVel);
+        omega = sign(d.angVel) * a / max(r * r + a * a, EPSILON);
+    }
 
-    let clipX = worldPos.x + offsetPx.x * 2.0 / camera.canvasWidth;
-    let clipY = worldPos.y + offsetPx.y * 2.0 / camera.canvasHeight;
+    // At least 2 px across, as before the contraction
+    let drawR = max(r, 2.0 / camera.zoom);
+    let corner = QUAD_POS[vertexIndex];
+    let perp = vec2(-n.y, n.x);
+    let offset = n * corner.x * max(drawR / gamma, 2.0 / camera.zoom) + perp * corner.y * drawR;
 
-    out.position = vec4(clipX, clipY, 0.0, 1.0);
-    out.uv = quadCorner;
+    out.position = camera.viewMatrix * vec4(p.posX + offset.x, p.posY + offset.y, 0.0, 1.0);
+    out.offset = offset;
+    out.boost = vec4(n, gamma, speed);
+    out.body = vec4(r, clocks[instanceIndex].z, omega, drawR);
 
     // Unpack RGBA from u32 (ABGR packed)
     let packed = color[instanceIndex];
@@ -76,12 +103,32 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
-    let dist = length(in.uv);
+    let n = in.boost.xy;
+    let gamma = in.boost.z;
+    let speed = in.boost.w;
+    let r = in.body.x;
+    let drawR = in.body.w;
 
-    // Discard outside the circle
-    if (dist > 1.0) { discard; }
+    // Rest-frame offset of this lab point (pure boost along n̂)
+    let par = dot(in.offset, n);
+    let rest = in.offset + (gamma - 1.0) * par * n;
+    let dist = length(rest);
+    if (dist > drawR) { discard; }
+
+    var rgb = in.particleColor.rgb;
+    let alpha = in.particleColor.a;
+
+    // The spoke, a radius at the angle it held at this point's rest-frame time
+    let spokeAngle = in.body.y + in.body.z * (-gamma * speed * par);
+    let dir = vec2(cos(spokeAngle), sin(spokeAngle));
+    let along = dot(rest, dir);
+    let across = abs(rest.x * dir.y - rest.y * dir.x);
+    let halfWidth = max(0.09 * r, 0.6 / camera.zoom);
+    let edge = fwidth(across);
+    let onSpoke = (1.0 - smoothstep(halfWidth - edge, halfWidth + edge, across)) * step(0.0, along);
+    let ink = select(COLOR_TEXT_LIGHT, COLOR_TEXT_DARK, camera.isDarkMode > 0.5);
+    rgb = mix(rgb, ink, 0.65 * onSpoke * step(4.0 / camera.zoom, r));
 
     // Premultiplied alpha output (required by alphaMode: 'premultiplied').
-    let alpha = in.particleColor.a;
-    return vec4(in.particleColor.rgb * alpha, alpha);
+    return vec4(rgb * alpha, alpha);
 }

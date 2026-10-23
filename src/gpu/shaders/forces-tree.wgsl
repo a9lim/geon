@@ -26,8 +26,8 @@ const MAX_STACK: u32 = 128u;
 
 // Group 3: signal delay history (interleaved) — 2 bindings
 // Bindings declared for pipeline layout; used by signal delay lookups (Task 9)
-@group(3) @binding(0) var<storage, read_write> histData: array<f32>;
-@group(3) @binding(1) var<storage, read_write> histMeta: array<u32>;
+@group(3) @binding(0) var<storage, read_write> wlData: array<f32>;
+@group(3) @binding(1) var<storage, read_write> wlMeta: array<u32>;
 
 // Shared pairForce function (from pair-force.wgsl, imported or inlined)
 // This function accumulates E-like forces and B-field contributions

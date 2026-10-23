@@ -11,11 +11,11 @@ import { REFERENCE_STRINGS } from './strings-reference.js';
 const UI_EN = {
     // ── document <head> ──
     'meta.title': "Geon — Interactive Particle Physics Simulator | a9l.im",
-    'meta.description': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across fifteen browser presets.",
+    'meta.description': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across eighteen browser presets.",
     'meta.ogTitle': "Geon — Interactive Particle Physics Simulator",
-    'meta.ogDescription': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across fifteen browser presets.",
+    'meta.ogDescription': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across eighteen browser presets.",
     'meta.twitterTitle': "Geon — Interactive Particle Physics Simulator",
-    'meta.twitterDescription': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across fifteen browser presets.",
+    'meta.twitterDescription': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across eighteen browser presets.",
 
     // ── Topbar ──
     'topbar.home': 'a9l.im',
@@ -71,6 +71,7 @@ const UI_EN = {
 
     // ── Preset dropdown groups ──
     'preset.group.gravity': 'Gravity',
+    'preset.group.relativity': 'Relativity',
     'preset.group.em': 'Electromagnetism',
     'preset.group.exotic': 'Exotic',
     'preset.group.cosmological': 'Cosmological',
@@ -176,6 +177,8 @@ const UI_EN = {
     'particle.spin': 'Spin',
     'particle.speed': 'Speed',
     'particle.gamma': 'γ (gamma)',
+    'particle.tau': 'τ (proper time)',
+    'particle.lapse': 'dτ/dt',
 
     // ── Hint bar / sim controls ──
     'hint.desktop': 'Left click to spawn · Right click to remove · Scroll to zoom',
@@ -206,7 +209,7 @@ const UI_EN = {
 
     // ── About panel ──
     'about.title': 'Geon',
-    'about.description': 'Spawn particles and watch them interact through gravity, electromagnetism, and exotic forces. Fling matter into orbit, toggle scalar fields, switch between 15 preset scenarios, and explore relativistic black hole physics in real time.',
+    'about.description': 'Spawn particles and watch them interact through gravity, electromagnetism, and exotic forces. Fling matter into orbit, toggle scalar fields, switch between 18 preset scenarios, and explore relativistic black hole physics in real time.',
     'about.controls.addParticle': 'Add particle',
     'about.controls.addParticleVal': 'Click on canvas',
     'about.controls.fling': 'Fling particle',
@@ -233,6 +236,7 @@ const UI_EN = {
     'shortcut.toggleVel': 'Toggle velocity vectors',
     'shortcut.toggleAccel': 'Toggle acceleration vectors',
     'shortcut.toggleAccelComp': 'Toggle acceleration components',
+    'shortcut.toggleClocks': 'Toggle clocks',
     'shortcut.toggleTheme': 'Toggle theme',
     'shortcut.toggleSidebar': 'Toggle sidebar',
     'shortcut.closePanel': 'Close panel',
@@ -306,6 +310,12 @@ const UI_EN = {
     'preset.kepler.desc': 'Classical gravity — Keplerian motion and conservation laws',
     'preset.precession.name': 'Precession',
     'preset.precession.desc': 'Relativistic perihelion advance — watch the rosette orbit',
+    'preset.wheel.name': 'Relativistic wheel',
+    'preset.wheel.desc': 'A wheel spinning at 0.9c, moving at 0.9c: contracted, its spoke bent, its clock slow',
+    'preset.thomas.name': 'Thomas precession',
+    'preset.thomas.desc': 'A non-spinning charge on a relativistic Coulomb orbit: its spoke turns back 2π(γ−1) per orbit',
+    'preset.geodetic.name': 'Geodetic precession',
+    'preset.geodetic.desc': 'A gyroscope orbiting a mass: its spoke turns forward 3πM/r per orbit, as on Gravity Probe B',
     'preset.inspiral.name': 'Binary inspiral',
     'preset.inspiral.desc': 'Gravitational-wave-driven coalescence of a compact binary',
     'preset.hawking.name': 'Hawking evaporation',
@@ -342,7 +352,7 @@ const UI_EN = {
     'edu.h.fields': 'Scalar fields',
     'edu.p.fields': 'Two scalar fields — Higgs and axion — live on a PQS grid with C² interpolation. The Higgs field modulates particle mass through its local vacuum expectation value, while the axion field couples to charge. Both evolve via Störmer-Verlet integration and exert gradient forces on particles.',
     'edu.h.presets': 'Presets',
-    'edu.p.presets': 'Fifteen curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, and cosmological expansion.',
+    'edu.p.presets': 'Eighteen curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, and cosmological expansion.',
     'edu.h.gm': 'Gravitomagnetism and frame-dragging',
     'edu.p.gm': 'Gravitomagnetism is the gravitational analogue of the magnetic force. In Geon, rotating or co-moving masses generate a gravitomagnetic contribution that changes nearby trajectories. Enable the Gravitomagnetic control alongside gravity to isolate the toy model\'s velocity- and spin-dependent effects.',
     'edu.h.bh': 'Black hole physics',
@@ -361,11 +371,11 @@ const UI_EN = {
 const UI_JA = {
     // ── document <head> ──
     'meta.title': 'Geon | a9l.im',
-    'meta.description': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。11種の力、スカラー場、15の教育用プリセットを備えたインタラクティブな多体シミュレータ。WebGPUによりブラウザ上でリアルタイム動作。',
+    'meta.description': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。11種の力、スカラー場、18の教育用プリセットを備えたインタラクティブな多体シミュレータ。WebGPUによりブラウザ上でリアルタイム動作。',
     'meta.ogTitle': 'Geon — インタラクティブ粒子物理シミュレータ',
-    'meta.ogDescription': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。15の教育用プリセットを備えたインタラクティブな多体シミュレータ、ブラウザ上でリアルタイム動作。',
+    'meta.ogDescription': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。18の教育用プリセットを備えたインタラクティブな多体シミュレータ、ブラウザ上でリアルタイム動作。',
     'meta.twitterTitle': 'Geon — インタラクティブ粒子物理シミュレータ',
-    'meta.twitterDescription': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。15の教育用プリセットを備えたインタラクティブな多体シミュレータ。',
+    'meta.twitterDescription': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。18の教育用プリセットを備えたインタラクティブな多体シミュレータ。',
 
     // ── Topbar ──
     'topbar.home': 'a9l.im',
@@ -419,6 +429,7 @@ const UI_JA = {
 
     // ── Preset dropdown groups ──
     'preset.group.gravity': '重力',
+    'preset.group.relativity': '相対論',
     'preset.group.em': '電磁気',
     'preset.group.exotic': 'エキゾチック',
     'preset.group.cosmological': '宇宙論',
@@ -524,6 +535,8 @@ const UI_JA = {
     'particle.spin': 'スピン',
     'particle.speed': '速さ',
     'particle.gamma': 'γ (ガンマ)',
+    'particle.tau': 'τ (固有時)',
+    'particle.lapse': 'dτ/dt',
 
     // ── Hint bar / sim controls ──
     'hint.desktop': '左クリックで生成・右クリックで削除・スクロールでズーム',
@@ -554,7 +567,7 @@ const UI_JA = {
 
     // ── About panel ──
     'about.title': 'Geon',
-    'about.description': '粒子を生成し、重力・電磁気・エキゾチックな力を介した相互作用を観察します。物質を軌道に投げ込み、スカラー場を切り替え、15のプリセットを切り替えながら、相対論的ブラックホール物理をリアルタイムで探ってください。',
+    'about.description': '粒子を生成し、重力・電磁気・エキゾチックな力を介した相互作用を観察します。物質を軌道に投げ込み、スカラー場を切り替え、18のプリセットを切り替えながら、相対論的ブラックホール物理をリアルタイムで探ってください。',
     'about.controls.addParticle': '粒子を追加',
     'about.controls.addParticleVal': 'キャンバスをクリック',
     'about.controls.fling': '粒子を投げる',
@@ -581,6 +594,7 @@ const UI_JA = {
     'shortcut.toggleVel': '速度ベクトル表示',
     'shortcut.toggleAccel': '加速度ベクトル表示',
     'shortcut.toggleAccelComp': '加速度成分表示',
+    'shortcut.toggleClocks': '時計表示',
     'shortcut.toggleTheme': 'テーマ切替',
     'shortcut.toggleSidebar': 'サイドバー切替',
     'shortcut.closePanel': 'パネルを閉じる',
@@ -654,6 +668,12 @@ const UI_JA = {
     'preset.kepler.desc': '古典重力 — ケプラー運動と保存則',
     'preset.precession.name': '歳差',
     'preset.precession.desc': '相対論的近日点移動 — ロゼット軌道を観察',
+    'preset.wheel.name': '相対論的な車輪',
+    'preset.wheel.desc': '0.9cで回転しながら0.9cで進む車輪 — ローレンツ収縮し、スポークが曲がり、時計が遅れる',
+    'preset.thomas.name': 'トーマス歳差',
+    'preset.thomas.desc': '相対論的なクーロン軌道を回る自転しない電荷 — スポークが1周ごとに2π(γ−1)だけ逆向きに回る',
+    'preset.geodetic.name': '測地歳差',
+    'preset.geodetic.desc': '質量の周りを回るジャイロスコープ — スポークが1周ごとに3πM/rだけ順向きに回る（グラビティ・プローブBと同じ）',
     'preset.inspiral.name': '連星インスパイラル',
     'preset.inspiral.desc': '重力波放射に駆動されたコンパクト連星の合体',
     'preset.hawking.name': 'ホーキング蒸発',
@@ -690,7 +710,7 @@ const UI_JA = {
     'edu.h.fields': 'スカラー場',
     'edu.p.fields': '2つのスカラー場 — ヒッグスとアクシオン — はC²補間付きのPQS格子上で定義されます。ヒッグス場は局所的な真空期待値を通じて粒子質量を変調し、アクシオン場は電荷に結合します。両者ともストーマー＝ヴェルレ法で時間発展し、勾配力で粒子に作用します。',
     'edu.h.presets': 'プリセット',
-    'edu.p.presets': '15のプリセットが、ケプラー運動、相対論的歳差、連星インスパイラル、ホーキング蒸発、原子・原子核のトイ系、制動放射、磁気双極子、パイオン交換、ヒッグス場とアクシオン場、ペッチェイ＝クイン力学、宇宙膨張を扱います。',
+    'edu.p.presets': '18のプリセットが、ケプラー運動、相対論的歳差、連星インスパイラル、ホーキング蒸発、相対論的な車輪、トーマス歳差と測地歳差、原子・原子核のトイ系、制動放射、磁気双極子、パイオン交換、ヒッグス場とアクシオン場、ペッチェイ＝クイン力学、宇宙膨張を扱います。',
     'edu.h.gm': '重力磁気とフレームドラッギング',
     'edu.p.gm': '重力磁気は磁気力の重力的な対応物です。Geonでは、回転または共動する質量が近傍の軌道を変える重力磁気項を生みます。重力とともに「重力磁気」を有効にすると、このトイモデルの速度・スピン依存効果を分離して観察できます。',
     'edu.h.bh': 'ブラックホール物理',

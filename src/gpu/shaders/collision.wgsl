@@ -327,7 +327,8 @@ fn resolveCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
         particleAux[idx1] = aux1;
         particleAux[idx2] = aux2;
     } else {
-        // Inelastic merge: both particles die, new particle created in idx1's slot
+        // Inelastic merge: both particles die, and the new particle takes the heavier
+        // parent's slot, so it keeps that parent's clock (τ, spoke angle θ)
         let keBefore = particleKE(ps1) + particleKE(ps2);
 
         let totalMass = ps1.mass + ps2.mass;
@@ -355,13 +356,22 @@ fn resolveCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
         let Lspin = INERTIA_K * ps1.mass * bodyR1Sq * ps1.angW
                    + INERTIA_K * ps2.mass * bodyR2Sq * ps2.angW;
 
-        // Retire p2 — save death metadata before zeroing mass
-        aux2.deathTime = uniforms.simTime;
-        aux2.deathMass = ps2.mass;
-        let sr2 = ps2.angW * sqrt(bodyR2Sq);
-        aux2.deathAngVel = select(ps2.angW, ps2.angW / sqrt(1.0 + sr2 * sr2), relOn);
+        let keep2 = ps2.mass > ps1.mass;
+        let keepIdx = select(idx1, idx2, keep2);
+        let dropIdx = select(idx2, idx1, keep2);
+        var dropPs = ps2;
+        var dropAux = aux2;
+        var keepAux = aux1;
+        if (keep2) { dropPs = ps1; dropAux = aux1; keepAux = aux2; }
 
-        // Write new merged particle to idx1's slot (fresh identity, both parents die)
+        // Retire the lighter parent — save death metadata before zeroing mass
+        dropAux.deathTime = uniforms.simTime;
+        dropAux.deathMass = dropPs.mass;
+        let dropBodyR = pow(max(dropPs.mass, EPSILON), 1.0 / 3.0);
+        let srDrop = dropPs.angW * dropBodyR;
+        dropAux.deathAngVel = select(dropPs.angW, dropPs.angW / sqrt(1.0 + srDrop * srDrop), relOn);
+
+        // Write the merged particle to the kept slot (fresh identity, both parents die)
         let newRadius = pow(totalMass, 1.0 / 3.0);
         let newI = INERTIA_K * totalMass * newRadius * newRadius;
         var newAngW = 0.0;
@@ -384,21 +394,21 @@ fn resolveCollisions(@builtin(global_invocation_id) gid: vec3<u32>) {
         newPs.flags = FLAG_ALIVE | FLAG_REBORN | amFlag;
 
         // Fresh aux for new particle (unique ID, clean death state)
-        aux1.radius = select(newRadius, kerrNewmanRadiusLocal(totalMass, newRadius * newRadius, newAngVel, newPs.charge), bhOn);
-        aux1.particleId = 0x80000000u | (uniforms.frameCount * MAX_PARTICLES + idx1);
-        aux1.deathTime = 1e38; // sentinel > 1e30 threshold — alive
-        aux1.deathMass = 0.0;
-        aux1.deathAngVel = 0.0;
+        keepAux.radius = select(newRadius, kerrNewmanRadiusLocal(totalMass, newRadius * newRadius, newAngVel, newPs.charge), bhOn);
+        keepAux.particleId = 0x80000000u | (uniforms.frameCount * MAX_PARTICLES + keepIdx);
+        keepAux.deathTime = 1e38; // sentinel > 1e30 threshold — alive
+        keepAux.deathMass = 0.0;
+        keepAux.deathAngVel = 0.0;
 
-        // Retire p2
-        ps2.mass = 0.0;
-        ps2.baseMass = 0.0;
-        ps2.flags = (ps2.flags & ~FLAG_ALIVE) | FLAG_RETIRED;
+        // Retire the lighter parent
+        dropPs.mass = 0.0;
+        dropPs.baseMass = 0.0;
+        dropPs.flags = (dropPs.flags & ~FLAG_ALIVE) | FLAG_RETIRED;
 
-        particleState[idx1] = newPs;
-        particleState[idx2] = ps2;
-        particleAux[idx1] = aux1;
-        particleAux[idx2] = aux2;
+        particleState[keepIdx] = newPs;
+        particleState[dropIdx] = dropPs;
+        particleAux[keepIdx] = keepAux;
+        particleAux[dropIdx] = dropAux;
 
         // Compute KE lost for field excitation
         let keAfter = particleKE(newPs);

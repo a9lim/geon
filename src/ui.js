@@ -1,7 +1,7 @@
 // ─── UI Setup ───
 // Wires all panel controls, toggles, presets, shortcuts, and info tips to the sim.
 import { loadPreset, PRESETS, PRESET_ORDER } from './presets.js';
-import { WORLD_SCALE, COL_BOUNCE, BOUND_BOUNCE, BOUND_LOOP, SPEED_OPTIONS, colFromString, boundFromString, topoFromString } from './config.js';
+import { WORLD_SCALE, DEFAULT_DOMAIN, COL_BOUNCE, BOUND_BOUNCE, BOUND_LOOP, SPEED_OPTIONS, colFromString, boundFromString, topoFromString } from './config.js';
 import { REFERENCE } from './reference.js';
 import { quickSave, quickLoad, downloadState, uploadState } from './save-load.js';
 
@@ -84,7 +84,7 @@ export function setupUI(sim) {
     // ─── Clear ───
     document.getElementById('clearBtn').addEventListener('click', () => {
         sim.reset();
-        sim.camera.reset(sim.domainW / 2, sim.domainH / 2, WORLD_SCALE);
+        sim.setDomain(DEFAULT_DOMAIN, DEFAULT_DOMAIN);
         sim.stats.resetBaseline();
         sim._dirty = true;
         showToast(_T('toast.cleared', 'Simulation cleared'));
@@ -149,6 +149,7 @@ export function setupUI(sim) {
         _settings.create(settingsBtn, [
             { type: 'toggle', label: 'Barnes-Hut', id: 'barneshut-toggle', checked: false },
             { type: 'toggle', label: 'Trails', id: 'trailsToggle', checked: true },
+            { type: 'toggle', label: 'Clocks', id: 'clocksToggle', checked: false },
             { type: 'toggle', label: 'Velocity vectors', id: 'velocityToggle', checked: false },
             { type: 'toggle', label: 'Accel. vectors', id: 'forceToggle', checked: false },
             { type: 'toggle', label: 'Accel. components', id: 'forceComponentsToggle', checked: false },
@@ -264,6 +265,10 @@ export function setupUI(sim) {
     // ─── Visual toggles ─── (bindToggle fires the 'light' haptic itself)
     _forms.bindToggle(document.getElementById('trailsToggle'), (v) => {
         sim.view.trails = v;
+        sim._dirty = true;
+    });
+    _forms.bindToggle(document.getElementById('clocksToggle'), (v) => {
+        sim.view.showClocks = v;
         sim._dirty = true;
     });
     _forms.bindToggle(document.getElementById('velocityToggle'), (v) => {
@@ -409,7 +414,7 @@ export function setupUI(sim) {
         zoomOut: document.getElementById('zoom-out-btn'),
         reset: document.getElementById('zoom-reset-btn'),
         display: document.getElementById('zoom-level'),
-        onReset: () => sim.camera.reset(sim.domainW / 2, sim.domainH / 2, WORLD_SCALE),
+        onReset: () => sim.fitCamera(),
         formatZoom: (z) => Math.round(z / WORLD_SCALE * 100) + '%',
     });
 
@@ -434,7 +439,7 @@ export function setupUI(sim) {
     const canvas = sim.canvas || document.getElementById('simCanvas');
     const zoomIn  = () => sim.camera.zoomBy(1.25, canvas.width / 2, canvas.height / 2);
     const zoomOut = () => sim.camera.zoomBy(0.8,  canvas.width / 2, canvas.height / 2);
-    const zoomReset = () => sim.camera.reset(sim.domainW / 2, sim.domainH / 2, WORLD_SCALE);
+    const zoomReset = () => sim.fitCamera();
 
     // ─── Keyboard shortcuts ───
     // Built as a function so labels/groups can be re-resolved through _i18n
@@ -475,6 +480,12 @@ export function setupUI(sim) {
             const el = document.getElementById('forceComponentsToggle');
             el.checked = !el.checked;
             sim.view.showForceComponents = el.checked;
+            sim._dirty = true;
+        }},
+        { key: 'K',          label: _T('shortcut.toggleClocks',      'Toggle clocks'),                 group: G_VIEW(), action: () => {
+            const el = document.getElementById('clocksToggle');
+            el.checked = !el.checked;
+            sim.view.showClocks = el.checked;
             sim._dirty = true;
         }},
         { key: 'T',          label: _T('shortcut.toggleTheme',       'Toggle theme'),                  group: G_VIEW(), action: toggleTheme },

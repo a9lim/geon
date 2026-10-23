@@ -106,10 +106,13 @@ export const ROCHE_TRANSFER_RATE = 0.1;      // fraction of donor mass per unit 
 export const MIN_KUGELBLITZ_ENERGY = 0.2;    // minimum total boson energy for collapse (4 × MIN_MASS)
 export const MIN_KUGELBLITZ_COUNT = 4;       // minimum boson count in collapsing node
 
-// ── Signal Delay ──
-export const HISTORY_SIZE = 256;
-export const HISTORY_MASK = HISTORY_SIZE - 1; // bitmask for modulo (power-of-2)
-export const HISTORY_STRIDE = 64;            // ~120 snapshots/second
+// ── World Lines and Clocks ──
+// Every particle records a world-line sample every WORLDLINE_DT of lab time into a
+// ring of WORLDLINE_LEN samples (128 time units), whatever the toggles. Signal delay
+// solves its light cone against it.
+export const WORLDLINE_LEN = 1024;            // power of 2 (ring mask)
+export const WORLDLINE_DT = 1 / 8;
+export const CLOCK_PERIOD = 16;              // proper time per sweep of the clock ring
 
 // ── GPU-Specific ──
 export const GPU_SCALAR_GRID = 128;            // GPU scalar field grid resolution
@@ -119,9 +122,12 @@ export const GPU_MAX_PARTICLES = 512;         // GPU buffer pre-allocation limit
 // ── Cosmological Expansion ──
 export const DEFAULT_HUBBLE = 0.001;
 
-// ── Viewport & Camera ──
-export const WORLD_SCALE = 16;
-export const ZOOM_MIN = WORLD_SCALE;
+// ── Domain, Viewport & Camera ──
+// The domain is simulation state, independent of the window: presets set it, and the
+// blank sandbox is DEFAULT_DOMAIN square. The window is a camera onto it.
+export const DEFAULT_DOMAIN = 64;
+export const WORLD_SCALE = 16;               // pixels per world unit at 100% zoom
+export const ZOOM_MIN = 2;
 export const ZOOM_MAX = 48;
 export const WHEEL_ZOOM_IN = 1.1;
 export const DESPAWN_MARGIN = 64;

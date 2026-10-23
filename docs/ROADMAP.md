@@ -237,11 +237,37 @@ The tie is explicit and per mode, which is what Codex asked for.
   stats readback. A lost device is recreated and the auto-save restored; browsers
   without WebGPU get an opening popup naming the supported browsers (caniuse,
   October 2026).
+- **M1 (2026-10-23): relativity you can see.**
+  - Proper-time clocks (§5.2): τ on the additive lapse, in `clocks.wgsl` after
+    the drift; τ and dτ/dt in the particle panel; a Clocks overlay (K) whose
+    arc fills once per `CLOCK_PERIOD` = 16 of proper time.
+  - The spoke (§5.3) replaces the spin arc and arrowhead: each body is its
+    rest-frame disk through the Lorentz map, contracted by 1/γ, its spoke bent
+    by relativity of simultaneity. θ advances by ω·dτ (Ω_H for holes) plus
+    Thomas (non-gravitational acceleration), geodetic `(3/2)∇Φ×v` and spin
+    Lense–Thirring `−J/r³`; Klein and RP² crossings mirror it.
+  - World lines (§10.2) replace the history ring: 12-float samples every 1/8
+    time unit, 1024 per slot, always recorded, with a birth sample on every
+    add. Found on the way: signal delay treated a source as nonexistent until
+    its light had crossed the domain, which included every preset's bodies at
+    load; preset and loaded bodies are now created at `−∞` and extrapolated
+    back as uniform motion.
+  - Merges keep the heavier parent's slot, so τ and θ survive; fragments and
+    Roche transfers inherit the parent's clock.
+  - The domain is state (§10.4): presets carry a size, the default is a
+    64 × 64 square, the camera fits it to the window, and a hairline marks
+    its edge. Saves are `version: 2` with domain, τ and θ; version 1 migrates
+    on load.
+  - Found on the way: the frame's substeps were encoded into one submit, so
+    every substep read the frame's final `simTime`. Substeps now submit
+    separately.
+  - Presets: relativistic wheel, Thomas precession, geodetic precession (18).
+  - Oracles: free clock at γ = 2, static clock `√(1 + 2Φ_N)`, circular-orbit
+    clock `√(1 − 3M/r)`, Thomas `−2π(γ − 1)` and geodetic `3π·g·r` per orbit,
+    world-line sampling; 12 in all.
 
 ### 2.2 Physics bugs and gaps found by the 2.0 scouting
 
-- **Spin has no clock.** The spin update and spin phase take no γ; θ on
-  proper time lands with M1 (§5.3).
 - **KG leftovers.** The exponential-metric form is in (§2.1). Still open: the
   projection corrections of §1.2, the thickness normalization of the field's
   self-gravity source, and the fields' energy accounting in the metric (the
@@ -259,13 +285,19 @@ The tie is explicit and per mode, which is what Codex asked for.
   - Photons, pions and leptons neither redshift nor co-expand.
   - H is constant; fields get no Hubble friction.
   - In loop mode the flow is discontinuous across the wrap.
-- **History is kinematics only.**
-  - 256 samples at a stride of 64 physics steps (0.5 time units each, about
-    128 time units of span).
-  - Linear interpolation, f32 times.
-  - Recorded only while relativity is on.
-  - No mass, charge or lifecycle events, so it cannot reconstruct a past
-    scene.
+- **World lines can't yet reconstruct a past scene** (M2, §10.2).
+  - Linear interpolation; times are absolute f32, whose spacing reaches
+    `WORLDLINE_DT/2` near t = 10⁶.
+  - Positions are wrapped, with no wrap count.
+  - No event log yet: births, deaths and merges exist only as slot flags.
+- **The lapse ignores field gravity.** `clocks.wgsl` sums the particles'
+  softened Φ_N; Φ_F from the grid moves fields' clocks (KG) but not
+  particles'.
+- **Spoke precession from moving sources is absent [standard].** θ feels
+  Thomas, geodetic, and Lense–Thirring from spin J. The 1PN two-body spin
+  precession `Ω₁ = (2 + 3m₂/2m₁)·L_N/r³` also has the "2" from the
+  companion's motion, the gravitomagnetic field the orbit already feels as
+  `Bgz`; θ ignores it. Needs the GEM factor derived and a binary oracle.
 - **Signal delay is a toy.**
   - Forces scale by `1/(1 − n·v)³`, capped at 100.
   - The heatmap uses delayed positions with a plain 1/r, which is not the
@@ -273,23 +305,21 @@ The tie is explicit and per mode, which is what Codex asked for.
 - **Pool culls destroy bound photons.** `PHOTON_CULL_AGE = 256` and
   `LEPTON_CULL_AGE = 512` are now named as culls, but any bound photon
   structure still dies at the age limit.
-- **No Thomas precession.** No code implements it, and spin has no
-  orientation state at all.
 
 ### 2.3 Still open from the June audit
 
-- **Tests (audit §1, its top item):** there are still none for Geon.
-  - The audit's route was to make the CPU engine headless for Node, then use
-    the transpiler as a GPU↔CPU parity oracle. That is **obsolete** now that
-    the CPU path is retired.
-  - The new route is in §10.3.
-- **Preset coverage (audit §3):** still 15 presets, and none turns on boson
-  interaction.
+- **Tests (audit §1, its top item):** `tests/physics-validation.html` runs
+  12 analytic oracles against the production `GPUPhysics` (§10.3). No Node
+  kernel tests yet. The audit's route, a headless CPU engine as a GPU↔CPU
+  parity oracle, died with the CPU path.
+- **Preset coverage (audit §3):** 18 presets, three of them relativity's
+  (M1), and none turns on boson interaction.
   - Nothing exercises superradiance, Schwinger discharge, kugelblitz,
     Roche/disintegration, the Klein/RP² topologies or the external fields.
   - Annihilation is only incidental (Peccei–Quinn).
   - Geon still can't make a geon (§11.3).
-- **Share-by-URL (audit §4):** not done. The only query parameter is `lang`.
+- **Share-by-URL (audit §4):** not done. The only query parameter is `lang`;
+  the domain is now state (M1), so a serialized state reproduces.
   - Plan: a `#state=` fragment holding the serialized state, gzipped with
     `CompressionStream` and base64url-encoded, plus `?preset=`.
   - That lets blog posts embed live Geon states through the iframe directive.
@@ -364,7 +394,7 @@ Versions set the order. Milestone IDs are stable names, not an order:
 |---|---|---|---|
 | **M0** (done 2026-10-23, §2.1) | 1.5 | **GPU only; don't fix CPU copies slated for deletion.** The §5.1 clock fix (per-process clocks, emission boosts); the Roche timestep and Eggleton q; the 3+1 KG coefficients (§2.2); the lengths split (ε for particles, ℓ for field gravity, §1.2); seed the browser test page (§10.3) with the pion-beam and moving-BH oracles. | none |
 | **M0′** (done 2026-10-23, §2.1) | 1.5 | Retire the CPU path (§4): port the phase plot and effective potential to readback; device-loss recovery; a "requires WebGPU" notice; delete about 8,100 lines; update the docs. Can share a session with M0. | M0 |
-| **M1** | 1.5 | **Relativity you can see.** The world-line store (§10.2); τ and θ state; the spoke shader; clocks; spoke precession; domain decoupled from viewport (§10.4). | M0′ |
+| **M1** (done 2026-10-23, §2.1) | 1.5 | **Relativity you can see.** The world-line store (§10.2); τ and θ state; the spoke shader; clocks; spoke precession; domain decoupled from viewport (§10.4). | M0′ |
 | **M2** | 1.5 | **Frames.** The slicer; lab, ZMF, particle and custom frames (view-only); lagged and true-now modes; the scrubber; the 1+1 Minkowski panel; the grid as lab rulers. | M1 |
 | **M3** | 1.5 | **Honest cosmology.** Comoving rewrite; the a(t) selector and self-consistent background; redshift; Hubble friction; the ledger; horizons; misalignment and Kibble–Zurek presets. | M2 (grid) |
 | **M4** | 1.5 | **Lensing.** Lens mode on the grid; microlensing probe. | M2 (grid) |
@@ -381,7 +411,7 @@ Versions set the order. Milestone IDs are stable names, not an order:
 |---|---|---|
 | Liénard–Wiechert fields (§11.1) | 1.5, alongside M2, or later | Open decision 6. |
 | Kerr equatorial geodesics (§11.2) | any time after M1 | |
-| Share-by-URL (§2.3) | 2.0, with the UI work, or any time | Needs the domain decoupled from the viewport (M1). |
+| Share-by-URL (§2.3) | 2.0, with the UI work, or any time | The domain is state since M1. |
 | Preset coverage (§2.3) | every version | Each version ships presets for its own features. The annihilation and photon-geon presets can land any time. |
 | GW overlay, light-cone camera, Bell's spaceship, time reversal, Maxwell–Jüttner (§11) | unslotted | |
 
@@ -403,84 +433,48 @@ Landed 2026-10-23 (§2.1). Every process uses `restFrameDt()` from
 process's clock calls for it. Photon and lepton culls stay on lab time; a
 bound-photon exemption is still open (§2.2).
 
-### 5.2 Proper-time clocks (M1, S–M)
+### 5.2 Proper-time clocks (M1, done)
 
-**State:**
-- Per-entity `τ`, recorded in history (§10.2).
-- **Many bodies, weak field:** `dτ = dt·√max(0, 1 + 2Φ_N − v²)`. This is the
-  leading weak-field, slow-motion form.
-- **Static clock near one Schwarzschild hole [standard]:** `1 + 2Φ_N =
-  1 − 2M/r = −g_tt` (signature −+++), which is exact.
-- **Moving clock near one hole (Codex):** `(dτ/dt)² = f − ṙ²/f − r²Ω̇²`, with
-  `f = 1 − 2M/r`; equivalently `dτ/dt = √f/γ_local`.
-- **Black-hole mode:** never put the Paczyński–Wiita Φ in the lapse, because
-  it vanishes at 4M. Use Newtonian Φ, the exact single-hole form for the
-  dominant hole, or the ZAMO lapse once Kerr lands (§11.2).
-  **[phenomenological in PW mode]**
+Landed 2026-10-23 (§2.1) as designed: the additive lapse
+`√max(0, 1 + 2Φ_N − v²)`, exact for free particles, static Schwarzschild
+clocks and circular orbits (all three are oracles), and a sweep ring per body.
+Clock readings are invariant; M2's frames change which readings count as
+simultaneous, never the readings. Still open:
+- **Near one dominant hole** the exact form is `(dτ/dt)² = f − ṙ²/f −
+  r²Ω̇²`, `f = 1 − 2M/r` (Codex), or the ZAMO lapse once Kerr lands (§11.2).
+  Black-hole mode now uses Newtonian Φ with `BH_SOFTENING`, never
+  Paczyński–Wiita, which vanishes at 4M. **[phenomenological in PW mode]**
+- Φ_F is missing from the lapse (§2.2).
+- The clock lattice, grid-intersection dots pulsing at the local lapse, goes
+  with the grid (§5.5).
 
-**Display:**
-- A "clocks" overlay: a thin outer ring arc that sweeps once per proper-time
-  period, separate from the spoke. The spoke is matter; the sweep is time.
-- An optional clock lattice of grid-intersection dots pulsing at the local
-  lapse (§5.5).
-- τ and dτ/dt appear in the particle panel.
-- **Clock readings are invariant.** What changes between frames is which
-  readings count as simultaneous.
+### 5.3 The spoke, drawn through the Lorentz map (M1, done)
 
-**Oracles:**
-- γ for a free particle;
-- `√(1 − 2M/r)` for a clock held static;
-- `√(1 − 3M/r)` on a circular Schwarzschild orbit.
-
-### 5.3 The spoke, drawn through the Lorentz map (M1, M)
-
-a9's call: a single spoke replaces the spin arc and arrowhead.
-
-**Rendering [synthesis]:**
-- Draw each body as its disk in its *centre's inertial frame*. A rotating
-  disk has no global comoving frame (Codex).
-- Push the disk, with one spoke at body angle θ, through the exact Lorentz
-  map in the fragment shader:
-  - a lab pixel at offset Δx along v maps to `x′ = γΔx`, `y′ = Δy`;
-  - its time offset is `t′ − t′_c = −γvΔx`.
-- **What you see:**
-  - The disk contracts by 1/γ along v. This needs only the quad-corner
-    transform in `vs_main` of `particle.wgsl`.
-  - **The spoke bends** from relativity of simultaneity. The material angle
-    shifts by `−ω₀γvΔx` across the body; the texture phase `θ′ − ω₀t′`
-    shifts by `+`.
-  - The total twist across the diameter is `2·v·v_rim` radians, about 93° at
-    0.9/0.9.
+Landed 2026-10-23 (§2.1) as designed.
+- Each body is its disk in its centre's inertial frame (a rotating disk has no
+  global comoving frame, Codex), pushed through the exact Lorentz map in the
+  fragment shader.
+  - It contracts by 1/γ along v.
+  - The spoke's material angle shifts by `−ω₀γvΔx` across the body, a twist
+    of `2·v·v_rim` across the diameter, about 93° at 0.9/0.9.
   - A spoke instantaneously perpendicular to v stays straight.
-- The lab rotation rate is `ω₀/γ`, via θ advancing in proper time.
-- Under the 3D convention bodies are spheres. A contracted sphere is an
-  oblate ellipsoid, which 3.0's inclined view (§9.2) would show.
-- **Black holes:** the spoke turns at `Ω_H = a/(r₊² + a²)`. The horizon and
-  ergosphere contract the same way (a boosted Kerr–Schild horizon is
-  contracted in lab coordinates).
-- **Collisions stay spherical.** There are no rigid bodies in special
-  relativity.
-- Torque arcs remain a diagnostic overlay.
+- θ is the in-plane transported axis, `θ = θ_FW + ω₀τ`. A z-spin vector
+  cannot precess about z (Codex), so θ never touches `angw` or S_z.
+- Black holes turn at `Ω_H = a/(r₊² + a²)`. The horizon and the ergosphere
+  ring contract like any body (a boosted Kerr–Schild horizon is contracted in
+  lab coordinates).
+- Collisions stay spherical; torque arcs remain a diagnostic overlay.
+- A non-spinning gyroscope comes back rotated after an orbit: a holonomy, the
+  same kind of object as `comma`'s pumps, though comma's connection is flat
+  and the geodetic one is curved.
 
-**State:** orientation θ, in GPU buffers, `physics-contract.js` and history.
-
-**Precession [standard physics, synthesis to show it]:**
-- A z-spin vector cannot precess about z (Codex).
-- What rotates is the in-plane transported axis θ: `θ = θ_FW + ω₀τ`. It never
-  touches `angw` or S_z.
-- The spoke shows:
-  - Thomas precession, `2π(γ − 1)` per circular orbit, retrograde;
-  - geodetic precession, `3πM/r` per orbit, prograde;
-  - Lense–Thirring from GEM, equatorial, `Ω = −J/r³`.
-- A non-spinning gyroscope comes back rotated after an orbit. That is a
-  holonomy, the same kind of object as `comma`'s pumps, though comma's
-  connection is flat and the geodetic one is curved.
-- This adds Thomas precession and Gravity Probe B's two effects.
+Still open:
+- Precession from moving sources (§2.2).
+- The twist and contraction have no automated oracle. The wheel preset was
+  checked by readback (τ = t/γ, θ = ω₀τ) and by eye.
 - In 3.0 (§9.4) spin becomes a vector and these become real spin precession,
-  including g − 2.
-
-**Oracles:** the twist formula; contraction 1/γ; Thomas and de Sitter angles
-over one orbit.
+  including g − 2. A contracted sphere is an oblate ellipsoid, which the
+  inclined view (§9.2) would show.
 
 ### 5.4 Frame switching (M2, L)
 
@@ -1091,16 +1085,24 @@ Decided (§4). WGSL is the single source of physics truth.
 
 ### 10.2 World-line store
 
-- **Per sample:** `t` relative to a rolling f32 epoch, `x`, `y`, `wx`, `wy`,
-  `τ`, `θ`, `angw`. That's 8 floats (32 B), up from 6.
-- **Sampling:** time-based every `Δt_h`, with cubic Hermite interpolation from
-  positions and velocities: O(Δt⁴) against linear's O(Δt²).
-- **Span:** domain diagonal divided by c, plus the maximum boost lag, about
-  128 units. 512 particles × 1024 samples at `Δt_h = 1/8` × 32 B = 16 MB.
-- **Unwrapped positions** plus a wrap count, for time-shifted periodic images.
-- **Event log:** births, deaths, merges, annihilations, mass and charge
-  changes, and absorptions, keyed by time. Slices reconstruct scenes from it.
-- **Always recorded,** not only with relativity on.
+**Built in M1** (`worldline.wgsl`; `AGENTS.md` has the details):
+- Per sample, 12 f32 (48 B): `t, x, y, wx, wy, ax, ay, τ, θ, angw, m, q`. The
+  acceleration is there for Liénard–Wiechert (§11.1).
+- Every `WORLDLINE_DT = 1/8` of lab time, 1024 samples (128 time units, the
+  domain diagonal over c plus the boost lag), always recorded. 512 × 1024 ×
+  48 B = 24 MB, allocated at init.
+- Meta per slot: `writeIdx, count, creationTime, _pad`. A birth sample on
+  every add, a death snapshot on removal, a reset on slot reuse. Signal delay
+  is its only reader, with linear interpolation.
+
+**M2:**
+- `t` relative to a rolling f32 epoch.
+- Cubic Hermite interpolation from positions and velocities: O(Δt⁴) against
+  linear's O(Δt²).
+- Unwrapped positions plus a wrap count, for time-shifted periodic images.
+- A per-slot generation counter in meta's `_pad`, bumped on reuse, so
+  `(slot, gen)` names one body for the event log.
+- The event log, to the schema below.
 - **Bosons:** back-extrapolation first, short rings later.
 - **Fields and dust density:** snapshot rings.
 - **The slicer:** one WGSL module for spacelike planes `n·X = c` (n timelike)
@@ -1108,6 +1110,47 @@ Decided (§4). WGSL is the single source of physics truth.
   - Method: bisect, then Newton on the Hermite segment.
   - Consumers: signal delay, the light-cone camera, frames, the heatmap and
     the spacetime view.
+
+**Event-log schema** (fixed in M1, built in M2; **[synthesis]**). The log
+holds only the discrete events a slice needs to decide who existed then and
+what changed hands. Continuous changes (Hawking loss, superradiance, the mass
+flow of Roche transfer, accretion) live in the samples' `m` and `q`.
+
+```wgsl
+struct WorldEvent {          // 48 B, 12 words
+    t: f32,                  // lab time, on the world lines' epoch
+    kind: u32,               // EV_BIRTH, EV_DEATH, EV_MERGE, EV_EMIT, EV_ABSORB
+    slot: u32,               // the body it happens to
+    gen: u32,                // that slot's generation
+    other: u32,              // partner slot, or boson pool index, or EV_NONE
+    otherGen: u32,           // partner's generation, or boson species
+    x: f32, y: f32,          // where
+    e: f32, px: f32, py: f32,  // lab four-momentum that changed hands
+    cause: u32,              // EV_CAUSE_*, per kind
+};
+```
+
+| kind | slot | other | four-momentum | causes |
+|---|---|---|---|---|
+| `EV_BIRTH` | the new body | parent body, or none | its initial momentum | spawn, preset, load, fragment, roche, kugelblitz |
+| `EV_DEATH` | the body | annihilation partner, or none | its final momentum | delete, despawn, evaporate, annihilate, cull |
+| `EV_MERGE` | the survivor (heavier) | the absorbed body, which logs no death | the absorbed body's | inelastic, horizon capture |
+| `EV_EMIT` | the emitter, or none | the boson | the boson's | photon, pion, lepton by process |
+| `EV_ABSORB` | the absorber | the boson | the boson's | photon, pion, lepton |
+
+- **Append:** `atomicAdd` on a head counter into a ring of 16,384 records
+  (768 KB) that overwrites its oldest; readers stop at the world-line span.
+  Births and deaths from the CPU (spawn, delete, preset, load) go through a
+  one-thread append pass, so the counter has one owner.
+- **Order:** unordered within a substep, ordered between substeps (they
+  submit separately); a slicer bins by t.
+- **Volume:** Hawking-heavy scenes may emit hundreds of bosons per time unit.
+  If boson events crowd out lifecycle events, they move to a ring of their
+  own; decide on measurement, not in advance.
+- **Annihilation** is not a merge: both bodies lose the lighter one's mass
+  (visible in their samples), a body left with none logs `EV_DEATH` with
+  cause annihilate, and the photon pair logs two `EV_EMIT`s at the event
+  point, from the survivor if there is one.
 
 ### 10.3 Tests
 
@@ -1121,9 +1164,9 @@ Decided (§4). WGSL is the single source of physics truth.
 
 ### 10.4 Other structural moves
 
-- **Decouple the domain from the viewport.** Presets define physical size; the
-  window is a camera. This is needed for the multiscale grid, periodic
-  cosmology, share-by-URL and reproducibility.
+- **The domain is decoupled from the viewport** (M1): presets define physical
+  size; the window is a camera. The multiscale grid, periodic cosmology and
+  share-by-URL build on it.
 - **Finish the pass graph and the GPU extractions** (§2.3).
 - **Name the pool culls** (off-domain, energy floor, age) as non-physical, with
   exemptions for bound structures.

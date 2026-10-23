@@ -1,7 +1,7 @@
 ---
 name: Geon
 title: Geon — Interactive Particle Physics Simulator
-description: Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across fifteen browser presets.
+description: Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across eighteen browser presets.
 updated: 2026-10-23
 ---
 
@@ -21,13 +21,21 @@ Particle trajectories are advanced with a phase-space-volume-preserving Boris ro
 
 Internal processes run on each body's own clock rather than on lab time. Pion decay, Hawking evaporation, Schwinger discharge, superradiance, and Roche mass transfer advance by the body's proper time, so a neutral pion beam at Lorentz factor 5 travels five times farther before half of it decays, and a black hole moving at γ = 2 takes twice as long to evaporate. Emission happens in the emitter's rest frame and is boosted into the lab with the matching recoil. Photons and leptons are removed from their pools after a fixed age; that cull bounds memory and is not a physical lifetime.
 
+Every body also carries a clock. Its proper time advances at dτ/dt = √(1 + 2Φ − v²), the weak-field rate that is exact for a free particle, for a clock held at rest near a Schwarzschild mass, and on a circular Schwarzschild orbit, where it runs at √(1 − 3M/r). The particle panel shows τ and dτ/dt, and the Clocks overlay (K) draws a ring around each body that fills once per 16 units of its proper time, so a moving body or one deep in a well visibly lags.
+
+## The Spoke
+
+Each body is drawn as its rest-frame disk pushed through the Lorentz transformation of its velocity, with one spoke marking its orientation. A moving body contracts by 1/γ along its motion, and a spinning, moving body's spoke bends: points across the disk are seen at different moments of the body's own time (relativity of simultaneity), so the spoke twists by 2·v·v_rim radians across the diameter, about 93° for a wheel spinning at 0.9c and moving at 0.9c. The spoke turns at the body's rest-frame rate on its proper time, so the moving wheel also turns slower in the lab. Black holes turn at their horizon angular velocity Ω_H.
+
+The spoke's orientation is a transported axis, and it precesses even when the body does not spin. Thomas precession turns it backward by 2π(γ − 1) per circular orbit under non-gravitational forces; geodetic precession turns it forward by 3πM/r per orbit around a mass, as measured by Gravity Probe B; and with gravitomagnetism on, a spinning mass drags it (Lense–Thirring). Gravity enters only through the geodetic and Lense–Thirring terms, never through Thomas precession.
+
 ## Scalar Fields
 
 The Higgs and axion fields evolve on a 128 × 128 grid. With gravity on, they evolve in the metric ds² = −e^{2Φ}dt² + e^{−2Φ}dx², whose Klein–Gordon equation reduces to the weak-field form at small Φ and stays well behaved in deep wells. The potential Φ comes from the fields' own energy and the particles' mass, solved by FFT convolution over a sheet of thickness 8, so field oscillations near a massive body slow by the gravitational redshift factor e^Φ.
 
 ## Presets
 
-Fifteen curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, and cosmological expansion. Each preset sets initial conditions and force parameters for one compact demonstration.
+Eighteen curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, and cosmological expansion. Each preset sets initial conditions and force parameters for one compact demonstration.
 
 ## Black Hole Physics
 
@@ -43,7 +51,7 @@ Designed for undergraduate physics education. Students can toggle individual for
 
 ## Technical Details
 
-WebGPU compute shaders run the whole simulation and WebGPU instanced rendering draws it; there is no CPU fallback, and browsers without WebGPU see a notice instead. If the GPU device is lost, Geon recreates it and restores the latest auto-save. Simulation state and stepping stay client-side.
+WebGPU compute shaders run the whole simulation and WebGPU instanced rendering draws it; there is no CPU fallback, and browsers without WebGPU see a notice instead. The simulation domain has a fixed size, 64 × 64 units unless a preset sets its own, and the window is a camera onto it; a hairline marks the domain's edge. Saves record the domain and every body's proper time and spoke angle. If the GPU device is lost, Geon recreates it and restores the latest auto-save. Simulation state and stepping stay client-side.
 
 ## Topology Modes
 
@@ -51,7 +59,7 @@ Boundary handling has three modes: open/despawn, reflective bounce, and loop. Lo
 
 ## Signal Delay
 
-Optional signal delay mode computes forces from delayed source positions rather than instantaneous positions, giving a toy finite-speed propagation effect. It uses a circular history buffer and a scalar aberration factor, so it is useful for visible near-c delays but is not a full moving-source field solution.
+Optional signal delay mode computes forces from delayed source positions rather than instantaneous positions, giving a toy finite-speed propagation effect. It solves the light-cone condition against each body's world line, a record of position, velocity, acceleration, proper time, and spoke angle sampled every eighth of a time unit, and applies a scalar aberration factor, so it is useful for visible near-c delays but is not a full moving-source field solution.
 
 ## Accessibility
 

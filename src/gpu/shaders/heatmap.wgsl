@@ -45,8 +45,8 @@ struct HeatmapUniforms {
 @group(1) @binding(3) var<uniform> hu: HeatmapUniforms;
 
 // Group 2: signal delay history (interleaved format, only used when useDelay != 0)
-@group(2) @binding(0) var<storage, read_write> histData: array<f32>;
-@group(2) @binding(1) var<storage, read_write> histMeta: array<u32>;
+@group(2) @binding(0) var<storage, read_write> wlData: array<f32>;
+@group(2) @binding(1) var<storage, read_write> wlMeta: array<u32>;
 
 // Constants provided by generated wgslConstants block.
 // Node accessors from shared-tree-nodes.wgsl (prepended).

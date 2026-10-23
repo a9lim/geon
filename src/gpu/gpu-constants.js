@@ -19,7 +19,7 @@ import {
     VELOCITY_VECTOR_SCALE,
     GPU_MAX_PHOTONS, GPU_MAX_PIONS, PHOTON_CULL_AGE, MAX_REJECTION_SAMPLES, GPU_MAX_LEPTONS, LEPTON_CULL_AGE,
     SPAWN_OFFSET_MULTIPLIER, SPAWN_OFFSET_FLOOR, ABERRATION_THRESHOLD,
-    HISTORY_SIZE, HISTORY_MASK, MAX_TRAIL_LENGTH,
+    WORLDLINE_LEN, CLOCK_PERIOD, MAX_TRAIL_LENGTH,
     SCALAR_FIELD_MAX, FIELD_EXCITATION_SIGMA, METRIC_PHI_CLAMP, SHEET_THICKNESS_SQ,
     COL_PASS, COL_MERGE, COL_BOUNCE,
     BOUND_DESPAWN, BOUND_BOUNCE, BOUND_LOOP,
@@ -159,11 +159,12 @@ const SHEET_THICKNESS_SQ: f32 = ${wf(SHEET_THICKNESS_SQ)};
 const HGRID: u32 = ${HGRID}u;
 const HGRID_SQ: u32 = ${HGRID_SQ}u;
 
-// Signal delay / history / trails
-const HISTORY_LEN: u32 = ${HISTORY_SIZE}u;
-const HISTORY_MASK: u32 = ${HISTORY_MASK}u;
-const HIST_STRIDE: u32 = 6u;       // interleaved: posX, posY, velX, velY, angW, time
-const HIST_META_STRIDE: u32 = 4u;  // writeIdx, count, creationTimeBits, _pad
+// World lines (worldline.wgsl documents the sample layout), clocks, trails
+const WL_LEN: u32 = ${WORLDLINE_LEN}u;
+const WL_MASK: u32 = ${WORLDLINE_LEN - 1}u;
+const WL_STRIDE: u32 = 12u;
+const WL_META_STRIDE: u32 = 4u;  // writeIdx, count, creationTimeBits, _pad
+const CLOCK_PERIOD: f32 = ${wf(CLOCK_PERIOD)};
 const TRAIL_LEN: u32 = ${MAX_TRAIL_LENGTH}u;
 
 // Boundary mode enums
@@ -283,6 +284,6 @@ export const BOSON_INTER_BIT = 32768;
 export const FIELD_GRAV_BIT_T1 = 1;
 export const HERTZ_BOUNCE_BIT_T1 = 2;
 
-// History buffer layout
-export const HIST_STRIDE = 6;
-export const HIST_META_STRIDE = 4;
+// World-line buffer layout (must match the WGSL block above)
+export const WL_STRIDE = 12;
+export const WL_META_STRIDE = 4;

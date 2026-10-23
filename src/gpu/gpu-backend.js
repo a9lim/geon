@@ -60,9 +60,12 @@ export default class GPUBackend {
         this.canvas.width = sim.width;
         this.canvas.height = sim.height;
         this.renderer.resize(sim.width, sim.height);
-        this.renderer.setDomain(sim.domainW, sim.domainH);
-        this.physics.domainW = sim.domainW;
-        this.physics.domainH = sim.domainH;
+    }
+
+    setDomain(w, h) {
+        this.physics.domainW = w;
+        this.physics.domainH = h;
+        this.renderer.setDomain(w, h);
     }
 
     setTheme(isLight) {
@@ -117,6 +120,9 @@ export default class GPUBackend {
         this.renderer.showForceComponents = sim.view.showForceComponents;
         this.renderer.showVelocity = sim.view.showVelocity;
         this.renderer.showTrails = sim.view.trails;
+        this.renderer.showClocks = sim.view.showClocks;
+        this.renderer.relativityOn = sim.settings.relativityEnabled;
+        this.renderer.blackHoleOn = sim.settings.blackHoleEnabled;
         this.renderer.setDomain(sim.domainW, sim.domainH);
 
         this.physics.setTrailsEnabled(sim.view.trails);
@@ -179,19 +185,22 @@ export default class GPUBackend {
         }
 
         this.renderer.render(this.physics.aliveCount, renderOpts);
-        sim.overlay.draw(sim.camera, sim.input);
+        sim.overlay.draw(sim.camera, sim.input, sim.domainW, sim.domainH);
         this._renderStats(sim);
     }
 
     _renderStats(sim) {
+        // A request skipped while a readback is in flight stays dirty for the next frame
         if ((sim.running && !(sim._sbFrame & STATS_THROTTLE_MASK)) || sim._statsDirty) {
-            this.physics.requestStats(sim.selectedIdx);
-            sim._statsDirty = false;
+            if (this.physics.requestStats(sim.selectedIdx)) sim._statsDirty = false;
         }
         sim._sbFrame++;
         const gpuStats = this.physics.readStats();
         if (!gpuStats) return;
         sim.stats.updateEnergyGPU(gpuStats, sim);
+
+        // A readback requested before the selection changed says nothing about the new one
+        if (gpuStats.selectedIdx !== sim.selectedIdx) return;
 
         // A selected particle that died (merged, evaporated, removed) drops the selection.
         const sel = gpuStats.selected;
@@ -236,6 +245,7 @@ export default class GPUBackend {
                         vx: evt.spawnVX + (-sin) * angVel * offset,
                         vy: evt.spawnVY + cos * angVel * offset,
                         mass: fragMass, charge: fragCharge, angw: evt.angW,
+                        inheritClockFrom: evt.particleIdx,
                     });
                 }
             } else {
@@ -244,6 +254,7 @@ export default class GPUBackend {
                     x: evt.spawnX, y: evt.spawnY,
                     vx: evt.spawnVX, vy: evt.spawnVY,
                     mass: evt.transferMass, charge: evt.charge,
+                    inheritClockFrom: evt.particleIdx,
                 });
             }
         }

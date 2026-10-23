@@ -41,9 +41,15 @@ substepping advances them.
   Both evolve on a grid and are excited by collisions. With gravity on they evolve in a
   curved metric sourced by their own energy and the particles' mass, so field
   oscillations slow near heavy bodies.
-- **Proper time.** Pion decay, Hawking evaporation, Schwinger discharge, superradiance,
-  and mass transfer run on each body's own clock: a fast pion beam lives longer in the
-  lab, and a moving black hole takes longer to evaporate.
+- **Proper time.** Every body carries a clock, slowed by speed and by gravity, and
+  pion decay, Hawking evaporation, Schwinger discharge, superradiance, and mass
+  transfer run on it: a fast pion beam lives longer in the lab, and a moving black hole
+  takes longer to evaporate. The Clocks overlay shows each body's proper time as a
+  ring that fills once per period.
+- **The spoke.** Each body is drawn through the Lorentz transformation of its motion,
+  with one spoke marking its orientation: moving bodies contract, a spinning, moving
+  wheel's spoke bends (relativity of simultaneity), and the spoke precesses on orbits
+  (Thomas, geodetic, and Lense–Thirring precession).
 - **Charge quantization.** Every charge is a multiple of 0.1, and emission, absorption,
   decay, and discharge move charge in whole units.
 - **Space.** Despawn, bounce, or periodic boundaries; periodic space can be a torus, a
@@ -52,11 +58,13 @@ substepping advances them.
   per-force breakdown for the selected particle; a potential heatmap (gravity,
   electric, Yukawa, or all); and a phase-space plot and an effective-potential curve
   for the selected particle against the heaviest other body.
-- **Presets.** Fifteen scenarios, from Kepler orbits and binary inspiral through
-  Hawking evaporation, atoms, nuclei, and pion exchange to the Higgs boson, axion
-  bursts, and an expanding universe.
+- **Presets.** Eighteen scenarios, from Kepler orbits and binary inspiral through
+  Hawking evaporation, a relativistic wheel, Thomas and geodetic precession, atoms,
+  nuclei, and pion exchange to the Higgs boson, axion bursts, and an expanding
+  universe.
 - **Save and load.** Quick save to the browser, or download and upload the state as
-  JSON (particles, toggles, settings, and camera).
+  JSON (domain, particles with their clocks, toggles, settings, and camera). Each
+  preset sets its own domain size; the window is a camera onto it.
 - **Reference.** The `?` buttons beside controls open short explanations;
   Shift+click opens a longer reference page with the equations. The interface is in
   English and Japanese.
@@ -70,7 +78,8 @@ substepping advances them.
 - **Touch.** Tap to spawn, drag to launch, pinch with two fingers to zoom and pan. The
   antimatter button switches taps to antimatter.
 - **Keyboard.** Space pauses, `/` steps, `R` resets, `,` and `.` change speed, `1`–`9`
-  load presets, `X` toggles antimatter mode, `T` the theme, `S` the sidebar. `Ctrl+S` /
+  load presets, `X` toggles antimatter mode, `K` the clocks, `T` the theme, `S` the
+  sidebar. `Ctrl+S` /
   `Ctrl+L` quick save and load. `?` opens the about panel with the full list.
 
 ## Running locally
