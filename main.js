@@ -12,6 +12,7 @@ import GPUBackend from './src/gpu/gpu-backend.js';
 import Frames from './src/frames.js';
 import FramePanel from './src/frame-panel.js';
 import MinkowskiPanel from './src/minkowski.js';
+import CosmologyPanel from './src/cosmology-panel.js';
 
 /**
  * Request a WebGPU device with the limits the simulation needs.
@@ -285,6 +286,7 @@ class Simulation {
         setupUI(this);
         this.framePanel = new FramePanel(this);
         this.minkowski = new MinkowskiPanel(this, document.getElementById('minkowski-container'));
+        this.cosmologyPanel = new CosmologyPanel(this);
 
         // Re-apply DOM translations after UI setup in case any modules
         // mutated text content during their wiring (e.g. mode-btn label).

@@ -518,7 +518,7 @@
                         <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.potential">Potential</span><span class="stat-value" id="potentialE">0</span></div>
                         <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.field">Field</span><span class="stat-value" id="fieldE">0</span></div>
                         <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.radiated">Radiated</span><span class="stat-value" id="radiatedE">0</span></div>
-                        <div class="stat-row stat-sub" id="expansion-work-row" hidden><span class="stat-label" data-i18n="stats.expansionWork">Redshift and expansion work</span><span class="stat-value" id="expansionWork">0</span></div>
+                        <div class="stat-row stat-sub" id="expansion-work-row" style="display:none"><span class="stat-label" data-i18n="stats.expansionWork">Redshift and expansion work</span><span class="stat-value" id="expansionWork">0</span></div>
                         <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.drift">Drift</span><span class="stat-value" id="energyDrift">+0.00%</span></div>
                         <div class="stat-row"><span class="stat-label" data-i18n="stats.massE">Mass (mc²)</span><span class="stat-value" id="massE">0</span></div>
                     </div>
@@ -533,6 +533,16 @@
                         <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.orbital">Orbital</span><span class="stat-value" id="orbitalAngMom">0</span></div>
                         <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.spin">Spin</span><span class="stat-value" id="spinAngMom">0</span></div>
                         <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.drift">Drift</span><span class="stat-value" id="angMomDrift">+0.00%</span></div>
+                    </div>
+                    <div class="panel-section" id="cosmo-section" aria-live="polite" hidden>
+                        <h2 class="group-label"><span data-i18n="group.cosmology">Expansion</span> <button class="info-trigger" data-info="expansion" aria-label="Expansion info" data-i18n-aria="sim.expansionAria">?</button></h2>
+                        <div class="stat-row"><span class="stat-label" data-i18n="cosmo.scaleFactor">Scale factor a</span><span class="stat-value" id="cosmo-a">1</span></div>
+                        <div class="stat-row"><span class="stat-label" data-i18n="cosmo.hubbleRate">Hubble rate H</span><span class="stat-value" id="cosmo-H">0</span></div>
+                        <div class="stat-row"><span class="stat-label" data-i18n="cosmo.hubbleRadius">Hubble radius c/H</span><span class="stat-value" id="cosmo-rH">∞</span></div>
+                        <div class="stat-row"><span class="stat-label" data-i18n="cosmo.eventHorizon">Event horizon</span><span class="stat-value" id="cosmo-rE">∞</span></div>
+                        <div class="stat-row" id="cosmo-rho-row" style="display:none"><span class="stat-label" data-i18n="cosmo.density">Mean density ρ̄</span><span class="stat-value" id="cosmo-rho">0</span></div>
+                        <canvas id="cosmo-plot" class="cosmo-plot" role="img" aria-label="Scale factor and Hubble rate over time" data-i18n-aria="cosmo.plotAria"></canvas>
+                        <p class="panel-hint" data-i18n="cosmo.hint">Beyond the Hubble radius, comoving bodies recede faster than light; nothing moves through space that fast.</p>
                     </div>
                 </div>
                 <!-- ── Particle ── -->

@@ -137,6 +137,12 @@
     aspect-ratio: 1;
 }
 
+/* The Stats tab's a(t), H(t) plot (cosmology-panel.js sizes it) */
+.cosmo-plot {
+    display: block;
+    margin: 6px 0 2px;
+}
+
 /* ═══════════════════════════════════════════════
    Controls
    ═══════════════════════════════════════════════ */

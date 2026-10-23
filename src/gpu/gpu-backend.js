@@ -8,6 +8,7 @@ import {
 } from '../config.js';
 import GPUPhysics from './gpu-physics.js';
 import GPURenderer from './gpu-renderer.js';
+import { t } from '../i18n.js';
 
 // Expansion: the most the scale factor may grow per update (ln a), and the most updates a frame
 const EXPANSION_STEP = 0.02;
@@ -107,6 +108,10 @@ export default class GPUBackend {
             this.renderer.setDomain(this.physics.domainW, this.physics.domainH);
             if (sim) sim.followExpansion(a1 / a0);
         }
+        // Past A_MAX the universe stops growing (cosmology.js); say so once
+        const capped = this.physics.cosmology.capped;
+        if (capped && !this._cappedShown && typeof showToast === 'function') showToast(t('cosmo.capped'));
+        this._cappedShown = capped;
     }
 
     stepOnce(sim) {
@@ -225,7 +230,10 @@ export default class GPUBackend {
         }
 
         this.renderer.render(this.physics.aliveCount, renderOpts);
-        sim.overlay.draw(sim.camera, sim.input);
+        // The horizons ring the selected body, or the middle of the view
+        const horizons = sim.cosmologyPanel?.horizons();
+        if (horizons) horizons.center = sim.selectedIdx >= 0 && sim._selPos ? sim._selPos : [sim.camera.x, sim.camera.y];
+        sim.overlay.draw(sim.camera, sim.input, horizons);
         this._renderStats(sim);
     }
 
@@ -238,6 +246,7 @@ export default class GPUBackend {
         const gpuStats = this.physics.readStats();
         if (!gpuStats) return;
         sim.stats.updateEnergyGPU(gpuStats, sim);
+        sim.cosmologyPanel?.update();
 
         // A readback requested before the selection changed says nothing about the new one
         if (gpuStats.selectedIdx !== sim.selectedIdx) return;
@@ -248,6 +257,7 @@ export default class GPUBackend {
         if (sim.selectedIdx >= 0 && !alive) sim.select(-1);
         sim.stats.updateSelectedGPU(sim.selectedIdx >= 0 ? sel : null, sim.settings);
         if (sim.selectedIdx < 0) return;
+        sim._selPos = [sel.posX, sel.posY];
 
         if (!sim._particleTabEl) {
             sim._particleTabEl = document.getElementById('tab-particle');

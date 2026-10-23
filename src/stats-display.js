@@ -87,7 +87,9 @@ export default class StatsDisplay {
         _set(this.dom.fieldE, fmt(allFieldE));
         _set(this.dom.radiatedE, fmt(radiated));
         const showWork = L.expansionWork !== 0;
-        if (this.dom.expansionWorkRow.hidden === showWork) this.dom.expansionWorkRow.hidden = !showWork;
+        // .stat-row's display beats the hidden attribute
+        const workDisplay = showWork ? '' : 'none';
+        if (this.dom.expansionWorkRow.style.display !== workDisplay) this.dom.expansionWorkRow.style.display = workDisplay;
         if (showWork) _set(this.dom.expansionWork, fmt(L.expansionWork));
         _set(this.dom.momentum, fmt(pMag));
         _set(this.dom.particleMom, fmt(Math.sqrt(e.px * e.px + e.py * e.py)));
