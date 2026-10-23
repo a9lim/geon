@@ -39,17 +39,16 @@ export const PRESETS = {
         settings: { collision: 'pass', boundary: 'despawn', speed: 32 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
         spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            sim.addParticle(cx, cy, 0, 0, { mass: 5, charge: 0, spin: 0 });
-            const radii = [8, 13, 18, 23, 28];
-            for (let i = 0; i < radii.length; i++) {
-                const r = radii[i];
-                const angle = Math.random() * TWO_PI;
-                const v = _vGrav(5, r);
+            const cx = sim.domainW / 2, cy = sim.domainH / 2, M = 5;
+            // Planets at random angles; the star recoils so the total momentum is zero
+            const planets = [8, 13, 18, 23, 28].map(r => {
+                const angle = Math.random() * TWO_PI, v = _vGrav(M, r);
                 const cos = Math.cos(angle), sin = Math.sin(angle);
-                sim.addParticle(cx + cos * r, cy + sin * r, -sin * v, cos * v,
-                    { mass: 0.3 + Math.random() * 0.7, charge: 0, spin: 0 });
-            }
+                return { x: cx + cos * r, y: cy + sin * r, vx: -sin * v, vy: cos * v, m: 0.3 + Math.random() * 0.7 };
+            });
+            const px = planets.reduce((s, p) => s + p.m * p.vx, 0), py = planets.reduce((s, p) => s + p.m * p.vy, 0);
+            sim.addParticle(cx, cy, -px / M, -py / M, { mass: M, charge: 0, spin: 0 });
+            for (const p of planets) sim.addParticle(p.x, p.y, p.vx, p.vy, { mass: p.m, charge: 0, spin: 0 });
         },
     },
 
