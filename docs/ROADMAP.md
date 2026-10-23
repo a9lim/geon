@@ -32,9 +32,9 @@ Cost: **S** about one session · **M** a few sessions · **L** a milestone ·
 | 2026-10-23 | **WebGPU only.** Retire the CPU physics and Canvas renderer entirely. | §4 |
 | 2026-10-23 | **The 3D convention:** the simulation is a 2D slice of a 3D world. | §1.2 |
 | 2026-10-23 | **Next session:** the internal-clock fix (§5.1). Fix only the GPU copies, since the CPU path is retiring; that part is a recommendation. | §3 |
-| 2026-10-23 | **In scope for 2.0:** the Lorentz-mapped spoke, proper-time clocks, frame switching, the multiscale background grid, and honest cosmology. | §5 |
-| 2026-10-23 | **Wanted but very ambitious:** dust and gas; paintable gas and refractive media; the quantum layer. | §5 |
-| 2026-10-23 | **3D views are parked for 3.0.** That covers the spacetime, inclined and embedding views. 2.0 keeps the 1+1 Minkowski panel. | §6 |
+| 2026-10-23 | **The version plan:** 1.5 = M0–M4 (WebGPU only, the spoke, clocks, frames, honest cosmology, lensing); 2.0 = a full visual overhaul; 2.1 = brushwork (M8 media, then M5 dust, M6 gas); 2.5 = quantum (M7); then 3.0 = 3D. | §3 |
+| 2026-10-23 | **Lengths: two knobs.** A sheet thickness ℓ (physical, and comoving when expansion is on) for fields and grid gravity; a numerical softening ε for particle forces only. | §1.2 |
+| 2026-10-23 | **3D views are parked for 3.0.** That covers the spacetime, inclined and embedding views. 1.5 ships the 1+1 Minkowski panel instead. | §9 |
 | 2026-10-23 | **Photons stay planar.** The planar emission surrogate is kept, labelled, with consistent recoil. | §1.2 |
 
 ### Open
@@ -45,20 +45,20 @@ Cost: **S** about one session · **M** a few sessions · **L** a milestone ·
 3. **Expansion outside loop mode:** keep it as a labelled "expanding cloud"
    with a centre, or disable it. §5.6.
 4. **Gas solver:** SPH (recommended; shares particle infrastructure with dust)
-   or Plasma's Eulerian solver. §5.7.
+   or Plasma's Eulerian solver. §7.3.
 5. **Quantum interpretation surface:** measurement-as-spawn, Bohmian tracers,
-   both, or neither. §5.8.
+   both, or neither. §8.
 6. **Liénard–Wiechert fields:** bring them in before frames, so frames are
-   honest for EM on day one, or after. §8.1.
-7. **The lengths:** a recommended two-knob scheme (§1.2):
-   - one physical sheet thickness ℓ, made comoving when expansion is on;
-   - a separate numerical softening ε for particle forces.
+   honest for EM on day one, or after. §11.1.
+7. **The 2.0 overhaul's scope:** which pillars are in, and whether it includes
+   a rendering-architecture rewrite. §6.
 
 ## 1. Direction
 
 ### 1.1 Thesis: a spacetime simulator
 
-Geon 1.x computes *space at the current instant*. Every chosen 2.0 feature
+Geon 1.x computes *space at the current instant*. Every chosen feature from
+1.5 on
 needs *spacetime*: a frame switch re-slices world-lines, a clock is a
 world-line's proper length, a light-cone view intersects world-lines with a
 null cone, and cosmology is about how the slices themselves stretch.
@@ -81,7 +81,7 @@ null cone, and cosmology is about how the slices themselves stretch.
 **Cross-cutting rule: every phenomenon ships with its analytic number.**
 Examples: γβcτ survival lengths, the spoke twist `2·v·v_rim`, the twin-paradox
 jump `2vd`, Einstein radii, `E ∝ 1/a`, and the 2D-hydrogen spectrum. These
-numbers are the test suite Geon has never had (§7.3).
+numbers are the test suite Geon has never had (§10.3).
 
 ### 1.2 The 3D convention: 3D parent physics, named planar reductions
 
@@ -115,7 +115,7 @@ readings of one model. Geon uses each where it fits, and says which.
   so turning on black-hole mode drops it from 8 to 4 and quietly halves the
   field's implied thickness.
 
-**Recommended scheme (open decision 7): two knobs.**
+**Decided scheme (2026-10-23): two knobs.**
 - **ℓ, the sheet thickness.** Physical in static presets. Comoving when
   expansion is on, because the slab is a slice of the universe there and
   stretches with it. ℓ then *is* ℓ_c, and the physical thickness is `a·ℓ`.
@@ -259,13 +259,13 @@ The tie is explicit and per mode, which is what Codex asked for.
   - The audit's route was to make the CPU engine headless for Node, then use
     the transpiler as a GPU↔CPU parity oracle. That is **obsolete** now that
     the CPU path is retired.
-  - The new route is in §7.3.
+  - The new route is in §10.3.
 - **Preset coverage (audit §3):** still 15 presets, and none turns on boson
   interaction.
   - Nothing exercises superradiance, Schwinger discharge, kugelblitz,
     Roche/disintegration, the Klein/RP² topologies or the external fields.
   - Annihilation is only incidental (Peccei–Quinn).
-  - Geon still can't make a geon (§8.3).
+  - Geon still can't make a geon (§11.3).
 - **Share-by-URL (audit §4):** not done. The only query parameters are `cpu`
   and `lang`.
   - Plan: a `#state=` fragment holding the serialized state, gzipped with
@@ -330,21 +330,43 @@ The tie is explicit and per mode, which is what Codex asked for.
   - `tests/wgsl-transpile/gpu-diff.mjs` is a GPU-golden harness. On macOS it
     needs an installed, headed Chrome.
 
-## 3. Milestones
+## 3. Versions and milestones
 
-| Milestone | Contents | Gate |
+Versions set the order. Milestone IDs are stable names, not an order:
+2.1 runs M8 before M5 and M6.
+
+| Version | Theme | Milestones, in order | Gate |
+|---|---|---|---|
+| **1.5** | WebGPU only; relativity you can see; frames; honest cosmology; lensing | M0 → M0′ → M1 → M2 → M3 → M4 (§4, §5) | — |
+| **2.0** | The full visual overhaul | scope to define (§6) | 1.5 |
+| **2.1** | Brushwork | M8 → M5 → M6 (§7) | 2.0 |
+| **2.5** | Quantum | M7 (§8) | 2.1 (painted walls) |
+| **3.0** | 3D | §9 | 2.5 |
+
+| ID | Version | Contents | Gate |
+|---|---|---|---|
+| **M0** (next session) | 1.5 | **GPU only; don't fix CPU copies slated for deletion.** The §5.1 clock fix (per-process clocks, emission boosts); the Roche timestep and Eggleton q; the 3+1 KG coefficients (§2.2); the lengths split (ε for particles, ℓ for field gravity, §1.2); seed the browser test page (§10.3) with the pion-beam and moving-BH oracles; fix the README Thomas claim. | none |
+| **M0′** | 1.5 | Retire the CPU path (§4): port the phase plot and effective potential to readback; device-loss recovery; a "requires WebGPU" notice; delete about 8,100 lines; update the docs. Can share a session with M0. | M0 |
+| **M1** | 1.5 | **Relativity you can see.** The world-line store (§10.2); τ and θ state; the spoke shader; clocks; spoke precession; domain decoupled from viewport (§10.4). | M0′ |
+| **M2** | 1.5 | **Frames.** The slicer; lab, ZMF, particle and custom frames (view-only); lagged and true-now modes; the scrubber; the 1+1 Minkowski panel; the grid as lab rulers. | M1 |
+| **M3** | 1.5 | **Honest cosmology.** Comoving rewrite; the a(t) selector and self-consistent background; redshift; Hubble friction; the ledger; horizons; misalignment and Kibble–Zurek presets. | M2 (grid) |
+| **M4** | 1.5 | **Lensing.** Lens mode on the grid; microlensing probe. | M2 (grid) |
+| **2.0** | 2.0 | The visual overhaul. Milestones are defined with its scope. | 1.5 |
+| **M8** | 2.1 | **The brush, then refractive media.** The layer system and brush UI (§7.1); n grids, Fresnel optics, dispersion, Cherenkov, gravity as an index (§7.2). | 2.0 |
+| **M5** | 2.1 | **Dust.** The PM collisionless species (§7.3). | M8 (brush), M3 (structure formation) |
+| **M6** | 2.1 | **Gas.** The SPH species; sinks, accretion and cooling; painted gas (§7.3). | M5 |
+| **M7** | 2.5 | **Quantum.** Rungs 1–2, then 3, then 4–5 (§8). The spectroscopy bench lands here, with M8's prism. | 2.1 |
+| **3.0** | 3.0 | Genuinely 3D physics plus the 3D views (§9): the spacetime view, the inclined ray-traced view, the embedding diagram, and 3D photons. 2.x's symmetry-plane sector is an exact restriction of it; 2.x's slab models are effective reductions that 3.0 generalizes (§9.4). | 2.5 |
+
+**Floating items** (not yet slotted):
+
+| Item | Natural slot | Note |
 |---|---|---|
-| **M0** (next session) | **GPU only; don't fix CPU copies slated for deletion.** The §5.1 clock fix (per-process clocks, emission boosts); the Roche timestep and Eggleton q; the 3+1 KG coefficients (§2.2); seed the browser test page (§7.3) with the pion-beam and moving-BH oracles; fix the README Thomas claim. | none |
-| **M0′** | Retire the CPU path (§4): port the phase plot and effective potential to readback; device-loss recovery; a "requires WebGPU" notice; delete about 8,100 lines; update the docs. Can share a session with M0. | M0 |
-| **M1 — relativity you can see** | The world-line store (§7.2); τ and θ state; the spoke shader; clocks; spoke precession; domain decoupled from viewport (§7.4). | M0′ |
-| **M2 — frames** | The slicer; lab, ZMF, particle and custom frames (view-only); lagged and true-now modes; the scrubber; the 1+1 Minkowski panel; the grid as lab rulers. | M1 |
-| **M3 — honest cosmology** | Comoving rewrite, the a(t) selector and self-consistent mode, redshift, Hubble friction, the ledger, horizons; misalignment and Kibble–Zurek presets. | M2 (grid) |
-| **M4 — lensing** | Lens mode on the grid; microlensing probe. | grid |
-| **M5–M6 — dust → gas** | PM dust; SPH gas; sinks and accretion; brush v1. | M3 for structure formation |
-| **M7 — quantum** | Rungs 1–2, then 3, then 4–5. | brush, for walls |
-| **M8 — media** | The refractive layer; Cherenkov; prism. | brush; M7 for the spectroscopy bench |
-| **Parallel options** | Liénard–Wiechert fields (best before or alongside M2); Kerr equatorial (any time after M1); share-by-URL and preset coverage (any time). | — |
-| **3.0** | Genuinely 3D physics plus the 3D views (§6): the spacetime view, the inclined ray-traced view, the embedding diagram, and 3D photons. 2.0's symmetry-plane sector is an exact restriction of it; 2.0's slab models are effective reductions that 3.0 generalizes (§6.4). | 2.0 |
+| Liénard–Wiechert fields (§11.1) | 1.5, alongside M2, or later | Open decision 6. |
+| Kerr equatorial geodesics (§11.2) | any time after M1 | |
+| Share-by-URL (§2.3) | 2.0, with the UI work, or any time | Needs the domain decoupled from the viewport (M1). |
+| Preset coverage (§2.3) | every version | Each version ships presets for its own features. The annihilation and photon-geon presets can land any time. |
+| GW overlay, light-cone camera, Bell's spaceship, time reversal, Maxwell–Jüttner (§11) | unslotted | |
 
 ## 4. Retiring the CPU path (M0′, M)
 
@@ -402,7 +424,9 @@ renderer, no `?cpu=1`, and no CPU fallback when the device is lost.
 - the transpiler as a GPU↔CPU parity oracle;
 - the decomposition of `integrator.js`'s 1100-line `update()`.
 
-## 5. Feature designs
+## 5. Geon 1.5: relativity you can see, frames, cosmology
+
+The 1.5 feature designs. §4 (retiring the CPU path) is also part of 1.5.
 
 ### 5.1 Internal clocks on proper time (M0, S)
 
@@ -439,7 +463,7 @@ consistently.
 ### 5.2 Proper-time clocks (M1, S–M)
 
 **State:**
-- Per-entity `τ`, recorded in history (§7.2).
+- Per-entity `τ`, recorded in history (§10.2).
 - **Many bodies, weak field:** `dτ = dt·√max(0, 1 + 2Φ_N − v²)`. This is the
   leading weak-field, slow-motion form.
 - **Static clock near one Schwarzschild hole [standard]:** `1 + 2Φ_N =
@@ -448,7 +472,7 @@ consistently.
   `f = 1 − 2M/r`; equivalently `dτ/dt = √f/γ_local`.
 - **Black-hole mode:** never put the Paczyński–Wiita Φ in the lapse, because
   it vanishes at 4M. Use Newtonian Φ, the exact single-hole form for the
-  dominant hole, or the ZAMO lapse once Kerr lands (§8.2).
+  dominant hole, or the ZAMO lapse once Kerr lands (§11.2).
   **[phenomenological in PW mode]**
 
 **Display:**
@@ -487,7 +511,7 @@ a9's call: a single spoke replaces the spin arc and arrowhead.
   - A spoke instantaneously perpendicular to v stays straight.
 - The lab rotation rate is `ω₀/γ`, via θ advancing in proper time.
 - Under the 3D convention bodies are spheres. A contracted sphere is an
-  oblate ellipsoid, which 3.0's inclined view (§6.2) would show.
+  oblate ellipsoid, which 3.0's inclined view (§9.2) would show.
 - **Black holes:** the spoke turns at `Ω_H = a/(r₊² + a²)`. The horizon and
   ergosphere contract the same way (a boosted Kerr–Schild horizon is
   contracted in lab coordinates).
@@ -510,7 +534,7 @@ a9's call: a single spoke replaces the spin arc and arrowhead.
   connection is flat and the geodetic one is curved.
 - This makes the README's Thomas claim true and adds Gravity Probe B's two
   effects.
-- In 3.0 (§6.4) spin becomes a vector and these become real spin precession,
+- In 3.0 (§9.4) spin becomes a vector and these become real spin precession,
   including g − 2.
 
 **Oracles:** the twist formula; contraction 1/γ; Thomas and de Sitter angles
@@ -568,7 +592,7 @@ over one orbit.
   - Use storage buffers for kernels, textures on the render side.
   - The lattice and its damping still define a preferred frame.
 - **The heatmap:** potentials aren't scalars. In boosted frames, hide it or
-  compute Liénard–Wiechert potentials from boosted world-lines (§8.1).
+  compute Liénard–Wiechert potentials from boosted world-lines (§11.1).
 
 **Input and tools:**
 - v1 is view-only in non-lab frames.
@@ -579,7 +603,7 @@ over one orbit.
 - **Minkowski panel:** a sidebar plot of world-lines projected onto the boost
   axis (x_∥ vs t), with the current slice, the light cone and proper-time
   ticks. Switching frames shears its axes. Label it a 1+1 projection.
-- The full 2+1 spacetime view (§6.1) is parked for 3.0.
+- The full 2+1 spacetime view (§9.1) is parked for 3.0.
 
 **Accelerated observer (Codex) [standard]:**
 - Under constant proper acceleration, the slices pivot about the Rindler
@@ -641,7 +665,7 @@ a9's call: a grid rather than stars, because it reads at every scale.
    - Einstein rings and moving caustics.
    - The weak thin-lens formula *cannot* make a black-hole shadow. A
      `3√3 M` capture disk is an imposed, labelled overlay. The real shadow
-     needs 3.0's ray-traced view (§6.2).
+     needs 3.0's ray-traced view (§9.2).
    - Geon's in-plane photons are deflected separately, by 2× Newtonian
      (`src/massless-boson.js:59-70` today).
 3. **Comoving coordinates (§5.6):** the lattice stretches with a(t) in the
@@ -728,7 +752,110 @@ The slab is a slice of homogeneous 3D FRW with comoving thickness ℓ_c.
 - the sheet dispersion relation `ω² = c_s²k² − 2πGΣ₀|k|·F(kℓ)` in a static
   background, and the expanding-sheet growth equation (§1.2).
 
-### 5.7 Dust and gas (M5–M6, XL)
+## 6. Geon 2.0: the full visual overhaul
+
+a9's call: a full visual overhaul marks 2.0. Its scope is **not yet
+defined**. What follows is a starting sketch **[proposal]**, to be sharpened
+with a9 before work starts (open decision 7).
+
+**Why it sits after 1.5 and before 2.1:**
+- 1.5 adds most of the new visual vocabulary: the spoke, clocks,
+  contraction, frames and their HUD, the grid, lensing, the Minkowski panel,
+  and cosmology's comoving and physical displays. The overhaul unifies all of
+  it once, instead of restyling each piece as it lands.
+- 2.1 then adds dense, layered visuals (dust sprites, gas splats, media
+  tints, the brush), which want the overhaul's layer and tone system
+  underneath them.
+
+**Constraints:** the root design system governs every project.
+- That means: editorial and quiet, one serif (Newsreader), a near-neutral
+  ground, one per-theme oxblood accent, hairline rules, `_PALETTE.extended`
+  data hues, canvas text at least 10px, light/dark parity, and none of the
+  glow, shadow or gradient flourishes the root site rules out.
+- The overhaul should read as that system applied to a physics canvas, not
+  as a departure from it.
+
+**Candidate pillars:**
+1. **One visual grammar for entities.** A single legend for what encodes what:
+   - size ↔ mass (radius `m^(1/3)`);
+   - hue ↔ charge, or species;
+   - the spoke ↔ orientation and spin;
+   - the sweep ring ↔ proper time;
+   - contraction ↔ velocity;
+   - plus antimatter, horizons and ergospheres, and the photons, pions and
+     leptons.
+   Today's encodings grew one feature at a time.
+2. **Hairline rendering.** Crisp, anti-aliased SDF strokes at constant screen
+   width for spokes, rings, trails, vectors, the grid and horizons. The
+   canvas would then match the site's hairline rules at every zoom.
+3. **Fields and heatmaps as first-class.**
+   - Perceptual, colour-vision-safe colormaps: diverging for signed
+     quantities, sequential for magnitudes.
+   - Explicit ranges and colorbars.
+   - One colormap system shared by the heatmap, the scalar fields and lensing
+     magnification.
+4. **Layering and modes.**
+   - A declared render-pass order, like the physics pass graph: ground, grid,
+     fields, trails, bodies, bosons, overlays, HUD.
+   - A "picture" mode, and a "diagnostics" mode that adds vectors, torque
+     arcs and force components.
+5. **Density without glow.** 2.1's dust and gas need additive accumulation
+   that doesn't blow out: HDR accumulation and a tone map, tuned to the quiet
+   register rather than to bloom.
+6. **HUD and sidebar built around time and frames:**
+   - the frame selector, observer and lag readout, clocks, the Minkowski
+     panel and the ledger lines;
+   - stats drawn with the shared `sparkline.js`;
+   - the phase plot and effective potential, ported in M0′, redesigned to
+     match.
+7. **Multiscale and labels:** zoom-adaptive detail (glyph LOD, trail density),
+   a scale bar, and Newsreader labels on the canvas.
+8. **Accessibility and motion:** a reduced-motion mode, CVD-safe palettes,
+   keyboard parity, and a layout that works at phone width.
+9. **Presentation:**
+   - presets that explain themselves, with captions or a short guided tour
+     each;
+   - a refreshed `about.md`;
+   - new social-card art.
+
+**Checks:**
+- screenshot diffs across both themes and three zoom levels;
+- a CVD-simulation pass over every colormap;
+- frame-time budgets from GPU timestamp queries.
+
+## 7. Geon 2.1: brushwork
+
+In order: the brush and media (M8), then dust (M5), then gas (M6).
+
+### 7.1 The brush and its layers (M8, M)
+
+One brush paints typed layers, each serialized through `physics-contract.js`
+as compressed grids.
+
+| Layer | Representation | Physics |
+|---|---|---|
+| Gas / dust | spawner (§7.3) | density, temperature, velocity |
+| Refractive medium | n grid plus dispersion | §7.2 |
+| Walls | signed-distance grid | particle bounce; infinite potential for ψ |
+| Potentials | grid | quantum barriers and wells |
+| Field seeds | stamp | Higgs and axion amplitude |
+| Flux tubes / field regions | grid | AB tubes; local E regions (Bell's spaceship, twins) |
+| Detectors / probes | regions | spectrometer, quantum-cut counter, microlensing |
+
+### 7.2 Refractive media (M8, M)
+
+**Media are cheaper than they sound:**
+- Photons travel at speed 1/n and follow `d(n·v̂)/ds = ∇n`.
+- Fresnel-stochastic reflection at interfaces gives Snell's law, TIR and
+  fibres.
+- Dispersion n(E) makes prisms. With 2.5's quantum line spectra (§8), that's
+  a full spectroscopy bench.
+- Cherenkov light at `cos θ = 1/(nβ)`, at the Frank–Tamm rate.
+- **Unification [synthesis]:** weak-field gravity is an index
+  `n_eff = 1 − 2Φ`. Routing photon gravity through the medium code gives the
+  same 4M/b deflection, and Shapiro delay falls out.
+
+### 7.3 Dust and gas (M5 dust, M6 gas; XL)
 
 Wanted, rated very ambitious.
 
@@ -789,10 +916,10 @@ history.
 **Oracles:** acoustic speed; Sod; the sheet Jeans length; KH growth; the Bondi
 rate; the Chandrasekhar friction time.
 
-**Staging:** PM dust (L) → SPH gas (L) → sinks, accretion and cooling (M) →
-the brush (§5.9).
+**Staging:** M5, PM dust (L); then M6, SPH gas (L), with sinks, accretion,
+cooling (M) and painted gas through the brush (§7.1).
 
-### 5.8 The quantum layer (M7, XL, laddered)
+## 8. Geon 2.5: the quantum layer (M7, XL, laddered)
 
 **What it looks like:**
 - A glowing field on its own grid: brightness is `|ψ|²`, hue is `arg ψ`.
@@ -892,41 +1019,17 @@ particles on a line fit on one 2D grid **[speculative]**.
 spacing; AB shift `qΦ_B`; ZB frequency; Klein transmission; norm to machine
 precision.
 
-### 5.9 Paintable layers (M for the brush, then per layer)
+## 9. Geon 3.0: 3D
 
-One brush paints typed layers, each serialized through `physics-contract.js`
-as compressed grids.
-
-| Layer | Representation | Physics |
-|---|---|---|
-| Gas / dust | spawner (§5.7) | density, temperature, velocity |
-| Refractive medium | n grid plus dispersion | below |
-| Walls | signed-distance grid | particle bounce; infinite potential for ψ |
-| Potentials | grid | quantum barriers and wells |
-| Field seeds | stamp | Higgs and axion amplitude |
-| Flux tubes / field regions | grid | AB tubes; local E regions (Bell's spaceship, twins) |
-| Detectors / probes | regions | spectrometer, quantum-cut counter, microlensing |
-
-**Media are cheaper than they sound:**
-- Photons travel at speed 1/n and follow `d(n·v̂)/ds = ∇n`.
-- Fresnel-stochastic reflection at interfaces gives Snell's law, TIR and
-  fibres.
-- Dispersion n(E) makes prisms. With §5.8, that's a full spectroscopy bench.
-- Cherenkov light at `cos θ = 1/(nβ)`, at the Frank–Tamm rate.
-- **Unification [synthesis]:** weak-field gravity is an index
-  `n_eff = 1 − 2Φ`. Routing photon gravity through the medium code gives the
-  same 4M/b deflection, and Shapiro delay falls out.
-
-## 6. 3D views (parked for 3.0)
-
-**Decided 2026-10-23: all of this is parked for 3.0.** 2.0 stays a 2D view,
-with the 1+1 Minkowski panel (§5.4) standing in for §6.1.
+**Decided 2026-10-23: all of this is parked for 3.0, after 2.5.** Until then
+Geon stays a 2D view, with 1.5's 1+1 Minkowski panel (§5.4) standing in for
+§9.1.
 
 The 3D convention makes "3D" more than decoration: Geon *is* a slice of a 3D
 world, so a 3D camera is looking at something real. Four options, in rising
 ambition.
 
-### 6.1 The spacetime view, 2+1 (3.0, M–L)
+### 9.1 The spacetime view, 2+1 (3.0, M–L)
 
 - Render the **block universe**: x and y across, t up.
   - World-lines as lines or tubes coloured by species, with proper-time ticks
@@ -950,34 +1053,34 @@ ambition.
   - cosmology (world-lines fanning out in physical coordinates, vertical in
     comoving ones);
   - kugelblitz and annihilation as world-line events.
-- **Cost:** it reuses 2.0's world-line store (§7.2) and slicer directly. It's
-  an orbit camera plus instanced lines, cones and planes. It supersedes 2.0's
+- **Cost:** it reuses 1.5's world-line store (§10.2) and slicer directly. It's
+  an orbit camera plus instanced lines, cones and planes. It supersedes 1.5's
   1+1 Minkowski panel.
-- It's the most direct picture of the 2.0 thesis, which makes it the cheapest
+- It's the most direct picture of the roadmap's thesis, which makes it the cheapest
   3.0 item to pull forward if wanted.
 
-### 6.2 The inclined view: look at the slab from outside (3.0, L)
+### 9.2 The inclined view: look at the slab from outside (3.0, L)
 
 - A free 3D camera views the slab at any angle. Under the 3D convention
   bodies are lit spheres, and contraction makes them oblate ellipsoids.
 - **Ray-traced lensing:**
   - march null geodesics from the camera through the masses: Schwarzschild for
-    a dominant hole (exact for one non-spinning hole), Kerr after §8.2, and
+    a dominant hole (exact for one non-spinning hole), Kerr after §11.2, and
     weak-field superposition elsewhere.
   - That gives real **shadows and photon rings** at any inclination, which the
     thin-lens grid (§5.5) cannot.
-- **With dust and gas (§5.7):** an accretion disk seen at inclination shows the
+- **With dust and gas (§7.3):** an accretion disk seen at inclination shows the
   canonical black-hole image, with the far side of the disk lensed over the
   top and Doppler-beamed on the approaching side. **[standard physics;
   synthesis to render it here]**
 - **With world-lines:** ray-trace through *spacetime* (rays sample the slicer
   at their own arrival times) and you get the true light-travel-time image,
-  i.e. the light-cone camera (§8.6) in 3D. That's the stretch goal.
+  i.e. the light-cone camera (§11.6) in 3D. That's the stretch goal.
 - The grid becomes a backdrop plane behind the slab in the scene.
 - **With 3D photons**, which come in 3.0 and replace the planar surrogate,
   escaping radiation is visible leaving the slab.
 
-### 6.3 Embedding diagram (3.0, S–M)
+### 9.3 Embedding diagram (3.0, S–M)
 
 - **[standard]** Flamm's paraboloid `z = 2√(r_s(r − r_s))` is the exact
   isometric embedding of the exterior Schwarzschild equatorial constant-time
@@ -999,10 +1102,10 @@ ambition.
   sheet shows only space. A Newtonian "rubber sheet" is potential-height, not
   curvature, and must be labelled so if shown at all.
 
-### 6.4 Geon 3.0: genuinely 3D physics (XL)
+### 9.4 Geon 3.0: genuinely 3D physics (XL)
 
-- 3.0 is the parent world itself. 2.0's particles become a reflection-symmetric
-  sector of it, and 2.0's slab models become explicit confinement inside it.
+- 3.0 is the parent world itself. 2.x's particles become a reflection-symmetric
+  sector of it, and 2.x's slab models become explicit confinement inside it.
   3.0 lifts the restriction:
   - **spin becomes a vector**: real Thomas, geodetic and Lense–Thirring
     precession of spin, and g − 2 via the BMT equation;
@@ -1017,7 +1120,7 @@ ambition.
     feasible);
   - volume rendering, with the 2D view as a *slice plane* through the 3D
     world.
-- **What 2.0 can do now without hypothetical-consumer scaffolding:**
+- **What 1.5–2.5 can do now without hypothetical-consumer scaffolding:**
   - keep every physics formula in its 3D form (the convention already
     requires it);
   - keep the slicer dimension-agnostic in the math. Its monotone root-finding
@@ -1031,20 +1134,20 @@ ambition.
   - The confined-slab field projections, prescribed confinement, softening and
     discarded bulk radiation are *effective reductions*.
   - Evaluating a 3D field at z = 0 doesn't remove `∂_z²φ`.
-  - So 3.0 generalizes 2.0's models. It won't reproduce 2.0 just by hiding a
-    coordinate, and the 2.0 slab presets would need 3.0 counterparts with
+  - So 3.0 generalizes 2.x's models. It won't reproduce 2.x just by hiding a
+    coordinate, and the 2.x slab presets would need 3.0 counterparts with
     explicit confinement.
 
-## 7. Architecture
+## 10. Architecture
 
-### 7.1 WebGPU only
+### 10.1 WebGPU only
 
 Decided (§4). WGSL is the single source of physics truth.
 - Keep physics kernels on storage buffers so the transpiler can run them in
   Node; textures and samplers stay on the render side.
 - Avoid barriers nested in control flow in kernels that tests transpile.
 
-### 7.2 World-line store
+### 10.2 World-line store
 
 - **Per sample:** `t` relative to a rolling f32 epoch, `x`, `y`, `wx`, `wy`,
   `τ`, `θ`, `angw`. That's 8 floats (32 B), up from 6.
@@ -1064,7 +1167,7 @@ Decided (§4). WGSL is the single source of physics truth.
   - Consumers: signal delay, the light-cone camera, frames, the heatmap and
     the spacetime view.
 
-### 7.3 Tests
+### 10.3 Tests
 
 - **Following Plasma:** a browser `tests/physics-validation.html` that
   instantiates the production sim, runs each analytic oracle, and reads back
@@ -1074,7 +1177,7 @@ Decided (§4). WGSL is the single source of physics truth.
 - **Seed it in M0** with the pion beam and the moving black hole, then grow it
   with every feature's oracles.
 
-### 7.4 Other structural moves
+### 10.4 Other structural moves
 
 - **Decouple the domain from the viewport.** Presets define physical size; the
   window is a camera. This is needed for the multiscale grid, periodic
@@ -1083,7 +1186,7 @@ Decided (§4). WGSL is the single source of physics truth.
 - **Name the pool culls** (off-domain, energy floor, age) as non-physical, with
   exemptions for bound structures.
 
-## 8. Further explorations (not yet chosen)
+## 11. Further explorations (not yet chosen)
 
 Ordered by how much they strengthen the chosen work.
 
@@ -1108,12 +1211,12 @@ Ordered by how much they strengthen the chosen work.
      - a real Penrose process;
      - an exact lapse for clocks;
      - Kerr V_eff in the panel;
-     - Kerr ray tracing for 3.0's inclined view (§6.2).
+     - Kerr ray tracing for 3.0's inclined view (§9.2).
 3. **Make a geon in Geon.**
    - A photon ring on its own null orbit (~4E in toy units), which needs the
      cull exemption. It's unstable, as real geons are, ending in dispersal or
      kugelblitz.
-   - The toy axion oscillaton, after the KG fixes (§5.8). **[speculative]**
+   - The toy axion oscillaton, after the KG fixes (§8). **[speculative]**
 4. **Bell's spaceship (S–M).** A tether whose rest length is proper length.
    Identical charges in an E region; the string snaps.
 5. **Gravitational-wave strain overlay and chirp audio (M).**
@@ -1128,17 +1231,17 @@ Ordered by how much they strengthen the chosen work.
      delayed radial motion `v/(1 − v)`, and transverse
      `v·sinθ/(1 − v·cosθ)` up to γv (Rees 1966).
    - Paired with §5.3, it explains Terrell–Penrose. 3.0's spacetime ray
-     tracing (§6.2) is its 3D form.
+     tracing (§9.2) is its 3D form.
 7. **Share-by-URL and preset coverage (S each)** (§2.3): an annihilation
    preset with the correlated-pair visual; superradiance; Schwinger;
    kugelblitz; external fields; Klein/RP².
 8. **Time reversal (S).** Flip w, spin and external B. It retraces until chaos
    or something irreversible intervenes (Loschmidt). Add a shadow twin for
    Lyapunov divergence.
-9. **The spectroscopy bench** (after §5.8 rung 4 and §5.9 media).
+9. **The spectroscopy bench** (2.5: after §8 rung 4 and §7.2 media).
 10. **Maxwell–Jüttner histogram (S).**
 
-## 9. Gotchas
+## 12. Gotchas
 
 - f32 times on the GPU: use a rolling epoch.
 - Field damping and viscosity are ether-like. Make them per-preset.
