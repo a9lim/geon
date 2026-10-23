@@ -574,9 +574,8 @@ canvas text needs no font-load redraw.
   it): fragments split the parent's charge evenly and `addParticle()` rounds each
   share, so charge survives only when it divides into `SPAWN_COUNT` quanta, and a
   Coulomb-driven breakup leaves fragments over threshold, cascading into dust.
-- `pass-graph.js` gates photon passes on Radiation, but `merge-photons.wgsl` emits
-  annihilation photons with Radiation off; those photons then never update (found by
-  reading the code, not reproduced).
+- Photons left in the pool after Radiation and Merge are both turned off stop updating
+  (`pass-graph.js` gates the passes on what can emit them), so they neither move nor age.
 - The `torque-render.wgsl` header table swaps the contact (0.5) and superradiance (1.0)
   arc offsets relative to `getTorqueOffset()`.
 - The `magnetic` preset drives a body to about 0.99c, as it did before the 2026-10-23

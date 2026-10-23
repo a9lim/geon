@@ -8,6 +8,8 @@
  * for shaders that immediately return.
  */
 
+import { COL_MERGE } from '../config.js';
+
 export function createGPUDispatchPlan() {
     return {
         spinOrbit: false,
@@ -27,7 +29,8 @@ export function createGPUDispatchPlan() {
 
 export function updateGPUDispatchPlan(gpu, plan = createGPUDispatchPlan()) {
     const canHavePions = gpu._yukawaEnabled || gpu._blackHoleEnabled;
-    const canHavePhotons = gpu._radiationEnabled;
+    // Radiation emits photons, and so does annihilation in merge mode (merge-photons.wgsl)
+    const canHavePhotons = gpu._radiationEnabled || gpu._collisionMode === COL_MERGE;
 
     plan.spinOrbit = gpu._spinOrbitEnabled &&
         (gpu._magneticEnabled || gpu._gravitomagEnabled);
