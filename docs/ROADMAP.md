@@ -625,13 +625,13 @@ Still open:
 
 ### 5.4 Frame switching (M2, done but for the covariance meter and slingshot twin)
 
-Landed 2026-10-23 (§2.1): the lab, zero-momentum, selected-particle, boost and
-co-rotating frames, the lagged view, the scrubber, the Minkowski panel, the
+Landed 2026-10-23 (§2.1): the lab, zero-momentum, selected-particle, boost,
+co-rotating and free-fall frames, the lagged view, the scrubber, the Minkowski panel, the
 bounce and torus twins, and boson slicing with the Doppler shift. True-now mode
 lost to the lagged view (decision 1). Not built:
 
-- **Free-fall and comoving frames.** Free fall needs a Galilean accelerated
-  slice; comoving waits for M3.
+- **The comoving frame:** after M3 the lab is the comoving frame once a ≠ 1, and the
+  other frames are off then (FRW has no global boosts).
 - **Spawning in a frame** (v2 below) and the heatmap in a frame (hidden).
 - **The covariance meter** below: seeding B's history to match a boosted A
   needs world-line seeding from a transformed history, which nothing writes yet.

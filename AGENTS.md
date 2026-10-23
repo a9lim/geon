@@ -288,7 +288,9 @@ created at `−∞` and act at once.
 
 `sim.frames` (`frames.js`) names the observer the view is drawn for: the lab (the
 simulation's own frame), zero momentum, the selected particle, a boost (rapidity and
-direction), or co-rotation at a rate Ω about the point the camera was on. Frames are a
+direction), co-rotation at a rate Ω about the point the camera was on, or free fall (the
+selected particle's frame kept Galilean, so uniform gravity vanishes and tides remain; the
+slicer runs it as the particle frame with `lorentz` off). Frames are a
 view: spawning, selection, deletion and hover act in the lab, and `input.js` ignores the
 canvas while a frame is active.
 

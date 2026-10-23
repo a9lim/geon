@@ -14,7 +14,7 @@
 import { BOUND_LOOP, WORLDLINE_LEN, CLOCK_PERIOD } from './config.js';
 import { WL_STRIDE } from './gpu/gpu-constants.js';
 import { minImage } from './topology.js';
-import { FRAME_PARTICLE, FRAME_COROTATE } from './frames.js';
+import { FRAME_COROTATE } from './frames.js';
 
 const _PAL = window._PALETTE;
 const MAX_BODIES = 12;
@@ -90,7 +90,7 @@ export default class MinkowskiPanel {
         // Which bodies: the observer or selection first, then the nearest to the reference point
         const snap = await gp.readSlotsSnapshot();
         const f = new Float32Array(snap.state), u = new Uint32Array(snap.state);
-        const focus = sim.frames.kind === FRAME_PARTICLE ? sim.frames.slot : sim.selectedIdx;
+        const focus = sim.frames.followsParticle ? sim.frames.slot : sim.selectedIdx;
         const cand = [];
         for (let i = 0; i < snap.n; i++) {
             if ((u[i * 9 + 8] & 1) === 0) continue;

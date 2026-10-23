@@ -2,7 +2,7 @@
 // The Frame tab: which observer the view is drawn for (frames.js), its parameters, what it
 // reads (speed, γ, and how far behind the lab its now is), and the look-back scrubber, which
 // only acts while paused.
-import { FRAME_KEYS, FRAME_LAB, FRAME_PARTICLE, FRAME_BOOST, FRAME_COROTATE } from './frames.js';
+import { FRAME_KEYS, FRAME_LAB, FRAME_PARTICLE, FRAME_BOOST, FRAME_COROTATE, FRAME_FREEFALL } from './frames.js';
 import { WORLDLINE_LEN, WORLDLINE_DT } from './config.js';
 import { t } from './i18n.js';
 
@@ -59,10 +59,11 @@ export default class FramePanel {
 
     /** The next frame in the list (B). */
     cycle() {
-        const next = (this.sim.frames.kind + 1) % FRAME_KEYS.length;
-        // Skip the particle frame when nothing is selected
-        const kind = next === FRAME_PARTICLE && this.sim.selectedIdx < 0 ? next + 1 : next;
-        this.choose(FRAME_KEYS[kind % FRAME_KEYS.length]);
+        // The next frame, skipping the ones that follow a particle when nothing is selected
+        let kind = this.sim.frames.kind;
+        do kind = (kind + 1) % FRAME_KEYS.length;
+        while ((kind === FRAME_PARTICLE || kind === FRAME_FREEFALL) && this.sim.selectedIdx < 0);
+        this.choose(FRAME_KEYS[kind]);
     }
 
     _sync() {
@@ -130,7 +131,7 @@ export default class FramePanel {
 
     /** The particle frame's observer died: fall back to the lab. */
     observerLost() {
-        if (this.sim.frames.kind === FRAME_PARTICLE) this.choose('lab');
+        if (this.sim.frames.followsParticle) this.choose('lab');
     }
 }
 

@@ -13,7 +13,11 @@ export const FRAME_ZMF = 1;
 export const FRAME_PARTICLE = 2;
 export const FRAME_BOOST = 3;
 export const FRAME_COROTATE = 4;
-export const FRAME_KEYS = ['lab', 'zmf', 'particle', 'boost', 'corotate'];
+// Free fall: the selected particle's frame kept Galilean whatever Relativity says, so its
+// acceleration is subtracted and uniform gravity vanishes while tides remain (the slicer
+// runs it as the particle frame with Galilean slices)
+export const FRAME_FREEFALL = 5;
+export const FRAME_KEYS = ['lab', 'zmf', 'particle', 'boost', 'corotate', 'freefall'];
 
 export default class Frames {
     constructor(sim) {
@@ -31,6 +35,9 @@ export default class Frames {
     }
 
     get active() { return this.kind !== FRAME_LAB; }
+
+    /** Frames that follow the selected particle. */
+    get followsParticle() { return this.kind === FRAME_PARTICLE || this.kind === FRAME_FREEFALL; }
 
     /**
      * Frames need a static universe: an expanding (or expanded) one has no global inertial
@@ -50,11 +57,12 @@ export default class Frames {
      */
     set(kind) {
         const sim = this.sim;
-        if (kind === FRAME_PARTICLE) {
+        const follows = kind === FRAME_PARTICLE || kind === FRAME_FREEFALL;
+        if (follows) {
             if (sim.selectedIdx < 0) return false;
             this.slot = sim.selectedIdx;
         }
-        if (kind === this.kind && kind !== FRAME_PARTICLE) return true;
+        if (kind === this.kind && !follows) return true;
         const cam = sim.camera;
         if (!this.active && kind !== FRAME_LAB) {
             this._labCamera = { x: cam.x, y: cam.y, zoom: cam.zoom };
@@ -72,7 +80,7 @@ export default class Frames {
             const lab = this._labCamera;
             if (lab) cam.reset(lab.x, lab.y, cam.zoom);
             this._labCamera = null;
-        } else if (!wasActive || kind !== FRAME_PARTICLE) {
+        } else if (!wasActive || !follows) {
             cam.reset(0, 0, cam.zoom);
         }
         sim._dirty = true;
@@ -94,9 +102,9 @@ export default class Frames {
         const halfH = sim.height / (2 * cam.zoom);
         const speed = this.boostSpeed;
         return {
-            kind: this.kind,
+            kind: this.kind === FRAME_FREEFALL ? FRAME_PARTICLE : this.kind,
             slot: this.slot,
-            lorentz: sim.settings.relativityEnabled,
+            lorentz: sim.settings.relativityEnabled && this.kind !== FRAME_FREEFALL,
             images: this.images,
             boostX: speed * Math.cos(this.direction),
             boostY: speed * Math.sin(this.direction),

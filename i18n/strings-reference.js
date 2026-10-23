@@ -172,6 +172,7 @@ const REF_EN = {
 <li><b>Selected particle</b> is the body's instantaneous rest frame, re-tilted as it accelerates. Under constant proper acceleration $a$ its slices pivot about a line $1/a$ behind it, the Rindler horizon.</li>
 <li><b>Boost</b> moves at a chosen speed and direction.</li>
 <li><b>Co-rotating</b> turns at a chosen rate $\\Omega$ about the point at the centre of the view. It is not inertial and keeps the lab's slices.</li>
+<li><b>Free fall</b> follows the selected particle with the lab's slices, accelerating with it: a uniform gravitational field vanishes and only tides remain, Einstein's equivalence principle as a button.</li>
 </ul>
 <p>With Relativity off every frame keeps the lab's slices (Galilean frames). A background grid of rulers at rest in the lab shows the lab lattice as the observer sees it, and the spacetime diagram plots nearby world lines in the observer's coordinates.</p>
 
@@ -941,6 +942,7 @@ const REF_JA = {
 <li><b>選択した粒子</b>はその物体の瞬間静止系で、加速に応じて断面が傾き直されます。一定の固有加速度 $a$ のもとでは、断面は後方 $1/a$ の直線（リンドラー地平線）を軸に回ります。</li>
 <li><b>ブースト</b>は指定した速さと向きで動きます。</li>
 <li><b>共回転</b>は表示の中心の点のまわりを指定した角速度 $\\Omega$ で回ります。慣性系ではなく、断面は実験室のものを使います。</li>
+<li><b>自由落下</b>は選択した粒子とともに加速しながら、実験室の断面で追います。一様な重力場は消え、潮汐だけが残ります。等価原理をボタン一つで確かめられます。</li>
 </ul>
 <p>相対論を切ると、どの座標系も実験室の断面を使います（ガリレイ系）。実験室に静止した背景の物差しの格子は、観測者から見た実験室の格子を示し、時空図は近くの世界線を観測者の座標で描きます。</p>
 
