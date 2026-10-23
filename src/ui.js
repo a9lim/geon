@@ -216,10 +216,12 @@ export function setupUI(sim) {
         { target: 'yukawa-sliders', show: () => tEl['yukawa-toggle'].checked },
         { target: 'axion-sliders', show: () => tEl['axion-toggle'].checked },
         { target: 'hubble-group', show: () => tEl['expansion-toggle'].checked },
+        { target: 'cosmo-schedule-group', show: () => tEl['expansion-toggle'].checked },
+        { target: 'comoving-group', show: () => tEl['expansion-toggle'].checked },
         { target: 'higgs-sliders', show: () => tEl['higgs-toggle'].checked },
         // Mode-dependent visibility
         { target: 'friction-group', show: () => sim.collisionMode === COL_BOUNCE || sim.boundaryMode === BOUND_BOUNCE },
-        { target: 'topology-group', show: () => sim.boundaryMode === BOUND_LOOP && !tEl['expansion-toggle'].checked },
+        { target: 'topology-group', show: () => sim.boundaryMode === BOUND_LOOP },
     ], {
         onDisable: (el) => { sim.settings[propById[el.id]] = false; }
     });
@@ -236,9 +238,9 @@ export function setupUI(sim) {
         } else {
             collisionToggles.classList.remove('ctrl-disabled');
         }
-        // Expansion locks boundary to despawn
+        // Expansion locks the boundary to loop: the universe is the periodic domain (decision 3)
         if (tEl['expansion-toggle'].checked) {
-            boundaryToggles.querySelector('[data-boundary="despawn"]').click();
+            boundaryToggles.querySelector('[data-boundary="loop"]').click();
             boundaryToggles.classList.add('ctrl-disabled');
         } else {
             boundaryToggles.classList.remove('ctrl-disabled');
@@ -358,6 +360,26 @@ export function setupUI(sim) {
         _haptics.trigger('selection');
     }, v => v.toFixed(4));
 
+    // The expansion history; the slider is H₀ for the imposed schedules, the vacuum H_Λ for
+    // the Friedmann closure
+    const scheduleSelect = document.getElementById('cosmo-schedule');
+    const hubbleName = document.getElementById('hubbleLabel');
+    const syncSchedule = () => {
+        sim.settings.cosmoSchedule = parseInt(scheduleSelect.value, 10) || 0;
+        const key = sim.settings.cosmoSchedule === 0 ? 'sim.hubbleVacuum' : 'sim.hubble';
+        hubbleName.setAttribute('data-i18n', key);
+        hubbleName.textContent = _T(key);
+    };
+    scheduleSelect.addEventListener('change', () => {
+        syncSchedule();
+        _syncSlidersToGPU();
+        sim._dirty = true;
+    });
+    syncSchedule();
+    _forms.bindToggle(document.getElementById('comovingToggle'), (v) => {
+        sim.setComovingView(v);
+    });
+
     const higgsMassSlider = document.getElementById('higgsMassInput');
     const higgsMassLabel = document.getElementById('higgsMassValue');
     if (higgsMassSlider) {
@@ -406,7 +428,7 @@ export function setupUI(sim) {
     // ─── Step button ───
     const stepSim = () => {
         if (!sim.running && sim.gpu) {
-            sim.gpu.stepOnce();
+            sim.gpu.stepOnce(sim);
             sim._statsDirty = true;
             sim._dirty = true;
         }

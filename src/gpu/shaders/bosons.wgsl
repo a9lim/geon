@@ -119,11 +119,8 @@ fn updatePhotons(@builtin(global_invocation_id) gid: vec3u) {
     ph.posX += phVX * dt;
     ph.posY += phVY * dt;
 
-    // Age + pool cull (non-physical; bounds the photon pool)
+    // Age; boson-ledger.wgsl culls the pool once per frame
     ph.lifetime += dt;
-    if (ph.lifetime > PHOTON_CULL_AGE) {
-        ph.flags &= ~1u; // mark dead
-    }
     photons[i] = ph;
 }
 
@@ -184,14 +181,9 @@ fn updatePions(@builtin(global_invocation_id) gid: vec3u) {
     pi.posY += velY * dt;
     pi.age += 1u;
 
-    // Lepton pool cull: age tracked in the energy field (repurposed). Leptons are
-    // stable; the cull only bounds the pool.
-    if (pi.kind == 1u) {
-        pi.energy += dt;
-        if (pi.energy > LEPTON_CULL_AGE) {
-            pi.flags &= ~1u; // mark dead
-        }
-    }
+    // A lepton's age lives in its energy field (repurposed); boson-ledger.wgsl culls the
+    // pool once per frame
+    if (pi.kind == 1u) { pi.energy += dt; }
 
     pions[i] = pi;
 }

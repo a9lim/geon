@@ -118,5 +118,5 @@ struct SimUniforms {
     particleCount: u32,
     bhTheta: f32,
     frameCount: u32,
-    _pad4: u32,
+    scaleA: f32,        // cosmological scale factor a (1 without expansion); the domain is a × comoving
 };

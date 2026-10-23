@@ -37,31 +37,41 @@ export default class StatsDisplay {
     /**
      * Update energy/momentum display from GPU readback data.
      * All quantities computed on GPU: KE, PE (O(N²)), Darwin field energy/momentum,
-     * scalar field energy/momentum, particle-field interaction energy.
+     * scalar field energy/momentum, particle-field interaction energy, the boson pools.
+     * Radiated is the pools plus the escaped radiation the pool culls removed; under
+     * expansion the ledger adds the energy the expansion took (redshift and the stretched
+     * potentials), and the momentum drift compares a·P, which expansion conserves.
      */
     updateEnergyGPU(gpuStats, sim) {
         const e = gpuStats;
+        const L = e.ledger;
         const angMom = e.orbitalAngMom + e.spinAngMom;
         const pe = e.pe + e.pfiEnergy;
         const allFieldE = e.fieldEnergy + e.higgsFieldEnergy + e.axionFieldEnergy;
-        const total = e.totalMass + e.linearKE + e.spinKE + pe + allFieldE + sim.totalRadiated;
+        const radiated = e.photonE + e.pionE + e.pendingRadiation + L.escapedE;
+        const total = e.totalMass + e.linearKE + e.spinKE + pe + allFieldE + radiated;
+        const ledgerTotal = total + L.expansionWork;
 
         const totalFieldPx = e.fieldPx + e.scalarFieldMomX;
         const totalFieldPy = e.fieldPy + e.scalarFieldMomY;
-        const totalPx = e.px + totalFieldPx + sim.totalRadiatedPx;
-        const totalPy = e.py + totalFieldPy + sim.totalRadiatedPy;
+        const radPx = e.photonPx + e.pionPx + L.escapedPx;
+        const radPy = e.photonPy + e.pionPy + L.escapedPy;
+        const totalPx = e.px + totalFieldPx + radPx;
+        const totalPy = e.py + totalFieldPy + radPy;
         const pMag = Math.sqrt(totalPx * totalPx + totalPy * totalPy);
+        const pComoving = pMag * e.scaleA;
 
-        if (this.initialEnergy === null && e.aliveCount > 0) {
-            this.initialEnergy = total;
-            this.initialMomentum = pMag;
+        // The baseline comes from a readback of the current state, not one in flight before it
+        if (this.initialEnergy === null && e.aliveCount > 0 && e.current) {
+            this.initialEnergy = ledgerTotal;
+            this.initialMomentum = pComoving;
             this.initialAngMom = angMom;
         }
 
         const eDrift = this.initialEnergy !== null
-            ? ((total - this.initialEnergy) / Math.max(Math.abs(this.initialEnergy), 1e-6) * 100) : 0;
+            ? ((ledgerTotal - this.initialEnergy) / Math.max(Math.abs(this.initialEnergy), 1e-6) * 100) : 0;
         const pDrift = this.initialMomentum !== null
-            ? ((pMag - this.initialMomentum) / Math.max(Math.abs(this.initialMomentum), 1e-6) * 100) : 0;
+            ? ((pComoving - this.initialMomentum) / Math.max(Math.abs(this.initialMomentum), 1e-6) * 100) : 0;
         const aDrift = this.initialAngMom !== null
             ? ((angMom - this.initialAngMom) / Math.max(Math.abs(this.initialAngMom), 1e-6) * 100) : 0;
 
@@ -72,11 +82,14 @@ export default class StatsDisplay {
         _set(this.dom.totalE, fmt(total));
         _set(this.dom.energyDrift, fmtDrift(eDrift));
         _set(this.dom.fieldE, fmt(allFieldE));
-        _set(this.dom.radiatedE, fmt(sim.totalRadiated));
+        _set(this.dom.radiatedE, fmt(radiated));
+        const showWork = L.expansionWork !== 0;
+        if (this.dom.expansionWorkRow.hidden === showWork) this.dom.expansionWorkRow.hidden = !showWork;
+        if (showWork) _set(this.dom.expansionWork, fmt(L.expansionWork));
         _set(this.dom.momentum, fmt(pMag));
         _set(this.dom.particleMom, fmt(Math.sqrt(e.px * e.px + e.py * e.py)));
         _set(this.dom.fieldMom, fmt(Math.sqrt(totalFieldPx * totalFieldPx + totalFieldPy * totalFieldPy)));
-        _set(this.dom.radiatedMom, fmt(Math.sqrt(sim.totalRadiatedPx * sim.totalRadiatedPx + sim.totalRadiatedPy * sim.totalRadiatedPy)));
+        _set(this.dom.radiatedMom, fmt(Math.sqrt(radPx * radPx + radPy * radPy)));
         _set(this.dom.momentumDrift, fmtDrift(pDrift));
         _set(this.dom.angularMomentum, fmt(angMom));
         _set(this.dom.orbitalAngMom, fmt(e.orbitalAngMom));

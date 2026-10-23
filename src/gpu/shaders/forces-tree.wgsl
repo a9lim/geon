@@ -341,8 +341,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let domH = uniforms.domainH;
     let topo = uniforms.topologyMode;
 
-    // Forces are computed at pre-drift positions, so the observer sits at simTime − dt
-    let sdTime = uniforms.simTime - uniforms.dt;
+    // Forces are computed at pre-drift positions, so the observer sits one substep back
+    // on the world-line clock: dη = dt/a
+    let sdTime = uniforms.simTime - uniforms.dt / uniforms.scaleA;
 
     // Stack-based iterative tree walk
     var stack: array<u32, 48>;
@@ -386,7 +387,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 let ret = retardedState(
                     sIdx, px, py, sdTime,
                     vec2(sPs.posX, sPs.posY), vec2(sPs.velWX, sPs.velWY), sPs.angW, sPs.mass, sPs.charge,
-                    !sIsRetired, isPeriodic, domW, domH, topo,
+                    !sIsRetired, isPeriodic, domW, domH, topo, uniforms.scaleA,
                 );
                 if (!ret.valid) { continue; }
                 let bodyRadSq = pow(max(ret.mass, EPSILON), 2.0 / 3.0);

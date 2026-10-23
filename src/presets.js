@@ -525,26 +525,33 @@ export const PRESETS = {
 
     expansion: {
         name: 'Expanding universe',
-        desc: 'Cosmological expansion — Hubble flow vs gravitational binding',
+        desc: 'A de Sitter torus: bound binaries keep their size while free bodies at rest recede with the comoving grid',
         toggles: {
             gravity: true, coulomb: false, magnetic: false, gravitomag: false,
             relativity: false, onepn: false, blackhole: false,
             radiation: false, spinorbit: false, disintegration: false,
             barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: true, higgs: false,
         },
-        settings: { collision: 'pass', boundary: 'despawn', speed: 32, hubble: 0.008 },
+        settings: { collision: 'pass', boundary: 'loop', topology: 'torus', speed: 16, schedule: 1, hubble: 0.01 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
         spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            // Uniform cloud at rest — inner particles stay bound, outer ones recede
-            for (let i = 0; i < 25; i++) {
-                const angle = Math.random() * TWO_PI;
-                const r = 2 + Math.random() * 25;
-                sim.addParticle(
-                    cx + Math.cos(angle) * r, cy + Math.sin(angle) * r,
-                    0, 0,
-                    { mass: 0.3, charge: 0, spin: 0 }
-                );
+            // Binaries on a coarse lattice: each is bound far beyond the tidal H²d, so it keeps
+            // its physical size while the lattice between them stretches
+            const M = 2, d = 4;
+            const v = 0.5 * Math.sqrt(2 * M * d * d / Math.pow(d * d + SOFTENING_SQ, 1.5));
+            for (let i = 0; i < 2; i++) {
+                for (let j = 0; j < 2; j++) {
+                    const cx = (i + 0.25) * sim.domainW / 2, cy = (j + 0.25) * sim.domainH / 2;
+                    sim.addParticle(cx - d / 2, cy, 0, -v, { mass: M, charge: 0, spin: 0 });
+                    sim.addParticle(cx + d / 2, cy, 0, v, { mass: M, charge: 0, spin: 0 });
+                }
+            }
+            // Free bodies at rest in comoving coordinates: they recede, each from every other
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    sim.addParticle((i + 0.5) * sim.domainW / 4 + 3, (j + 0.5) * sim.domainH / 4 - 3, 0, 0,
+                        { mass: 0.02, charge: 0, spin: 0 });
+                }
             }
         },
     },
@@ -604,6 +611,11 @@ const MODE_GROUPS = {
     potentialMode: { id: 'potential-mode-toggles', attr: 'potential' },
 };
 
+// Select menus: a preset's value is the option's value
+const SELECT_MAP = {
+    schedule: 'cosmo-schedule',
+};
+
 const SLIDER_MAP = {
     friction: 'frictionInput',
     yukawaMu: 'yukawaMuInput',
@@ -658,6 +670,16 @@ export function loadPreset(name, sim) {
             if (!el) continue;
             el.value = val;
             el.dispatchEvent(new Event('input'));
+        }
+
+        for (const [key, elId] of Object.entries(SELECT_MAP)) {
+            const el = document.getElementById(elId);
+            if (!el) continue;
+            const val = String(preset.settings[key] ?? el.querySelector('option')?.value ?? '');
+            if (el.value !== val) {
+                el.value = val;
+                el.dispatchEvent(new Event('change'));
+            }
         }
 
         // Speed: find nearest SPEED_OPTIONS index

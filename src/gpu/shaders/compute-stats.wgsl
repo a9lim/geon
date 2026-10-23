@@ -56,6 +56,10 @@ struct AxYukMod {
 // [8]  totalMass     [9]  aliveCount   [10] pe           [11] darwinFieldE
 // [12] darwinFieldPx [13] darwinFieldPy [14] higgsFieldE [15] axionFieldE
 // [16] higgsPfiE     [17] axionPfiE    [18] fieldMomX    [19] fieldMomY
+// [20-25] boson pools (boson-ledger.wgsl): photon E, px, py; pion and lepton E, px, py
+// [26] peScale = Σ d·∂V/∂d over pairs, dPE/d(ln a) for a uniform stretch (expansion's ledger)
+// [27] radiation lost by bodies but not yet emitted (boson-ledger.wgsl)
+// [96-103] cosmoAccum since the last readback: [96] expansion work, [97-99] escaped E, px, py
 // Selected particle [32-75]: [32] posX .. [69] axion force, [70-72] axMod, yukMod, higgsMod,
 //   [73-75] τ, dτ/dt, θ
 // Reference body [80-91]: heaviest other alive particle (mass [84] = -1 when none)
@@ -249,6 +253,7 @@ fn statsPE() {
     let yukMu = params.yukawaMu;
 
     var pe: f32 = 0.0;
+    var peScale: f32 = 0.0;   // Σ d·∂V/∂d of the static potentials
     var darwinE: f32 = 0.0;
     var darwinPx: f32 = 0.0;
     var darwinPy: f32 = 0.0;
@@ -278,6 +283,8 @@ fn statsPE() {
             let invR3 = invR * invR * invR;
             let rx = dx * invR;
             let ry = dy * invR;
+            // d·∂/∂d of a (d² + ε²)^(−n/2) potential is −n·V·d²/(d² + ε²)
+            let stretch = rawRSq * invR * invR;
 
             let axModPair = sqrt(max(modi.axMod * modj.axMod, 0.0));
             let yukModPair = sqrt(max(modi.yukMod * modj.yukMod, 0.0));
@@ -288,24 +295,32 @@ fn statsPE() {
                     let invPi = bhInvPotential(rawRSq, pi.mass, pi.charge, di.angVel, di.angMomentum);
                     let invPj = bhInvPotential(rawRSq, pj.mass, pj.charge, dj.angVel, dj.angMomentum);
                     pe -= 0.5 * pi.mass * pj.mass * (invPi + invPj);
+                    peScale += 0.5 * pi.mass * pj.mass * (invPi + invPj) * stretch;
                 } else {
                     pe -= pi.mass * pj.mass * invR;
+                    peScale += pi.mass * pj.mass * invR * stretch;
                 }
             }
 
             // Coulomb PE
             if (coulOn) {
-                pe += pi.charge * pj.charge * invR * axModPair;
+                let v = pi.charge * pj.charge * invR * axModPair;
+                pe += v;
+                peScale -= v * stretch;
             }
 
             // Magnetic dipole PE
             if (magOn) {
-                pe += di.magMoment * dj.magMoment * invR3 * axModPair;
+                let v = di.magMoment * dj.magMoment * invR3 * axModPair;
+                pe += v;
+                peScale -= 3.0 * v * stretch;
             }
 
             // GM dipole PE
             if (gmOn) {
-                pe -= di.angMomentum * dj.angMomentum * invR3;
+                let v = -di.angMomentum * dj.angMomentum * invR3;
+                pe += v;
+                peScale -= 3.0 * v * stretch;
             }
 
             // Velocity-dependent terms
@@ -369,6 +384,7 @@ fn statsPE() {
                 if (mur < 6.0) {
                     let yukPE = -YUKAWA_COUPLING * yukModPair * pi.mass * pj.mass * exp(-mur) * invR;
                     pe += yukPE;
+                    peScale -= yukPE * (1.0 + mur) * stretch;
                     // Scalar Breit (Yukawa 1PN)
                     if (onePNOn) {
                         pe += 0.5 * YUKAWA_COUPLING * yukModPair * pi.mass * pj.mass * exp(-mur) * invR
@@ -380,6 +396,7 @@ fn statsPE() {
     }
 
     stats[10] = pe;
+    stats[26] = peScale;
     stats[11] = darwinE;
     stats[12] = darwinPx;
     stats[13] = darwinPy;

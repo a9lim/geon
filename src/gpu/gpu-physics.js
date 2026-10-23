@@ -18,7 +18,7 @@
  *  10. applyTorques
  *  11. radiationReaction      (Phase 4 — Larmor, Hawking, pion emission)
  *  12. borisDrift
- *  13. cosmologicalExpansion  (Phase 5 — if expansionEnabled)
+ *  13. (cosmological expansion: once per frame after the substeps, on a periodic domain)
  *  14. compute1PN_VV          (Phase 4 — 1PN recompute + VV correction kick)
  *  15. scalarFieldEvolve      (Phase 5 — deposit → [self-grav] → KDK → gradients)
  *  17-18. collisions          (Phase 3 — detect + resolve)
@@ -34,6 +34,8 @@
  *  World lines record at the end of every substep: a sample for every particle when the
  *  substep crosses a WORLDLINE_DT mark, else only merge breaks and new death snapshots.
  *  GPU times are relative to a rolling epoch (gpuTime, _maybeRebaseEpoch).
+ *  Under expansion the domain is a × the comoving domain and the world-line clock is
+ *  conformal time (cosmology.js, expansion.wgsl).
  */
 import { createParticleBuffers, createUniformBuffer, writeFrameUniforms, writeSubstepUniforms, createFieldBuffers, createGravityGridBuffers, createAtomicGridBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createKugelblitzBuffers, createTrailBuffers, createFrameBuffers, FRAME_PARAMS_SIZE, FRAME_STATE_SIZE, FIELD_GRID_RES, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
 import { fetchShader, createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createMergePhotonPipeline, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldGravityPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createBosonDispatchArgsPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline, createFrameSlicePipelines } from './gpu-pipelines.js';
@@ -47,8 +49,9 @@ import {
     SOFTENING, BH_SOFTENING, SOFTENING_SQ, BH_SOFTENING_SQ, SHEET_THICKNESS_SQ, CLOCK_PERIOD,
     HIGGS_MASS_FLOOR, HIGGS_MASS_MAX_DELTA, HIGGS_COUPLING, AXION_COUPLING,
     TIDAL_STRENGTH, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, MIN_MASS, SPAWN_COUNT, BOSON_CHARGE,
-    EPOCH_SPAN, EPOCH_STEP,
+    EPOCH_SPAN, EPOCH_STEP, MAX_TRAIL_LENGTH,
 } from '../config.js';
+import Cosmology, { SCHEDULE_KEYS, slabVolume } from '../cosmology.js';
 import { GPU_PARAMETER_SLOTS } from '../physics-contract.js';
 import { fft2d } from '../fft.js';
 
@@ -99,7 +102,10 @@ const _addParticleAuxU32 = new Uint32Array(_addParticleAuxData);
 const _addParticleColorData = new Uint32Array(1);
 const _addParticleModData = new Float32Array(4);
 const _addParticleClockData = new Float32Array(4);   // τ, ring phase, θ, lapse
-const _birthSampleData = new Float32Array(12);       // one world-line sample (WL_STRIDE)
+const _birthSampleData = new Float32Array(12);
+const _expansionUniformData = new ArrayBuffer(32);   // ExpansionUniforms
+const _expansionUniformF32 = new Float32Array(_expansionUniformData);
+const _expansionUniformU32 = new Uint32Array(_expansionUniformData);       // one world-line sample (WL_STRIDE)
 const _addParticleRadData = new Float32Array(12);    // RADIATION_STATE_SIZE / 4
 const _addParticleMetaBuf = new ArrayBuffer(32);       // 8 u32 for wlMeta (WL_META_STRIDE)
 const _addParticleMetaU32 = new Uint32Array(_addParticleMetaBuf);
@@ -166,10 +172,27 @@ export default class GPUPhysics {
      */
     constructor(device, domainW, domainH) {
         this.device = device;
+        // The domain as state is comoving; the GPU's is physical, a × comoving
+        this.comovingW = domainW;
+        this.comovingH = domainH;
         this.domainW = domainW;
         this.domainH = domainH;
+        this.cosmology = new Cosmology();
+        // What the stats can't see: escaped radiation (culled boson pools, which redshift
+        // with everything else) and the energy the expansion has taken (stats-display.js)
+        this.ledger = { escapedE: 0, escapedPx: 0, escapedPy: 0, expansionWork: 0 };
+        // A stats readback describes the state it was requested in: stateVersion bumps on
+        // every add, removal, reset and load, resetGen on resets and loads only
+        this.stateVersion = 0;
+        this.resetGen = 0;
+        this._stepsSinceChange = 0;   // a readback before any step sees stale derived state
+        this._peScale = null;         // null until the first readback after a reset
+        this._lnrPending = 0;         // ln a accumulated while _peScale is unknown
         this.simTime = 0;
-        this.timeEpoch = 0;   // GPU times are simTime − timeEpoch (gpuTime)
+        // The world-line clock: lab time, or conformal time η (dη = dt/a) while the universe
+        // expands. GPU times are conformalTime − timeEpoch (gpuTime).
+        this.conformalTime = 0;
+        this.timeEpoch = 0;
         this.aliveCount = 0;
         // Per-slot generation, bumped whenever addParticle() fills the slot: (slot, generation)
         // names one body across slot reuse (world-line meta word 3)
@@ -180,6 +203,11 @@ export default class GPUPhysics {
         this.topologyMode = 0;  // torus
 
         this.buffers = createParticleBuffers(device, MAX_PARTICLES);
+        // Expansion's ledger accumulators (expansion.wgsl), read and cleared with the stats
+        this._cosmoAccum = device.createBuffer({
+            label: 'cosmoAccum', size: 32,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+        });
         this.uniformBuffer = createUniformBuffer(device);
 
         // Phase 1 pipelines
@@ -309,6 +337,7 @@ export default class GPUPhysics {
         this._expansionEnabled = false;
         this._disintegrationEnabled = false;
         this._hubbleParam = 0.001;
+        this._cosmoSchedule = 0;
         this._heatmapEnabled = false;
         this._heatmapMode = 'all';
         this._heatmapFrame = 0;
@@ -344,6 +373,7 @@ export default class GPUPhysics {
         this._heatmapBGs = null;
         this._heatmapBlurBGs = {};
         this._expansionBG = null;
+        this._expansionBGTrails = null;
         this._disintBGs = null;
         this._bosonDispatchArgsBG = null;
 
@@ -581,6 +611,21 @@ export default class GPUPhysics {
             });
             this._statsBindGroup1 = null;
             this._rebuildStatsFieldBindGroup();
+            this._ledgerPipelines = computeStats.ledger;
+            this._ledgerBindGroup = this.device.createBindGroup({
+                label: 'bosonLedger',
+                layout: computeStats.ledger.layout,
+                entries: [
+                    { binding: 0, resource: { buffer: this.buffers.photonPool } },
+                    { binding: 1, resource: { buffer: this.buffers.pionPool } },
+                    { binding: 2, resource: { buffer: this._cosmoAccum } },
+                    { binding: 3, resource: { buffer: this.buffers.statsBuffer } },
+                    { binding: 4, resource: { buffer: this.buffers.phCount } },
+                    { binding: 5, resource: { buffer: this.buffers.piCount } },
+                    { binding: 6, resource: { buffer: this.buffers.particleState } },
+                    { binding: 7, resource: { buffer: this.buffers.radiationState } },
+                ],
+            });
         }
 
         await this._initFrames(wgslConstants);
@@ -1516,8 +1561,22 @@ export default class GPUPhysics {
         pass.end();
     }
 
-    /** GPU time: lab time relative to the rolling epoch (config.js EPOCH_SPAN). */
-    get gpuTime() { return this.simTime - this.timeEpoch; }
+    /** GPU time: the world-line clock relative to the rolling epoch (config.js EPOCH_SPAN). */
+    get gpuTime() { return this.conformalTime - this.timeEpoch; }
+
+    /** The cosmological scale factor (1 unless the universe has expanded). */
+    get scaleA() { return this.cosmology.a; }
+
+    /** Set the comoving domain (the state's); the GPU's is a × it. */
+    setComovingDomain(w, h) {
+        this.comovingW = w;
+        this.comovingH = h;
+        this.domainW = w * this.scaleA;
+        this.domainH = h * this.scaleA;
+    }
+
+    /** Whether the universe expands this frame: Expansion on a periodic domain. */
+    get expanding() { return this._expansionEnabled && this.boundaryMode === BOUND_LOOP; }
 
     /**
      * Advance the epoch by EPOCH_STEP once GPU time passes EPOCH_SPAN: every stored GPU time
@@ -1926,6 +1985,8 @@ export default class GPUPhysics {
      */
     addParticle({ x, y, vx = 0, vy = 0, mass: m = 1, charge: q = 0, angw = 0, antimatter = false,
                   tau = 0, theta = 0, inheritClockFrom = -1, bornAt = null }) {
+        this.stateVersion++;
+        this._stepsSinceChange = 0;
         let idx;
         if (this._cpuFreeSlots.length > 0) {
             // Reuse a slot freed by dead GC
@@ -2025,6 +2086,8 @@ export default class GPUPhysics {
      */
     removeParticle(idx, deathMass = 0, deathAngVel = 0) {
         if (idx < 0 || idx >= this.aliveCount) return;
+        this.stateVersion++;
+        this._stepsSinceChange = 0;
         // Clear ALIVE bit, set RETIRED bit in flags (byte offset 8 in ParticleState = 32 bytes in)
         // ParticleState: posX(0), posY(4), velWX(8), velWY(12), mass(16), charge(20), angW(24), baseMass(28), flags(32)
         this.device.queue.writeBuffer(this.buffers.particleState, idx * PARTICLE_STATE_SIZE + 32, _retiredFlagU32);
@@ -2038,7 +2101,7 @@ export default class GPUPhysics {
     /** Write a particle's first world-line sample (ring slot 0) at the current time. */
     _writeBirthSample(idx, x, y, wx, wy, m, q, angw, tau, theta) {
         const f = _birthSampleData;
-        f[0] = this.gpuTime; f[1] = x; f[2] = y; f[3] = wx; f[4] = wy;
+        f[0] = this.gpuTime; f[1] = x / this.scaleA; f[2] = y / this.scaleA; f[3] = wx; f[4] = wy;
         f[5] = 0; f[6] = 0; f[7] = tau; f[8] = theta; f[9] = angw; f[10] = m; f[11] = q;
         this.device.queue.writeBuffer(this.buffers.wlData, idx * WORLDLINE_LEN * WL_STRIDE * 4, f);
     }
@@ -2113,7 +2176,12 @@ export default class GPUPhysics {
         // Phase 5 toggle state
         this._higgsEnabled = physics.higgsEnabled;
         this._axionEnabled = physics.axionEnabled;
+        // Expansion switched on: the imposed schedules start from the current a
+        if (physics.expansionEnabled && !this._expansionEnabled) this.cosmology.start();
         this._expansionEnabled = physics.expansionEnabled;
+        this.cosmology.h0 = physics.hubbleParam || 0;
+        this._cosmoSchedule = physics.cosmoSchedule | 0;
+        this.cosmology.schedule = SCHEDULE_KEYS[this._cosmoSchedule] || SCHEDULE_KEYS[0];
         this._disintegrationEnabled = physics.disintegrationEnabled;
         this._hubbleParam = physics.hubbleParam || 0.001;
         this._heatmapEnabled = physics.heatmapEnabled || false;
@@ -2924,45 +2992,102 @@ export default class GPUPhysics {
     }
 
     /**
-     * Dispatch cosmological expansion (Pass 13).
+     * The expansion's work on what the GPU pass doesn't see: the potential energy of the
+     * stretched separations, to first order (dPE = ln r · Σ d·∂V/∂d from the last stats), and
+     * the escaped radiation, which redshifts by 1/r.
      */
-    _dispatchExpansion(encoder, dt) {
-        if (!this._expansionEnabled || !this._expansionPipeline) return;
-        if (this.aliveCount === 0) return;
+    _ledgerExpansion(ratio) {
+        const L = this.ledger;
+        if (this._peScale === null) this._lnrPending += Math.log(ratio);
+        else L.expansionWork -= Math.log(ratio) * this._peScale;
+        const e = L.escapedE;
+        L.escapedE /= ratio;
+        L.escapedPx /= ratio;
+        L.escapedPy /= ratio;
+        L.expansionWork += e - L.escapedE;
+    }
 
+    /**
+     * Collect a stats readback's ledger words (compute-stats.wgsl [96-99]) and feed the
+     * Friedmann closure its densities at the scale factor `a` the stats were taken at.
+     */
+    _absorbLedger(d, a) {
+        const L = this.ledger;
+        L.expansionWork += d[96];
+        L.escapedE += d[97];
+        L.escapedPx += d[98];
+        L.escapedPy += d[99];
+        if (this._peScale === null) L.expansionWork -= this._lnrPending * d[26];
+        this._peScale = d[26];
+        this._lnrPending = 0;
+        const V = slabVolume(a, this.comovingW, this.comovingH);
+        const matter = d[8] + d[0] + d[1] + d[23];   // rest, kinetic and spin; pions and leptons
+        const radiation = d[20] + d[27] + L.escapedE;
+        const fields = (d[14] + d[15]) * a;           // the slab is a·ℓ thick
+        this.cosmology.setDensities(matter / V, radiation / V, fields / V, a);
+    }
+
+    /**
+     * Grow the universe by `ratio` = a_new/a_old (expansion.wgsl): positions ×ratio,
+     * peculiar momenta and photon energies ÷ratio, trails with their bodies. Once per frame,
+     * after the substeps; the caller then sets the domain to the new a.
+     */
+    _dispatchExpansion(encoder, ratio) {
+        const pl = this._expansionPipeline;
+        if (!pl) return;
         if (!this._expansionUniformBuffer) {
             this._expansionUniformBuffer = this.device.createBuffer({
-                label: 'expansionUniforms',
-                size: 32, // 8 floats
+                label: 'expansionUniforms', size: 32,
                 usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
             });
+            // Dummy trail rings while trails are off (one buffer may not fill two writable bindings)
+            this._expansionDummyTrails = [0, 1].map(i => this.device.createBuffer({
+                label: `expansionDummyTrail${i}`, size: 16, usage: GPUBufferUsage.STORAGE,
+            }));
         }
+        const tb = this._trailBuffers;
+        const trailCount = tb ? this.aliveCount * MAX_TRAIL_LENGTH : 0;
+        _expansionUniformF32[0] = ratio;
+        _expansionUniformU32[1] = this._relativityEnabled ? 1 : 0;
+        _expansionUniformU32[2] = this.aliveCount;
+        _expansionUniformU32[3] = GPU_MAX_PHOTONS;
+        _expansionUniformU32[4] = PION_POOL_CAP;
+        _expansionUniformU32[5] = trailCount;
+        this.device.queue.writeBuffer(this._expansionUniformBuffer, 0, _expansionUniformData);
 
-        // Write ExpansionUniforms (reuse pre-allocated field uniform buffer)
-        _fieldUniformF32[0] = this._hubbleParam;
-        _fieldUniformF32[1] = dt;
-        _fieldUniformF32[2] = this.domainW * 0.5;
-        _fieldUniformF32[3] = this.domainH * 0.5;
-        _fieldUniformU32[4] = this.aliveCount;
-        this.device.queue.writeBuffer(this._expansionUniformBuffer, 0, _fieldUniformData, 0, 32);
-
-        if (!this._expansionBG) {
+        if (!this._expansionBG || this._expansionBGTrails !== tb) {
             const b = this.buffers;
+            const [dx, dy] = this._expansionDummyTrails;
+            this._expansionBGTrails = tb;
             this._expansionBG = this.device.createBindGroup({
                 label: 'expansion_g0',
-                layout: this._expansionPipeline.bindGroupLayouts[0],
+                layout: pl.bindGroupLayouts[0],
                 entries: [
-                    { binding: 0, resource: { buffer: b.particleState } },
-                    { binding: 1, resource: { buffer: this._expansionUniformBuffer } },
+                    { binding: 0, resource: { buffer: this._expansionUniformBuffer } },
+                    { binding: 1, resource: { buffer: b.particleState } },
+                    { binding: 2, resource: { buffer: b.photonPool } },
+                    { binding: 3, resource: { buffer: b.pionPool } },
+                    { binding: 4, resource: { buffer: tb ? tb.trailX : dx } },
+                    { binding: 5, resource: { buffer: tb ? tb.trailY : dy } },
+                    { binding: 6, resource: { buffer: this._cosmoAccum } },
+                    { binding: 7, resource: { buffer: b.phCount } },
+                    { binding: 8, resource: { buffer: b.piCount } },
                 ],
             });
         }
 
-        const workgroups = Math.ceil(this.aliveCount / 256);
         const p = encoder.beginComputePass({ label: 'expansion' });
-        p.setPipeline(this._expansionPipeline.pipeline);
         p.setBindGroup(0, this._expansionBG);
-        p.dispatchWorkgroups(workgroups);
+        p.setPipeline(pl.particles);
+        p.dispatchWorkgroups(Math.max(1, Math.ceil(this.aliveCount / 64)));
+        p.setPipeline(pl.photons);
+        p.dispatchWorkgroups(Math.ceil(GPU_MAX_PHOTONS / 64));
+        p.setPipeline(pl.pions);
+        p.dispatchWorkgroups(Math.ceil(PION_POOL_CAP / 64));
+        if (trailCount > 0) {
+            p.setPipeline(pl.trails);
+            p.dispatchWorkgroups(Math.ceil(trailCount / 64));
+        }
         p.end();
     }
 
@@ -3135,6 +3260,7 @@ export default class GPUPhysics {
         _heatmapUniformU32[16] = this.aliveCount;
         _heatmapUniformU32[17] = this._barnesHutEnabled ? 1 : 0; // useTree
         _heatmapUniformU32[18] = this._blackHoleEnabled ? 1 : 0;
+        _heatmapUniformF32[19] = this.scaleA;
         this.device.queue.writeBuffer(this._heatmapUniformBuffer, 0, _heatmapUniformData);
 
         if (!this._heatmapBGs) {
@@ -3281,11 +3407,16 @@ export default class GPUPhysics {
         const numSubsteps = Math.min(Math.ceil(dt / dtSafe), maxSubsteps);
         const dtSub = dt / numSubsteps;
 
+        // The frame's Hubble rate; the scale factor steps after the substeps
+        const cosmo = this.cosmology;
+        if (!this.expanding) cosmo.stop();
+
         // Write slow-changing uniforms once per frame (toggles, domain, sliders, etc.)
         this._maybeRebaseEpoch();
         writeFrameUniforms(this.device, this.uniformBuffer, {
             dt: dtSub,
             simTime: this.gpuTime,
+            scaleA: this.scaleA,
             domainW: this.domainW,
             domainH: this.domainH,
             speedScale: 1,
@@ -3324,14 +3455,30 @@ export default class GPUPhysics {
         // all) must land before that substep's passes, not before the whole frame's.
         for (let step = 0; step < numSubsteps; step++) {
             this.simTime += dtSub;
+            this.conformalTime += dtSub / this.scaleA;
             this.device.queue.submit([this._dispatchSubstep(dtSub)]);
         }
 
         this._frameCount++;
+        this._stepsSinceChange++;
+        const ratio = this.expanding ? cosmo.step(dt) : 1;
+        if (ratio !== 1) this._ledgerExpansion(ratio);
 
         // Post-substep passes (once per frame)
         {
             const encoder = this.device.createCommandEncoder({ label: 'post-substep' });
+
+            // The universe grows by `ratio` (expansion.wgsl); the domain follows after submit
+            if (ratio !== 1) this._dispatchExpansion(encoder, ratio);
+
+            // Pool culls: the removed energy becomes escaped radiation (boson-ledger.wgsl)
+            if (this._ledgerPipelines) {
+                const p = encoder.beginComputePass({ label: 'cullBosons' });
+                p.setPipeline(this._ledgerPipelines.cull);
+                p.setBindGroup(0, this._ledgerBindGroup);
+                p.dispatchWorkgroups(Math.ceil(Math.max(GPU_MAX_PHOTONS, PION_POOL_CAP) / 64));
+                p.end();
+            }
 
             // Heatmap compute (every HEATMAP_INTERVAL=4 frames)
             this._heatmapFrame++;
@@ -3378,6 +3525,7 @@ export default class GPUPhysics {
 
             this.device.queue.submit([encoder.finish()]);
         }
+        if (ratio !== 1) this.setComovingDomain(this.comovingW, this.comovingH);
 
         // Readback maxAccel for next frame (non-blocking)
         this._readbackMaxAccel();
@@ -3533,8 +3681,7 @@ export default class GPUPhysics {
         // Pass 12b: proper-time clocks and spoke angles (after the drift: new velocities)
         this._dispatchClocks(encoder);
 
-        // Pass 13: cosmological expansion
-        this._dispatchExpansion(encoder, dtSub);
+        // Pass 13: cosmological expansion runs once per frame, after the substeps (update())
 
         // Pass 14: 1PN velocity-Verlet correction
         this._dispatch1PNVV(encoder);
@@ -3571,9 +3718,10 @@ export default class GPUPhysics {
 
         // Pass 25: world lines — a sample when this substep crosses a WORLDLINE_DT mark,
         // otherwise merge breaks and death snapshots only
-        const due = this.simTime >= this._nextWorldLineTime;
+        // (on the world-line clock, so under expansion the ring spans WORLDLINE_LEN·DT of η)
+        const due = this.conformalTime >= this._nextWorldLineTime;
         this._dispatchRecordWorldLines(encoder, due);
-        if (due) this._nextWorldLineTime = (Math.floor(this.simTime / WORLDLINE_DT) + 1) * WORLDLINE_DT;
+        if (due) this._nextWorldLineTime = (Math.floor(this.conformalTime / WORLDLINE_DT) + 1) * WORLDLINE_DT;
 
         return encoder.finish();
     }
@@ -3702,7 +3850,8 @@ export default class GPUPhysics {
 
         const state = {
             version: 2,
-            domain: { w: this.domainW, h: this.domainH },
+            domain: { w: this.comovingW, h: this.comovingH },
+            cosmology: { a: this.scaleA },
             particles: [],
             toggles: {},
             settings: {
@@ -3818,6 +3967,10 @@ export default class GPUPhysics {
         if (!state || state.version !== 2) return false;
 
         this.reset();
+        // A save from an expanded universe: physical positions on a × the comoving domain
+        this.cosmology.a = Math.max(1, Number(state.cosmology?.a) || 1);
+        this.cosmology.start();
+        this.setComovingDomain(this.comovingW, this.comovingH);
 
         // G16: Build full packed arrays CPU-side, then issue one writeBuffer per buffer type.
         // This replaces N×6 individual writeBuffer calls with 6 batched uploads.
@@ -3920,7 +4073,17 @@ export default class GPUPhysics {
     reset() {
         this.aliveCount = 0;
         this.simTime = 0;
+        this.conformalTime = 0;
         this.timeEpoch = 0;
+        this.cosmology.reset();
+        this.setComovingDomain(this.comovingW, this.comovingH);
+        this.ledger = { escapedE: 0, escapedPx: 0, escapedPy: 0, expansionWork: 0 };
+        this._peScale = null;
+        this._lnrPending = 0;
+        this.stateVersion++;
+        this._stepsSinceChange = 0;
+        this.resetGen++;
+        if (this._cosmoAccum) this.device.queue.writeBuffer(this._cosmoAccum, 0, new Uint32Array(8));
         this._nextWorldLineTime = 0;
         this._frameCount = 0;
         this._heatmapFrame = 0;
@@ -4157,6 +4320,15 @@ export default class GPUPhysics {
         p4.dispatchWorkgroups(1);
         p4.end();
 
+        // The boson pools, and the ledger's accumulators since the last readback
+        const p5 = encoder.beginComputePass({ label: 'statsBosons' });
+        p5.setPipeline(this._ledgerPipelines.stats);
+        p5.setBindGroup(0, this._ledgerBindGroup);
+        p5.dispatchWorkgroups(1);
+        p5.end();
+        encoder.copyBufferToBuffer(this._cosmoAccum, 0, this.buffers.statsBuffer, 96 * 4, 32);
+        encoder.clearBuffer(this._cosmoAccum);
+
         // Copy to staging (double-buffered)
         const staging = this._statsStagingFlip
             ? this.buffers.statsStagingB
@@ -4167,8 +4339,14 @@ export default class GPUPhysics {
 
         // Async readback
         this._statsPending = true;
+        const statsA = this.scaleA, gen = this.resetGen;
+        // Current: no state change since the request, and at least one step before it
+        const version = this._stepsSinceChange > 0 ? this.stateVersion : -1;
         staging.mapAsync(GPUMapMode.READ).then(() => {
             this._statsData = new Float32Array(staging.getMappedRange().slice(0));
+            this._statsDataVersion = version;
+            // The ledger words belong to the state before a reset when one intervened
+            if (gen === this.resetGen) this._absorbLedger(this._statsData, statsA);
             this._statsDataSel = selectedGpuIdx;
             staging.unmap();
             this._statsResultReady = true;
@@ -4199,6 +4377,13 @@ export default class GPUPhysics {
             higgsFieldEnergy: d[14], axionFieldEnergy: d[15],
             pfiEnergy: d[16] + d[17], // higgs + axion particle-field interaction
             scalarFieldMomX: d[18], scalarFieldMomY: d[19],
+            photonE: d[20], photonPx: d[21], photonPy: d[22],
+            pionE: d[23], pionPx: d[24], pionPy: d[25],
+            pendingRadiation: d[27],
+            peScale: d[26],
+            ledger: this.ledger,
+            scaleA: this.scaleA,
+            current: this._statsDataVersion === this.stateVersion,
             selectedIdx: this._statsDataSel, // the selection this readback describes
             selected: null,
             reference: null,
@@ -4292,6 +4477,8 @@ export default class GPUPhysics {
 
         // Expansion
         _d(this._expansionUniformBuffer);
+        _d(this._cosmoAccum);
+        if (this._expansionDummyTrails) this._expansionDummyTrails.forEach(_d);
 
         // FFT
         _d(this._fftParamsBuffer);

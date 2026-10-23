@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 95;
+const SHADER_VERSION = 99;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -1494,30 +1494,34 @@ export async function createHeatmapPipelines(device, wgslConstants = '') {
 }
 
 /**
- * Create expansion compute pipeline (Phase 5).
- * Bind group: particleState (rw) + ExpansionUniforms = 1 storage + 1 uniform
+ * Create the expansion pipelines (expansion.wgsl): one per pool, sharing one layout.
+ * Bind group: ExpansionUniforms, particleState, photonPool, pionPool, trailX, trailY,
+ * cosmoAccum, phCount, piCount (1 uniform + 8 storage).
  */
 export async function createExpansionPipeline(device, wgslConstants = '') {
     const prefix = await getSharedPrefix(wgslConstants);
     const code = await fetchShader('expansion.wgsl', prefix);
     const module = device.createShaderModule({ label: 'expansion', code });
 
+    const storage = (binding) => ({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } });
     const group0Layout = device.createBindGroupLayout({
         label: 'expansion_g0',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // particleState
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },           // ExpansionUniforms
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+            storage(1), storage(2), storage(3), storage(4), storage(5), storage(6), storage(7), storage(8),
         ],
     });
 
     const bindGroupLayouts = [group0Layout];
-    const pipeline = device.createComputePipeline({
-        label: 'applyExpansion',
-        layout: device.createPipelineLayout({ bindGroupLayouts }),
-        compute: { module, entryPoint: 'applyExpansion' },
-    });
-
-    return { pipeline, bindGroupLayouts };
+    const layout = device.createPipelineLayout({ bindGroupLayouts });
+    const make = (entryPoint) => device.createComputePipeline({ label: entryPoint, layout, compute: { module, entryPoint } });
+    return {
+        particles: make('expandParticles'),
+        photons: make('expandPhotons'),
+        pions: make('expandPions'),
+        trails: make('expandTrails'),
+        bindGroupLayouts,
+    };
 }
 
 /**
@@ -2070,7 +2074,21 @@ export async function createComputeStatsPipeline(device, wgslConstants = '') {
         });
     }
 
-    return { pipelines, group0Layout, group1Layout };
+    // The boson pools in the ledger (boson-ledger.wgsl): photonPool, pionPool, cosmoAccum, stats
+    const ledgerCode = await fetchShader('boson-ledger.wgsl', prefix);
+    const ledgerModule = device.createShaderModule({ label: 'bosonLedger', code: ledgerCode });
+    const ledgerLayout = device.createBindGroupLayout({
+        label: 'bosonLedger_g0',
+        entries: [0, 1, 2, 3, 4, 5, 6, 7].map(binding => ({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } })),
+    });
+    const ledgerPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [ledgerLayout] });
+    const ledger = {
+        layout: ledgerLayout,
+        cull: device.createComputePipeline({ label: 'cullBosons', layout: ledgerPipelineLayout, compute: { module: ledgerModule, entryPoint: 'cullBosons' } }),
+        stats: device.createComputePipeline({ label: 'statsBosons', layout: ledgerPipelineLayout, compute: { module: ledgerModule, entryPoint: 'statsBosons' } }),
+    };
+
+    return { pipelines, group0Layout, group1Layout, ledger };
 }
 
 /**

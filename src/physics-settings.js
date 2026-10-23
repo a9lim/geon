@@ -26,6 +26,7 @@ export function createPhysicsSettings() {
         yukawaMu: DEFAULT_PION_MASS,
         axionMass: DEFAULT_AXION_MASS,
         hubbleParam: DEFAULT_HUBBLE,
+        cosmoSchedule: 0,          // cosmology.js SCHEDULE_KEYS: the Friedmann closure
         higgsMass: DEFAULT_HIGGS_MASS,
 
         // Uniform background fields, independent of the force toggles

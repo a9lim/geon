@@ -56,7 +56,7 @@ import GPUPhysics from './src/gpu/gpu-physics.js';
 import { PION_SIZE, PARTICLE_STATE_SIZE } from './src/gpu/gpu-buffers.js';
 import {
     PION_HALF_LIFE, CHARGED_PION_HALF_LIFE, MIN_MASS, BOSON_CHARGE,
-    SHEET_THICKNESS_SQ, SOFTENING_SQ, BOUND_LOOP, GPU_SCALAR_GRID, PHYSICS_DT,
+    SHEET_THICKNESS, SHEET_THICKNESS_SQ, SOFTENING_SQ, BOUND_LOOP, GPU_SCALAR_GRID, PHYSICS_DT,
     WORLDLINE_LEN, WORLDLINE_DT, INERTIA_K,
 } from './src/config.js';
 import { WL_STRIDE } from './src/gpu/gpu-constants.js';
@@ -865,6 +865,143 @@ cases.push({
             measured: `t = ${fmt(t1)}, ${fmt(t2)}`,
             metric: `ratio ${fmt(ratio, 4)}`,
             pass: Math.abs(ratio - 2) < 0.06 && Math.abs(t1 / tauRest - 1) < 0.03,
+        };
+    },
+});
+
+// ── Cosmology (M3) ──
+
+/** A sim with expansion's pipelines ready: makeSim, then the Phase 5 pipelines Expansion builds. */
+async function makeUniverse(opts) {
+    const gp = await makeSim({ boundary: BOUND_LOOP, ...opts });
+    await gp._ensurePhase5Pipelines();
+    return gp;
+}
+
+/** Request a stats readback and wait for it (the ledger and the Friedmann densities ride on it). */
+async function statsNow(gp) {
+    while (gp._statsPending) await new Promise(r => setTimeout(r, 2));
+    gp.requestStats(-1);
+    while (gp._statsPending) await new Promise(r => setTimeout(r, 2));
+    return gp.readStats();
+}
+
+/** Write photons straight into the pool: [{x, y, vx, vy, energy}]. */
+function addPhotons(gp, list) {
+    const buf = new ArrayBuffer(list.length * 32);
+    const f = new Float32Array(buf), u = new Uint32Array(buf);
+    list.forEach((p, i) => {
+        const b = i * 8;
+        f[b] = p.x; f[b + 1] = p.y; f[b + 2] = p.vx; f[b + 3] = p.vy; f[b + 4] = p.energy;
+        u[b + 5] = 0xFFFFFFFF; f[b + 6] = 0; u[b + 7] = 1;
+    });
+    gp.device.queue.writeBuffer(gp.buffers.photonPool, 0, buf);
+    gp.device.queue.writeBuffer(gp.buffers.phCount, 0, new Uint32Array([list.length]));
+}
+
+cases.push({
+    name: 'Expansion: de Sitter a = e^{H₀t}; comoving bodies stay put, a·w and photon a·E are constant',
+    async run() {
+        const H0 = 0.01, T = 100, dt = 0.5;
+        const gp = await makeUniverse({ on: ['expansionEnabled', 'relativityEnabled'],
+                                        params: { hubbleParam: H0, cosmoSchedule: 1 }, domainW: 64, domainH: 64 });
+        gp.addParticle({ x: 10, y: 20, mass: 1, bornAt: -Infinity });
+        gp.addParticle({ x: 40, y: 44, vx: 2, vy: 0, mass: 1, bornAt: -Infinity });
+        addPhotons(gp, [{ x: 5, y: 5, vx: 0, vy: 1, energy: 1 }]);
+        await run(gp, T, dt);
+        const a = gp.scaleA;
+        const [rest, mover] = await readParticles(gp);
+        const ph = new Float32Array(await readBuffer(gp, gp.buffers.photonPool, 32));
+        gp.destroy();
+        const aExp = Math.exp(H0 * T);
+        const drift = Math.hypot(rest.x / a - 10, rest.y / a - 20);
+        const errs = [Math.abs(a / aExp - 1), drift / 10, Math.abs(mover.wx * a / 2 - 1), Math.abs(ph[4] * a - 1)];
+        return {
+            expected: `a = ${fmt(aExp)}; x/a = (10, 20); a·w = 2; a·E = 1`,
+            measured: `a = ${fmt(a)}; (${fmt(rest.x / a)}, ${fmt(rest.y / a)}); ${fmt(mover.wx * a)}; ${fmt(ph[4] * a)}`,
+            metric: `max rel ${fmt(Math.max(...errs) * 100, 2)}%`,
+            pass: Math.max(...errs) < 1e-3,
+        };
+    },
+});
+
+cases.push({
+    name: 'Liénard–Wiechert in an expanding universe: a comoving charge acts by the proper distance now',
+    async run() {
+        // Maxwell is conformally invariant, so a charge at rest in comoving coordinates has the
+        // static field in (η, x/a): E = q/(a·R_c)² physically, softened by σ³ as at a = 1
+        const gp = await makeUniverse({ on: ['coulombEnabled', 'relativityEnabled', 'expansionEnabled'],
+                                        params: { hubbleParam: 0.01, cosmoSchedule: 1 }, domainW: 128, domainH: 128 });
+        const Rc = 40;
+        gp.addParticle({ x: 30, y: 64, mass: 1e6, charge: 1, bornAt: -Infinity });
+        gp.addParticle({ x: 30 + Rc, y: 64, mass: 1e6, charge: 1, bornAt: -Infinity });
+        await run(gp, 60, 0.5);
+        const a = gp.scaleA;              // the frame's forces are evaluated at the a it starts with
+        gp.update(0.5);
+        await gp.device.queue.onSubmittedWorkDone();
+        const f = new Float32Array(await readBuffer(gp, gp.buffers.allForces, 2 * 160));
+        gp.destroy();
+        const R = a * Rc;
+        const expect = R / Math.pow(R * R + SOFTENING_SQ, 1.5);
+        const fx = f[40 + 2];             // slot 1's Coulomb x (repulsion: +x)
+        return {
+            expected: `F = q²R/(R² + ε²)^{3/2} = ${fmt(expect)} at R = a·R_c = ${fmt(R)}`,
+            measured: `${fmt(fx)} (a = ${fmt(a)}; at a = 1 it would be ${fmt(Rc / Math.pow(Rc * Rc + SOFTENING_SQ, 1.5))})`,
+            metric: `${fmt((fx / expect - 1) * 100, 2)}%`,
+            pass: Math.abs(fx / expect - 1) < 0.01,
+        };
+    },
+});
+
+cases.push({
+    name: 'Friedmann closure: dust alone expands as a ∝ (1 + 3H₀t/2)^{2/3}',
+    async run() {
+        // Matter at rest, no forces: ρ ∝ a⁻³ and H² = (8π/3)ρ give the Einstein–de Sitter law
+        const gp = await makeUniverse({ on: ['expansionEnabled'], params: { hubbleParam: 0, cosmoSchedule: 0 },
+                                        domainW: 64, domainH: 64 });
+        for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+            gp.addParticle({ x: 8 + 16 * i, y: 8 + 16 * j, mass: 10, bornAt: -Infinity });
+        }
+        gp.update(1e-4);
+        await statsNow(gp);
+        const H0 = gp.cosmology.hubble(gp.scaleA), a0 = gp.scaleA;
+        const rho = 160 / (64 * 64 * SHEET_THICKNESS);
+        const T = 20;
+        await run(gp, T, 0.25);
+        const a = gp.scaleA / a0;
+        gp.destroy();
+        const aExp = Math.pow(1 + 1.5 * H0 * T, 2 / 3);
+        const hExp = Math.sqrt(8 * Math.PI / 3 * rho);
+        return {
+            expected: `H₀ = √(8πρ/3) = ${fmt(hExp)}; a(${T}) = ${fmt(aExp)}`,
+            measured: `H₀ = ${fmt(H0)}; a = ${fmt(a)}`,
+            metric: `${fmt((a / aExp - 1) * 100, 2)}%, ${fmt((H0 / hExp - 1) * 100, 2)}%`,
+            pass: Math.abs(a / aExp - 1) < 0.005 && Math.abs(H0 / hExp - 1) < 0.002,
+        };
+    },
+});
+
+cases.push({
+    name: 'A uniform periodic background exerts no net in-plane force',
+    async run() {
+        // The minimum-image cell around each body is symmetric, so the mean density's pull
+        // cancels: a lattice feels nothing, and peculiar gravity is sourced by δΣ alone. An odd
+        // lattice, so that no pair sits exactly half a domain apart, where the image is a tie
+        const n = 5, s = 64 / n;
+        const gp = await makeSim({ on: ['gravityEnabled'], domainW: 64, domainH: 64, boundary: BOUND_LOOP });
+        for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) gp.addParticle({ x: s * (i + 0.5), y: s * (j + 0.5), mass: 1 });
+        gp.update(PHYSICS_DT);
+        await gp.device.queue.onSubmittedWorkDone();
+        const f = new Float32Array(await readBuffer(gp, gp.buffers.allForces, n * n * 160));
+        gp.destroy();
+        let worst = 0;
+        for (let i = 0; i < n * n; i++) worst = Math.max(worst, Math.hypot(f[i * 40], f[i * 40 + 1]));
+        const pair = s / Math.pow(s * s + SOFTENING_SQ, 1.5);
+        return {
+            expected: `|F| = 0 (one neighbour alone: ${fmt(pair)})`,
+            measured: `max |F| = ${fmt(worst)}`,
+            metric: `${fmt(worst / pair, 2)} of a pair force`,
+            pass: worst / pair < 1e-4,
         };
     },
 });

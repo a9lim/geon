@@ -462,9 +462,21 @@
                         <div class="control-group">
                             <label class="checkbox-label"><span><span data-i18n="sim.expansion">Expansion</span> <button class="info-trigger" data-info="expansion" aria-label="Expansion info" data-i18n-aria="sim.expansionAria">?</button></span> <input type="checkbox" id="expansion-toggle"></label>
                         </div>
+                        <div class="control-group" id="cosmo-schedule-group" style="display:none">
+                            <select id="cosmo-schedule" class="sim-select" aria-label="Expansion history" data-i18n-aria="cosmo.schedule">
+                                <option value="0" data-i18n="cosmo.friedmann" selected>Friedmann, from the contents</option>
+                                <option value="1" data-i18n="cosmo.desitter">de Sitter</option>
+                                <option value="2" data-i18n="cosmo.matter">Matter, a ∝ t^(2/3)</option>
+                                <option value="3" data-i18n="cosmo.radiation">Radiation, a ∝ t^(1/2)</option>
+                                <option value="4" data-i18n="cosmo.lcdm">ΛCDM</option>
+                            </select>
+                        </div>
                         <div class="control-group" id="hubble-group" style="display:none">
-                            <label><span data-i18n="sim.hubble">Hubble H</span> <span class="slider-value" id="hubbleValue">0.001</span></label>
-                            <input type="range" id="hubbleInput" min="0.0001" max="0.01" step="0.0001" value="0.001">
+                            <label><span id="hubbleLabel" data-i18n="sim.hubbleVacuum">Vacuum H_Λ</span> <span class="slider-value" id="hubbleValue">0.0100</span></label>
+                            <input type="range" id="hubbleInput" min="0" max="0.05" step="0.0005" value="0.01">
+                        </div>
+                        <div class="control-group" id="comoving-group" style="display:none">
+                            <label class="checkbox-label"><span data-i18n="cosmo.comoving">Comoving view</span> <input type="checkbox" id="comovingToggle"></label>
                         </div>
                     </div>
                     <div class="panel-section">
@@ -501,6 +513,7 @@
                         <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.potential">Potential</span><span class="stat-value" id="potentialE">0</span></div>
                         <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.field">Field</span><span class="stat-value" id="fieldE">0</span></div>
                         <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.radiated">Radiated</span><span class="stat-value" id="radiatedE">0</span></div>
+                        <div class="stat-row stat-sub" id="expansion-work-row" hidden><span class="stat-label" data-i18n="stats.expansionWork">Redshift and expansion work</span><span class="stat-value" id="expansionWork">0</span></div>
                         <div class="stat-row stat-sub"><span class="stat-label" data-i18n="stats.drift">Drift</span><span class="stat-value" id="energyDrift">+0.00%</span></div>
                         <div class="stat-row"><span class="stat-label" data-i18n="stats.massE">Mass (mc²)</span><span class="stat-value" id="massE">0</span></div>
                     </div>

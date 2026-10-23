@@ -16,7 +16,7 @@ import { HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA, GPU_MAX_PHOTONS, GPU_MAX_PIONS,
 // Pre-allocated typed arrays for per-frame writeBuffer calls (eliminate GC pressure)
 const _cameraData = new ArrayBuffer(256);
 const _cameraF32 = new Float32Array(_cameraData);
-const _gridData = new ArrayBuffer(16);   // GridParams: domainW, domainH, periodic, showLines
+const _gridData = new ArrayBuffer(32);   // GridParams: domainW, domainH, periodic, showLines, scaleA
 const _gridF32 = new Float32Array(_gridData);
 const _gridU32 = new Uint32Array(_gridData);
 const _trailData = new ArrayBuffer(16);
@@ -185,6 +185,7 @@ export default class GPURenderer {
         // body passes draw the view buffers, frameImages copies per slot.
         this.frameBuffers = null;
         this.frameOn = false;
+        this.scaleA = 1;          // the grid's rulers are comoving
         this.frameImages = 1;
         this.showGrid = true;
         this.periodic = false;
@@ -308,7 +309,7 @@ export default class GPURenderer {
                 await createGridRenderPipeline(this.device, this.format, this._wgslConstants || '');
             this._gridPipeline = pipeline;
             this._gridUniformBuffer = this.device.createBuffer({
-                label: 'gridParams', size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+                label: 'gridParams', size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
             });
             this._gridBindGroup = this.device.createBindGroup({
                 label: 'gridRender',
@@ -714,6 +715,7 @@ export default class GPURenderer {
                 _gridF32[1] = this._domainH || 1;
                 _gridU32[2] = this.periodic ? 1 : 0;
                 _gridU32[3] = this.showGrid ? 1 : 0;
+                _gridF32[4] = this.scaleA || 1;
                 this.device.queue.writeBuffer(this._gridUniformBuffer, 0, _gridData);
                 gridPass.setPipeline(this._gridPipeline);
                 gridPass.setBindGroup(0, this._gridBindGroup);

@@ -4,6 +4,10 @@
 // cone, the lab's now, and proper-time ticks. Switching frames shears the axes. In the lab
 // the axes are lab x and t through the camera's centre.
 //
+// Under expansion the store is comoving and conformal (shared-worldline.wgsl), so the lab's
+// diagram is the conformal diagram: comoving x across and conformal time η up, light cones
+// still at 45°.
+//
 // World lines come back from the GPU a few times a second: the observer (or selection) and
 // the bodies nearest it. Each is mapped like frame-slice.wgsl maps it, from its covering
 // plane through the image nearest the frame's reference point.
@@ -69,9 +73,10 @@ export default class MinkowskiPanel {
                 corot: sim.frames.kind === FRAME_COROTATE, omega: st.omega, phi: st.phi,
             };
         }
-        // The lab: lab x and t through the camera's centre, now
-        const c = [sim.camera.x, sim.camera.y];
-        return { u: [0, 0], gamma: 1, tA: gp.simTime, xA: c, aNow: c, lorentz: false, corot: false, omega: 0, phi: 0 };
+        // The lab: lab x and t through the camera's centre, now (comoving and conformal)
+        const a = gp.scaleA;
+        const c = [sim.camera.x / a, sim.camera.y / a];
+        return { u: [0, 0], gamma: 1, tA: gp.conformalTime, xA: c, aNow: c, lorentz: false, corot: false, omega: 0, phi: 0 };
     }
 
     async _refresh() {
@@ -89,16 +94,17 @@ export default class MinkowskiPanel {
         const cand = [];
         for (let i = 0; i < snap.n; i++) {
             if ((u[i * 9 + 8] & 1) === 0) continue;
-            const d = this._image(frame.aNow, f[i * 9], f[i * 9 + 1], geom);
+            const d = this._image(frame.aNow, f[i * 9] / gp.scaleA, f[i * 9 + 1] / gp.scaleA, geom);
             cand.push({ i, d2: i === focus ? -1 : d.x * d.x + d.y * d.y });
         }
         cand.sort((a, b) => a.d2 - b.d2);
         const slots = cand.slice(0, MAX_BODIES).map(c => c.i);
-        const pos = slots.map(i => [f[i * 9], f[i * 9 + 1]]);
+        const a = gp.scaleA;
+        const pos = slots.map(i => [f[i * 9] / a, f[i * 9 + 1] / a]);
         const wl = await gp.readWorldLines(slots);
 
         const lines = slots.map((slot, k) => this._project(wl.rings[k], wl.meta[k], pos[k], wl.epoch, frame, geom));
-        this.data = { lines, focus: slots.indexOf(focus), frame, now: gp.simTime };
+        this.data = { lines, focus: slots.indexOf(focus), frame, now: gp.conformalTime, conformal: a !== 1 || gp.expanding };
         this.cacheSize();
         this.draw();
     }
@@ -239,8 +245,9 @@ export default class MinkowskiPanel {
         c.font = `italic 12px ${_FONT.text}`;
         c.textBaseline = 'alphabetic';
         c.textAlign = 'left';
-        c.fillText('t′', X(0) + 4, 12);
+        const conformal = d && d.conformal;
+        c.fillText(conformal ? 'η' : 't′', X(0) + 4, 12);
         c.textAlign = 'right';
-        c.fillText('x′', w - 4, Y(0) - 4);
+        c.fillText(conformal ? 'x' : 'x′', w - 4, Y(0) - 4);
     }
 }

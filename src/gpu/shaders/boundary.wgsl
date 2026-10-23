@@ -135,7 +135,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
 
         let newPos = vec2(ps.posX, ps.posY);
-        if (any(newPos != oldPos)) { updateDeck(idx, oldPos, newPos, flips); }
+        // The deck is comoving (shared-worldline.wgsl)
+        if (any(newPos != oldPos)) { updateDeck(idx, oldPos / uniforms.scaleA, newPos / uniforms.scaleA, flips); }
 
     } else if (uniforms.boundaryMode == BOUND_BOUNCE) {
         // Hertz wall repulsion matching CPU _applyBoundaryForces().

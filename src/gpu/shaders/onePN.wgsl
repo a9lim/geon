@@ -78,7 +78,7 @@ fn pnFromParticle(o: PNObserver, j: u32, relOn: bool, periodic: bool) -> vec2<f3
     if (relOn) {
         let ret = retardedState(j, o.pos.x, o.pos.y, u.simTime,
                                 vec2(sp.posX, sp.posY), vec2(sp.velWX, sp.velWY), sp.angW, sp.mass, sp.charge,
-                                true, periodic, u.domainW, u.domainH, u.topologyMode);
+                                true, periodic, u.domainW, u.domainH, u.topologyMode, u.scaleA);
         if (!ret.valid) { return vec2(0.0); }
         return pnFromSource(o, ret.rel, ret.vel, ret.mass, ret.charge, aym.y, aym.z, true);
     }

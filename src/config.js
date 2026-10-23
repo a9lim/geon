@@ -124,7 +124,7 @@ export const GPU_HEATMAP_GRID = 128;           // GPU heatmap overlay resolution
 export const GPU_MAX_PARTICLES = 512;         // GPU buffer pre-allocation limit
 
 // ── Cosmological Expansion ──
-export const DEFAULT_HUBBLE = 0.001;
+export const DEFAULT_HUBBLE = 0.01;   // H₀ of the imposed schedules, H_Λ of the Friedmann closure
 
 // ── Domain, Viewport & Camera ──
 // The domain is simulation state, independent of the window: presets set it, and the

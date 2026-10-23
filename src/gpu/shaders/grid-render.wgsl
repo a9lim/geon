@@ -1,4 +1,6 @@
 // ─── The background grid: lab rulers and the domain edge ───
+// Under expansion the rulers are comoving: spaced 2^k in x/a, so in the physical view they
+// stretch with the universe and in the comoving view they stand still.
 // One sheet at rest in the lab, behind the slab. A full-screen pass maps each pixel back to
 // lab coordinates on the current slice and draws multiscale hairlines at spacings 2^k,
 // faded in by their on-screen spacing (12–48 px), plus the domain edge (the seams, in loop
@@ -20,10 +22,14 @@ struct CameraUniforms {
 };
 
 struct GridParams {
-    domainW: f32,
+    domainW: f32,       // physical
     domainH: f32,
     periodic: u32,
     showLines: u32,
+    scaleA: f32,        // the rulers are comoving
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 };
 
 // FrameState as frame-slice.wgsl writes it
@@ -129,7 +135,7 @@ fn fsGrid(in: VertexOutput) -> @location(0) vec4<f32> {
     let ink = select(COLOR_TEXT_LIGHT, COLOR_TEXT_DARK, dark);
     // Hairline weights: the edge matches --border (text at 12% / 13%), rulers sit below it
     let edge = edgeAlpha(lab, fw) * select(0.12, 0.13, dark);
-    let lines = select(0.0, gridAlpha(lab, fw) * select(0.075, 0.09, dark), grid.showLines != 0u);
+    let lines = select(0.0, gridAlpha(lab / grid.scaleA, fw / grid.scaleA) * select(0.075, 0.09, dark), grid.showLines != 0u);
     let a = max(edge, lines);
     return vec4(ink * a, a);
 }

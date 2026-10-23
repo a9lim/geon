@@ -32,7 +32,7 @@ struct HeatmapUniforms {
     particleCount: u32,
     useTree: u32,   // 1 when BH tree available
     blackHole: u32,
-    _pad1: f32,
+    scaleA: f32,
     _pad2: f32,
     _pad3: f32,
 };
@@ -119,7 +119,7 @@ fn accumulateRetired(
 
         let ret = retardedState(di, wx, wy, hu.simTime,
             vec2(dp.posX, dp.posY), vec2(0.0), 0.0, 0.0, dp.charge,
-            false, isPeriodic, hu.domainW, hu.domainH, hu.topologyMode);
+            false, isPeriodic, hu.domainW, hu.domainH, hu.topologyMode, hu.scaleA);
         if (!ret.valid) { continue; }
 
         accumulatePotential(ret.rel.x, ret.rel.y, ret.mass, ret.charge, bhSourceRadius(ret.mass, ret.charge),
@@ -157,7 +157,7 @@ fn computeHeatmap(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (useDelay) {
             let ret = retardedState(i, wx, wy, hu.simTime,
                 vec2(p.posX, p.posY), vec2(p.velWX, p.velWY), p.angW, p.mass, p.charge,
-                true, isPeriodic, hu.domainW, hu.domainH, hu.topologyMode);
+                true, isPeriodic, hu.domainW, hu.domainH, hu.topologyMode, hu.scaleA);
             if (!ret.valid) { continue; } // outside past light cone — particle not yet visible
             accumulatePotential(ret.rel.x, ret.rel.y, ret.mass, ret.charge, particleAux[i].radius,
                 lwKappa(ret), doG, doC, doY, hu.softeningSq, yCutSq, hu.yukawaCoupling, hu.yukawaMu,

@@ -48,7 +48,10 @@ export default class FramePanel {
     choose(key) {
         const sim = this.sim;
         const kind = Math.max(0, FRAME_KEYS.indexOf(key));
-        if (!sim.frames.set(kind)) {
+        if (kind !== FRAME_LAB && !sim.frames.allowed) {
+            if (typeof showToast === 'function') showToast(t('frame.expanding'));
+            sim.frames.set(FRAME_LAB);
+        } else if (!sim.frames.set(kind)) {
             if (typeof showToast === 'function') showToast(t('frame.needSelection'));
         }
         this._sync();
@@ -111,7 +114,7 @@ export default class FramePanel {
     _outsideHistory(st) {
         const sim = this.sim;
         const p = sim.frames.params();
-        const now = sim._gpuPhysics ? sim._gpuPhysics.simTime : 0;
+        const now = sim._gpuPhysics ? sim._gpuPhysics.conformalTime : 0;
         let back = 0, ahead = 0;
         const s = Math.hypot(st.ux, st.uy);
         if (p && st.lorentz && s > 1e-6) {

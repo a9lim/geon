@@ -107,7 +107,7 @@ class Simulation {
                 if (sim.frames && sim.frames.active) return;
                 const halfW = cam.viewportW / (2 * cam.zoom);
                 const halfH = cam.viewportH / (2 * cam.zoom);
-                const dw = sim.domainW, dh = sim.domainH;
+                const dw = sim.physW, dh = sim.physH;
                 if (halfW * 2 >= dw) cam.x = dw / 2;
                 else cam.x = clamp(cam.x, halfW, dw - halfW);
                 if (halfH * 2 >= dh) cam.y = dh / 2;
@@ -138,6 +138,8 @@ class Simulation {
             energyDrift: document.getElementById('energyDrift'),
             fieldE: document.getElementById('fieldE'),
             radiatedE: document.getElementById('radiatedE'),
+            expansionWork: document.getElementById('expansionWork'),
+            expansionWorkRow: document.getElementById('expansion-work-row'),
             momentum: document.getElementById('momentum'),
             particleMom: document.getElementById('particleMom'),
             fieldMom: document.getElementById('fieldMom'),
@@ -154,9 +156,6 @@ class Simulation {
         this.topology = TORUS;
         this.speedScale = DEFAULT_SPEED_SCALE;
         this.selectedIdx = -1; // GPU slot of the selected particle, -1 for none
-        this.totalRadiated = 0;
-        this.totalRadiatedPx = 0;
-        this.totalRadiatedPy = 0;
 
         this.gpu = null;          // GPUBackend once WebGPU is up
         this._gpuPhysics = null;
@@ -420,15 +419,43 @@ class Simulation {
         this._dirty = true;
     }
 
+    /** Comoving view: the camera shrinks with the universe, so the domain holds still on screen. */
+    setComovingView(on) {
+        this.view.comoving = on;
+        this._dirty = true;
+    }
+
+    /**
+     * The universe grew by r this frame. The camera stays on the same comoving point, and in
+     * the comoving view it zooms out with the growth.
+     */
+    followExpansion(r) {
+        const cam = this.camera;
+        cam.minZoom = ZOOM_MIN / this.scaleA;
+        if (this.frames.active) return;
+        cam.x *= r;
+        cam.y *= r;
+        if (this.view.comoving) cam.zoom = Math.max(cam.zoom / r, cam.minZoom);
+        if (cam.clampFn) cam.clampFn(cam);
+        this._dirty = true;
+    }
+
+    /** The cosmological scale factor: 1 unless the universe has expanded (cosmology.js). */
+    get scaleA() { return this._gpuPhysics ? this._gpuPhysics.scaleA : 1; }
+
+    /** The domain's physical size: the comoving domain (state) times the scale factor. */
+    get physW() { return this.domainW * this.scaleA; }
+    get physH() { return this.domainH * this.scaleA; }
+
     /** Zoom that fits the whole domain in the window, with a margin. */
     _fitZoom() {
-        const z = 0.92 * Math.min(this.width / this.domainW, this.height / this.domainH);
-        return Math.min(Math.max(z, ZOOM_MIN), ZOOM_MAX);
+        const z = 0.92 * Math.min(this.width / this.physW, this.height / this.physH);
+        return Math.min(Math.max(z, ZOOM_MIN / this.scaleA), ZOOM_MAX);
     }
 
     /** Center the camera on the domain and zoom to fit it. */
     fitCamera() {
-        this.camera.reset(this.domainW / 2, this.domainH / 2, this._fitZoom());
+        this.camera.reset(this.physW / 2, this.physH / 2, this._fitZoom());
     }
 
     /** Resize the simulated domain (world units). Particles are not moved. */
@@ -486,11 +513,9 @@ class Simulation {
 
     /** Clear the simulation: particles, bosons, fields, selection. */
     reset() {
-        this.totalRadiated = 0;
-        this.totalRadiatedPx = 0;
-        this.totalRadiatedPy = 0;
         this.select(-1);
         if (this.gpu) this.gpu.reset(this);
+        this.camera.minZoom = ZOOM_MIN;
     }
 
     /** Select a particle by GPU slot (-1 clears); the sidebar fills on the next stats readback. */

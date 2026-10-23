@@ -442,8 +442,9 @@ fn main(
     let muMin = select(yukMu, yukMu * HIGGS_MASS_FLOOR, higgsOn);
     let yukCutoffSq = select(1e30, (6.0 / muMin) * (6.0 / muMin), yukawaOn && muMin > EPSILON);
 
-    // Forces are computed at pre-drift positions, so the observer sits at simTime − dt
-    let sdTime = uniforms.simTime - uniforms.dt;
+    // Forces are computed at pre-drift positions, so the observer sits one substep back
+    // on the world-line clock: dη = dt/a
+    let sdTime = uniforms.simTime - uniforms.dt / uniforms.scaleA;
 
     // Per-thread force accumulator
     var accum: ForceAccum;
@@ -508,7 +509,7 @@ fn main(
                     let ret = retardedState(
                         s.srcIdx, pPosX, pPosY, sdTime,
                         vec2(s.posX, s.posY), vec2(s.wX, s.wY), s.angW, s.mass, s.charge,
-                        true, isPeriodic, domW, domH, topo,
+                        true, isPeriodic, domW, domH, topo, uniforms.scaleA,
                     );
                     if (!ret.valid) { continue; }
                     src = makeDelayedSource(ret, s.axMod, s.yukMod, s.higgsMod);
@@ -561,7 +562,7 @@ fn main(
             let ret = retardedState(
                 ri, pPosX, pPosY, sdTime,
                 vec2(rp.posX, rp.posY), vec2(0.0), 0.0, 0.0, rp.charge,
-                false, isPeriodic, domW, domH, topo,
+                false, isPeriodic, domW, domH, topo, uniforms.scaleA,
             );
             if (!ret.valid) { continue; }
 

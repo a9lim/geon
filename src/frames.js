@@ -32,6 +32,15 @@ export default class Frames {
 
     get active() { return this.kind !== FRAME_LAB; }
 
+    /**
+     * Frames need a static universe: an expanding (or expanded) one has no global inertial
+     * frames, and the world lines are comoving. Clearing or loading a preset resets a to 1.
+     */
+    get allowed() {
+        const gp = this.sim._gpuPhysics;
+        return !(gp && (gp.expanding || gp.scaleA !== 1));
+    }
+
     /** Speed of the boost frame. */
     get boostSpeed() { return Math.tanh(this.rapidity); }
 
@@ -53,7 +62,7 @@ export default class Frames {
         if (kind === FRAME_BOOST || kind === FRAME_COROTATE) {
             const lab = this._labCamera || { x: cam.x, y: cam.y };
             this.origin = [lab.x, lab.y];
-            this.refT = sim._gpuPhysics ? sim._gpuPhysics.simTime : 0;
+            this.refT = sim._gpuPhysics ? sim._gpuPhysics.conformalTime : 0;
         }
         const wasActive = this.active;
         this.kind = kind;

@@ -109,9 +109,6 @@ export function loadState(stored, sim) {
     const ok = sim._gpuPhysics.deserialize(state, sim);
     if (!ok) return false;
     sim.select(-1);
-    sim.totalRadiated = 0;
-    sim.totalRadiatedPx = 0;
-    sim.totalRadiatedPy = 0;
 
     // Restore toggles and parameters to the settings store (UI sync reads it)
     const ph = sim.settings;

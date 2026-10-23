@@ -164,7 +164,8 @@ export function createParticleBuffers(device, maxParticles) {
     const statsBuffer = device.createBuffer({
         label: 'statsBuffer',
         size: STATS_BUFFER_SIZE,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+        // COPY_DST: the stats pass copies the ledger accumulators in (gpu-physics.js requestStats)
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
     });
 
     const statsStagingA = device.createBuffer({
@@ -600,6 +601,7 @@ export function writeFrameUniforms(device, buffer, params) {
     u[30] = params.particleCount || 0;  // actual alive particle count for dispatch sizing
     f[31] = params.bhTheta || 0.5;     // Barnes-Hut opening angle
     u[32] = params.frameCount || 0;    // frameCount field in SimUniforms
+    f[33] = params.scaleA || 1;        // cosmological scale factor
 
     device.queue.writeBuffer(buffer, 0, _uniformData);
 }

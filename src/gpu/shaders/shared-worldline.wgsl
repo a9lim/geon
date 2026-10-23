@@ -5,10 +5,16 @@
 //
 // Sample, WL_STRIDE = 12 f32:
 //   [0] t  [1] x  [2] y  [3] wx  [4] wy  [5] ax  [6] ay  [7] τ  [8] θ  [9] angw  [10] m  [11] q
-// Positions, velocities (w, proper), accelerations (dw/dt), θ and angw are on the
-// covering plane: the slot's deck maps its wrapped position x to C = A·x + b, A a
+// Positions, velocities (w, proper), accelerations (dw/dη), θ and angw are on the
+// covering plane: the slot's deck maps its wrapped position x to C = A·x/a + b, A a
 // diagonal of ±1, and boundary.wgsl updates the deck at every crossing so C never
-// jumps. Times are GPU times (lab time minus the rolling epoch).
+// jumps. Times are GPU times (the world-line clock minus the rolling epoch).
+//
+// The store is comoving and conformal: positions are x/a and times conformal time η
+// (dη = dt/a), so w, the peculiar proper velocity, is dC/dη and light runs at 1 in (η, C).
+// Without expansion a = 1, η is lab time and C the lab position. Maxwell's equations are
+// conformally invariant, so a Liénard–Wiechert field solved in (η, C) is exact in an
+// expanding universe; retardedState() converts back to physical (see there).
 //
 // Meta, WL_META_STRIDE = 8 u32:
 //   [0] writeIdx  [1] count  [2] creationTime (f32 bits)  [3] generation
@@ -172,12 +178,18 @@ fn wlConeG(p: vec2<f32>, t: f32, xo: vec2<f32>, T: f32) -> f32 {
  * The state of source `src` that observer (obsX, obsY) sees at GPU time T.
  * nowPos is the source's current wrapped position (its death position once retired),
  * nowW its proper velocity, nowAngw, nowMass, nowCharge its current values; a retired
- * source has no current point, and its world line ends at its death snapshot.
+ * source has no current point, and its world line ends at its death snapshot. Positions
+ * and the domain are physical, scaleA the current scale factor.
+ *
+ * The cone is solved in comoving, conformal coordinates and the result returned physical:
+ * rel = a·ΔC, and acc = (dv/dη)/a, which is (a_ret/a)·dv/dt. Fed to the flat-space
+ * Liénard–Wiechert formula, those give exactly E_phys = E_conformal/a²: the Coulomb part
+ * falls with the proper distance now, and the radiation part is dimmed by 1/(1 + z).
  */
 fn retardedState(
     src: u32, obsX: f32, obsY: f32, T: f32,
     nowPos: vec2<f32>, nowW: vec2<f32>, nowAngw: f32, nowMass: f32, nowCharge: f32,
-    alive: bool, periodic: bool, domW: f32, domH: f32, topo: u32,
+    alive: bool, periodic: bool, domW: f32, domH: f32, topo: u32, scaleA: f32,
 ) -> Retarded {
     var r: Retarded;
     r.valid = false;
@@ -191,10 +203,11 @@ fn retardedState(
         d = mi.xy;
         imageFlips = mi.zw;
     }
+    let invA = 1.0 / scaleA;
     let deck = wlDeck(src);
     let L = deck.xy * imageFlips;
-    let cNow = deck.xy * nowPos + deck.zw;
-    let xo = cNow - L * d;
+    let cNow = deck.xy * nowPos * invA + deck.zw;
+    let xo = cNow - L * d * invA;
 
     var now: WLPoint;
     now.t = T;
@@ -271,9 +284,9 @@ fn retardedState(
         }
     }
 
-    r.rel = L * (p.pos - xo);
+    r.rel = scaleA * L * (p.pos - xo);
     r.vel = L * p.vel;
-    r.acc = L * p.acc;
+    r.acc = invA * L * p.acc;
     r.angw = L.x * L.y * p.angw;
     r.mass = p.mass;
     r.charge = p.charge;

@@ -1,6 +1,7 @@
 // ─── World Lines ───
-// Every particle's history: a ring of WL_LEN samples, one every WORLDLINE_DT of lab
-// time, recorded whatever the toggles. Signal delay solves its light cone against it, and
+// Every particle's history: a ring of WL_LEN samples, one every WORLDLINE_DT of the
+// world-line clock (lab time, or conformal time under expansion), recorded whatever the
+// toggles. Samples are comoving (x/a) and carry dw/dη = a·dw/dt. Signal delay solves its light cone against it, and
 // frame slicing reads it. shared-worldline.wgsl documents the layout and reads it back.
 //
 // Samples are on the covering plane: position, proper velocity, dw/dt and θ go through
@@ -64,11 +65,11 @@ fn writeCurrent(i: u32) {
     dwdt /= max(p.mass, EPSILON);
     let c = clocks[i];
 
-    // Onto the cover; a mirror reverses θ's sense and angw's sign
+    // Onto the cover, comoving; a mirror reverses θ's sense and angw's sign
     let deck = deckOf(i);
-    let pos = deck.xy * vec2(p.posX, p.posY) + deck.zw;
+    let pos = deck.xy * vec2(p.posX, p.posY) / u.scaleA + deck.zw;
     let wc = deck.xy * w;
-    let ac = deck.xy * dwdt;
+    let ac = deck.xy * dwdt * u.scaleA;
     let theta = atan2(deck.y * sin(c.z), deck.x * cos(c.z));
     let angw = deck.x * deck.y * p.angW;
     // A retired slot's mass is zeroed by merges and annihilation; its death mass is the last
@@ -90,7 +91,7 @@ fn writeExtrapolatedNewest(i: u32) {
     let pos = vec2(wlData[base + 1u], wlData[base + 2u]) + (w / g) * dt;
     appendSample(i,
         vec4(u.simTime, pos, w.x),
-        vec4(w.y, wlData[base + 5u], wlData[base + 6u], wlData[base + 7u] + dt / g),
+        vec4(w.y, wlData[base + 5u], wlData[base + 6u], wlData[base + 7u] + u.scaleA * dt / g),
         vec4(wlData[base + 8u], wlData[base + 9u], wlData[base + 10u], wlData[base + 11u]));
 }
 

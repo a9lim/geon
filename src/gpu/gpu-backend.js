@@ -63,10 +63,10 @@ export default class GPUBackend {
         this.renderer.resize(sim.width, sim.height);
     }
 
+    /** The comoving domain (sim.domainW/H); the physical one is a × it. */
     setDomain(w, h) {
-        this.physics.domainW = w;
-        this.physics.domainH = h;
-        this.renderer.setDomain(w, h);
+        this.physics.setComovingDomain(w, h);
+        this.renderer.setDomain(this.physics.domainW, this.physics.domainH);
     }
 
     setTheme(isLight) {
@@ -89,15 +89,26 @@ export default class GPUBackend {
         this.physics._collisionMode = sim.collisionMode;
     }
 
-    stepOnce() {
-        this.physics.update(PHYSICS_DT);
+    /** Advance by dt; under expansion the camera follows the universe's growth. */
+    _advance(sim, dt) {
+        const a0 = this.physics.scaleA;
+        this.physics.update(dt);
+        const a1 = this.physics.scaleA;
+        if (a1 !== a0) {
+            this.renderer.setDomain(this.physics.domainW, this.physics.domainH);
+            if (sim) sim.followExpansion(a1 / a0);
+        }
+    }
+
+    stepOnce(sim) {
+        this._advance(sim, PHYSICS_DT);
     }
 
     step(sim) {
         this.physics.setCamera(sim.camera);
         const substeps = Math.floor(sim.accumulator / PHYSICS_DT);
         if (substeps > 0) {
-            this.physics.update(PHYSICS_DT * substeps);
+            this._advance(sim, PHYSICS_DT * substeps);
             sim.accumulator -= substeps * PHYSICS_DT;
         }
 
@@ -124,11 +135,13 @@ export default class GPUBackend {
         this.renderer.showClocks = sim.view.showClocks;
         this.renderer.relativityOn = sim.settings.relativityEnabled;
         this.renderer.blackHoleOn = sim.settings.blackHoleEnabled;
-        this.renderer.setDomain(sim.domainW, sim.domainH);
+        this.renderer.setDomain(this.physics.domainW, this.physics.domainH);
         this.renderer.periodic = sim.boundaryMode === BOUND_LOOP;
         this.renderer.showGrid = sim.view.grid;
+        this.renderer.scaleA = this.physics.scaleA;
 
         // A non-lab frame: slice every world line on the observer's hyperplane first
+        if (sim.frames.active && !sim.frames.allowed) sim.framePanel?.choose('lab');
         const frameParams = sim.frames.params();
         if (frameParams) {
             this.physics.sliceFrame(frameParams);
@@ -235,7 +248,7 @@ export default class GPUBackend {
             sim._controlPanelEl && sim._controlPanelEl.classList.contains('open');
         if (particleTabActive) {
             const sel2 = { ...sel, index: sim.selectedIdx };
-            const geom = { domainW: sim.domainW, domainH: sim.domainH, boundaryMode: sim.boundaryMode, topology: sim.topology };
+            const geom = { domainW: sim.physW, domainH: sim.physH, boundaryMode: sim.boundaryMode, topology: sim.topology };
             sim.phasePlot.update(sel2, gpuStats.reference, geom);
             sim.effPotPlot.update(sel2, gpuStats.reference, sim.settings, geom);
             sim.phasePlot.draw(sim.overlay.isLight);
@@ -295,10 +308,6 @@ export default class GPUBackend {
                 x: evt.x, y: evt.y, vx: evt.px / mass, vy: evt.py / mass,
                 mass, charge: evt.charge, angw,
             });
-            sim.totalRadiated -= evt.radiatedEnergy ?? evt.energy;
-            sim.totalRadiatedPx -= evt.radiatedPx ?? evt.px;
-            sim.totalRadiatedPy -= evt.radiatedPy ?? evt.py;
-            if (sim.totalRadiated < 0) sim.totalRadiated = 0;
         }
     }
 }
