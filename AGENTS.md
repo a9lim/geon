@@ -136,9 +136,11 @@ absolute GPU times. Lab time `simTime` stays an f64 in JS.
 
 ### Expansion
 
-Expansion requires loop topology (decision 3; the toggle switches the boundary to
-loop): the universe is the periodic domain, a slab of comoving thickness
-`SHEET_THICKNESS` cut from flat 3D FRW.
+Expansion requires the torus (decision 3, refined after Codex's review: the toggle
+switches the boundary to loop and the topology to torus): the universe is the periodic
+domain, a slab of comoving thickness `SHEET_THICKNESS` cut from flat 3D FRW. Klein and RP²
+are out because they aren't homogeneous: there the minimum-image pull of a uniform
+background doesn't cancel.
 
 - **The scale factor** (`cosmology.js`, `GPUPhysics.cosmology`): `step(dt)` integrates
   `da/dt = a·H(a)` by RK4 for the schedule chosen under the toggle: de Sitter, matter,
@@ -150,29 +152,35 @@ loop): the universe is the periodic domain, a slab of comoving thickness
   radiation as a⁻⁴. a stops at `A_MAX` (1000, single precision) with a toast.
 - **Physical coordinates on a growing domain.** `sim.domainW/H` is the comoving domain
   (state, saved); `GPUPhysics.domainW/H` is a times it (`setComovingDomain`). The forces
-  never see a: within a frame the universe is static, and after the substeps
-  `expansion.wgsl` scales every position (bodies, retired bodies, photons, pions,
-  trails) by r = a_new/a_old about the domain's corner and every peculiar momentum and
-  photon energy by 1/r. On a torus, Klein bottle or RP² that scaling is homogeneous, so
-  it is the comoving dynamics, `d̈ = (ä/a)d − ∇Φ_pec`; the mean density's pull cancels
-  over each body's minimum-image cell. `GPUBackend._advance` splits a frame whose H·dt
-  exceeds 0.02. The camera follows the universe (`sim.followExpansion`); the comoving
+  never see a. `update()` splits the stretch symmetrically (Strang): `expansion.wgsl`
+  scales every position (bodies, retired bodies, photons, pions, trails) by √r about the
+  domain's corner and every peculiar momentum and photon energy by 1/√r before the
+  substeps and again after them, r = a_new/a_old, and the substeps run in a static
+  universe at the midpoint a (`_frameA`, which `scaleA` returns meanwhile). On the torus
+  that is the comoving dynamics, `ẋ = Hx + v`, `ẇ = f − Hw`, which at low speed is
+  `d̈ = (ä/a)d + f`; the mean density's pull cancels over each body's minimum-image
+  cell. `GPUBackend._advance` splits a frame whose H·dt exceeds 0.02. The camera follows the universe (`sim.followExpansion`); the comoving
   view zooms out with it, and the grid's rulers are comoving.
 - **World lines are comoving and conformal:** samples hold C = x/a on the cover,
-  conformal time and dw/dη = a·dw/dt, and boundary decks are comoving.
+  conformal time and dw/dη = a·(dw/dt − H·w) (the continuous Hubble drag, though the
+  frame applies it at the stretches), and boundary decks are comoving.
   `retardedState(…, scaleA)` solves the flat cone in (η, C) and returns `rel·a` and
   `acc/a`, so the flat-space Liénard–Wiechert formula gives E_phys = E_conformal/a²
-  (Maxwell is conformally invariant): exact, with radiation fields dimmed by 1/(1 + z).
+  (Maxwell is conformally invariant), with radiation fields dimmed by 1/(1 + z): exact
+  for the trajectory the samples describe, which is interpolated (Hermite positions,
+  linear accelerations) and sees one image of each source.
   The other laws use the same physical retarded position. Non-lab frames are off once a
   ≠ 1 (FRW has no global boosts); the spacetime diagram becomes the conformal diagram.
 - **Fields** (below) feel Hubble friction, thin their particle sources by 1/a and count
   a slab energy of a times the grid's.
 - **The ledger.** `GPUPhysics.ledger.expansionWork` is the energy the expansion took,
   so `E_total + W` should hold: kinetic and photon redshift summed exactly in
-  `expansion.wgsl` (`cosmoAccum[0]`), the fields' Hubble friction and stretch in
-  `field-ledger.wgsl` (friction by the kick's own linear trapezoid), and in JS the
-  stretched potentials to first order (`stats[26]` = Σ d·∂V/∂d) and the escaped
-  background's redshift. Momentum drift compares a·P, which expansion conserves.
+  `expansion.wgsl` (`cosmoAccum[0]`); the fields' share in `field-ledger.wgsl`, the
+  Hubble friction metered exactly around its own operator (`hubbleFriction`) and the
+  stretch from the state just before it; and in JS the stretched potentials to first
+  order (`stats[26]` = Σ d·∂V/∂d) and the escaped background's redshift (culled photons
+  arrive comoving, a·E, and convert at the a they're read at; culled leptons are matter).
+  Momentum drift compares a·P, which expansion conserves on the torus.
 - **Readouts:** the Stats tab's Expansion section (`cosmology-panel.js`): a, H, c/H, the
   event horizon (finite only with a vacuum term), the Friedmann density, and ln a and H
   over the run; the overlay rings the selection (or the view's centre) with c/H and the
@@ -375,7 +383,7 @@ canvas while a frame is active.
 - **Annihilation** (Merge mode, matter meets antimatter) emits two photons conserving
   lab-frame energy and momentum: the 32-byte `MergeResult`
   (`p0 = x, y, energy, type`, `p1 = px, py, _, _`) → `merge-photons.wgsl` on-device.
-  Merge and annihilation energies also excite the scalar fields.
+  An inelastic merge's lost kinetic energy excites the scalar fields instead (Scalar fields).
 - **Kugelblitz**: a boson-tree node whose energy exceeds half its full extent (hoop
   conjecture) collapses into a particle of mass `√(E² − |P|²)` and proper velocity
   `P/m`; near-null clusters are rejected, and only consumed bosons that were counted as
@@ -393,20 +401,26 @@ portal and the shared metric are evaluated at matching times.
 `baseMass·max(|φ|, HIGGS_MASS_FLOOR)`, and particles source the field with
 `HIGGS_COUPLING·baseMass`. Axion: `axMod = 1 + g·a` scales EM couplings and charges
 source it with `g·q²`; a Peccei–Quinn `yukMod` scales Yukawa and flips sign for
-antimatter. Scalar sources couple through proper time (`× 1/γ`). Merge and annihilation
-excitations enter `fieldDot` as impulses solved against the existing `fieldDot` cross
-term, so field kinetic energy rises by exactly the event energy (`field-excitation.wgsl`).
+antimatter. Scalar sources couple through proper time (`× 1/γ`). An inelastic merge's lost
+kinetic energy enters `fieldDot` as impulses solved against the existing `fieldDot` cross
+term, so field kinetic energy rises by exactly the event energy, shared among the active
+fields (`field-excitation.wgsl`); annihilation energy is all in its photons. Each event is
+consumed once.
 
 **Damping and the bath.** The fields' ether damping (Higgs `2m_H`, axion `g·m_a`) is the
 `fieldDamping` setting, on by default. `setHiggsQuench(τ_Q, T)` (the Kibble–Zurek preset)
 ramps the Higgs mass term as `ε·μ²`, ε = −1 + t/τ_Q clamped to [−1, 1], and adds a
-Langevin bath `⟨ξ²⟩ = 2γT/(cellArea·dt)` on the Higgs damping. The Higgs overlay measures
+Langevin bath `⟨ξ²⟩ = 2γT/(cellArea·dt)` on the Higgs damping, an independent draw per
+half-kick. The quench and the bath do work the ledger doesn't book. The Higgs overlay measures
 from the current vacuum √ε and colours φ < 0 with the enhanced hue.
 
 **Under expansion** the grid is comoving (its cells grow with a, so the Laplacian is
-physical), the kicks add Hubble friction `−3Hφ̇`, particle sources thin by 1/a (spread
-over a slab a·ℓ thick), and the slab's field energy is a times the grid's (stats,
-Friedmann density, excitation impulses scaled by 1/a).
+physical), `hubbleFriction` applies `φ̇ ← φ̇·e^{−3H dt}` each substep, particle sources
+thin by 1/a, and the slab's field energy and momentum are a times the grid's (stats,
+Friedmann density, excitation and superradiance impulses scaled by 1/a). The
+convention: the grid holds the dimensionally reduced field ψ = √ℓ·φ_3D, uniform through
+the slab, so the slab's energy is a·ℓ·Σ(…)dA in φ terms and the ℓ is absorbed into ψ and
+the couplings.
 
 **Grid gravity.** With Gravity on, the fields evolve in the metric
 `ds² = −e^{2Φ}dt² + e^{−2Φ}d𝐱²`, where the Klein–Gordon equation is exactly

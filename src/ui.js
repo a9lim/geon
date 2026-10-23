@@ -239,12 +239,18 @@ export function setupUI(sim) {
         } else {
             collisionToggles.classList.remove('ctrl-disabled');
         }
-        // Expansion locks the boundary to loop: the universe is the periodic domain (decision 3)
+        // Expansion locks the boundary to loop (decision 3) and the topology to the torus: the
+        // universe is the periodic domain, and only the torus is homogeneous, so only there does
+        // the mean density's minimum-image pull cancel (Klein and RP² leave a net force)
+        const topologyToggles = document.getElementById('topology-toggles');
         if (tEl['expansion-toggle'].checked) {
             boundaryToggles.querySelector('[data-boundary="loop"]').click();
             boundaryToggles.classList.add('ctrl-disabled');
+            topologyToggles.querySelector('[data-topology="torus"]').click();
+            topologyToggles.classList.add('ctrl-disabled');
         } else {
             boundaryToggles.classList.remove('ctrl-disabled');
+            topologyToggles.classList.remove('ctrl-disabled');
         }
 
         _syncGPU(sim);

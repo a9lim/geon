@@ -119,4 +119,5 @@ struct SimUniforms {
     bhTheta: f32,
     frameCount: u32,
     scaleA: f32,        // cosmological scale factor a (1 without expansion); the domain is a × comoving
+    hubble: f32,        // the frame's Hubble rate (0 without expansion)
 };

@@ -231,10 +231,11 @@ fn depositSuperradiance(@builtin(global_invocation_id) gid: vec3<u32>) {
     let B = coeff.x;
     let C = coeff.y;
     if (C <= EPSILON) { return; }
-    let amp = (-B + sqrt(max(0.0, B * B + 2.0 * C * dE))) / C;
+    // Under expansion the slab's field energy is a times the grid's (field-common.wgsl)
+    let amp = (-B + sqrt(max(0.0, B * B + 2.0 * C * dE * uniforms.invScaleA))) / C;
     if (amp <= EPSILON || amp != amp) { return; }
 
-    let acceptedE = min(dE, max(0.0, B * amp + 0.5 * C * amp * amp));
+    let acceptedE = min(dE, max(0.0, B * amp + 0.5 * C * amp * amp) * uniforms.scaleA);
     if (acceptedE < EPSILON) { return; }
 
     atomicDeposit(pqs, amp, uniforms.boundaryMode, uniforms.topologyMode);

@@ -2,24 +2,23 @@
 // A field's slab energy is a·E, E = Σ(½φ̇² + ½|∇φ|² + V)·cellArea on the comoving grid
 // (cosmology.js). Expansion changes it two ways, and this pass books both into
 // cosmoAccum[0] (the energy expansion took; f32 bits, compare-and-swap):
-//   mode 0, every substep:  Hubble friction 3Hφ̇ takes 6H dt·a·K̄, K̄ the trapezoid of K before
-//                            and after the field step (booked half each time). The KDK's
-//                            half-kicks apply friction linearly, so that is the scheme's own
-//                            loss: the exact e^{−6H dt} decay, or K after the step alone, miss
-//                            it by 5–8% of the energy that flows through onset.
+//   modes 0 and 2, every substep: around hubbleFriction (field-evolve.wgsl), +a·K before and
+//                            −a·K after, so W gets exactly the kinetic energy friction removed
 //   mode 1, at each stretch: cells ×r², gradients² ×1/r², thickness ×r, so the slab energy
 //                            changes by a[(r³ − 1)(K + V) + (r − 1)G]
 // Together these give d(ρa³) = −3HP·a³ dt for a homogeneous field. One workgroup sums the
-// grid from the live state, so nothing lags a readback.
+// grid from the live state, so nothing lags a readback. (K and V here are the grid's own;
+// the gradient term uses wrapped central differences, which the evolution's 5-point
+// Laplacian doesn't share exactly, so G's booking is approximate.)
 
 struct LedgerUniforms {
-    mode: u32,          // 0 friction, 1 stretch
+    mode: u32,          // 0 before friction, 2 after it, 1 stretch
     higgsOn: u32,
     axionOn: u32,
     _pad0: u32,
     scaleA: f32,        // a when the step began
     ratio: f32,         // stretch: a_new/a_old
-    hubbleDt: f32,      // friction: H·dt
+    _pad1: f32,
     cellArea: f32,
     invCellWSq: f32,
     invCellHSq: f32,
@@ -104,8 +103,8 @@ fn fieldLedger(@builtin(local_invocation_index) lid: u32) {
 
     let area = lu.cellArea;
     var work: f32;
-    if (lu.mode == 0u) {
-        work = 3.0 * lu.hubbleDt * lu.scaleA * shK[0] * area;
+    if (lu.mode != 1u) {
+        work = select(-1.0, 1.0, lu.mode == 0u) * lu.scaleA * shK[0] * area;
     } else {
         let r = lu.ratio;
         work = -lu.scaleA * area * ((r * r * r - 1.0) * (shK[0] + shV[0]) + (r - 1.0) * shG[0]);

@@ -49,7 +49,7 @@ Cost: **S** about one session · **M** a few sessions · **L** a milestone ·
 | 2026-10-23 | **Frames default to the lagged view** (open decision 1): the slice is all computed past, and the HUD names the lag. | §5.4 |
 | 2026-10-23 | **Liénard–Wiechert before frames** (open decision 6), so frames are honest for EM from the start. Landed the same day. | §11.1, §2.1 |
 | 2026-10-23 | **The full 1.5 suite this leg:** M2, M3 and M4 after M1. | §3 |
-| 2026-10-23 | **Expansion requires loop topology** (open decision 3): the universe is the periodic domain; the centred expanding cloud is gone. | §5.6 |
+| 2026-10-23 | **Expansion requires loop topology** (open decision 3): the universe is the periodic domain; the centred expanding cloud is gone. Refined to the torus after Codex's review: Klein and RP² aren't homogeneous, and a uniform background pulls bodies there. | §5.6 |
 | 2026-10-23 | **M3 keeps physical coordinates on a growing domain** (Claude's call): positions scale by a_new/a_old once per frame, which on a periodic domain is the comoving dynamics exactly, so the force shaders never see a; world lines are comoving and conformal. | §5.6 |
 | 2026-10-23 | **The event log waits for a consumer:** the slicer reads births, deaths and merges from creation times, death snapshots and breaks (Claude's call while building M2). | §10.2 |
 
@@ -329,10 +329,11 @@ The tie is explicit and per mode, which is what Codex asked for.
   - Deferred, with reasons: the event log (§10.2), the covariance meter and the
     slingshot twin (§5.4).
 - **M3 (2026-10-23): honest cosmology** (§5.6).
-  - Expansion requires loop topology (decision 3). Positions stay physical on a
-    domain a times the comoving one; once a frame `expansion.wgsl` scales them by
-    a_new/a_old and peculiar momenta and photon energies by the inverse, which on a
-    periodic domain is the comoving dynamics exactly. Frames with H·dt > 0.02 split.
+  - Expansion requires the torus (decision 3, refined). Positions stay physical on a
+    domain a times the comoving one; `expansion.wgsl` scales them by √(a_new/a_old)
+    before and after each frame's substeps (Strang) and peculiar momenta and photon
+    energies by the inverse, which on the torus is the comoving dynamics. Frames
+    with H·dt > 0.02 split.
   - a(t) (`cosmology.js`): de Sitter, matter, radiation, ΛCDM, or the Friedmann
     closure from the contents (matter, radiation including pending and escaped,
     fields' slab energy) plus a vacuum H_Λ. Hubble radius and event horizon.
@@ -348,10 +349,22 @@ The tie is explicit and per mode, which is what Codex asked for.
     comoving rulers, a logarithmic H slider.
   - Presets: the expanding universe rebuilt as a de Sitter torus, axion
     misalignment, Kibble–Zurek walls (a Higgs quench with a Langevin bath) (22).
-  - Oracles (29): de Sitter a(t), w ∝ 1/a and photon E ∝ 1/a, comoving rest; a
-    comoving charge's field at the proper distance now; the Friedmann dust law;
-    zero force from a periodic lattice; misalignment frozen then ρa³ constant; the
-    field ledger's closure; Kibble–Zurek walls ∝ τ_Q^{−0.24} against 1/4.
+  - Codex reviewed the physics (2026-10-23) and found, all fixed: world-line
+    accelerations missing the Hubble drag (so a moving charge's radiation field was
+    wrong); a first-order split leaving an O(H·dt) error in bound orbits; Hubble
+    friction booked by a trapezoid that missed the kicks' own loss; escaped radiation
+    redshifted at the wrong times and culled leptons booked as radiation; annihilation
+    energy given to the photons and again, whole, to each scalar field, with events
+    replayed every substep until the next readback; superradiance and the scalar
+    momentum missing the slab's factor a; the Kibble–Zurek bath drawing one Gaussian
+    twice per substep; and Klein/RP² backgrounds that don't cancel.
+  - Oracles (32): de Sitter a(t), w ∝ 1/a and photon E ∝ 1/a, comoving rest; the
+    Hubble drag in world-line accelerations; a comoving charge's field at the proper
+    distance now; the Friedmann dust law; zero force from a periodic lattice;
+    misalignment frozen then ρa³ constant (0.5%); the field ledger's closure (0.3% of
+    the peak slab energy, about 10% of the initial); Kibble–Zurek walls fewer for
+    slower quenches, n ∝ τ_Q^{−0.18}, below both mean-field 1/4 and 2D Ising ≈ 0.32
+    (counted after ordering, so coarsening and weak-noise delays flatten it).
 
 ### 2.2 Physics bugs and gaps found by the 2.0 scouting
 
@@ -366,15 +379,27 @@ The tie is explicit and per mode, which is what Codex asked for.
 - **Field damping is ether-like friction:** axion `damp = AXION_COUPLING·m_a`
   (Q ≈ 20), Higgs critical damping `2m_H`, and numerical viscosity `ν∇²φ̇` on
   top. It gives fields a preferred frame and kills self-bound lumps.
-- **Cosmology's model boundaries** (M3, §2.1):
-  - the expansion is a first-order split at frame cadence (H·dt ≤ 0.02 per step);
-  - the ledger's potential term is first order and lags a readback, and its fields
-    term assumes the KDK's linear friction; it closes to about 1% of the energy that
-    flows through the expansion;
+- **Cosmology's model boundaries** (M3, §2.1; most from Codex's review):
+  - the expansion is a Strang split at frame cadence (H·dt ≤ 0.02 per step); with
+    relativistic peculiar speeds `ẇ = −Hw` is exact but the low-speed form
+    `d̈ = (ä/a)d + f` picks up an `H v|v|²` term;
+  - Liénard–Wiechert is exact for the sampled trajectory only: Hermite positions
+    with linearly interpolated accelerations aren't one curve, and one image of each
+    source is used (no winding paths);
   - the other force laws act from the physical retarded position without FRW
-    corrections (only Liénard–Wiechert is exact); particle softening stays physical
-    while ℓ is comoving;
-  - Friedmann densities lag a readback and assume a⁻³ / a⁻⁴ in between.
+    corrections; particle softening stays physical while ℓ is comoving;
+  - the grid gravity kernel −1/√(r² + ℓ²) is a Plummer smoothing, not a slab's
+    kernel (−(2/ℓ)·asinh(ℓ/2R) for a top hat), and the FFT is a torus convolution;
+    `packFieldEnergy` omits the portal energy, and the quench's V(t) isn't in it;
+  - the ledger's potential term is first order and lags a readback, leaves out the
+    velocity-dependent energies, and treats Paczyński–Wiita like Plummer; the
+    gradient term uses a different difference stencil from the evolution; quenches,
+    baths, damping and viscosity aren't booked;
+  - pending radiation accumulators aren't redshifted (Hawking's is rest-frame);
+  - the Friedmann densities lag a readback and assume a⁻³ (matter, fields) and a⁻⁴
+    (radiation) in between, wrong for frozen or kinetic fields and relativistic
+    matter; planar matter and radiation are anisotropic, driving an isotropic a;
+  - the Kibble–Zurek bath's temperature isn't rescaled under expansion.
 - **The stats' velocity-dependent energies predate the force audit:**
   `compute-stats.wgsl` still books Darwin field energy and the old EIH and
   Bažański energies, so 1PN and magnetic runs drift by bookkeeping.

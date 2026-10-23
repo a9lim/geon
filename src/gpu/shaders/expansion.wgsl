@@ -54,9 +54,9 @@ fn accumulateWork(lid: u32, v: f32) {
     }
 }
 
-fn kinetic(m: f32, w: vec2<f32>) -> f32 {
+fn kinetic(m: f32, w: vec2<f32>, relativistic: bool) -> f32 {
     let w2 = dot(w, w);
-    if (eu.relativity != 0u) { return m * w2 / (sqrt(1.0 + w2) + 1.0); }   // m(γ − 1)
+    if (relativistic) { return m * w2 / (sqrt(1.0 + w2) + 1.0); }   // m(γ − 1)
     return 0.5 * m * w2;
 }
 
@@ -73,7 +73,7 @@ fn expandParticles(@builtin(global_invocation_id) gid: vec3u, @builtin(local_inv
             if (alive) {
                 let w0 = vec2(p.velWX, p.velWY);
                 let w1 = w0 / eu.ratio;
-                work = kinetic(p.mass, w0) - kinetic(p.mass, w1);
+                work = kinetic(p.mass, w0, eu.relativity != 0u) - kinetic(p.mass, w1, eu.relativity != 0u);
                 p.velWX = w1.x;
                 p.velWY = w1.y;
             }
@@ -112,7 +112,8 @@ fn expandPions(@builtin(global_invocation_id) gid: vec3u, @builtin(local_invocat
             pi.posY *= eu.ratio;
             let w0 = vec2(pi.wX, pi.wY);
             let w1 = w0 / eu.ratio;
-            work = kinetic(pi.mass, w0) - kinetic(pi.mass, w1);
+            // Pions and leptons always carry true proper velocity (AGENTS.md, Bosons)
+            work = kinetic(pi.mass, w0, true) - kinetic(pi.mass, w1, true);
             pi.wX = w1.x;
             pi.wY = w1.y;
             // A pion's energy budget pays for the kinetic loss; a lepton's field is its age

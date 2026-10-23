@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 106;
+const SHADER_VERSION = 108;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -1170,7 +1170,7 @@ export async function createFieldEvolvePipelines(device, wgslConstants = '') {
     const gradBindGroupLayouts = [gradGroup0Layout];
     const gradPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: gradBindGroupLayouts });
 
-    const evolveEntries = ['higgsHalfKick', 'axionHalfKick', 'fieldDrift'];
+    const evolveEntries = ['higgsHalfKick', 'axionHalfKick', 'fieldDrift', 'hubbleFriction'];
     const pipelines = {};
     for (const entry of evolveEntries) {
         pipelines[entry] = device.createComputePipeline({
@@ -2079,7 +2079,10 @@ export async function createComputeStatsPipeline(device, wgslConstants = '') {
     const ledgerModule = device.createShaderModule({ label: 'bosonLedger', code: ledgerCode });
     const ledgerLayout = device.createBindGroupLayout({
         label: 'bosonLedger_g0',
-        entries: [0, 1, 2, 3, 4, 5, 6, 7].map(binding => ({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } })),
+        entries: [
+            ...[0, 1, 2, 3, 4, 5, 6, 7].map(binding => ({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } })),
+            { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },   // a
+        ],
     });
     const ledgerPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [ledgerLayout] });
     const ledger = {

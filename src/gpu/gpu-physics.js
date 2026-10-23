@@ -44,7 +44,7 @@ import { createGPUDispatchPlan, updateGPUDispatchPlan } from './pass-graph.js';
 import {
     WORLDLINE_DT, WORLDLINE_LEN, GPU_MAX_PHOTONS, GPU_MAX_PIONS, GPU_MAX_LEPTONS,
     GPU_MAX_PARTICLES, GPU_HEATMAP_GRID, HEATMAP_INTERVAL_MASK,
-    COL_MERGE, COL_BOUNCE, BOUND_LOOP,
+    COL_MERGE, COL_BOUNCE, BOUND_LOOP, TORUS,
     COL_NAMES, BOUND_NAMES, TOPO_NAMES,
     SOFTENING, BH_SOFTENING, SOFTENING_SQ, BH_SOFTENING_SQ, SHEET_THICKNESS_SQ, CLOCK_PERIOD,
     HIGGS_MASS_FLOOR, HIGGS_MASS_MAX_DELTA, HIGGS_COUPLING, AXION_COUPLING,
@@ -109,6 +109,10 @@ const _lensU32 = new Uint32Array(_lensData);
 // The lens map's resolution, and a small core so a ray through a body stays finite
 export const LENS_RES = 512;
 const LENS_CORE_SQ = 0.01;
+const _ledgerAData = new Float32Array(4);           // boson-ledger.wgsl LedgerA
+// The energy accounts the stats can't see (stats-display.js): escaped radiation (redshifting),
+// escaped leptons (matter), and the work the expansion has done
+const EMPTY_LEDGER = Object.freeze({ escapedE: 0, escapedPx: 0, escapedPy: 0, escapedMatterE: 0, escapedMatterPx: 0, escapedMatterPy: 0, expansionWork: 0 });
 const _fieldLedgerData = new ArrayBuffer(48);       // field-ledger.wgsl LedgerUniforms
 const _fieldLedgerF32 = new Float32Array(_fieldLedgerData);
 const _fieldLedgerU32 = new Uint32Array(_fieldLedgerData);
@@ -189,7 +193,9 @@ export default class GPUPhysics {
         this.cosmology = new Cosmology();
         // What the stats can't see: escaped radiation (culled boson pools, which redshift
         // with everything else) and the energy the expansion has taken (stats-display.js)
-        this.ledger = { escapedE: 0, escapedPx: 0, escapedPy: 0, expansionWork: 0 };
+        this.ledger = Object.assign({}, EMPTY_LEDGER);
+        this._frameA = null;          // update(): the frame's midpoint a while the substeps run
+        this._frameH = 0;             // update(): the Hubble rate the substeps see
         // A stats readback describes the state it was requested in: stateVersion bumps on
         // every add, removal, reset and load, resetGen on resets and loads only
         this.stateVersion = 0;
@@ -624,6 +630,9 @@ export default class GPUPhysics {
             this._statsBindGroup1 = null;
             this._rebuildStatsFieldBindGroup();
             this._ledgerPipelines = computeStats.ledger;
+            this._ledgerAUniform = this.device.createBuffer({
+                label: 'ledgerA', size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+            });
             this._ledgerBindGroup = this.device.createBindGroup({
                 label: 'bosonLedger',
                 layout: computeStats.ledger.layout,
@@ -636,6 +645,7 @@ export default class GPUPhysics {
                     { binding: 5, resource: { buffer: this.buffers.piCount } },
                     { binding: 6, resource: { buffer: this.buffers.particleState } },
                     { binding: 7, resource: { buffer: this.buffers.radiationState } },
+                    { binding: 8, resource: { buffer: this._ledgerAUniform } },
                 ],
             });
         }
@@ -1637,8 +1647,11 @@ export default class GPUPhysics {
     /** GPU time: the world-line clock relative to the rolling epoch (config.js EPOCH_SPAN). */
     get gpuTime() { return this.conformalTime - this.timeEpoch; }
 
-    /** The cosmological scale factor (1 unless the universe has expanded). */
-    get scaleA() { return this.cosmology.a; }
+    /**
+     * The cosmological scale factor of the GPU state: 1 unless the universe has expanded, and
+     * during update()'s substeps the frame's midpoint a (the stretch is split around them).
+     */
+    get scaleA() { return this._frameA ?? this.cosmology.a; }
 
     /** Set the comoving domain (the state's); the GPU's is a × it. */
     setComovingDomain(w, h) {
@@ -1648,8 +1661,8 @@ export default class GPUPhysics {
         this.domainH = h * this.scaleA;
     }
 
-    /** Whether the universe expands this frame: Expansion on a periodic domain. */
-    get expanding() { return this._expansionEnabled && this.boundaryMode === BOUND_LOOP; }
+    /** Whether the universe expands this frame: Expansion on a torus (ui.js locks both). */
+    get expanding() { return this._expansionEnabled && this.boundaryMode === BOUND_LOOP && this.topologyMode === TORUS; }
 
     /**
      * Advance the epoch by EPOCH_STEP once GPU time passes EPOCH_SPAN: every stored GPU time
@@ -2461,7 +2474,7 @@ export default class GPUPhysics {
         f[22] = cellH;
         f[23] = 1 / (cellW * cellW);
         f[24] = 1 / (cellH * cellH);
-        f[25] = this.expanding ? this.cosmology.H : 0;
+        f[25] = this._frameH ?? 0;
         f[26] = this.scaleA;
         f[27] = 1 / this.scaleA;
         u[28] = this._fieldDamping ? 1 : 0;
@@ -3022,9 +3035,15 @@ export default class GPUPhysics {
         if (!this._fieldExcitation) return;
         if (!this._higgsEnabled && !this._axionEnabled) return;
 
-        // Excitation events come from merge results (already on GPU in mergeResultBuffer)
-        const mergeCount = this._pendingMergeEvents.length;
+        // Excitation events come from merge results, consumed once (they used to replay every
+        // substep until the next readback). Annihilation energy is all in its photons
+        // (merge-photons.wgsl); an inelastic merge's lost kinetic energy is shared among the
+        // active fields, not given whole to each.
+        const events = this._pendingMergeEvents;
+        this._pendingMergeEvents = [];
+        const mergeCount = events.length;
         if (mergeCount === 0) return;
+        const nFields = (this._higgsEnabled ? 1 : 0) + (this._axionEnabled ? 1 : 0);
 
         if (!this._excitationBuffers) {
             this._excitationBuffers = createExcitationBuffers(this.device);
@@ -3034,12 +3053,12 @@ export default class GPUPhysics {
         const maxEvents = 64;
         let eventCount = 0;
         for (let i = 0; i < mergeCount && eventCount < maxEvents; i++) {
-            const me = this._pendingMergeEvents[i];
-            if (me.energy <= 0) continue;
+            const me = events[i];
+            if (me.energy <= 0 || me.type === 'annihilation') continue;
             const base = eventCount * 4;
             _excitationEventData[base] = me.x;
             _excitationEventData[base + 1] = me.y;
-            _excitationEventData[base + 2] = me.energy / this.scaleA;   // the slab is a·ℓ thick
+            _excitationEventData[base + 2] = me.energy / (nFields * this.scaleA);   // the slab is a·ℓ thick
             _excitationEventData[base + 3] = 0; // padding
             eventCount++;
         }
@@ -3080,10 +3099,21 @@ export default class GPUPhysics {
     }
 
     /**
+     * Stretch the universe by `ratio` from scale factor `aOld`: book the fields' share from
+     * their state just before it (field-ledger.wgsl), then scale (expansion.wgsl), and book
+     * what the GPU passes don't see in JS.
+     */
+    _stretch(encoder, ratio, aOld) {
+        this._dispatchFieldLedger(encoder, 1, ratio, 0, aOld);
+        this._dispatchExpansion(encoder, ratio);
+        this._ledgerExpansion(ratio);
+    }
+
+    /**
      * The expansion's work on what the GPU passes don't see, from the last stats: the
      * potential energy of the stretched separations, to first order (dPE = ln r · Σ d·∂V/∂d),
-     * and the escaped radiation, which redshifts by 1/r. The fields' share is on the GPU
-     * (field-ledger.wgsl).
+     * and the escaped background, which redshifts by 1/r (escaped leptons are matter and keep
+     * their energy). The fields' share is on the GPU (field-ledger.wgsl).
      */
     _ledgerExpansion(ratio) {
         const L = this.ledger;
@@ -3097,52 +3127,68 @@ export default class GPUPhysics {
     }
 
     /**
-     * Book the fields' share of the expansion's work (field-ledger.wgsl): mode 0 is a substep's
-     * Hubble friction, mode 1 the stretch by `ratio`, both from the domain and a the step began with.
+     * Book the fields' share of the expansion's work (field-ledger.wgsl): modes 0 and 2 bracket a
+     * substep's Hubble friction, mode 1 is the stretch by `ratio` from scale factor `aOld`, with
+     * the domain as it is when the pass is encoded.
      */
-    _dispatchFieldLedger(encoder, mode, ratio, dt) {
+    _dispatchFieldLedger(encoder, mode, ratio, dt, aOld = this.scaleA) {
         const pl = this._ledgerPipelines;
         const hb = this._higgsEnabled ? this._higgsBuffers : null;
         const ab = this._axionEnabled ? this._axionBuffers : null;
         if (!pl || !pl.field || (!hb && !ab)) return;
-        if (!this._fieldLedgerUniform) {
-            this._fieldLedgerUniform = this.device.createBuffer({
-                label: 'fieldLedgerUniforms', size: 48, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-            });
+        // One uniform buffer and bind group per mode: modes 0 and 2 share an encoder, and a
+        // queue.writeBuffer lands before the whole encoder runs
+        if (!this._fieldLedgerUniforms) {
+            this._fieldLedgerUniforms = [0, 1, 2].map(m => this.device.createBuffer({
+                label: `fieldLedgerUniforms${m}`, size: 48, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+            }));
             this._fieldLedgerDummy = this.device.createBuffer({ label: 'fieldLedgerDummy', size: 16, usage: GPUBufferUsage.STORAGE });
         }
-        const key = `${hb ? 1 : 0}${ab ? 1 : 0}`;
-        if (this._fieldLedgerKey !== key || this._fieldLedgerBuffers !== hb || this._fieldLedgerAxion !== ab) {
+        if (this._fieldLedgerBuffers !== hb || this._fieldLedgerAxion !== ab || !this._fieldLedgerBGs) {
             const dummy = this._fieldLedgerDummy;
-            this._fieldLedgerKey = key;
             this._fieldLedgerBuffers = hb;
             this._fieldLedgerAxion = ab;
-            this._fieldLedgerBG = this.device.createBindGroup({
-                label: 'fieldLedger',
+            this._fieldLedgerBGs = this._fieldLedgerUniforms.map((uniform, m) => this.device.createBindGroup({
+                label: `fieldLedger${m}`,
                 layout: pl.fieldLayout,
                 entries: [
-                    { binding: 0, resource: { buffer: this._fieldLedgerUniform } },
+                    { binding: 0, resource: { buffer: uniform } },
                     { binding: 1, resource: { buffer: hb ? hb.field : dummy } },
                     { binding: 2, resource: { buffer: hb ? hb.fieldDot : dummy } },
                     { binding: 3, resource: { buffer: ab ? ab.field : dummy } },
                     { binding: 4, resource: { buffer: ab ? ab.fieldDot : dummy } },
                     { binding: 5, resource: { buffer: this._cosmoAccum } },
                 ],
-            });
+            }));
         }
         const cellW = this.domainW / FIELD_GRID_RES, cellH = this.domainH / FIELD_GRID_RES;
         const u = _fieldLedgerU32, f = _fieldLedgerF32;
         u[0] = mode; u[1] = hb ? 1 : 0; u[2] = ab ? 1 : 0; u[3] = 0;
-        // The stretch runs after cosmology.step(), so a is already the new one there
-        f[4] = mode === 1 ? this.scaleA / ratio : this.scaleA; f[5] = ratio; f[6] = this.cosmology.H * dt;
+        f[4] = aOld; f[5] = ratio; f[6] = 0;
         f[7] = cellW * cellH; f[8] = 1 / (cellW * cellW); f[9] = 1 / (cellH * cellH);
         f[10] = this._higgsMass; f[11] = this._axionMass;
-        this.device.queue.writeBuffer(this._fieldLedgerUniform, 0, _fieldLedgerData);
+        this.device.queue.writeBuffer(this._fieldLedgerUniforms[mode], 0, _fieldLedgerData);
         const p = encoder.beginComputePass({ label: 'fieldLedger' });
         p.setPipeline(pl.field);
-        p.setBindGroup(0, this._fieldLedgerBG);
+        p.setBindGroup(0, this._fieldLedgerBGs[mode]);
         p.dispatchWorkgroups(1);
         p.end();
+    }
+
+    /** φ̇ ← φ̇·e^{−3H dt} for each active field (field-evolve.wgsl hubbleFriction). */
+    _dispatchHubbleFriction(encoder) {
+        const evo = this._fieldEvolve;
+        if (!evo || !evo.hubbleFriction) return;
+        const gridWG = Math.ceil(FIELD_GRID_RES / 8);
+        for (const which of ['higgs', 'axion']) {
+            if (!(which === 'higgs' ? this._higgsEnabled && this._higgsBuffers : this._axionEnabled && this._axionBuffers)) continue;
+            this._ensureEvolveBindGroups(which);
+            const p = encoder.beginComputePass({ label: `hubbleFriction_${which}` });
+            p.setPipeline(evo.hubbleFriction);
+            p.setBindGroup(0, this._fieldEvolveBGs[which]);
+            p.dispatchWorkgroups(gridWG, gridWG);
+            p.end();
+        }
     }
 
     /**
@@ -3151,11 +3197,17 @@ export default class GPUPhysics {
      */
     _absorbLedger(d, a, then) {
         const L = this.ledger;
-        for (const l of [L, then]) {
-            l.expansionWork += d[96];
-            l.escapedE += d[97];
-            l.escapedPx += d[98];
-            l.escapedPy += d[99];
+        // Escaped photons arrive comoving (a·E at the cull), so each account converts at its
+        // own a and books the redshift since the cull as expansion work
+        for (const [l, aAt] of [[L, this.scaleA], [then, a]]) {
+            const e = d[98] / aAt;
+            l.expansionWork += d[96] + d[97] - e;
+            l.escapedE += e;
+            l.escapedPx += d[99] / aAt;
+            l.escapedPy += d[100] / aAt;
+            l.escapedMatterE += d[101];
+            l.escapedMatterPx += d[102];
+            l.escapedMatterPy += d[103];
         }
         if (this._peScale === null) {
             L.expansionWork -= this._lnrPending * d[26];
@@ -3164,8 +3216,8 @@ export default class GPUPhysics {
         this._peScale = d[26];
         this._lnrPending = 0;
         const V = slabVolume(a, this.comovingW, this.comovingH);
-        const matter = d[8] + d[0] + d[1] + d[23];   // rest, kinetic and spin; pions and leptons
-        const radiation = d[20] + d[27] + L.escapedE;
+        const matter = d[8] + d[0] + d[1] + d[23] + then.escapedMatterE;   // rest, kinetic, spin; pions, leptons
+        const radiation = d[20] + d[27] + then.escapedE;
         const fields = (d[14] + d[15]) * a;           // the slab is a·ℓ thick
         this.cosmology.setDensities(matter / V, radiation / V, fields / V, a);
     }
@@ -3550,9 +3602,26 @@ export default class GPUPhysics {
         const numSubsteps = Math.min(Math.ceil(dt / dtSafe), maxSubsteps);
         const dtSub = dt / numSubsteps;
 
-        // The frame's Hubble rate; the scale factor steps after the substeps
+        // Expansion, split symmetrically (Strang): half the stretch before the substeps and
+        // half after, with the substeps in the static universe at the midpoint a. A first-order
+        // split would leave an O(H·dt) error in bound orbits, comparable to the real tidal term.
         const cosmo = this.cosmology;
-        if (!this.expanding) cosmo.stop();
+        let half = 1;
+        if (this.expanding) {
+            const a0 = cosmo.a;
+            half = Math.sqrt(cosmo.step(dt));
+            this._frameA = a0 * half;
+            this._frameH = cosmo.hubble(this._frameA);
+            if (half !== 1) {
+                const enc = this.device.createCommandEncoder({ label: 'expansion-pre' });
+                this._stretch(enc, half, a0);
+                this.device.queue.submit([enc.finish()]);
+                this.setComovingDomain(this.comovingW, this.comovingH);
+            }
+        } else {
+            cosmo.stop();
+            this._frameH = 0;
+        }
 
         // Write slow-changing uniforms once per frame (toggles, domain, sliders, etc.)
         this._maybeRebaseEpoch();
@@ -3560,6 +3629,7 @@ export default class GPUPhysics {
             dt: dtSub,
             simTime: this.gpuTime,
             scaleA: this.scaleA,
+            hubble: this._frameH,
             domainW: this.domainW,
             domainH: this.domainH,
             speedScale: 1,
@@ -3604,22 +3674,18 @@ export default class GPUPhysics {
 
         this._frameCount++;
         this._stepsSinceChange++;
-        const ratio = this.expanding ? cosmo.step(dt) : 1;
-        if (ratio !== 1) this._ledgerExpansion(ratio);
 
         // Post-substep passes (once per frame)
         {
             const encoder = this.device.createCommandEncoder({ label: 'post-substep' });
 
-            // The universe grows by `ratio` (expansion.wgsl); the domain follows after submit.
-            // The fields' share of the stretch is booked from their state just before it.
-            if (ratio !== 1) {
-                this._dispatchFieldLedger(encoder, 1, ratio, 0);
-                this._dispatchExpansion(encoder, ratio);
-            }
+            // The second half of the stretch; the domain follows after submit
+            if (half !== 1) this._stretch(encoder, half, this._frameA);
 
             // Pool culls: the removed energy becomes escaped radiation (boson-ledger.wgsl)
             if (this._ledgerPipelines) {
+                _ledgerAData[0] = half !== 1 ? this._frameA * half : this.scaleA;
+                this.device.queue.writeBuffer(this._ledgerAUniform, 0, _ledgerAData);
                 const p = encoder.beginComputePass({ label: 'cullBosons' });
                 p.setPipeline(this._ledgerPipelines.cull);
                 p.setBindGroup(0, this._ledgerBindGroup);
@@ -3672,7 +3738,8 @@ export default class GPUPhysics {
 
             this.device.queue.submit([encoder.finish()]);
         }
-        if (ratio !== 1) this.setComovingDomain(this.comovingW, this.comovingH);
+        this._frameA = null;
+        if (half !== 1) this.setComovingDomain(this.comovingW, this.comovingH);
 
         // Readback maxAccel for next frame (non-blocking)
         this._readbackMaxAccel();
@@ -3839,11 +3906,13 @@ export default class GPUPhysics {
         if (this._fieldDeposit) {
             if (this._higgsEnabled) this._writeFieldUniforms(dtSub, 0);
             if (this._axionEnabled) this._writeFieldUniforms(dtSub, 1);
-            // Hubble friction's share of the energy ledger, from K before and after the step
-            const friction = this.expanding && this.cosmology.H > 0;
-            if (friction) this._dispatchFieldLedger(encoder, 0, 1, dtSub);
+            // Hubble friction, its own operator, metered by the ledger on either side
+            if (this.expanding && this._frameH > 0 && this._phase5Ready) {
+                this._dispatchFieldLedger(encoder, 0, 1, dtSub);
+                this._dispatchHubbleFriction(encoder);
+                this._dispatchFieldLedger(encoder, 2, 1, dtSub);
+            }
             this._dispatchFieldStep(encoder, dtSub);
-            if (friction) this._dispatchFieldLedger(encoder, 0, 1, dtSub);
         }
 
         // (Field forces already dispatched at Pass 5c, before Boris)
@@ -4229,7 +4298,7 @@ export default class GPUPhysics {
         this.cosmology.reset();
         this._higgsQuench = null;
         this.setComovingDomain(this.comovingW, this.comovingH);
-        this.ledger = { escapedE: 0, escapedPx: 0, escapedPy: 0, expansionWork: 0 };
+        this.ledger = Object.assign({}, EMPTY_LEDGER);
         this._peScale = null;
         this._lnrPending = 0;
         this._statsLedger = null;

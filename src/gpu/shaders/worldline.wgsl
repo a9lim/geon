@@ -1,7 +1,9 @@
 // ─── World Lines ───
 // Every particle's history: a ring of WL_LEN samples, one every WORLDLINE_DT of the
 // world-line clock (lab time, or conformal time under expansion), recorded whatever the
-// toggles. Samples are comoving (x/a) and carry dw/dη = a·dw/dt. Signal delay solves its light cone against it, and
+// toggles. Samples are comoving (x/a) and carry dw/dη = a·(dw/dt − H·w): within a frame the
+// universe is static and expansion.wgsl applies the Hubble drag in one step, but the world
+// line's acceleration is the continuous one. Signal delay solves its light cone against it, and
 // frame slicing reads it. shared-worldline.wgsl documents the layout and reads it back.
 //
 // Samples are on the covering plane: position, proper velocity, dw/dt and θ go through
@@ -63,6 +65,7 @@ fn writeCurrent(i: u32) {
     if ((u.toggles0 & MAGNETIC_BIT) != 0u || u.extBz != 0.0) { dwdt += p.charge * af.bFields.x * rot; }
     if ((u.toggles0 & GRAVITOMAG_BIT) != 0u) { dwdt += 4.0 * p.mass * af.bFields.y * rot; }
     dwdt /= max(p.mass, EPSILON);
+    dwdt -= u.hubble * w;
     let c = clocks[i];
 
     // Onto the cover, comoving; a mirror reverses θ's sense and angw's sign

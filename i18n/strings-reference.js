@@ -443,7 +443,7 @@ const REF_EN = {
 
     'ref.expansion.title': 'Cosmological expansion',
     'ref.expansion.body': `
-<p>The universe is the periodic domain, a slab cut from a flat, homogeneous, expanding 3D universe (Friedmann–Robertson–Walker). Expansion needs loop topology: an expanding universe with an edge would have a centre.</p>
+<p>The universe is the periodic domain, a slab cut from a flat, homogeneous, expanding 3D universe (Friedmann–Robertson–Walker). Expansion needs a torus: an expanding universe with an edge would have a centre, and the Klein bottle and projective plane aren't homogeneous, so a uniform background would pull on bodies there.</p>
 
 <h3>The scale factor</h3>
 <p>Distances between bodies at rest grow with the scale factor $a(t)$ at the rate $H = \\dot a/a$. Choose the history: de Sitter ($H$ constant), matter ($a \\propto t^{2/3}$), radiation ($a \\propto t^{1/2}$), ΛCDM, or Friedmann, where the universe's own contents set the rate:</p>
@@ -1189,7 +1189,7 @@ const REF_JA = {
 
     'ref.expansion.title': '宇宙膨張',
     'ref.expansion.body': `
-<p>宇宙は周期的な領域そのもので、平坦で一様な膨張する3次元宇宙（フリードマン＝ロバートソン＝ウォーカー）から切り出した薄板です。膨張にはループ境界が必要です。端のある膨張宇宙には中心ができてしまうからです。</p>
+<p>宇宙は周期的な領域そのもので、平坦で一様な膨張する3次元宇宙（フリードマン＝ロバートソン＝ウォーカー）から切り出した薄板です。膨張にはトーラスが必要です。端のある膨張宇宙には中心ができてしまい、クラインの壺や射影平面は一様でないため、一様な背景が物体を引いてしまうからです。</p>
 
 <h3>スケール因子</h3>
 <p>静止した物体どうしの距離はスケール因子 $a(t)$ とともに、率 $H = \\dot a/a$ で伸びます。膨張の歴史は、ド・ジッター（$H$ 一定）、物質優勢（$a \\propto t^{2/3}$）、放射優勢（$a \\propto t^{1/2}$）、ΛCDM、そして宇宙自身の内容物が率を決めるフリードマンから選べます。</p>

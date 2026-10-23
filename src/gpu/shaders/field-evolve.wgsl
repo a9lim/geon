@@ -25,7 +25,8 @@
 //
 // Under expansion the field is the 3D field of a slab of FRW: φ̈ + 3Hφ̇ − ∇²φ + V′ = source/a,
 // with ∇² in physical coordinates (the grid is comoving, so its cells grow with a) and the
-// source spread over a slab a·ℓ thick.
+// source spread over a slab a·ℓ thick. The Hubble friction is its own operator,
+// hubbleFriction (φ̇ ← φ̇·e^{−3H dt}), so field-ledger.wgsl can meter exactly what it removes.
 fn metricCoeffs(idx: u32) -> vec4<f32> {
     if (uniforms.gravityEnabled == 0u) { return vec4<f32>(1.0, 1.0, 1.0, 0.0); }
     let lapse = exp(clamp(metricPhi[idx], -METRIC_PHI_CLAMP, METRIC_PHI_CLAMP));
@@ -121,12 +122,14 @@ fn higgsHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     let mc = metricCoeffs(idx);
     let ddphi = mc.x * lapI + mc.y * force + mc.x * mc.z * srcTerm
-              - mc.z * damp * fdC + viscosity + 4.0 * mc.w * fdC - 3.0 * uniforms.hubble * fdC;
+              - mc.z * damp * fdC + viscosity + 4.0 * mc.w * fdC;
 
     var newFdot = fdC + ddphi * halfDt;
     // Langevin bath: the fluctuation partner of the damping, ⟨ξ²⟩ = 2γT/(cellArea·dt) per cell
     if (uniforms.higgsNoise > 0.0 && damp > 0.0) {
-        let h1 = pcgHash((idx * 2654435761u) ^ uniforms.noiseSeed);
+        // Both half-kicks share the substep's seed; fdC differs between them, so mixing its bits
+        // in gives each kick its own draw (one draw twice would double the variance)
+        let h1 = pcgHash((idx * 2654435761u) ^ uniforms.noiseSeed ^ bitcast<u32>(fdC));
         let u1 = max(f32(h1) / 4294967296.0, 1e-7);
         let u2 = f32(pcgHash(h1 ^ 0x68E31DA4u)) / 4294967296.0;
         let gauss = sqrt(-2.0 * log(u1)) * cos(TWO_PI * u2);
@@ -200,12 +203,20 @@ fn axionHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     let mc = metricCoeffs(idx);
     let ddA = mc.x * lapI + mc.y * force + mc.x * mc.z * srcTerm
-            - mc.z * damp * fdC + viscosity + 4.0 * mc.w * fdC - 3.0 * uniforms.hubble * fdC;
+            - mc.z * damp * fdC + viscosity + 4.0 * mc.w * fdC;
 
     var newFdot = fdC + ddA * (uniforms.dt * 0.5);
     // NaN/Inf guard on fieldDot only (Axion vacuum is 0.0, handled by drift fixup)
     if (newFdot != newFdot || abs(newFdot) > 1e6) { newFdot = 0.0; }
     fieldDot[idx] = newFdot;
+}
+
+// ─── Hubble friction, φ̇ ← φ̇·e^{−3H dt} (expanding universes; bracketed by the ledger) ───
+@compute @workgroup_size(8, 8)
+fn hubbleFriction(@builtin(global_invocation_id) gid: vec3<u32>) {
+    if (gid.x >= GRID || gid.y >= GRID) { return; }
+    let idx = gid.y * GRID + gid.x;
+    fieldDot[idx] *= exp(-3.0 * uniforms.hubble * uniforms.dt);
 }
 
 // ─── Field Drift (with NaN/Inf fixup) ───

@@ -602,6 +602,7 @@ export function writeFrameUniforms(device, buffer, params) {
     f[31] = params.bhTheta || 0.5;     // Barnes-Hut opening angle
     u[32] = params.frameCount || 0;    // frameCount field in SimUniforms
     f[33] = params.scaleA || 1;        // cosmological scale factor
+    f[34] = params.hubble || 0;        // the frame's Hubble rate
 
     device.queue.writeBuffer(buffer, 0, _uniformData);
 }

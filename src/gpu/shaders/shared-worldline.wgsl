@@ -11,7 +11,7 @@
 // jumps. Times are GPU times (the world-line clock minus the rolling epoch).
 //
 // The store is comoving and conformal: positions are x/a and times conformal time η
-// (dη = dt/a), so w, the peculiar proper velocity, is dC/dη and light runs at 1 in (η, C).
+// (dη = dt/a), so v = w/γ, the peculiar velocity, is dC/dη and light runs at 1 in (η, C).
 // Without expansion a = 1, η is lab time and C the lab position. Maxwell's equations are
 // conformally invariant, so a Liénard–Wiechert field solved in (η, C) is exact in an
 // expanding universe; retardedState() converts back to physical (see there).

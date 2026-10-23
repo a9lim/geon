@@ -49,14 +49,14 @@ export default class StatsDisplay {
         const pe = e.pe + e.pfiEnergy;
         // A scalar field's energy is the slab's, a·ℓ thick under expansion (cosmology.js)
         const allFieldE = e.fieldEnergy + (e.higgsFieldEnergy + e.axionFieldEnergy) * e.scaleA;
-        const radiated = e.photonE + e.pionE + e.pendingRadiation + L.escapedE;
+        const radiated = e.photonE + e.pionE + e.pendingRadiation + L.escapedE + L.escapedMatterE;
         const total = e.totalMass + e.linearKE + e.spinKE + pe + allFieldE + radiated;
         const ledgerTotal = total + L.expansionWork;
 
-        const totalFieldPx = e.fieldPx + e.scalarFieldMomX;
-        const totalFieldPy = e.fieldPy + e.scalarFieldMomY;
-        const radPx = e.photonPx + e.pionPx + L.escapedPx;
-        const radPy = e.photonPy + e.pionPy + L.escapedPy;
+        const totalFieldPx = e.fieldPx + e.scalarFieldMomX * e.scaleA;   // the slab's, like its energy
+        const totalFieldPy = e.fieldPy + e.scalarFieldMomY * e.scaleA;
+        const radPx = e.photonPx + e.pionPx + L.escapedPx + L.escapedMatterPx;
+        const radPy = e.photonPy + e.pionPy + L.escapedPy + L.escapedMatterPy;
         const totalPx = e.px + totalFieldPx + radPx;
         const totalPy = e.py + totalFieldPy + radPy;
         const pMag = Math.sqrt(totalPx * totalPx + totalPy * totalPy);
