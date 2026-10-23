@@ -627,7 +627,7 @@ export const PRESETS = {
             const slider = document.getElementById('lensDistanceInput');
             if (slider) { slider.value = 0; slider.dispatchEvent(new Event('input')); }
             sim.lensPanel.setLensing(true);
-            sim.lensPanel.setProbe(true, { x: cx, y: cy, r: 0.6 });
+            sim.lensPanel.setProbe(true, { x: cx, y: cy, r: 1.2 });
         },
     },
 };

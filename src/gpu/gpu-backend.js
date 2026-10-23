@@ -236,7 +236,7 @@ export default class GPUBackend {
             const cam = sim.camera;
             const w = 1.1 * sim.width / cam.zoom, h = 1.1 * sim.height / cam.zoom;
             const lens = { res: LENS_RES, left: cam.x - w / 2, top: cam.y - h / 2, width: w, height: h, star: sim.lens.star };
-            this.physics.dispatchLens({ ...lens, distance: sim.lens.distance });
+            this.physics.dispatchLens({ ...lens, distance: sim.lens.distance, generation: sim.lens.gen });
             this.renderer.lens = lens;
             sim.lensPanel?.update();
         } else {

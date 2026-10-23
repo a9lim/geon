@@ -1,9 +1,9 @@
 // ─── Backdrop panel ───
 // The Frame tab's lensing controls: the grid as a lensed backdrop (lens-deflection.wgsl), its
-// distance D = D_LS/(D_L·D_S) on a log slider, and the microlensing probe: a backdrop star,
-// placed where the view's centre was, whose magnification is plotted as a light curve.
-import { t } from './i18n.js';
-
+// projected distance 𝒟 = D_L·D_LS/D_S on a log slider (lab units, so R_E = √(4M𝒟)), and the
+// microlensing probe: a backdrop star, placed where the view's centre was, whose
+// magnification is plotted as a light curve. sim.lens.gen counts changes, so a probe
+// readback from before one is dropped.
 const _PAL = window._PALETTE;
 const CURVE_LEN = 400;
 
@@ -23,11 +23,12 @@ export default class LensPanel {
         };
         this.ctx = this.el.canvas.getContext('2d');
         this.curve = [];
-        this._lastT = null;
+        this._lastSeq = null;
         _forms.bindToggle(this.el.toggle, v => this.setLensing(v));
         _forms.bindToggle(this.el.probe, v => this.setProbe(v));
         _forms.bindSlider(this.el.distance, $('lensDistanceValue'), v => {
             sim.lens.distance = 10 ** v;
+            this._restartCurve();
             sim._dirty = true;
         }, v => (10 ** v).toPrecision(2));
     }
@@ -52,10 +53,16 @@ export default class LensPanel {
         } else {
             sim.lens.star = null;
         }
-        this.curve = [];
-        this._lastT = null;
+        this._restartCurve();
         this.el.curveGroup.style.display = on ? '' : 'none';
         sim._dirty = true;
+    }
+
+    /** A new configuration: an empty curve, and older readbacks ignored. */
+    _restartCurve() {
+        this.sim.lens.gen = (this.sim.lens.gen ?? 0) + 1;
+        this.curve = [];
+        this._lastSeq = null;
     }
 
     /** Collect the probe's latest magnification and redraw (each rendered frame). */
@@ -63,11 +70,14 @@ export default class LensPanel {
         const sim = this.sim;
         if (!sim.lens.star) return;
         const h = sim._gpuPhysics?.lensHits;
-        if (!h || h.t === this._lastT) return;
-        this._lastT = h.t;
-        this.curve.push({ t: h.t, mu: h.magnification });
+        if (!h || h.seq === this._lastSeq || h.generation !== sim.lens.gen) return;
+        this._lastSeq = h.seq;
+        // Paused, the same instant only updates the readout
+        const last = this.curve[this.curve.length - 1];
+        if (last && last.t === h.t) last.mu = h.magnification;
+        else this.curve.push({ t: h.t, mu: h.magnification });
         if (this.curve.length > CURVE_LEN) this.curve.shift();
-        this.el.mu.textContent = h.hits > 0 ? h.magnification.toFixed(3) : t('lens.outOfView');
+        this.el.mu.textContent = h.magnification.toFixed(3);
         this.draw();
     }
 

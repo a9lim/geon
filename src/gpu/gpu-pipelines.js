@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 111;
+const SHADER_VERSION = 112;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -1170,7 +1170,7 @@ export async function createFieldEvolvePipelines(device, wgslConstants = '') {
     const gradBindGroupLayouts = [gradGroup0Layout];
     const gradPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: gradBindGroupLayouts });
 
-    const evolveEntries = ['higgsHalfKick', 'axionHalfKick', 'fieldDrift', 'hubbleFriction'];
+    const evolveEntries = ['higgsHalfKick', 'axionHalfKick', 'fieldDrift', 'hubbleFriction', 'higgsLangevin'];
     const pipelines = {};
     for (const entry of evolveEntries) {
         pipelines[entry] = device.createComputePipeline({

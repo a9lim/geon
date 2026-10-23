@@ -1211,27 +1211,40 @@ cases.push({
 });
 
 cases.push({
-    name: 'Microlensing: a point lens magnifies a backdrop star by (u² + 2)/(u√(u² + 4))',
+    name: 'Microlensing: a point lens magnifies a backdrop star by (u² + 2)/(u√(u² + 4)), averaged over its disk',
     async run() {
         // Inverse ray shooting on the probe's window: cells whose rays land on the star, times
-        // the cell area, over its area. θ_E = 8, a star of radius θ_E/10 (finite-source
-        // effects below 1% at u ≥ 0.5)
-        const M = 16, D = 1, thetaE = 8, rs = 0.8, side = 48;
+        // the cell area, over its area. The star is a uniform disk of radius θ_E/5, so the
+        // reference is the point-lens μ averaged over the disk (≈ 2% above the point value at
+        // u = 0.5); u = 3 checks that the window holds the faint inner image. With the window
+        // 8θ_E across at 1024², the star spans ~26 cells: ~1% resolution
+        const M = 16, D = 1, thetaE = 8, rs = 1.6, side = 48;
+        const muPoint = (u) => (u * u + 2) / (u * Math.sqrt(u * u + 4));
+        const muDisk = (u) => {
+            let sum = 0, n = 0;
+            const N = 200, rho = rs / thetaE;
+            for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+                const dx = (2 * (i + 0.5) / N - 1) * rho, dy = (2 * (j + 0.5) / N - 1) * rho;
+                if (dx * dx + dy * dy > rho * rho) continue;
+                sum += muPoint(Math.hypot(u + dx, dy));
+                n++;
+            }
+            return sum / n;
+        };
         const gp = await makeSim({ domainW: 128, domainH: 128 });
         gp.addParticle({ x: 64, y: 64, mass: M });
         const rows = [];
-        for (const u of [0.5, 1, 2]) {
+        for (const u of [0.5, 1, 2, 3]) {
             await lensMap(gp, 64, 64, side, D, { x: 64 + u * thetaE, y: 64, r: rs }, M);
-            const mu = gp.lensHits.magnification;
-            rows.push({ u, mu, exp: (u * u + 2) / (u * Math.sqrt(u * u + 4)) });
+            rows.push({ u, mu: gp.lensHits.magnification, exp: muDisk(u) });
         }
         gp.destroy();
         const worst = Math.max(...rows.map(r => Math.abs(r.mu / r.exp - 1)));
         return {
-            expected: rows.map(r => `μ(${r.u}) = ${fmt(r.exp, 3)}`).join(', '),
-            measured: rows.map(r => fmt(r.mu, 3)).join(', '),
+            expected: rows.map(r => `μ(${r.u}) = ${fmt(r.exp, 4)}`).join(', '),
+            measured: rows.map(r => fmt(r.mu, 4)).join(', '),
             metric: `worst ${fmt(worst * 100, 2)}%`,
-            pass: worst < 0.03,
+            pass: worst < 0.01,
         };
     },
 });

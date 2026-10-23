@@ -55,8 +55,8 @@ export default class StatsDisplay {
 
         const totalFieldPx = e.fieldPx + e.scalarFieldMomX * e.scaleA;   // the slab's, like its energy
         const totalFieldPy = e.fieldPy + e.scalarFieldMomY * e.scaleA;
-        const radPx = e.photonPx + e.pionPx + L.escapedPx + L.escapedMatterPx;
-        const radPy = e.photonPy + e.pionPy + L.escapedPy + L.escapedMatterPy;
+        const radPx = e.photonPx + e.pionPx + L.escapedPx;
+        const radPy = e.photonPy + e.pionPy + L.escapedPy;
         const totalPx = e.px + totalFieldPx + radPx;
         const totalPy = e.py + totalFieldPy + radPy;
         const pMag = Math.sqrt(totalPx * totalPx + totalPy * totalPy);

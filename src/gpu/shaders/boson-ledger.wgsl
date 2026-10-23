@@ -7,10 +7,10 @@
 //   cullBosons   — once per frame: photons past PHOTON_CULL_AGE and leptons past
 //                  LEPTON_CULL_AGE leave the pools into cosmoAccum (f32 bits, by
 //                  compare-and-swap), which the stats readback collects and clears:
-//                  [1] photon energy at the cull, [2–4] its comoving a·(E, px, py), so the
-//                  escaped background redshifts exactly whenever it is read; [5–7] lepton
-//                  energy and momentum, which stay matter (massive, so they don't redshift
-//                  as radiation)
+//                  [1] the culled energy that redshifts (photons, and leptons' kinetic
+//                  energy, taken as relativistic) at the cull, [2–4] its comoving a·(E, px,
+//                  py) with all culled momentum, so the escaped background redshifts exactly
+//                  whenever it is read; [5] leptons' rest mass, which stays matter
 //   statsBosons  — with the stats: pool totals into stats[20..25]: photon E, px, py; pion
 //                  and lepton E = m√(1 + w²), px, py; and stats[27], the radiation the
 //                  bodies have lost but not yet emitted (RadiationState accumulators)
@@ -56,8 +56,8 @@ fn reduce3(lid: u32, v: vec3<f32>) -> vec3<f32> {
 @compute @workgroup_size(LEDGER_WG)
 fn cullBosons(@builtin(global_invocation_id) gid: vec3u, @builtin(local_invocation_index) lid: u32) {
     let i = gid.x;
-    var photon = vec3(0.0);
-    var lepton = vec3(0.0);
+    var photon = vec3(0.0);   // what redshifts: E, px, py
+    var restMass = 0.0;
     if (i < min(atomicLoad(&phCount), arrayLength(&photons))) {
         var ph = photons[i];
         if ((ph.flags & 1u) != 0u && ph.lifetime > PHOTON_CULL_AGE) {
@@ -72,19 +72,18 @@ fn cullBosons(@builtin(global_invocation_id) gid: vec3u, @builtin(local_invocati
             pi.flags &= ~1u;
             pions[i] = pi;
             let w = vec2(pi.wX, pi.wY);
-            lepton = pi.mass * vec3(sqrt(1.0 + dot(w, w)), w);
+            photon += pi.mass * vec3(sqrt(1.0 + dot(w, w)) - 1.0, w);
+            restMass = pi.mass;
         }
     }
     let ph = reduce3(lid, photon);
-    let lep = reduce3(lid, lepton);
+    let rest = reduce3(lid, vec3(restMass, 0.0, 0.0));
     if (lid == 0u) {
         atomicAddF32(1u, ph.x);
         atomicAddF32(2u, ph.x * la.scaleA);
         atomicAddF32(3u, ph.y * la.scaleA);
         atomicAddF32(4u, ph.z * la.scaleA);
-        atomicAddF32(5u, lep.x);
-        atomicAddF32(6u, lep.y);
-        atomicAddF32(7u, lep.z);
+        atomicAddF32(5u, rest.x);
     }
 }
 

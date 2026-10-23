@@ -89,7 +89,7 @@ class Simulation {
         this.view = { trails: true, showClocks: false, showVelocity: false, showForce: false, showForceComponents: false, grid: true };
         this.heatmap = { enabled: false, mode: 'all' };
         // The grid as a lensed backdrop (lens-panel.js): on, distance D, the probe's star
-        this.lens = { on: false, distance: 1, star: null };
+        this.lens = { on: false, distance: 1, star: null, gen: 0 };
         // The domain is simulation state; the window is only a camera onto it
         this.domainW = DEFAULT_DOMAIN;
         this.domainH = DEFAULT_DOMAIN;

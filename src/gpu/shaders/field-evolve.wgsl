@@ -125,16 +125,6 @@ fn higgsHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
               - mc.z * damp * fdC + viscosity + 4.0 * mc.w * fdC;
 
     var newFdot = fdC + ddphi * halfDt;
-    // Langevin bath: the fluctuation partner of the damping, ⟨ξ²⟩ = 2γT/(cellArea·dt) per cell
-    if (uniforms.higgsNoise > 0.0 && damp > 0.0) {
-        // Both half-kicks share the substep's seed; fdC differs between them, so mixing its bits
-        // in gives each kick its own draw (one draw twice would double the variance)
-        let h1 = pcgHash((idx * 2654435761u) ^ uniforms.noiseSeed ^ bitcast<u32>(fdC));
-        let u1 = max(f32(h1) / 4294967296.0, 1e-7);
-        let u2 = f32(pcgHash(h1 ^ 0x68E31DA4u)) / 4294967296.0;
-        let gauss = sqrt(-2.0 * log(u1)) * cos(TWO_PI * u2);
-        newFdot += gauss * sqrt(2.0 * damp * uniforms.higgsNoise * halfDt * invCellArea);
-    }
     // NaN/Inf guard: reset fieldDot and field to VEV (matching CPU higgs-field.js:112)
     if (newFdot != newFdot || abs(newFdot) > 1e6) {
         newFdot = 0.0;
@@ -211,12 +201,28 @@ fn axionHalfKick(@builtin(global_invocation_id) gid: vec3<u32>) {
     fieldDot[idx] = newFdot;
 }
 
-// ─── Hubble friction, φ̇ ← φ̇·e^{−3H dt} (expanding universes; bracketed by the ledger) ───
+// ─── Hubble friction: φ̇ ← φ̇·e^{−3H dt/2}, half a step either side of the KDK (Strang),
+// each bracketed by the ledger (expanding universes) ───
 @compute @workgroup_size(8, 8)
 fn hubbleFriction(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (gid.x >= GRID || gid.y >= GRID) { return; }
     let idx = gid.y * GRID + gid.x;
-    fieldDot[idx] *= exp(-3.0 * uniforms.hubble * uniforms.dt);
+    fieldDot[idx] *= uniforms.frictionFactor;
+}
+
+// ─── The Higgs's Langevin bath, once per substep: φ̇ += ξ, ⟨ξ²⟩ = 2γT·dt/cellArea, the
+// fluctuation partner of the damping γ = 2m_H. Counter-based draws keyed by (cell, substep) ───
+@compute @workgroup_size(8, 8)
+fn higgsLangevin(@builtin(global_invocation_id) gid: vec3<u32>) {
+    if (gid.x >= GRID || gid.y >= GRID) { return; }
+    let idx = gid.y * GRID + gid.x;
+    let gamma = 2.0 * uniforms.higgsMass;
+    let cellArea = uniforms.cellW * uniforms.cellH;
+    let h1 = pcgHash(pcgHash(idx) ^ uniforms.noiseSeed);
+    let u1 = max(f32(h1) / 4294967296.0, 1e-7);
+    let u2 = f32(pcgHash(h1 ^ 0x68E31DA4u)) / 4294967296.0;
+    let gauss = sqrt(-2.0 * log(u1)) * cos(TWO_PI * u2);
+    fieldDot[idx] += gauss * sqrt(2.0 * gamma * uniforms.higgsNoise * uniforms.dt / cellArea);
 }
 
 // ─── Field Drift (with NaN/Inf fixup) ───

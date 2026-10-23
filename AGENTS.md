@@ -180,7 +180,9 @@ background doesn't cancel.
   Hubble friction metered exactly around its own operator (`hubbleFriction`) and the
   stretch from the state just before it; and in JS the stretched potentials to first
   order (`stats[26]` = Σ d·∂V/∂d) and the escaped background's redshift (culled photons
-  arrive comoving, a·E, and convert at the a they're read at; culled leptons are matter).
+  arrive comoving, a·E, and convert at the a they're read at; culled leptons split into
+  rest mass, which stays matter, and kinetic energy, redshifted as relativistic). The
+  capped universe (a = A_MAX) stops its Hubble friction and drag with its stretch.
   Momentum drift compares a·P, which expansion conserves on the torus.
 - **Readouts:** the Stats tab's Expansion section (`cosmology-panel.js`): a, H, c/H, the
   event horizon (finite only with a vacuum term), the Friedmann density, and ln a and H
@@ -339,22 +341,26 @@ backdrop seen through the bodies as a thin lens, viewed along z, in the lab fram
 
 - **The map** (`lens-deflection.wgsl`, `GPUPhysics.dispatchLens`, from
   `GPUBackend.render()` each rendered frame): one thread per cell of a `LENS_RES`² (512)
-  grid over the view, 10% oversized, writes α(θ) = Σ 4M·D(θ − θᵢ)/(|θ − θᵢ|² + 0.01), the
-  gradient of the 2D log potential, with D = D_LS/(D_L·D_S) on a log slider (θ_E =
-  √(4MD)); on a periodic domain each lens sits at its image nearest the view's centre
-  (a per-pixel minimum image would tear the backdrop at the seam, since α falls only as
-  1/θ). Black holes flag an imposed 3√3·M capture disk, since the weak thin lens has no
-  shadow.
+  grid over the view, 10% oversized, writes α(x) = Σ 4M𝒟(x − xᵢ)/(|x − xᵢ|² + 10⁻⁴·4M𝒟)
+  in physical lens-plane coordinates, the gradient of the 2D log potential, with
+  𝒟 = D_L·D_LS/D_S on a log slider (R_E = √(4M𝒟); the core shifts the ring by 5·10⁻⁵ R_E).
+  On a periodic domain each lens sits at its image nearest the view's centre, for the map
+  and the probe alike (a per-pixel minimum image would tear the backdrop at the seam,
+  since α falls only as 1/x); one image per lens is a finite-patch approximation. Black
+  holes flag an imposed 3√3·M disk, the Schwarzschild capture impact parameter (no spin
+  or charge), since the weak thin lens has no shadow. The lens is instantaneous: no
+  moving-lens corrections, time delays or strong-field images, and lab frame only.
 - **Drawing** (`grid-render.wgsl`): each pixel samples the map bilinearly and draws the
   rulers at β = θ − α; the domain edge is in the slab and stays unlensed; capture disks
   take the ground's ink.
 - **The probe:** a backdrop star of radius r at β_s, placed where the view's centre was.
   Cells whose rays land on it light up in the accent (its images, arcs, Einstein rings)
   and are counted (`lensBuffers.hits`) on a second, `countOnly` pass over a 1024² window
-  around the star (±3θ_E for the total mass, at least 20 star radii), so μ =
-  hits·cellArea/(πr²) by inverse ray shooting, for any lens configuration, read back a
-  frame late (`lensHits`) and plotted as a light curve. Images outside the window are
-  missed.
+  around the star (±4 R_E for the total mass, at least 20 star radii: a heuristic that
+  holds a single lens's images to u ≈ 3.7), so μ = hits·cellArea/(πr²) by inverse ray
+  shooting, the magnification of a uniform disk, for any lens configuration; captured rays
+  see no star. Results carry `sim.lens.gen`, bumped by every change, so a readback from
+  before one is dropped; the panel plots the rest as a light curve.
 
 ### Black holes
 
@@ -437,12 +443,14 @@ consumed once.
 **Damping and the bath.** The fields' ether damping (Higgs `2m_H`, axion `g·m_a`) is the
 `fieldDamping` setting, on by default. `setHiggsQuench(τ_Q, T)` (the Kibble–Zurek preset)
 ramps the Higgs mass term as `ε·μ²`, ε = −1 + t/τ_Q clamped to [−1, 1], and adds a
-Langevin bath `⟨ξ²⟩ = 2γT/(cellArea·dt)` on the Higgs damping, an independent draw per
-half-kick. The quench and the bath do work the ledger doesn't book. The Higgs overlay measures
+Langevin bath on the Higgs damping, its own pass (`higgsLangevin`) once per substep with
+`⟨ξ²⟩ = 2γT·dt/cellArea` and counter-based draws keyed by cell and substep. The quench and
+the bath do work the ledger doesn't book. The Higgs overlay measures
 from the current vacuum √ε and colours φ < 0 with the enhanced hue.
 
 **Under expansion** the grid is comoving (its cells grow with a, so the Laplacian is
-physical), `hubbleFriction` applies `φ̇ ← φ̇·e^{−3H dt}` each substep, particle sources
+physical), `hubbleFriction` applies `φ̇ ← φ̇·e^{−3H dt/2}` before and after each substep's
+KDK (Strang; each half metered by the ledger), particle sources
 thin by 1/a, and the slab's field energy and momentum are a times the grid's (stats,
 Friedmann density, excitation and superradiance impulses scaled by 1/a). The
 convention: the grid holds the dimensionally reduced field ψ = √ℓ·φ_3D, uniform through

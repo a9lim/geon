@@ -190,7 +190,7 @@ const REF_EN = {
 <h3>The lens equation</h3>
 <p>A ray that reaches the eye at angle $\\boldsymbol\\theta$ left the backdrop at</p>
 <p>$$\\boldsymbol\\beta = \\boldsymbol\\theta - \\boldsymbol\\alpha(\\boldsymbol\\theta), \\qquad \\boldsymbol\\alpha(\\boldsymbol\\theta) = \\sum_i 4M_iD\\,\\frac{\\boldsymbol\\theta - \\boldsymbol\\theta_i}{|\\boldsymbol\\theta - \\boldsymbol\\theta_i|^2},$$</p>
-<p>the gradient of a two-dimensional logarithmic potential, twice what Newtonian gravity would give a fast particle. $D = D_{LS}/(D_L D_S)$ sets how far behind the plane the backdrop lies (the Backdrop distance slider). Each pixel draws the grid at $\\boldsymbol\\beta$, so the rulers bend around every mass.</p>
+<p>the gradient of a two-dimensional logarithmic potential, twice what Newtonian gravity would give a fast particle. Geon works in lens-plane distances rather than angles, so the Backdrop distance slider sets $D = D_L D_{LS}/D_S$ in the simulation's length units. Each pixel draws the grid at $\\boldsymbol\\beta$, so the rulers bend around every mass. A tiny core, $10^{-4}$ of each lens's $4MD$, keeps a ray through a body finite.</p>
 
 <h3>Einstein rings</h3>
 <p>A backdrop point directly behind a lone mass is seen on a ring of radius</p>
@@ -203,7 +203,7 @@ const REF_EN = {
 <p>so a lens drifting past the star brightens it along a symmetric light curve, the signature astronomers use to find dark objects and planets. Geon measures $\\mu$ by shooting a ray through every cell of the view and counting those that land on the star, which works for any arrangement of lenses.</p>
 
 <h3>Limits</h3>
-<p>This is the weak, thin-lens approximation. It has no black-hole shadow: around black holes Geon draws the photon-capture disk of radius $3\\sqrt3\\,M$ as an imposed overlay, not a computed one. The photons moving in the plane are deflected separately, by twice the Newtonian pull. Lensing is drawn in the lab frame only.</p>
+<p>This is the weak, thin-lens approximation for lenses at rest at their current positions: no moving-lens corrections, time delays, or spin and charge effects. It has no black-hole shadow: around black holes Geon masks the Schwarzschild capture impact parameter $3\\sqrt3\\,M$, an imposed overlay rather than a computed one. On a periodic domain each lens is taken once, at its image nearest the centre of the view. The photons moving in the plane are deflected separately, by twice the Newtonian pull. Lensing is drawn in the lab frame only.</p>
 `,
 
     'ref.radiation.title': 'Radiation',
@@ -960,7 +960,7 @@ const REF_JA = {
 <h3>レンズ方程式</h3>
 <p>角度 $\\boldsymbol\\theta$ で目に届く光線は、背景の次の位置から出ています。</p>
 <p>$$\\boldsymbol\\beta = \\boldsymbol\\theta - \\boldsymbol\\alpha(\\boldsymbol\\theta), \\qquad \\boldsymbol\\alpha(\\boldsymbol\\theta) = \\sum_i 4M_iD\\,\\frac{\\boldsymbol\\theta - \\boldsymbol\\theta_i}{|\\boldsymbol\\theta - \\boldsymbol\\theta_i|^2}$$</p>
-<p>これは2次元の対数ポテンシャルの勾配で、ニュートン重力が速い粒子に与える曲がりの2倍です。$D = D_{LS}/(D_L D_S)$ は背景が平面のどれだけ奥にあるかを決めます（「背景までの距離」スライダー）。各画素は $\\boldsymbol\\beta$ の位置の格子を描くので、物差しはどの質量のまわりでも曲がります。</p>
+<p>これは2次元の対数ポテンシャルの勾配で、ニュートン重力が速い粒子に与える曲がりの2倍です。Geonは角度ではなくレンズ面上の距離で計算するので、「背景までの距離」スライダーはシミュレーションの長さの単位で $D = D_L D_{LS}/D_S$ を決めます。各画素は $\\boldsymbol\\beta$ の位置の格子を描くので、物差しはどの質量のまわりでも曲がります。物体を通る光線が発散しないよう、各レンズの $4MD$ の $10^{-4}$ の小さな芯を入れています。</p>
 
 <h3>アインシュタイン・リング</h3>
 <p>孤立した質量の真後ろにある背景の点は、半径</p>
@@ -973,7 +973,7 @@ const REF_JA = {
 <p>なので、星の前を横切るレンズは星を左右対称な光度曲線に沿って明るくします。天文学者が暗い天体や惑星を見つけるのに使う特徴です。Geonは表示のすべてのセルに光線を通し、星に届いたものを数えて $\\mu$ を求めるので、レンズがいくつあっても使えます。</p>
 
 <h3>制限</h3>
-<p>これは弱い薄レンズ近似です。ブラックホールの影は生じないので、ブラックホールのまわりには半径 $3\\sqrt3\\,M$ の光子捕獲円盤を、計算ではなく課した表示として描きます。平面内を動く光子は別に、ニュートン重力の2倍で曲げられます。レンズ効果は実験室系でのみ描かれます。</p>
+<p>これは、レンズが現在の位置に静止しているとした弱い薄レンズ近似です。動くレンズの補正、時間の遅れ、スピンや電荷の効果は入りません。ブラックホールの影は生じないので、ブラックホールのまわりにはシュワルツシルトの捕獲衝突径数 $3\\sqrt3\\,M$ を、計算ではなく課した表示として描きます。周期的な領域では、各レンズを表示の中心に最も近い像として一度だけ数えます。平面内を動く光子は別に、ニュートン重力の2倍で曲げられます。レンズ効果は実験室系でのみ描かれます。</p>
 `,
 
     'ref.radiation.title': '放射',

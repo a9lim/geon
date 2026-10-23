@@ -59,8 +59,9 @@ struct AxYukMod {
 // [20-25] boson pools (boson-ledger.wgsl): photon E, px, py; pion and lepton E, px, py
 // [26] peScale = Σ d·∂V/∂d over pairs, dPE/d(ln a) for a uniform stretch (expansion's ledger)
 // [27] radiation lost by bodies but not yet emitted (boson-ledger.wgsl)
-// [96-103] cosmoAccum since the last readback: [96] expansion work; [97] escaped photon energy,
-//          [98-100] its comoving a·(E, px, py); [101-103] escaped lepton E, px, py
+// [96-103] cosmoAccum since the last readback: [96] expansion work; [97] escaped energy that
+//          redshifts (photons, leptons' kinetic), [98-100] its comoving a·(E, px, py) with all
+//          escaped momentum; [101] escaped leptons' rest mass
 // Selected particle [32-75]: [32] posX .. [69] axion force, [70-72] axMod, yukMod, higgsMod,
 //   [73-75] τ, dτ/dt, θ
 // Reference body [80-91]: heaviest other alive particle (mass [84] = -1 when none)

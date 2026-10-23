@@ -181,8 +181,9 @@ fn fsGrid(in: VertexOutput) -> @location(0) vec4<f32> {
     var a = max(edge, lines);
     var color = ink * a;
     if (lensed && grid.starOn != 0u) {
+        // A captured ray sees no star (the probe doesn't count it either)
         let ds = length(backdrop - vec2(grid.starX, grid.starY)) / grid.starR;
-        let star = (1.0 - smoothstep(0.85, 1.0, ds)) * 0.9;
+        let star = (1.0 - smoothstep(0.85, 1.0, ds)) * 0.9 * (1.0 - smoothstep(0.3, 0.7, shadow));
         let accent = select(COLOR_ACCENT_LIGHT, COLOR_ACCENT_DARK, dark);
         color = color * (1.0 - star) + accent * star;
         a = a + star * (1.0 - a);

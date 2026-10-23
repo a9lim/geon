@@ -106,14 +106,18 @@ const _birthSampleData = new Float32Array(12);
 const _lensData = new ArrayBuffer(80);               // lens-deflection.wgsl LensParams
 const _lensF32 = new Float32Array(_lensData);
 const _lensU32 = new Uint32Array(_lensData);
-// The lens map's resolution, and a small core so a ray through a body stays finite
+// The lens map's resolution, and each lens's core as a fraction of its R_E², so a ray
+// through a body stays finite (the ring radius shifts by 5·10⁻⁵ R_E)
 export const LENS_RES = 512;
+const LENS_CORE_FRAC = 1e-4;
 const PROBE_RES = 1024;   // the probe's ray-shooting grid, finer: magnifications to ~1%
-const LENS_CORE_SQ = 0.01;
 const _ledgerAData = new Float32Array(4);           // boson-ledger.wgsl LedgerA
 // The energy accounts the stats can't see (stats-display.js): escaped radiation (redshifting),
 // escaped leptons (matter), and the work the expansion has done
-const EMPTY_LEDGER = Object.freeze({ escapedE: 0, escapedPx: 0, escapedPy: 0, escapedMatterE: 0, escapedMatterPx: 0, escapedMatterPy: 0, expansionWork: 0 });
+// (escapedE: culled photons and culled leptons' kinetic energy, both redshifting as 1/a, the
+// relativistic law; escapedMatterE: culled leptons' rest mass; escapedP: all their momentum,
+// which falls as 1/a at any speed)
+const EMPTY_LEDGER = Object.freeze({ escapedE: 0, escapedPx: 0, escapedPy: 0, escapedMatterE: 0, expansionWork: 0 });
 const _fieldLedgerData = new ArrayBuffer(48);       // field-ledger.wgsl LedgerUniforms
 const _fieldLedgerF32 = new Float32Array(_fieldLedgerData);
 const _fieldLedgerU32 = new Uint32Array(_fieldLedgerData);
@@ -685,23 +689,26 @@ export default class GPUPhysics {
      * Build the lens map over the rectangle `p` = { left, top, width, height } (lab) for the
      * backdrop distance `p.distance`, and, when `p.star` = { x, y, r } is set, count the
      * probe's rays on a window around the star (read back a frame late into `lensHits`).
-     * The window spans 3θ_E either side for the total mass's Einstein radius (`p.massTotal`,
-     * else the last stats), which holds the bright images, and at least 20 star radii.
+     * The window spans 4 R_E either side for the total mass's Einstein radius (`p.massTotal`,
+     * else the last stats), a heuristic that holds both images of a single lens out to u ≈ 3.7
+     * (beyond, the missed secondary carries under 0.5% of the flux), and at least 20 star
+     * radii. `p.generation` tags the result, so a readback from before a change is ignored.
      */
     dispatchLens(p) {
         if (!this._lensPipeline) return;
+        const refX = p.left + p.width / 2, refY = p.top + p.height / 2;
         const writeParams = (buf, left, top, w, h, star, countOnly, res) => {
             const f = _lensF32, u = _lensU32;
             f[0] = left; f[1] = top; f[2] = w / res; f[3] = h / res;
             u[4] = res; u[5] = this.aliveCount;
             f[6] = 4 * p.distance;
-            f[7] = LENS_CORE_SQ;
+            f[7] = LENS_CORE_FRAC;
             f[8] = star ? star.x : 0; f[9] = star ? star.y : 0; f[10] = star ? star.r * star.r : 0;
             u[11] = star ? 1 : 0;
             u[12] = this.boundaryMode === BOUND_LOOP ? 1 : 0; u[13] = this.topologyMode;
             f[14] = this.domainW; f[15] = this.domainH;
             u[16] = this._blackHoleEnabled ? 1 : 0; u[17] = countOnly ? 1 : 0;
-            f[18] = left + w / 2; f[19] = top + h / 2;   // the rectangle's centre
+            f[18] = refX; f[19] = refY;   // both passes take each lens's image nearest the view's centre
             this.device.queue.writeBuffer(buf, 0, _lensData);
         };
         writeParams(this.lensBuffers.params, p.left, p.top, p.width, p.height, null, false, LENS_RES);
@@ -714,7 +721,7 @@ export default class GPUPhysics {
         let cellArea = 0;
         if (p.star) {
             const mTot = p.massTotal ?? (this._statsData ? Math.max(this._statsData[8], 0) : 1);
-            const half = Math.max(3 * Math.sqrt(4 * mTot * p.distance), 20 * p.star.r);
+            const half = Math.max(4 * Math.sqrt(4 * mTot * p.distance), 20 * p.star.r);
             writeParams(this.lensBuffers.probeParams, p.star.x - half, p.star.y - half, 2 * half, 2 * half, p.star, true, PROBE_RES);
             cellArea = (2 * half / PROBE_RES) ** 2;
             pass.setBindGroup(0, this._lensProbeBG);
@@ -726,11 +733,12 @@ export default class GPUPhysics {
         this.device.queue.submit([enc.finish()]);
         if (!readHits) return;
         this._lensPending = true;
-        const r = p.star.r, t = this.simTime;
+        const r = p.star.r, t = this.simTime, generation = p.generation ?? 0;
         this.lensBuffers.staging.mapAsync(GPUMapMode.READ).then(() => {
             const n = new Uint32Array(this.lensBuffers.staging.getMappedRange().slice(0))[0];
             this.lensBuffers.staging.unmap();
-            this.lensHits = { hits: n, magnification: n * cellArea / (Math.PI * r * r), t };
+            this._lensSeq = (this._lensSeq ?? 0) + 1;
+            this.lensHits = { hits: n, magnification: n * cellArea / (Math.PI * r * r), t, generation, seq: this._lensSeq };
         }).catch(() => {}).finally(() => { this._lensPending = false; });
     }
 
@@ -2499,7 +2507,8 @@ export default class GPUPhysics {
         const q = this._higgsQuench;
         f[29] = q ? Math.min(1, Math.max(-1, (this.simTime - q.t0) / q.tau - 1)) : 1;
         f[30] = q ? q.noise : 0;
-        u[31] = (this._noiseSeed = (this._noiseSeed + 0x9E3779B9) >>> 0);
+        u[31] = this._noiseSeed;
+        f[32] = Math.exp(-1.5 * (this._frameH ?? 0) * dt);
         this.device.queue.writeBuffer(buf, 0, _fieldUniformData);
     }
 
@@ -3193,10 +3202,14 @@ export default class GPUPhysics {
         p.end();
     }
 
-    /** φ̇ ← φ̇·e^{−3H dt} for each active field (field-evolve.wgsl hubbleFriction). */
+    /**
+     * φ̇ ← φ̇·e^{−3H dt/2} for each active field (field-evolve.wgsl hubbleFriction), metered by
+     * the ledger on either side.
+     */
     _dispatchHubbleFriction(encoder) {
         const evo = this._fieldEvolve;
         if (!evo || !evo.hubbleFriction) return;
+        this._dispatchFieldLedger(encoder, 0, 1, 0);
         const gridWG = Math.ceil(FIELD_GRID_RES / 8);
         for (const which of ['higgs', 'axion']) {
             if (!(which === 'higgs' ? this._higgsEnabled && this._higgsBuffers : this._axionEnabled && this._axionBuffers)) continue;
@@ -3207,6 +3220,22 @@ export default class GPUPhysics {
             p.dispatchWorkgroups(gridWG, gridWG);
             p.end();
         }
+        this._dispatchFieldLedger(encoder, 2, 1, 0);
+    }
+
+    /** The Higgs's Langevin bath during a quench (field-evolve.wgsl higgsLangevin). */
+    _dispatchHiggsLangevin(encoder) {
+        const evo = this._fieldEvolve;
+        const q = this._higgsQuench;
+        if (!evo || !evo.higgsLangevin || !q || !(q.noise > 0) || !this._fieldDamping) return;
+        if (!this._higgsEnabled || !this._higgsBuffers || !this._phase5Ready) return;
+        this._ensureEvolveBindGroups('higgs');
+        const gridWG = Math.ceil(FIELD_GRID_RES / 8);
+        const p = encoder.beginComputePass({ label: 'higgsLangevin' });
+        p.setPipeline(evo.higgsLangevin);
+        p.setBindGroup(0, this._fieldEvolveBGs.higgs);
+        p.dispatchWorkgroups(gridWG, gridWG);
+        p.end();
     }
 
     /**
@@ -3224,8 +3253,6 @@ export default class GPUPhysics {
             l.escapedPx += d[99] / aAt;
             l.escapedPy += d[100] / aAt;
             l.escapedMatterE += d[101];
-            l.escapedMatterPx += d[102];
-            l.escapedMatterPy += d[103];
         }
         if (this._peScale === null) {
             L.expansionWork -= this._lnrPending * d[26];
@@ -3629,7 +3656,7 @@ export default class GPUPhysics {
             const a0 = cosmo.a;
             half = Math.sqrt(cosmo.step(dt));
             this._frameA = a0 * half;
-            this._frameH = cosmo.hubble(this._frameA);
+            this._frameH = cosmo.capped ? 0 : cosmo.hubble(this._frameA);
             if (half !== 1) {
                 const enc = this.device.createCommandEncoder({ label: 'expansion-pre' });
                 this._stretch(enc, half, a0);
@@ -3924,13 +3951,14 @@ export default class GPUPhysics {
         if (this._fieldDeposit) {
             if (this._higgsEnabled) this._writeFieldUniforms(dtSub, 0);
             if (this._axionEnabled) this._writeFieldUniforms(dtSub, 1);
-            // Hubble friction, its own operator, metered by the ledger on either side
-            if (this.expanding && this._frameH > 0 && this._phase5Ready) {
-                this._dispatchFieldLedger(encoder, 0, 1, dtSub);
-                this._dispatchHubbleFriction(encoder);
-                this._dispatchFieldLedger(encoder, 2, 1, dtSub);
-            }
+            // Hubble friction, its own operator, half a step either side of the KDK (Strang),
+            // each half metered by the ledger; the Higgs's Langevin bath, once per substep
+            const friction = this.expanding && this._frameH > 0 && this._phase5Ready;
+            this._noiseSeed = (this._noiseSeed + 0x9E3779B9) >>> 0;
+            if (friction) this._dispatchHubbleFriction(encoder);
+            this._dispatchHiggsLangevin(encoder);
             this._dispatchFieldStep(encoder, dtSub);
+            if (friction) this._dispatchHubbleFriction(encoder);
         }
 
         // (Field forces already dispatched at Pass 5c, before Boris)

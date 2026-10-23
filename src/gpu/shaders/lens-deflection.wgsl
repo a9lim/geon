@@ -1,16 +1,20 @@
 // ─── Gravitational lensing of the backdrop ───
 // The background grid is a sheet behind the slab, seen along z through the slab's masses as
-// a thin lens. Each image-plane point θ (lab coordinates) sees the backdrop at
-//   β = θ − α(θ),  α(θ) = Σᵢ 4Mᵢ·D·(θ − θᵢ)/|θ − θᵢ|²,
-// the gradient of the 2D log potential, with D = D_LS/(D_L·D_S) the backdrop-distance knob
-// (a lone mass's Einstein radius is θ_E = √(4MD)). One thread per cell of a LENS_RES² map
+// a thin lens. Positions are physical lab coordinates in the lens plane (x = D_L·θ), so a
+// point x sees the backdrop at
+//   y = x − α(x),  α(x) = Σᵢ 4Mᵢ·𝒟·(x − xᵢ)/(|x − xᵢ|² + s²ᵢ),
+// the gradient of the 2D log potential, with 𝒟 = D_L·D_LS/D_S the projected-distance knob
+// (a lone mass's Einstein radius is R_E = √(4M𝒟)). The core s²ᵢ = 10⁻⁴·4Mᵢ𝒟 keeps a ray
+// through a body finite; it makes each lens a tiny extended mass (ring radius² R_E² − s²). One thread per cell of a LENS_RES² map
 // over the visible rectangle writes (αx, αy, shadow, 0); grid-render.wgsl samples it.
 //
 // Black holes: the weak thin-lens formula has no shadow, so cells within the photon-capture
 // radius 3√3·M of a hole are flagged, an imposed and labelled disk (3.0's ray tracing would
-// find it). On a periodic domain each lens sits at its image nearest a reference point (the
-// view's centre, or the probe's star), not the nearest image per pixel: the 1/θ deflection
-// decays too slowly for a minimum-image seam, which would tear the backdrop.
+// find it); 3√3·M is the Schwarzschild capture impact parameter, without Kerr–Newman spin or
+// charge. On a periodic domain each lens sits at its image nearest one reference point (the
+// view's centre, for both the map and the probe), not the nearest image per pixel: the 1/x
+// deflection decays too slowly for a minimum-image seam, which would tear the backdrop.
+// One image per lens is a finite-patch approximation, not periodic lensing.
 //
 // The microlensing probe is a backdrop star of radius r_s at β_s: a cell whose ray lands
 // inside it adds to `hits`, so the magnification is hits·cellArea/(π r_s²) (inverse ray
@@ -25,8 +29,8 @@ struct LensParams {
     cellH: f32,
     res: u32,
     aliveCount: u32,
-    deflect: f32,       // 4·D
-    softSq: f32,        // a small core, so a pixel on a body stays finite
+    deflect: f32,       // 4·𝒟
+    coreFrac: f32,      // s² = coreFrac·4M𝒟 per lens
     starX: f32,
     starY: f32,
     starRSq: f32,
@@ -61,7 +65,8 @@ fn lensDeflection(@builtin(global_invocation_id) gid: vec3u) {
         }
         let d = theta - lens;
         let rSq = dot(d, d);
-        alpha += (lp.deflect * p.mass / (rSq + lp.softSq)) * d;
+        let k = lp.deflect * p.mass;
+        alpha += (k / (rSq + lp.coreFrac * k)) * d;
         if (lp.blackHole != 0u && rSq < 27.0 * p.mass * p.mass) { shadow = 1.0; }
     }
     if (lp.countOnly == 0u) { lensMap[gid.y * lp.res + gid.x] = vec4(alpha, shadow, 0.0); }

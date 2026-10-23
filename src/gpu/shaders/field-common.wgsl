@@ -44,7 +44,8 @@ struct FieldUniforms {
     // Higgs damping, so slow quenches have fluctuations to grow from
     higgsQuench: f32,
     higgsNoise: f32,
-    noiseSeed: u32,
+    noiseSeed: u32,         // a fresh key per substep (counter-based draws, higgsLangevin)
+    frictionFactor: f32,    // e^{−3H·dt/2}: hubbleFriction runs half a step either side of the KDK
 };
 
 // ─── PQS (Cubic B-Spline, Order 3) Weight Computation ───

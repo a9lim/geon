@@ -363,8 +363,8 @@ The tie is explicit and per mode, which is what Codex asked for.
     distance now; the Friedmann dust law; zero force from a periodic lattice;
     misalignment frozen then ρa³ constant (0.5%); the field ledger's closure (0.3% of
     the peak slab energy, about 10% of the initial); Kibble–Zurek walls fewer for
-    slower quenches, n ∝ τ_Q^{−0.18}, below both mean-field 1/4 and 2D Ising ≈ 0.32
-    (counted after ordering, so coarsening and weak-noise delays flatten it).
+    slower quenches, n ∝ τ_Q^{−0.22}, a qualitative check against mean-field 1/4 and
+    2D Ising ≈ 0.32 (counted once the field orders, so coarsening flattens it).
 
 - **M4 (2026-10-23): lensing** (§5.5).
   - The grid as a lensed backdrop: a 512² deflection map over the view each frame
@@ -374,10 +374,20 @@ The tie is explicit and per mode, which is what Codex asked for.
   - The microlensing probe: a backdrop star whose images show on the grid and whose
     magnification comes from inverse ray shooting, plotted as a light curve.
   - Preset: microlensing, a mass drifting past the star (23).
-  - Oracles (32): |α| = 4MD/θ so β = 0 on θ_E = √(4MD) (0.04%); the point lens's
-    μ(u) = (u² + 2)/(u√(u² + 4)) at u = 0.5, 1, 2 (0.5%, on the probe's own 1024²
-    window around the star). On a torus each lens sits at its image nearest the view's
-    centre (or the star): per-pixel minimum images tore the backdrop at the seam.
+  - Oracles (32): |α| = 4M𝒟/x so y = 0 on R_E = √(4M𝒟) (0.01%); a uniform disk's
+    magnification, the point lens's (u² + 2)/(u√(u² + 4)) averaged over the disk, at
+    u = 0.5, 1, 2, 3 (0.23%, on the probe's own 1024² window around the star).
+  - Codex reviewed M4 and the M3 fixes (2026-10-23); fixed: the knob is the projected
+    distance 𝒟 = D_L·D_LS/D_S in lab units (the shader works in physical lens-plane
+    coordinates); the 0.01 core was a different lens model at small 4M𝒟 and is now 10⁻⁴
+    of each lens's R_E²; the probe's window missed a single lens's inner image beyond
+    u ≈ 3 (now ±4 R_E); the map and the probe picked periodic images from different
+    reference points; the star showed through capture disks; probe readbacks had no
+    identity across changes; per-pixel minimum images tore the backdrop at the seam. In
+    M3: the capped universe kept its Hubble friction; culled leptons froze their kinetic
+    energy; the field friction was a first-order split (now Strang halves); the bath's
+    draws relied on fdC (now its own counter-keyed pass, which moved the Kibble–Zurek
+    slope to 0.22).
 
 ### 2.2 Physics bugs and gaps found by the 2.0 scouting
 
