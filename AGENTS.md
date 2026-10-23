@@ -7,6 +7,10 @@ Part of the **a9l.im** portfolio. See root `AGENTS.md` for the shared design sys
 - Always prefer shared modules over project-specific reimplementations. Check the parent `shared/` directory before adding utility code.
 - Never use the phrase "retarded potential(s)" in code, comments, or user-facing text. Use "signal delay" or "finite-speed force propagation" instead.
 
+## Future Plans
+
+`docs/ROADMAP.md` is the single authoritative plans document, covering 2.0 and beyond, open bugs, open decisions and milestones. This file describes Geon as it is; the roadmap describes where it is going. Decided on 2026-10-23: WebGPU-only (the CPU path will be retired) and the 3D convention (the simulation is a 2D slice of a 3D world). Until the CPU retirement lands, the CPU sections below still describe the live code.
+
 ## Running Locally
 
 ```bash
@@ -32,7 +36,7 @@ Falls back to CPU on WebGPU unavailability or device loss. Force CPU via `?cpu=1
 
 Backend switching should go through `sim.useGPUBackend()` / `sim.useCPUBackend()`. Single-step and main-loop stepping should go through `sim.runtimeBackend.stepOnce(sim)` / `sim.runtimeBackend.step(sim)` rather than branching directly on `sim.backend` in UI or loop code.
 
-**Key modules**: `integrator.js` (Boris substep loop, all physics), `forces.js` (pairForce, BH tree walk, 1PN), `scalar-field.js` (PQS grid base), `higgs-field.js` / `axion-field.js` (field subclasses), `quadtree.js` (SoA flat typed arrays, pool-based), `physics-contract.js` (shared toggle/parameter/save-load contract), `ui.js` (toggle deps via shared `_forms.bindDeps`, mode locking, backend switching), `presets.js` (19 scenarios).
+**Key modules**: `integrator.js` (Boris substep loop, all physics), `forces.js` (pairForce, BH tree walk, 1PN), `scalar-field.js` (PQS grid base), `higgs-field.js` / `axion-field.js` (field subclasses), `quadtree.js` (SoA flat typed arrays, pool-based), `physics-contract.js` (shared toggle/parameter/save-load contract), `ui.js` (toggle deps via shared `_forms.bindDeps`, mode locking, backend switching), `presets.js` (15 scenarios).
 
 ## Visual Layer
 
