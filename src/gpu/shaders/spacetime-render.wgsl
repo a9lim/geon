@@ -445,7 +445,14 @@ fn vs_boson(@builtin(vertex_index) vid: u32, @builtin(instance_index) idx: u32) 
         vel = vec2(ph.velX, ph.velY);
         age = ph.lifetime;
         let grav = (ph.flags & 2u) != 0u;
-        rgb = select(select(INK_OCHRE_L, INK_OCHRE_D, dk), select(INK_MADDER_L, INK_MADDER_D, dk), grav);
+        // Light in the displayed coordinates takes its Doppler factor γψ(1 − uψ·v̂)
+        let ob = observer();
+        let uPsi = ob.n * tanh(ob.psi);
+        let D = (1.0 - dot(uPsi, vel)) / sqrt(max(1.0 - dot(uPsi, uPsi), 1e-6));
+        var light = select(INK_OCHRE_L, INK_OCHRE_D, dk);
+        if (D < 1.0) { light = mix(light, select(INK_SIENNA_L, INK_SIENNA_D, dk), clamp((1.0 - D) / 0.3, 0.0, 1.0)); }
+        else { light = mix(light, select(INK_INDIGO_L, INK_INDIGO_D, dk), clamp((D - 1.0) / 0.45, 0.0, 1.0)); }
+        rgb = select(light, select(INK_MADDER_L, INK_MADDER_D, dk), grav);
         strength = 0.55;
     } else {
         let k = idx - MAX_PHOTONS;

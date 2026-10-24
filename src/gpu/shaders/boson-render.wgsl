@@ -104,6 +104,12 @@ fn bosonInFrame(pos: vec2f, v: vec2f, age: f32) -> vec4f {
     return vec4f(xo, 1.0, doppler);
 }
 
+/** Light's ink by its Doppler factor D: sienna by D = 0.7, indigo by D = 1.45, `base` at 1. */
+fn dopplerInk(base: vec3f, D: f32, dk: bool) -> vec3f {
+    if (D < 1.0) { return mix(base, select(INK_SIENNA_L, INK_SIENNA_D, dk), clamp((1.0 - D) / 0.3, 0.0, 1.0)); }
+    return mix(base, select(INK_INDIGO_L, INK_INDIGO_D, dk), clamp((D - 1.0) / 0.45, 0.0, 1.0));
+}
+
 // Quad vertex positions (triangle strip: 4 verts -> 2 triangles)
 fn quadOffset(vertexIdx: u32) -> vec2f {
     // 0: (-1,-1), 1: (1,-1), 2: (-1,1), 3: (1,1)
@@ -152,10 +158,11 @@ fn vertexPhoton(
 
     out.position = clipPos + vec4f(qOff * pixelRadius * quadScale * 2.0 / vec2f(camera.canvasWidth, camera.canvasHeight), 0.0, 0.0);
 
-    // Color: ochre for EM, madder for gravitons (theme-paired inks)
+    // Color: ochre for EM, madder for gravitons (theme-paired inks). In a frame, light takes
+    // its Doppler factor E′/E = γ(1 − u·v̂): sienna as it reddens, indigo as it blues
     let isGrav = (ph.flags & 2u) != 0u;
     let dk = isDark > 0.5;
-    out.color = vec4f(select(select(INK_OCHRE_L, INK_OCHRE_D, dk), select(INK_MADDER_L, INK_MADDER_D, dk), isGrav), alpha);
+    out.color = vec4f(select(dopplerInk(select(INK_OCHRE_L, INK_OCHRE_D, dk), seen.w, dk), select(INK_MADDER_L, INK_MADDER_D, dk), isGrav), alpha);
     // UV in [-1,1] scaled by quadScale so dist==1 is the circle edge
     out.uv = qOff * quadScale;
     out.isDark = isDark;
