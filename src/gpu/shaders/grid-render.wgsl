@@ -202,7 +202,8 @@ fn fsGrid(in: VertexOutput) -> @location(0) vec4<f32> {
     lines *= 1.0 - smoothstep(0.3, 0.7, shadow);
     // Tilted into spacetime the sheet is the present: the rulers keep to the domain, which
     // takes a faint fill and a firmer edge, so the plane reads as a slice above its past
-    let tilt = select(grid.tilt, 0.0, camera.frameOn > 0.5);
+    // (In a frame `lab` is still the lab point under the pixel, so the mask is the lab box)
+    let tilt = grid.tilt;
     var fill = 0.0;
     var insideMask = 1.0;
     if (tilt > 0.0) {

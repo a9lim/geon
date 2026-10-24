@@ -87,9 +87,13 @@ export default class Frames {
         return true;
     }
 
-    /** Image copies drawn per body: the 3×3 nearest on a torus, else one. */
+    /**
+     * Image copies drawn per body: the 3×3 nearest on a torus, else one. Tilted into
+     * spacetime the view shows the box, so one image, as the world lines do.
+     */
     get images() {
         const sim = this.sim;
+        if (sim.spacetime && sim.spacetime.tilted) return 1;
         return sim.boundaryMode === BOUND_LOOP && sim.topology === TORUS ? 9 : 1;
     }
 
