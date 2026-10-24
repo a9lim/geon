@@ -39,9 +39,12 @@ src/physics-contract.js  toggle/parameter keys shared by save/load and the GPU s
 src/ui.js                colophon, margin, view and boost controls, toggle dependencies, shortcuts, about
 src/input.js             spawn, select, delete through GPU hit tests; Alt/Shift-drag orbits the view
 src/spacetime.js         the spacetime view: orbit camera over the 2D camera, Lab/Observer boost
-src/caption.js           the live figure caption under the scene (en, ja)
-src/overlay.js           the 2D canvas above the GPU canvas: spawn-drag line, the spacetime box and presents
-src/presets.js           six curated presets (PRESET_ORDER); each may set its domain
+src/caption.js           the live figure caption under the scene: Fig. 1, the preset's live values (en, ja)
+src/scene-key.js         the key at the stage's bottom right, and the margin's legend swatches (en, ja)
+src/overlay.js           the 2D canvas above the GPU canvas: the field atlas, spawn-drag line, scale bar,
+                         the spacetime box with its dimension line and presents
+src/field-atlas.js       the Fields overlay's contours and field lines, from the heatmap readback
+src/presets.js           six curated presets (PRESET_ORDER); each may set its domain and keep a tick
 src/cosmology.js         the scale factor a(t): schedules, the Friedmann closure, horizons
 src/cosmology-panel.js   the Stats tab's expansion readouts and the overlay's horizons
 src/frames.js            the observer the view is drawn for (sim.frames), FrameParams
@@ -58,7 +61,7 @@ src/gpu/gpu-buffers.js   allocation and packed struct sizes
 src/gpu/gpu-constants.js generated WGSL constants and toggle bits
 src/gpu/gpu-renderer.js  instanced rendering, light/dark pipeline pairs
 src/gpu/pass-graph.js    per-frame dispatch plan
-src/gpu/shaders/         64 WGSL files; shared-*.wgsl are prepended includes
+src/gpu/shaders/         62 WGSL files; shared-*.wgsl are prepended includes
 tests/physics-validation.html   analytic oracles against a headless GPUPhysics
 ```
 
@@ -69,7 +72,9 @@ tests/physics-validation.html   analytic oracles against a headless GPUPhysics
 `Simulation` (`main.js`) owns the domain, camera, modes, selection, and the settings
 store `sim.settings` (`physics-settings.js`), which `ui.js` writes and
 `GPUBackend.applySettings()` copies into `GPUPhysics.setToggles()`. View flags (trails,
-clocks, vectors) live in `sim.view`, the potential heatmap's state in `sim.heatmap`.
+clocks, vectors, `grid` for the rulers and key) live in `sim.view`, the Fields overlay's
+state in `sim.heatmap`. A preset with a `tick(sim)` (the bremsstrahlung beam) sets
+`sim.presetTick`, which runs after each stepped frame until `reset()` clears it.
 
 The domain is state, not the window: `sim.domainW`/`domainH` in world units, square
 `DEFAULT_DOMAIN` (64) unless a preset sets `domain: [w, h]` or a save carries one.
@@ -129,8 +134,8 @@ radiation, drift, clocks, the 1PN velocity-Verlet correction, the field step,
 collisions, disintegration, bosons, the boundary, and the world lines (a sample whenever
 the world-line clock crosses the next `WORLDLINE_DT` mark, else merge breaks and death
 snapshots only). After the substeps, once per frame: the expansion (below), the pool
-culls, pion decay, boson interaction, dead-slot GC, quadrupole radiation, colors, and
-trails. The scheme is the staggered Boris pusher:
+culls, pion decay, boson interaction, dead-slot GC, quadrupole radiation and colors.
+The scheme is the staggered Boris pusher:
 both half-kicks precede the drift, so velocities sit half a kick from positions, and
 spin-orbit kicks change `w` directly rather than through `totalForce`.
 
@@ -161,7 +166,7 @@ background doesn't cancel.
 - **Physical coordinates on a growing domain.** `sim.domainW/H` is the comoving domain
   (state, saved); `GPUPhysics.domainW/H` is a times it (`setComovingDomain`). The forces
   never see a. `update()` splits the stretch symmetrically (Strang): `expansion.wgsl`
-  scales every position (bodies, retired bodies, photons, pions, trails) by √r about the
+  scales every position (bodies, retired bodies, photons, pions) by √r about the
   domain's corner and every peculiar momentum and photon energy by 1/√r before the
   substeps and again after them, r = a_new/a_old, and the substeps run in a static
   universe at the midpoint a (`_frameA`, which `scaleA` returns meanwhile). On the torus
@@ -264,6 +269,16 @@ created at `−∞` and act at once.
   geodetic, `−(3/2)·(g × v)` with g the Newtonian field; and Lense–Thirring,
   `Σ −J_j/r³`, with Gravitomagnetic on. Klein and RP² crossings mirror θ
   (`boundary.wgsl`).
+- **The glyph** (`particle.wgsl`): a body is its ink mixed into the ground (52% ground in
+  light, 38% in dark) inside a 1.25 px outline of the ink, the ink by the sign of its charge
+  (`update-colors.wgsl`: sienna positive, prussian negative, graphite neutral, beyond half a
+  `BOSON_CHARGE`). Bodies at least 5 px in radius carry their sign as a + or −; a neutral body's
+  spoke runs from the centre, a charged one's (and a hole's) is a rim tick from 0.6R, and
+  marks take the ink mixed 45% toward the text. Antimatter is hollow (the ground inside the
+  outline). A black hole is a void, the text ink in light and near-black (`COLOR_VOID_DARK`)
+  with a faint edge in dark; `ring-render.wgsl` dashes its equatorial ergosphere at
+  M + √(M² − Q²), skipped within 1.5 px of the horizon, and rings the selection in the accent
+  4.5 px out. Every body is drawn at least 2 px in radius.
 - **The spoke** (`particle.wgsl`): each body is its rest-frame disk pushed through the
   Lorentz map of its centre's velocity. The vertex shader contracts the quad by 1/γ
   along v; the fragment shader maps each lab offset to its rest-frame offset
@@ -271,8 +286,8 @@ created at `−∞` and act at once.
   that point's rest-frame time, so a spinning, moving spoke bends by `2·v·v_rim` across
   the diameter. The spoke is drawn only on bodies at least 4 px in radius.
 - **The Clocks overlay** (K, the View section; `clock-render.wgsl`): a faint ring per
-  body and an accent arc that fills once per `CLOCK_PERIOD` (16) of its proper time,
-  contracted with the body. The particle panel shows τ and dτ/dt.
+  body and an arc in the body's ink that fills once per `CLOCK_PERIOD` (16) of its proper
+  time, contracted with the body. The particle panel shows τ and dτ/dt.
 - **World lines** (`worldline.wgsl` writes, `shared-worldline.wgsl` reads): a ring of
   `WORLDLINE_LEN` (1024) samples per slot, one every `WORLDLINE_DT` (1/8) of the
   world-line clock (lab time, or conformal time under expansion: positions are then
@@ -315,13 +330,26 @@ and Spacetime buttons, ease between the two (`EL_SPACETIME` ≈ 30°).
   periodic domain to the image nearest the body (or the observer). The fragment draws a
   hairline and a bead every `beadStep` of the body's proper time (a power of 2 near depth/14),
   fading beads closer than ~8 px. Opacity falls with age; the selected body is the accent.
-- **The selected body's past light cone** (`vs_cone`): four lab-time rings, boosted like
-  everything else. **Bosons** (`vs_boson`): photons on 45° lines back to their emission,
+- **Trails** are the same world lines seen from above: with Trails on, `vs_line` draws in the
+  plane view too (`SpacetimeParams.trails`; the flat camera zeroes the matrix's h column so
+  the past doesn't clip). There is no separate trail pass or buffer.
+- **The selected body's past light cone** (`vs_cone`): four lab-time rings reaching
+  `CONE_REACH` (0.3) of the depth, boosted like everything else, with its two generators where
+  the projection's null directions graze it (`towardCamera()`) and the back of each ring
+  dashed (`fs_cone`). **Bosons** (`vs_boson`): photons on 45° lines back to their emission,
   pions and leptons on timelike lines beaded by their own clocks.
+- **Events** (`vs_event`, `fs_event`, tilted): open circles, the ground inside a hairline, where
+  a world line begins during the run, ends, merges, or takes a kick (a jump in proper
+  velocity above `KICK_DW` (0.15) between samples, at its local maximum).
+- **The sheet of the present.** In the lab's coordinates, world lines and light that pass
+  under the tilted plane's fill are drawn at `SEEN` (0.45) (`underSheet()`).
 - **The plane and box.** `grid-render.wgsl` keeps the rulers to the domain and gives it a faint
   fill when tilted (`GridParams.tilt`); a periodic domain's seams give way to the box. The
-  overlay draws the box's corner world lines, its floor at the depth and a time axis.
-- **Trails** are the plane view's shadows of the world lines; they fade out as it tilts.
+  overlay draws the box's corner world lines, its floor at the depth, a time axis at the
+  corner nearest the left edge, and a dimension line along the present's front edge away
+  from it. On a torus with an observer the box (and the sheet, `GridParams.boxX/boxY`) is the
+  domain's translate around the observer (`renderOpts.boxOrigin`), since any translate of
+  the domain is the domain.
 
 **Lab and Observer coordinates.** The Boost slider sets the boost frame's velocity along x
 (`frames.rapidity`, `direction` 0 or π; the Frame tab's speed and direction are the same
@@ -344,7 +372,9 @@ present (found by bisection: g = (t − t_A) − u·(x − x_A) rises along a ti
 coordinates with a boost set, the same points show as rings on the tilted present. World-line
 segments beyond the observer's present are faint. The overlay outlines the presents that
 aren't the flat plane on top: the observer's (lab coordinates) and the lab's (observer's).
-Co-rotating and free-fall frames are not boosts and keep the plane.
+Co-rotating and free-fall frames are not boosts and keep the plane. A boost leans the scene
+by tanh ψ of the depth along u, so `SpacetimeView.frame()` refits: it shifts the centre half
+the lean and fits the width with it, so the sheared scene stays in frame.
 
 **The opening.** `Simulation._openScene()` loads the cyclotron preset quietly and, 2.6 s later,
 tilts into spacetime once unless the visitor has acted. Under reduced motion it runs 240
@@ -392,7 +422,7 @@ canvas while a frame is active.
 - **The spacetime view** replaced the Frame tab's side diagram: the canvas itself tilts
   (above). `readSlotsSnapshot` and `readWorldLines` remain for the tests.
 - **Shortcuts:** B cycles frames (skipping the particle frame without a selection),
-  L returns to the lab, G toggles the grid, W tilts between plane and spacetime, O boosts
+  L returns to the lab, G toggles the rulers and key, W tilts between plane and spacetime, O boosts
   between Lab and Observer coordinates.
 
 ### Lensing
@@ -463,6 +493,12 @@ backdrop seen through the bodies as a thin lens, viewed along z, in the lab fram
 
 - Pool caps live in `config.js`: 512 particles, 4096 photons, 1024 pions + 1024
   leptons. Leptons share the pion buffer, told apart by `Pion.kind` (0 pion, 1 lepton).
+- A body's Larmor and quadrupole radiation accumulates until it reaches `PHOTON_QUANTUM`
+  (0.02) and leaves as one photon (`MIN_MASS`, 0.05, stays the Hawking threshold and the
+  evaporation floor). A photon is drawn as a wave packet in ochre (`boson-render.wgsl`
+  `fragmentPhoton`): a sinusoid 2.6 px high under a Gaussian envelope 22 px long, its
+  wavelength `clamp(6·√(0.05/E′), 3.5, 12)` px reading the energy E′ it has in the frame
+  drawn (Doppler-shifted in a non-lab frame, with the Doppler hue).
 - Absorption adds the boson's full four-momentum (`absorbFourMomentum()`), so the
   target's invariant mass changes with its proper velocity; charged pions move charge.
   `emitterId` blocks self-absorption, and nothing is absorbed before `BOSON_MIN_AGE`.
@@ -557,23 +593,39 @@ per stage would land before the whole encoder ran (that bug left Φ ≡ 0 until
 
 ### The Fields overlay
 
-The View section's Fields toggle (with All, Gravity, Electric, Magnetic and Yukawa) draws
-the heatmap grid (`heatmap.wgsl`, the visible plane's box when tilted) through
-`heatmap-render.wgsl`, mapping pixels through the plane's inverse matrix and keeping to the
-domain when tilted:
+The View section's Fields toggle (with All, Gravity, Electric, Magnetic and Yukawa) draws the
+heatmap grid (`heatmap.wgsl`, over the view, or the visible plane's box when tilted) the way
+a survey sheet or a physics text prints a field, keeping to the domain:
 
-- **Potentials** as a faint wash by sign and channel (gravity graphite, electric sienna or
-  prussian, Yukawa viridian).
-- **The in-plane field combed**: line integral convolution of noise fixed to the plane along
-  −∇φ (electric when Coulomb is on, else gravity), its contrast reading the field's strength.
-- **Bz as ⊙ and ⊗**: the field is out of the plane, so it has no direction to comb. The grid
-  computes Bz (`magField`) as `pair-force.wgsl` has it: Biot–Savart from moving charges, or
-  with signal delay B = n̂ × E of the Liénard–Wiechert field; the spin dipoles' −μ/r³; and
-  the external Bz. Symbols sit on a lattice fixed to the plane (about 16 px, an octave of
-  world units), each site shown with probability 1 − exp(−|Bz|/B0), B0 = 0.04, so symbols per
-  area are proportional to a weak field and fill the lattice in a strong one. World y runs
-  down the screen, so the right-handed z axis points into it: Bz > 0 is ⊗. The tree-walk path
-  computes Bz pairwise, since moving charges and dipoles have no tree aggregate.
+- **The atlas** (`src/field-atlas.js`, on the overlay canvas). `heatmap.wgsl` also stores the
+  charges' electric field (`elecField`, a vec2 per cell: Liénard–Wiechert with signal delay,
+  else softened Coulomb, the tree path pairwise); `GPUPhysics` copies the grids, E and the
+  bodies' state into `_heatmapStaging` at the end of `dispatchHeatmap` and maps it after the
+  frame's submit (`heatmapReadback`, a frame or two late). From each readback the atlas
+  draws gravity's potential as umber contours at nice levels (1, 1.5, 2, 3, 5, 7 × 10^k over
+  `LEVEL_SPAN`), the 1s and 3s heavier and labelled, ticked downhill like depression contours;
+  the electric field as prussian field lines traced (RK2, 0.6 cell) from the sign carrying
+  more charge, about 10·√(|q|/0.4) per charge, each ending on the other sign, at the view's
+  edge, or where it meets another line (a 1.2-cell separation grid), with a chevron at 45%
+  of its length; in the Electric view, equipotentials one a decade, solid sienna where
+  positive and dashed prussian where negative; and Yukawa's potential as dotted viridian
+  contours. A uniform external E has no structure and would swamp the softened charges'
+  fields (~0.002 against 0.12 in the cyclotron), so it stays out and the key names it.
+- **Bz as ⊙ and ⊗** (`heatmap-render.wgsl`, on the GPU): the field is out of the plane, so it
+  has no line to draw. The grid computes Bz (`magField`) as `pair-force.wgsl` has it:
+  Biot–Savart from moving charges, or with signal delay B = n̂ × E of the Liénard–Wiechert
+  field; the spin dipoles' −μ/r³; and the external Bz. Symbols sit on lattices fixed to the
+  plane, one octave of density per decade: every site of a coarse lattice (a power of 2 in
+  world units near 64 px) once |Bz| passes B0 = 0.1, the sites halfway between once it passes
+  10·B0, and halfway again past 100·B0, so a uniform field is an even lattice whose spacing
+  reads its strength. World y runs down the screen, so the right-handed z axis points into
+  it: Bz > 0 is ⊗.
+- **The scalar fields** (`field-render.wgsl`, whenever Higgs or axion is on): no wash. Each
+  side of zero is hatched its own way, 6 px apart (the Higgs +v in sap `/`, −v in violet `\`;
+  the axion indigo and ochre, its sign from a smoothed sample), once the field has left the
+  noise (`smoothstep(0.01, 0.06, |φ|)`); the zero contour is drawn heavier in the text ink
+  (the Higgs's domain walls, the axion's nodes) where the field two cells away has left zero
+  too, and the Higgs takes thin contours every v/4, faded at the vacuum.
 
 ### Chrome
 
@@ -581,26 +633,50 @@ Worldline was the overhaul's pilot (`../../docs/sim-overhaul/PLAN.md`) and loads
 `shared/hud.css` nor `toolbar.js`. The page is a grid: the scene (a stage for the canvases
 over a hairline figure bar) and the margin. The shared colophon (`_colophon.mount`, with
 translated labels) carries play, step, theme and help; the figure bar carries the caption
-(`caption.js`: the preset's name, then what the view shows with its values, rebuilt a few
-times a second) and the Plane/Spacetime, Lab/Observer and Boost controls; the stage's top
-right has speed, language, the touch-only antimatter mode and the Controls toggle. The
-margin holds the old sidebar's tabs on the same paper, ruled off by a hairline, with the
-gear menu's view toggles moved into Settings and Reset/Save/Load at its foot; on a narrow
-window it rises as a sheet. `styles.css` styles every control here (hairline switches and
-sliders in the force's ink, ruled dropdowns), since `hud.css` no longer applies. `resize()`
-sizes the canvases to the stage (a ResizeObserver), so opening the margin narrows the scene.
+(`caption.js`: "Fig. 1.", the preset's name, then what it shows with its live values, or the
+view, the observer and the selected body, rebuilt a few times a second) and the
+Plane/Spacetime, Lab/Observer and Boost controls; the stage's top right has speed, language,
+the touch-only antimatter mode and the Controls toggle (at 600 px and below `ui.js` moves
+speed and language to the sheet's foot and antimatter into the figure bar, so the top keeps
+to one row). The margin holds the old sidebar's tabs on the same paper, ruled off by a
+hairline, with the gear menu's view toggles moved into Settings and Reset/Save/Load at its
+foot; on a narrow window it rises as a sheet. `styles.css` styles every control here
+(hairline switches that take a wash of the force's ink when on, sliders in the force's ink,
+ruled dropdowns), since `hud.css` no longer applies. `resize()` sizes the canvases to the
+stage (a ResizeObserver), so opening the margin narrows the scene.
+
+The plate's furniture, all hidden with the rulers by G ("Rulers and key"):
+
+- **The key** (`scene-key.js`, `#scene-key`, the stage's bottom right; not on a stage under
+  700 × 420): a double hairline box titled Reference with a row for each mark the scene is
+  drawing now, from `sim.scene` (a slow snapshot of the bodies, `GPUBackend._readScene`), the
+  settings and the view: bodies by kind, the selection, world lines and their bead step,
+  clocks, light (photons in the pool), the cone and events when tilted, the Fields layers, the
+  scalar hatching, a uniform external field with its value, the lensed backdrop and its star.
+  Swatches are inline SVG with the scene's own marks in `var(--ink-*)`; the DOM is rebuilt
+  only when the rows change. `decorateMargin()` gives each Forces and Physics row the same
+  swatch for its force, so those sections read as the scene's legend; one ink per force,
+  margin and scene alike (1PN mulberry, Relativity and boson interaction graphite as modes).
+- **The scale bar** (`Overlay._drawScaleBar`): bottom left seen from above, a 1, 2 or 5 × 10^k
+  length up to 120 px, "length, c = 1". Tilted, `_drawDimension` sets a dimension line along
+  the box's front edge instead.
+
+One red: the accent marks only the selected body, its world line and cone, and the lens
+probe's star. Force arrows are px hairlines, the total in the text ink and components in
+their force's ink; velocity arrows are graphite; clock arcs take the body's ink.
 
 ### Rendering
 
 `GPURenderer` draws on `#gpuCanvas`, behind the 2D `#simCanvas` that `Overlay` uses for
-the spawn-drag line. Each frame starts with the background grid (`grid-render.wgsl`), a
+the field atlas, the spawn-drag line and the plate's lines. Each frame starts with the background grid (`grid-render.wgsl`), a
 full-screen pass that clears and then draws the lab rulers and the domain edge: hairlines at
 spacings 2^k, each level faded in between 12 and 24 px on screen, and the edge (or, in loop
 mode, the seams) in the `--border` mix. The grid is a sheet at rest in the lab, so in a
 non-lab frame each pixel maps back through the observer's slice and the rulers contract by
-1/γ along u and turn with co-rotation; `sim.view.grid` (G) hides the rulers but not the
-edge. Bodies, their clock rings, and their ring overlays share the camera uniforms'
-`relativityOn`, `blackHoleOn`, `showClocks`, `frameOn` and `frameImages` flags. It clears to `_PALETTE.{light,dark}.canvas`, with light/dark
+1/γ along u and turn with co-rotation; `sim.view.grid` (G) hides the rulers, the key and
+the scale but not the edge. Bodies, their clock rings, and their ring overlays share the
+camera uniforms' `relativityOn`, `blackHoleOn`, `showClocks`, `frameOn` and `frameImages`
+flags. It clears to `_PALETTE.{light,dark}.canvas`, with light/dark
 pipeline pairs that `setTheme()` swaps; both blend alpha-over (the dark theme's additive
 blend and the bosons' glow halos are gone: they read no quantity). Colours are the shared
 inks, theme-paired: WGSL gets `INK_<NAME>_L`/`_D` constants (graphite is `textMuted`), and
@@ -689,16 +765,22 @@ canvas text needs no font-load redraw.
   (`pass-graph.js` gates the passes on what can emit them), so they neither move nor age.
 - The `torque-render.wgsl` header table swaps the contact (0.5) and superradiance (1.0)
   arc offsets relative to `getTorqueOffset()`.
-- The `magnetic` preset drives a body to about 0.99c, as it did before the 2026-10-23
-  force-law fixes.
 - With Relativity on, gravity's signal delay unbinds comparable-mass orbits at O(v)
-  (Laplace's aberration; `docs/ROADMAP.md` §2.2), so the inspiral preset's binary gains
-  energy despite its quadrupole radiation.
-- The precession preset starts its planet at 1.3× circular speed (about 0.63c) at r = 10,
-  inside the softening length (ε = 8), far outside 1PN's range: with 1PN on it escapes
-  the domain at once instead of tracing a rosette (Newton alone gives a bound one).
-- The nucleus preset's Yukawa well (coupling 14, m = 2) drives bodies to about 3c with
-  Relativity off, and its energy drifts by tens of percent with pass-through collisions
-  too: the integrator at those speeds, not the stats.
+  (Laplace's aberration; `docs/ROADMAP.md` §2.2), so a radiating binary gains energy
+  despite its quadrupole radiation (the inspiral preset, cut in 2.0, showed it).
+- 1PN is far outside its range inside the softening length (ε = 8): a planet started at
+  about 0.63c at r = 10 escapes at once with 1PN on instead of tracing a rosette, where
+  Newton alone keeps it bound (the cut precession preset).
+- A Yukawa well of coupling 14 and m = 2 drives bodies to about 3c with Relativity off,
+  and its energy drifts by tens of percent even with pass-through collisions: the
+  integrator at those speeds, not the stats (the cut nucleus preset).
 - Schwinger and extremal-shedding leptons carry kinetic energy the hole never pays
-  (see Black holes); now that the pools count, the hawking preset's drift shows it.
+  (see Black holes); since the pools count, an evaporating hole's energy drift shows it.
+- Radiation reaction is strong at these charges: Larmor's τ = 2q²/3m is 6.7 for an
+  electron of m 0.1 and q −1, comparable to a pass, so such an electron radiates more than
+  its kinetic energy and is captured, and with q −2 about a charge-6 nucleus the reaction
+  runs away (147 radiated in a test). The bremsstrahlung beam uses m 0.3 for that reason.
+- `GPUPhysics.update()` returns when no body is alive, fields included, so the
+  Kibble–Zurek preset keeps a 10⁻³ tracer body to step the Higgs; it draws as a 2 px dot
+  (every body is at least 2 px) and the key lists it as Neutral.
+- The cyclotron's synchrotron light is weak at 0.5c: a few photons a run.

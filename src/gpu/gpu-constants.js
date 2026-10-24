@@ -151,7 +151,7 @@ const SHEET_THICKNESS_SQ: f32 = ${wf(SHEET_THICKNESS_SQ)};
 const HGRID: u32 = ${HGRID}u;
 const HGRID_SQ: u32 = ${HGRID_SQ}u;
 
-// World lines (worldline.wgsl documents the sample layout), clocks, trails
+// World lines (worldline.wgsl documents the sample layout) and clocks
 const WL_LEN: u32 = ${WORLDLINE_LEN}u;
 const WL_MASK: u32 = ${WORLDLINE_LEN - 1}u;
 const WL_STRIDE: u32 = 12u;

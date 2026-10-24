@@ -52,6 +52,9 @@ Cost: **S** about one session · **M** a few sessions · **L** a milestone ·
 | 2026-10-23 | **Expansion requires loop topology** (open decision 3): the universe is the periodic domain; the centred expanding cloud is gone. Refined to the torus after Codex's review: Klein and RP² aren't homogeneous, and a uniform background pulls bodies there. | §5.6 |
 | 2026-10-23 | **M3 keeps physical coordinates on a growing domain** (Claude's call): positions scale by a_new/a_old once per frame, which on a periodic domain is the comoving dynamics exactly, so the force shaders never see a; world lines are comoving and conformal. | §5.6 |
 | 2026-10-23 | **The event log waits for a consumer:** the slicer reads births, deaths and merges from creation times, death snapshots and breaks (Claude's call while building M2). | §10.2 |
+| 2026-10-24 | **2.0 is the second visual pass** (open decision 7), approved by a9 on Claude's proposal: one grammar for entities, hairline rendering, fields drawn as an atlas, the plate's furniture, presets that explain themselves. No rendering-architecture rewrite. | §6 |
+| 2026-10-24 | **Trails are world lines seen from above;** the trail pass is retired. **Field lines replace the line-integral comb.** **No canvas labels in 2.0;** they come later. | §6 |
+| 2026-10-24 | **Six curated presets:** cyclotron drift, twin paradox, relativistic wheel, bremsstrahlung, Kibble–Zurek walls, microlensing. The other eighteen are cut; Hidden Disintegration stays hidden. | §6 |
 
 ### Open
 
@@ -63,8 +66,7 @@ Cost: **S** about one session · **M** a few sessions · **L** a milestone ·
 5. **Quantum interpretation surface:** measurement-as-spawn, Bohmian tracers,
    both, or neither. §8.
 6. *(Decided: before frames; landed, §2.1.)*
-7. **The 2.0 overhaul's scope:** which pillars are in, and whether it includes
-   a rendering-architecture rewrite. §6.
+7. *(Decided: the second visual pass, §6.)*
 
 ## 1. Direction
 
@@ -581,7 +583,7 @@ Versions set the order. Milestone IDs are stable names, not an order:
 | Version | Theme | Milestones, in order | Gate |
 |---|---|---|---|
 | **1.5** | WebGPU only; relativity you can see; frames; honest cosmology; lensing | M0 → M0′ → M1 → M2 → M3 → M4 (§4, §5) | — |
-| **2.0** | The full visual overhaul | scope to define (§6) | 1.5 |
+| **2.0** | The visual overhaul | done 2026-10-24 (§6) | 1.5 |
 | **2.1** | Brushwork | M8 → M5 → M6 (§7) | 2.0 |
 | **2.5** | Quantum | M7 (§8) | 2.1 (painted walls) |
 | **3.0** | 3D | §9 | 2.5 |
@@ -594,7 +596,7 @@ Versions set the order. Milestone IDs are stable names, not an order:
 | **M2** (done 2026-10-23 but for the covariance meter and slingshot twin, §2.1) | 1.5 | **Frames.** The slicer; lab, ZMF, particle and custom frames (view-only); lagged and true-now modes; the scrubber; the 1+1 Minkowski panel; the grid as lab rulers. | M1 |
 | **M3** (done 2026-10-23, §2.1) | 1.5 | **Honest cosmology.** Comoving rewrite; the a(t) selector and self-consistent background; redshift; Hubble friction; the ledger; horizons; misalignment and Kibble–Zurek presets. | M2 (grid) |
 | **M4** (done 2026-10-23, §2.1) | 1.5 | **Lensing.** Lens mode on the grid; microlensing probe. | M2 (grid) |
-| **2.0** | 2.0 | The visual overhaul. Milestones are defined with its scope. | 1.5 |
+| **2.0** (done 2026-10-24, §6) | 2.0 | **The visual overhaul.** The second visual pass: glyphs, world lines as trails, the spacetime plate, photons as wave packets, the field atlas, the key, scale and captions, one red, the margin as legend, six presets. | 1.5 |
 | **M8** | 2.1 | **The brush, then refractive media.** The layer system and brush UI (§7.1); n grids, Fresnel optics, dispersion, Cherenkov, gravity as an index (§7.2). | 2.0 |
 | **M5** | 2.1 | **Dust.** The PM collisionless species (§7.3). | M8 (brush), M3 (structure formation) |
 | **M6** | 2.1 | **Gas.** The SPH species; sinks, accretion and cooling; painted gas (§7.3). | M5 |
@@ -916,76 +918,69 @@ The slab is a slice of homogeneous 3D FRW with comoving thickness ℓ_c.
 - the sheet dispersion relation `ω² = c_s²k² − 2πGΣ₀|k|·F(kℓ)` in a static
   background, and the expanding-sheet growth equation (§1.2).
 
-## 6. Worldline 2.0: the full visual overhaul
+## 6. Worldline 2.0: the visual overhaul
 
-a9's call: a full visual overhaul marks 2.0. Its scope is **not yet
-defined**. What follows is a starting sketch **[proposal]**, to be sharpened
-with a9 before work starts (open decision 7).
+**Done 2026-10-24.** 2.0 is the second visual pass, which Claude proposed and a9 approved
+(open decision 7). The proposal's live sketches and the headless screenshot harness used
+to check it are in `docs/second-pass/`. It builds on the first round of the sims' overhaul
+(`../../docs/sim-overhaul/PLAN.md`), which had already put Worldline on the shared paper:
+the colophon, the caption, the margin, hairline controls and the inks. The aim was the
+siblings' standard, a labelled plate in which every mark reads a quantity, without a
+rendering-architecture rewrite.
 
-**Why it sits after 1.5 and before 2.1:**
-- 1.5 adds most of the new visual vocabulary: the spoke, clocks,
-  contraction, frames and their HUD, the grid, lensing, the Minkowski panel,
-  and cosmology's comoving and physical displays. The overhaul unifies all of
-  it once, instead of restyling each piece as it lands.
-- 2.1 then adds dense, layered visuals (dust sprites, gas splats, media
-  tints, the brush), which want the overhaul's layer and tone system
-  underneath them.
+**What 2.0 is,** against the earlier sketch's pillars:
+1. **One grammar for entities** (pillar 1). Ink is the sign of the charge (sienna, prussian,
+   graphite), with + and − marks; a neutral body's spoke runs from its centre and a charged
+   one's is a rim tick. Antimatter is hollow, a horizon is a void with its ergosphere
+   dashed, and the selection gets an accent ring. A photon is a wave packet whose
+   wavelength reads its energy. Trails are the world lines seen from above, so the trail
+   pass is gone. In spacetime, events are open circles, and clock arcs take the body's ink.
+   Red means the selection and nothing else.
+2. **Hairline rendering** (pillar 2). Outlines, rings, arrows, world lines, the cone and the
+   grid are all drawn at constant screen width.
+3. **Fields as first-class** (pillar 3), drawn as an atlas rather than through colormaps:
+   - gravity's contours, ticked downhill;
+   - field lines traced through the Liénard–Wiechert field, so they kink where an
+     accelerating charge's news has reached;
+   - ⊙ and ⊗ on lattices that gain an octave of density per decade of |Bz|;
+   - the scalar fields hatched by vacuum, with the walls drawn between.
 
-**Constraints:** the root design system governs every project.
-- That means: editorial and quiet, one serif (Newsreader), a near-neutral
-  ground, one per-theme oxblood accent, hairline rules, `_PALETTE.extended`
-  data hues, canvas text at least 10px, light/dark parity, and none of the
-  glow, shadow or gradient flourishes the root site rules out.
-- The overhaul should read as that system applied to a physics canvas, not
-  as a departure from it.
+   Pattern before hue meant colorbars weren't needed. This departs from the sketch, which
+   had perceptual colormaps.
+4. **The spacetime plate:**
+   - the selected body's past light cone, with its generators and dashed back arcs;
+   - events;
+   - what lies under the present's sheet, drawn faint;
+   - a refit in observer coordinates;
+   - the box around the observer on a torus;
+   - a time axis and a dimension line.
+5. **Presets that explain themselves** (pillar 9). There are six curated presets, each with
+   a live "Fig. 1." caption that gives its own numbers. Bremsstrahlung is now a beam fed
+   by a preset tick.
+6. **The plate's furniture** (pillar 7 in part): a key listing only what is drawn and a
+   scale bar. The Forces and Physics sections read as the scene's legend, with one ink per
+   force.
+7. **Phone width** (pillar 8 in part): the scene's top keeps to one row.
 
-**Candidate pillars:**
-1. **One visual grammar for entities.** A single legend for what encodes what:
-   - size ↔ mass (radius `m^(1/3)`);
-   - hue ↔ charge, or species;
-   - the spoke ↔ orientation and spin;
-   - the sweep ring ↔ proper time;
-   - contraction ↔ velocity;
-   - plus antimatter, horizons and ergospheres, and the photons, pions and
-     leptons.
-   Today's encodings grew one feature at a time.
-2. **Hairline rendering.** Crisp, anti-aliased SDF strokes at constant screen
-   width for spokes, rings, trails, vectors, the grid and horizons. The
-   canvas would then match the site's hairline rules at every zoom.
-3. **Fields and heatmaps as first-class.**
-   - Perceptual, colour-vision-safe colormaps: diverging for signed
-     quantities, sequential for magnitudes.
-   - Explicit ranges and colorbars.
-   - One colormap system shared by the heatmap, the scalar fields and lensing
-     magnification.
-4. **Layering and modes.**
-   - A declared render-pass order, like the physics pass graph: ground, grid,
-     fields, trails, bodies, bosons, overlays, HUD.
-   - A "picture" mode, and a "diagnostics" mode that adds vectors, torque
-     arcs and force components.
-5. **Density without glow.** 2.1's dust and gas need additive accumulation
-   that doesn't blow out: HDR accumulation and a tone map, tuned to the quiet
-   register rather than to bloom.
-6. **HUD and sidebar built around time and frames:**
-   - the frame selector, observer and lag readout, clocks, the Minkowski
-     panel and the ledger lines;
-   - stats drawn with the shared `sparkline.js`;
-   - the phase plot and effective potential, ported in M0′, redesigned to
-     match.
-7. **Multiscale and labels:** zoom-adaptive detail (glyph LOD, trail density),
-   a scale bar, and Newsreader labels on the canvas.
-8. **Accessibility and motion:** a reduced-motion mode, CVD-safe palettes,
-   keyboard parity, and a layout that works at phone width.
-9. **Presentation:**
-   - presets that explain themselves, with captions or a short guided tour
-     each;
-   - a refreshed `about.md`;
-   - new social-card art.
+Fixes on the way:
+- the twin's wall lost a fifth of the traveller's speed, from a clamp at the wall;
+- the ergosphere was drawn with the uncharged formula;
+- Larmor light came in quanta too coarse to see;
+- the symmetric phase drew a maze of noise walls;
+- the axion field drew a maze.
 
-**Checks:**
-- screenshot diffs across both themes and three zoom levels;
-- a CVD-simulation pass over every colormap;
-- frame-time budgets from GPU timestamp queries.
+**Later:**
+- **Labels on the canvas**, naming bodies and events. a9 deferred them on 2026-10-24.
+- **Layering and modes** (pillar 4): a declared render-pass order, with picture and
+  diagnostics modes.
+- **Density without glow** (pillar 5): HDR accumulation and a tone map, with 2.1's dust and
+  gas.
+- **A HUD built around time and frames** (pillar 6): sparklines, and the phase and
+  potential plots redesigned to match.
+- **Zoom-adaptive detail:** glyph LOD, and world-line density at a distance.
+- **The checks:** screenshot diffs across themes and three zoom levels, a CVD-simulation
+  pass, and GPU timestamp budgets.
+- **New social-card art.**
 
 ## 7. Worldline 2.1: brushwork
 

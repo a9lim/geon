@@ -29,9 +29,24 @@ Each body is drawn as its rest-frame disk pushed through the Lorentz transformat
 
 The spoke's orientation is a transported axis, and it precesses even when the body does not spin. Thomas precession turns it backward by 2π(γ − 1) per circular orbit under non-gravitational forces; geodetic precession turns it forward by 3πM/r per orbit around a mass, as measured by Gravity Probe B; and with gravitomagnetism on, a spinning mass drags it (Lense–Thirring). Gravity enters only through the geodetic and Lense–Thirring terms, never through Thomas precession.
 
+## Reading the Figure
+
+Each body is drawn in the ink of its charge's sign: sienna for positive, prussian for negative, graphite for neutral, with the sign marked on bodies large enough to carry it. Antimatter is drawn hollow, and a black hole is a void ringed by its dashed ergosphere. The one red marks the selected body, its world line and its past light cone. A photon is a short wave packet whose wavelength reads its energy, shorter for more.
+
+Trails are world lines seen from above. Alt-drag, W or the Spacetime button tilts the plane into time. Each body's world line then climbs to the plane of the present, with time and space at one scale so that light runs at 45°. It is beaded at a fixed interval of the body's own proper time, so a moving or deeply bound clock beads more sparsely. Open circles mark events: a birth, a death, a merger, a sudden kick. The selected body's past light cone opens below it. Lab and Observer switch the drawing between the lab's coordinates and those of an observer moving at the Boost speed, in which the plane of the present becomes that observer's surface of simultaneity.
+
+The Fields overlay draws fields the way a physics text prints them:
+
+- gravity's potential as contours, ticked downhill;
+- the charges' electric field as field lines, traced through the Liénard–Wiechert field, so an accelerating charge's lines kink where news of its acceleration has reached;
+- the magnetic field, which points out of the plane, as ⊙ and ⊗ on a lattice whose density doubles with each tenfold rise in strength;
+- Yukawa's potential as dotted contours.
+
+A Higgs or axion field is hatched one way where it sits above zero and the other way below, with the walls between domains drawn in. A key in the corner names each mark in the current scene. A scale bar gives lengths in units where c = 1, and the caption under the figure states what it shows, with its current values.
+
 ## Frames
 
-The view can be drawn for observers other than the lab: the zero-momentum frame, the selected particle's rest frame, a boost at a chosen speed and direction, or a frame rotating at a chosen rate. Worldline records every body's world line and redraws the scene on the observer's surface of simultaneity, so in a boosted frame moving rulers contract, clocks synchronized in the lab disagree across the view, and a fast wheel can be followed in its own rest frame, where it is round. The observer's present is set far enough into the lab's past that everything shown has already been computed, and the Frame tab reports how far behind the lab it is. A background grid of rulers at rest in the lab contracts and shears with the observer, and a spacetime diagram plots nearby world lines in the observer's coordinates with its light cone and proper-time ticks.
+The view can be drawn for observers other than the lab: the zero-momentum frame, the selected particle's rest frame, a boost at a chosen speed and direction, or a frame rotating at a chosen rate. Worldline records every body's world line and redraws the scene on the observer's surface of simultaneity, so in a boosted frame moving rulers contract, clocks synchronized in the lab disagree across the view, and a fast wheel can be followed in its own rest frame, where it is round. The observer's present is set far enough into the lab's past that everything shown has already been computed, and the Frame tab reports how far behind the lab it is. A background grid of rulers at rest in the lab contracts and shears with the observer, and tilted into spacetime the same world lines are drawn in the observer's coordinates.
 
 On a torus the lab is a preferred frame: opposite edges are identified at equal lab time, so a traveller circling a torus of length L at speed v sees its own images, in its own frame, spaced γL apart with clocks γvL apart. A twin who circles the torus at 0.8c meets the stay-at-home twin every lap, younger each time, without ever turning around (Barrow and Levin, 2001). In the twin-paradox preset the traveller bounces off a wall instead, and at the turn the home clock's reading on the traveller's slice jumps ahead by 2vd.
 
@@ -49,7 +64,7 @@ The Higgs and axion fields evolve on a 128 × 128 grid. With gravity on, they ev
 
 ## Presets
 
-Six curated presets each make one figure: cyclotron drift, where charges of both signs trace helices in spacetime; the twin paradox; a relativistic wheel; bremsstrahlung, where a deflected charge radiates; Kibble–Zurek walls in a quenched Higgs field; and microlensing of a backdrop star. Each sets its initial conditions and forces and opens on its own frame; everything else Worldline models stays a toggle away.
+Six curated presets each make one figure: cyclotron drift, where charges of both signs trace helices in spacetime; the twin paradox; a relativistic wheel; bremsstrahlung, where a beam of fast electrons bent by a nucleus sheds light beamed forward; Kibble–Zurek walls in a quenched Higgs field; and microlensing of a backdrop star. Each sets its initial conditions and forces and opens on its own frame; everything else Worldline models stays a toggle away.
 
 ## Black Hole Physics
 
@@ -77,7 +92,7 @@ With relativity on, every force acts from where its source was when the signal l
 
 ## Accessibility
 
-Worldline provides keyboard shortcuts, light and dark themes, labeled simulation controls, and numerical readouts for conserved quantities and selected particles. The canvas contains continuous motion and optional particle trails; users sensitive to motion can pause, single-step, or choose a lower-particle preset.
+Worldline provides keyboard shortcuts, light and dark themes, labeled simulation controls, and numerical readouts for conserved quantities and selected particles. The canvas contains continuous motion and optional world-line trails; under a reduced-motion preference the opening scene starts paused and already tilted, and anyone can pause, single-step, or choose a quieter preset.
 
 ## GPU Compute
 
