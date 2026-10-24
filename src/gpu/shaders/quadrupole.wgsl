@@ -411,7 +411,7 @@ fn quadrupoleApply(@builtin(global_invocation_id) gid: vec3u) {
     }
 
     // ── Emit GW graviton ──
-    if (rs.quadAccum >= MIN_MASS) {
+    if (rs.quadAccum >= PHOTON_QUANTUM) {
         let phIdx = atomicAdd(&phCount, 1u);
         if (phIdx < MAX_PHOTONS) {
             // Quadrupole angular pattern: power ∝ (Axx·cos2φ + Axy·sin2φ)²
@@ -436,7 +436,7 @@ fn quadrupoleApply(@builtin(global_invocation_id) gid: vec3u) {
     }
 
     // ── Emit EM quadrupole photon ──
-    if (rs.emQuadAccum >= MIN_MASS) {
+    if (rs.emQuadAccum >= PHOTON_QUANTUM) {
         let phIdx = atomicAdd(&phCount, 1u);
         if (phIdx < MAX_PHOTONS) {
             let angle = quadSample(d3Qxx, d3Qxy, i, 1u);

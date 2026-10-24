@@ -107,7 +107,7 @@ fn larmorRadiation(@builtin(global_invocation_id) gid: vec3u) {
     rs.radAccum += dE;
 
     // Emit photon when threshold reached
-    if (rs.radAccum >= MIN_MASS) {
+    if (rs.radAccum >= PHOTON_QUANTUM) {
         let phIdx = atomicAdd(&phCount, 1u);
         if (phIdx < MAX_PHOTONS) {
             // sin²θ dipole pattern: peak emission ⊥ to acceleration (rejection sampling)

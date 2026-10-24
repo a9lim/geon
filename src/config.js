@@ -27,7 +27,8 @@ export function topoFromString(s) { return s === 'klein' ? KLEIN : s === 'rp2' ?
 // ── Numerical Thresholds ──
 export const GPU_EPSILON = 1e-6;              // f32-safe epsilon (f32 machine eps ~1.2e-7)
 export const EPSILON = GPU_EPSILON * GPU_EPSILON; // 1e-12, f64 epsilon ≈ GPU_EPSILON²
-export const MIN_MASS = 0.05;               // emission threshold, evaporation floor
+export const MIN_MASS = 0.05;               // Hawking and pion emission threshold, evaporation floor
+export const PHOTON_QUANTUM = 0.02;         // a body's radiated energy leaves as photons of about this
 export const MAX_SPEED_RATIO = 0.999;
 
 // ── Integrator ──

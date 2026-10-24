@@ -91,8 +91,9 @@ fn fieldSmooth(gx: f32, gy: f32) -> f32 {
 
 // The field as a relief, by pattern before hue: each side of zero hatched its own way in its
 // own ink (the Higgs: +v one way in sap, −v the other in violet; the axion: indigo and ochre),
-// once the field has left the noise about zero, and the zero contour drawn heavier: for the Higgs, the
-// walls between the domains a quench leaves; for the axion, its nodes. The Higgs also takes
+// once the field has left the noise about zero, and the zero contour drawn heavier where the
+// field around it has too: for the Higgs, the walls between the domains a quench leaves; for
+// the axion, its nodes. The Higgs also takes
 // thin contours every v/4 from its vacuum, faded where the field sits at the vacuum, so a
 // calm field draws only its hatch. The axion's sign is read from the smoothed field.
 @fragment
@@ -120,9 +121,14 @@ fn fsFieldOverlay(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // The zero contour, and for the Higgs thin contours every v/4 away from its vacuum
     let c = select(val * 4.0, val / v * 4.0, higgs);
-    let wall = contour(c * 0.25, 1.6 * camera.dpr) * (1.0 - step(0.5, abs(c))) * select(0.65, 0.75, dark);
+    // A wall is where the field crosses zero between sides that have left it: in the symmetric
+    // phase's noise every crossing is noise, so it waits for the field two cells away to pick one
+    let reach = max(max(abs(fieldAt(gx + 2.0, gy)), abs(fieldAt(gx - 2.0, gy))),
+                    max(abs(fieldAt(gx, gy + 2.0)), abs(fieldAt(gx, gy - 2.0))));
+    let picked = smoothstep(0.01, 0.06, reach);
+    let wall = contour(c * 0.25, 1.6 * camera.dpr) * (1.0 - step(0.5, abs(c))) * picked * select(0.65, 0.75, dark);
     let calm = select(0.0, smoothstep(0.08, 0.3, abs(abs(val) - v) / v), higgs);
-    let lines = contour(c, camera.dpr) * calm * select(0.28, 0.34, dark);
+    let lines = contour(c, camera.dpr) * calm * picked * select(0.28, 0.34, dark);
 
     let tintCol = select(renderUniforms.color0.rgb, renderUniforms.color1.rgb, pos);
     let ink = select(COLOR_TEXT_LIGHT, COLOR_TEXT_DARK, dark);

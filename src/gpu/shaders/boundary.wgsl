@@ -225,9 +225,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             ps.angW += contactTorque * dt / I;
         }
 
-        // Safety clamp: prevent deep wall penetration at extreme speeds
-        ps.posX = clamp(x, 0.0, w);
-        ps.posY = clamp(y, 0.0, h);
+        // A fast body's Hertz stopping depth passes its radius (1.23 r at 0.8c, for any mass),
+        // so the centre may cross the wall by up to a radius; beyond that, at extreme speeds,
+        // it reflects elastically. (A clamp at the wall took the contact's work: the twin
+        // came home at 0.70c.)
+        if (x < -r) { ps.posX = -r; ps.velWX = abs(ps.velWX); }
+        if (x > w + r) { ps.posX = w + r; ps.velWX = -abs(ps.velWX); }
+        if (y < -r) { ps.posY = -r; ps.velWY = abs(ps.velWY); }
+        if (y > h + r) { ps.posY = h + r; ps.velWY = -abs(ps.velWY); }
 
         // Record force + torque in allForces for display (external force arrow)
         if (extFx != 0.0 || extFy != 0.0 || contactTorque != 0.0) {
