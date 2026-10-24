@@ -42,7 +42,8 @@ export default class Caption {
         const sim = this.sim;
         const L = TEXT[getLang()] || TEXT.en;
         const opt = this._preset.selectedOptions[0];
-        const title = this._preset.value !== 'none' && opt ? opt.textContent.trim() + '. ' : '';
+        const stop = getLang() === 'ja' ? '。' : '. ';
+        const title = this._preset.value !== 'none' && opt ? opt.textContent.trim() + stop : '';
         if (this.titleEl.textContent !== title) this.titleEl.textContent = title;
 
         const n = sim.gpu ? sim.gpu.physics.aliveCount : 0;

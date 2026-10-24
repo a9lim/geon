@@ -584,7 +584,7 @@ export function setupUI(sim) {
     // ─── About panel ───
     const _buildAboutConfig = () => ({
         title: _T('about.title', 'Worldline'),
-        lastUpdated: '2026-10-23',
+        lastUpdated: '2026-10-24',
         description: _T('about.description'),
         controls: [
             { label: _T('about.controls.addParticle'),        value: _T('about.controls.addParticleVal') },
@@ -593,6 +593,7 @@ export function setupUI(sim) {
             { label: _T('about.controls.pan'),                value: _T('about.controls.panVal') },
             { label: _T('about.controls.zoom'),               value: _T('about.controls.zoomVal') },
             { label: _T('about.controls.select'),             value: _T('about.controls.selectVal') },
+            { label: _T('about.controls.orbit'),              value: _T('about.controls.orbitVal') },
         ],
         shortcuts: shortcuts,
         repo: 'https://github.com/a9lim/worldline',

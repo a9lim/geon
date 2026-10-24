@@ -296,7 +296,7 @@ const UI_EN = {
 
     // ── About panel ──
     'about.title': 'Worldline',
-    'about.description': 'Spawn particles and watch them interact through gravity, electromagnetism, and exotic forces. Fling matter into orbit, toggle scalar fields, switch between 23 preset scenarios, and explore relativistic black hole physics in real time.',
+    'about.description': 'Spawn particles and watch them interact through gravity, electromagnetism, and exotic forces, then tilt the plane into spacetime to see the world lines they trace. Fling matter into orbit, boost into a moving observer’s coordinates, toggle scalar fields, and explore relativistic black-hole physics across 24 presets.',
     'about.controls.addParticle': 'Add particle',
     'about.controls.addParticleVal': 'Click on canvas',
     'about.controls.fling': 'Fling particle',
@@ -309,6 +309,8 @@ const UI_EN = {
     'about.controls.zoomVal': 'Scroll wheel / pinch',
     'about.controls.select': 'Select particle',
     'about.controls.selectVal': 'Click on particle',
+    'about.controls.orbit': 'Tilt into spacetime',
+    'about.controls.orbitVal': 'Alt or Shift + drag',
 
     // ── Keyboard shortcuts ──
     'shortcut.help.title': 'Keyboard shortcuts',
@@ -764,7 +766,7 @@ const UI_JA = {
 
     // ── About panel ──
     'about.title': 'Worldline',
-    'about.description': '粒子を生成し、重力・電磁気・エキゾチックな力を介した相互作用を観察します。物質を軌道に投げ込み、スカラー場を切り替え、24のプリセットを切り替えながら、相対論的ブラックホール物理をリアルタイムで探ってください。',
+    'about.description': '粒子を生成し、重力・電磁気・エキゾチックな力を介した相互作用を観察し、平面を時空へ傾けて、粒子がたどる世界線を見ます。物質を軌道に投げ込み、動く観測者の座標へブーストし、スカラー場を切り替えながら、24のプリセットで相対論的ブラックホール物理を探ってください。',
     'about.controls.addParticle': '粒子を追加',
     'about.controls.addParticleVal': 'キャンバスをクリック',
     'about.controls.fling': '粒子を投げる',
@@ -777,6 +779,8 @@ const UI_JA = {
     'about.controls.zoomVal': 'スクロール / ピンチ',
     'about.controls.select': '粒子を選択',
     'about.controls.selectVal': '粒子をクリック',
+    'about.controls.orbit': '時空へ傾ける',
+    'about.controls.orbitVal': 'Alt または Shift + ドラッグ',
 
     // ── Keyboard shortcuts ──
     'shortcut.help.title': 'キーボードショートカット',
