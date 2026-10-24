@@ -1,11 +1,10 @@
-// update-colors.wgsl — Recompute per-particle packed RGBA from charge/mass/antimatter.
+// update-colors.wgsl — Recompute each body's packed RGBA ink from its charge.
 //
-// Matches CPU Particle.getColor() logic:
-//   neutral → graphite (INK_GRAPHITE), or theme text color in BH mode
-//   positive charge → lerp base toward sienna (INK_SIENNA), intensity = |q|/5
-//   negative charge → lerp base toward prussian (INK_PRUSSIAN), intensity = |q|/5
-//   BH mode → use theme text color as base (COLOR_TEXT_LIGHT / COLOR_TEXT_DARK)
-//   antimatter → visual distinction via dashed ring overlay (rendered separately)
+// The ink reads the sign of the charge, at full strength for any nonzero charge: sienna
+// for positive, prussian for negative, graphite when neutral. |q| is read off the Particle
+// tab, not the ink. particle.wgsl draws the sign as a mark as well, so it survives in grey,
+// and draws antimatter hollow. In black-hole mode every body is a horizon: its ink (used by
+// its world line) is the text colour, and particle.wgsl fills the disk with the void.
 
 // Struct definition (ParticleState) provided by shared-structs.wgsl.
 
@@ -20,15 +19,12 @@ struct ColorUniforms {
 @group(0) @binding(1) var<storage, read_write> particles: array<ParticleState>;
 @group(0) @binding(2) var<storage, read_write> color: array<u32>;
 
-// Constants (FLAG_ALIVE, FLAG_ANTIMATTER, the INK_* pairs)
+// Constants (FLAG_ALIVE, FLAG_ANTIMATTER, BOSON_CHARGE, the INK_* pairs)
 // provided by generated wgslConstants block.
 
-fn packRGBA(r: f32, g: f32, b: f32, a: f32) -> u32 {
-    let ri = u32(clamp(r * 255.0, 0.0, 255.0));
-    let gi = u32(clamp(g * 255.0, 0.0, 255.0));
-    let bi = u32(clamp(b * 255.0, 0.0, 255.0));
-    let ai = u32(clamp(a * 255.0, 0.0, 255.0));
-    return ri | (gi << 8u) | (bi << 16u) | (ai << 24u);
+fn packRGBA(c: vec3<f32>, a: f32) -> u32 {
+    let q = vec4<u32>(clamp(vec4(c, a) * 255.0, vec4(0.0), vec4(255.0)));
+    return q.x | (q.y << 8u) | (q.z << 16u) | (q.w << 24u);
 }
 
 @compute @workgroup_size(64)
@@ -45,39 +41,10 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
         particles[idx].flags = p.flags;
     }
 
-    let q = p.charge;
-    let absQ = abs(q);
-    let intensity = clamp(absQ / 5.0, 0.0, 1.0);
-
-    // BH mode: use theme text color as base instead of graphite
-    let isDark = (params.isDarkMode != 0u);
-    let bhColor = select(COLOR_TEXT_LIGHT, COLOR_TEXT_DARK, isDark);
-    let baseColor = select(select(INK_GRAPHITE_L, INK_GRAPHITE_D, isDark), bhColor, isBH);
-    let posColor = select(INK_SIENNA_L, INK_SIENNA_D, isDark);
-    let negColor = select(INK_PRUSSIAN_L, INK_PRUSSIAN_D, isDark);
-
-    var r: f32;
-    var g: f32;
-    var b: f32;
-
-    if (absQ < 0.001) {
-        // Neutral
-        r = baseColor.r; g = baseColor.g; b = baseColor.b;
-    } else if (q > 0.0) {
-        // Positive: lerp base → sienna
-        r = mix(baseColor.r, posColor.r, intensity);
-        g = mix(baseColor.g, posColor.g, intensity);
-        b = mix(baseColor.b, posColor.b, intensity);
-    } else {
-        // Negative: lerp base → prussian
-        r = mix(baseColor.r, negColor.r, intensity);
-        g = mix(baseColor.g, negColor.g, intensity);
-        b = mix(baseColor.b, negColor.b, intensity);
-    }
-
-    // Antimatter: no color inversion — charge is already negated at spawn time,
-    // which naturally produces the opposite color. CPU uses same getColor() for both.
-    // The visual distinction is the dashed ring overlay (rendered separately).
-
-    color[idx] = packRGBA(r, g, b, 1.0);
+    let dk = params.isDarkMode != 0u;
+    var ink = select(INK_GRAPHITE_L, INK_GRAPHITE_D, dk);
+    if (p.charge > 0.5 * BOSON_CHARGE) { ink = select(INK_SIENNA_L, INK_SIENNA_D, dk); }
+    else if (p.charge < -0.5 * BOSON_CHARGE) { ink = select(INK_PRUSSIAN_L, INK_PRUSSIAN_D, dk); }
+    if (isBH) { ink = select(COLOR_TEXT_LIGHT, COLOR_TEXT_DARK, dk); }
+    color[idx] = packRGBA(ink, 1.0);
 }

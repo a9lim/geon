@@ -49,7 +49,7 @@ import {
     SOFTENING, BH_SOFTENING, SOFTENING_SQ, BH_SOFTENING_SQ, SHEET_THICKNESS_SQ, CLOCK_PERIOD,
     HIGGS_MASS_FLOOR, HIGGS_MASS_MAX_DELTA, HIGGS_COUPLING, AXION_COUPLING,
     TIDAL_STRENGTH, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, MIN_MASS, SPAWN_COUNT, BOSON_CHARGE,
-    EPOCH_SPAN, EPOCH_STEP, MAX_TRAIL_LENGTH,
+    EPOCH_SPAN, EPOCH_STEP, MAX_TRAIL_LENGTH, kerrNewmanRadius,
 } from '../config.js';
 import Cosmology, { SCHEDULE_KEYS, slabVolume } from '../cosmology.js';
 import { GPU_PARAMETER_SLOTS } from '../physics-contract.js';
@@ -64,9 +64,18 @@ const BOSON_ARGS_NODES = 36;
 const DISINT_FEATURE_BREAKUP = 1;
 const DISINT_FEATURE_EXTREMAL = 2;
 
-// Pack graphite (light textMuted) to ABGR u32 as a new slot's color until update-colors runs
-const _sN = parseInt(window._PALETTE.light.textMuted.slice(1), 16);
-const _DEFAULT_SLATE_ABGR = 0xFF000000 | ((_sN & 0xFF) << 16) | (_sN & 0xFF00) | ((_sN >> 16) & 0xFF);
+// A new slot's ink as update-colors.wgsl would give it, so a body spawned while paused
+// shows its charge before the first step: sienna positive, prussian negative, graphite
+// neutral, the text colour for a black hole
+const _hexABGR = (hex) => { const n = parseInt(hex.slice(1), 16); return (0xFF000000 | ((n & 0xFF) << 16) | (n & 0xFF00) | ((n >> 16) & 0xFF)) >>> 0; };
+const _DEFAULT_SLATE_ABGR = _hexABGR(window._PALETTE.light.textMuted);
+function _inkABGR(charge, dark, hole) {
+    const T = dark ? window._PALETTE.dark : window._PALETTE.light;
+    if (hole) return _hexABGR(T.text);
+    if (charge > 0.5 * BOSON_CHARGE) return _hexABGR(T.inks.sienna);
+    if (charge < -0.5 * BOSON_CHARGE) return _hexABGR(T.inks.prussian);
+    return _hexABGR(T.textMuted);
+}
 
 // Pre-allocated typed arrays for per-frame writeBuffer calls (avoid GC pressure)
 const _qtNodeCounterData = new Uint32Array([1]);
@@ -2123,16 +2132,18 @@ export default class GPUPhysics {
         _addParticleStateU32[8] = flags;
         this.device.queue.writeBuffer(this.buffers.particleState, idx * PARTICLE_STATE_SIZE, _addParticleStateData);
 
-        // Write packed ParticleAux struct (20 bytes = 5 × f32/u32)
-        _addParticleAuxF32[0] = Math.cbrt(m); // radius
+        // Write packed ParticleAux struct (20 bytes = 5 × f32/u32). The radius is the body's, or
+        // in black-hole mode its horizon (cache-derived refreshes both every substep)
+        const bodyR = Math.cbrt(m);
+        _addParticleAuxF32[0] = this._blackHoleEnabled ? kerrNewmanRadius(m, bodyR * bodyR, angw, _addParticleStateF32[5]) : bodyR;
         _addParticleAuxU32[1] = idx;          // particleId
         _addParticleAuxF32[2] = 3.4028235e38;     // deathTime (not dead)
         _addParticleAuxF32[3] = 0;            // deathMass
         _addParticleAuxF32[4] = 0;            // deathAngVel
         this.device.queue.writeBuffer(this.buffers.particleAux, idx * PARTICLE_AUX_SIZE, _addParticleAuxData);
 
-        // Pack color: neutral slate -> ABGR (update-colors shader will refresh)
-        _addParticleColorData[0] = _DEFAULT_SLATE_ABGR;
+        // The ink of its charge (update-colors refreshes it every frame)
+        _addParticleColorData[0] = _inkABGR(_addParticleStateF32[5], this._isDarkTheme, this._blackHoleEnabled);
         this.device.queue.writeBuffer(this.buffers.color, idx * 4, _addParticleColorData);
 
         // cacheDerived shader computes derived state before forces each substep.

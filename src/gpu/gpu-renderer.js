@@ -28,7 +28,7 @@ const _arrowF32 = new Float32Array(_arrowData);
 const _torqueData = new ArrayBuffer(32);
 const _torqueU32 = new Uint32Array(_torqueData);
 const _torqueF32 = new Float32Array(_torqueData);
-const _ringData = new ArrayBuffer(32); // RingParams: vec4f color (16) + dashLen, gapLen, halfWidth (12) + ringType u32 (4)
+const _ringData = new ArrayBuffer(48); // RingParams: vec4f color, dashPx, gapPx, halfWidthPx, ringType, selected, 3 pad
 const _ringF32 = new Float32Array(_ringData);
 const _ringU32 = new Uint32Array(_ringData);
 const _fieldRenderData = new ArrayBuffer(128);
@@ -169,12 +169,12 @@ export default class GPURenderer {
         this._torqueBindGroups = null;   // Array<GPUBindGroup>[5]
         this._torqueReady = false;
 
-        // Ring rendering (ergosphere + antimatter dashed circles)
+        // Ring rendering (the ergosphere's dashed hairline, the selection's solid one)
         this._ringPipeline = null;
         this._ringBindGroup = null;
         this._ringUniformBuffer = null;
         // Per-type ring uniform buffers + bind groups for batched draws (G4).
-        // Slot 0: ergosphere, slot 1: antimatter.
+        // Slot 0: ergosphere, slot 1: selection.
         this._ringUniformBufs = null;   // Array<GPUBuffer>[2]
         this._ringBindGroups = null;    // Array<GPUBindGroup>[2]
         this._ringReady = false;
@@ -314,7 +314,7 @@ export default class GPURenderer {
         // --- Torque arc render pipeline ---
         await this._initTorqueRendering();
 
-        // --- Ring render pipeline (ergosphere + antimatter dashed circles) ---
+        // --- Ring render pipeline (ergosphere and selection) ---
         await this._initRingRendering();
 
         // --- The spacetime view: world lines, light cone, boson world lines ---
@@ -647,7 +647,7 @@ export default class GPURenderer {
         }
     }
 
-    /** Create ring render pipeline (ergosphere + antimatter dashed circles). */
+    /** Create ring render pipeline (ergosphere and selection). */
     async _initRingRendering() {
         try {
             const { pipeline, bindGroupLayout } =
@@ -657,14 +657,14 @@ export default class GPURenderer {
             const b = this.buffers;
 
             // Pre-allocate per-type ring uniform buffers + bind groups (G4 batching).
-            // Slot 0: ergosphere, slot 1: antimatter.
+            // Slot 0: ergosphere, slot 1: selection.
             const RING_SLOT_COUNT = 2;
             this._ringUniformBufs = [];
             this._ringBindGroups = [];
             for (let i = 0; i < RING_SLOT_COUNT; i++) {
                 const buf = this.device.createBuffer({
                     label: `ringUniforms_${i}`,
-                    size: 32, // RingParams struct
+                    size: 48, // RingParams struct
                     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
                 });
                 this._ringUniformBufs.push(buf);
@@ -993,55 +993,45 @@ export default class GPURenderer {
             }
         }
 
-        // Pass 3c: Dashed ring overlays (ergosphere + antimatter)
-        // Both ring types are batched into ONE encoder + ONE submit using per-slot
-        // uniform buffers (slot 0 = ergosphere, slot 1 = antimatter).
+        // Pass 3c: Ring overlays (the ergosphere, the selection), batched into ONE encoder +
+        // ONE submit with per-slot uniform buffers (slot 0 = ergosphere, slot 1 = selection)
         if (this._ringReady && aliveCount > 0 && !boosting) {
             try {
-                const bhEnabled = opts.blackHoleEnabled || false;
-
-                // Collect active ring draws; each writes its own uniform buffer before the encoder.
                 const ringDrawSlots = [];
-
-                // Ergosphere rings (only when BH mode active)
-                if (bhEnabled) {
+                // Ergosphere: a dashed hairline in the text ink, only in black-hole mode
+                if (opts.blackHoleEnabled) {
                     const [er, eg, eb] = this.isLight ? _textLight : _textDark;
-                    const ea = this.isLight ? 0.3 : 0.4;
-                    _ringF32[0] = er; _ringF32[1] = eg; _ringF32[2] = eb; _ringF32[3] = ea;
-                    _ringF32[4] = 0.3;  // dashLen
-                    _ringF32[5] = 0.3;  // gapLen
-                    _ringF32[6] = 0.075; // halfWidth (CPU lineWidth 0.15 / 2)
-                    _ringU32[7] = 0;    // ringType = ergosphere
+                    _ringF32[0] = er; _ringF32[1] = eg; _ringF32[2] = eb; _ringF32[3] = this.isLight ? 0.55 : 0.6;
+                    _ringF32[4] = 3; _ringF32[5] = 3; _ringF32[6] = 0.5;
+                    _ringU32[7] = 0; _ringU32[8] = 0xFFFFFFFF;
                     this.device.queue.writeBuffer(this._ringUniformBufs[0], 0, _ringData);
                     ringDrawSlots.push(0);
                 }
-
-                // Antimatter rings (always — shader skips non-antimatter particles)
-                // TODO: skip when no antimatter particles — currently submits even with zero antimatter.
-                {
-                    const [ar, ag, ab] = this.isLight ? [0.533, 0.533, 0.533] : [0.8, 0.8, 0.8];
-                    _ringF32[0] = ar; _ringF32[1] = ag; _ringF32[2] = ab; _ringF32[3] = 1.0;
-                    _ringF32[4] = 0.5;   // dashLen
-                    _ringF32[5] = 0.3;   // gapLen
-                    _ringF32[6] = 0.125; // halfWidth (CPU lineWidth 0.25 / 2)
-                    _ringU32[7] = 1;     // ringType = antimatter
+                // Selection: a solid accent hairline, the one red the scene spends on a body
+                if (opts.selected >= 0) {
+                    const [ar, ag, ab] = this.isLight ? _lightAccent : _darkAccent;
+                    _ringF32[0] = ar; _ringF32[1] = ag; _ringF32[2] = ab; _ringF32[3] = 1;
+                    _ringF32[4] = 0; _ringF32[5] = 0; _ringF32[6] = 0.625;
+                    _ringU32[7] = 1; _ringU32[8] = opts.selected;
                     this.device.queue.writeBuffer(this._ringUniformBufs[1], 0, _ringData);
                     ringDrawSlots.push(1);
                 }
 
                 // One encoder, one render pass per ring type, one submit
-                const ringEnc = this.device.createCommandEncoder({ label: 'rings-batch' });
-                for (const slot of ringDrawSlots) {
-                    const ringPass = ringEnc.beginRenderPass({
-                        label: `ring-slot-${slot}`,
-                        colorAttachments: [{ view: textureView, loadOp: 'load', storeOp: 'store' }],
-                    });
-                    ringPass.setPipeline(this._ringPipeline);
-                    ringPass.setBindGroup(0, frame ? this._ringBindGroupsView[slot] : this._ringBindGroups[slot]);
-                    ringPass.draw(130, instances); // (RING_SEGMENTS + 1) * 2 to close strip
-                    ringPass.end();
+                if (ringDrawSlots.length > 0) {
+                    const ringEnc = this.device.createCommandEncoder({ label: 'rings-batch' });
+                    for (const slot of ringDrawSlots) {
+                        const ringPass = ringEnc.beginRenderPass({
+                            label: `ring-slot-${slot}`,
+                            colorAttachments: [{ view: textureView, loadOp: 'load', storeOp: 'store' }],
+                        });
+                        ringPass.setPipeline(this._ringPipeline);
+                        ringPass.setBindGroup(0, frame ? this._ringBindGroupsView[slot] : this._ringBindGroups[slot]);
+                        ringPass.draw(130, instances); // (RING_SEGMENTS + 1) * 2 to close strip
+                        ringPass.end();
+                    }
+                    this.device.queue.submit([ringEnc.finish()]);
                 }
-                this.device.queue.submit([ringEnc.finish()]);
             } catch (e) {
                 console.warn('[physsim] Ring render failed, disabling:', e.message);
                 this._ringReady = false;

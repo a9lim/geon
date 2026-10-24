@@ -196,6 +196,7 @@ export default class GPUBackend {
 
         const renderOpts = sim._renderOpts;
         renderOpts.blackHoleEnabled = ph.blackHoleEnabled;
+        renderOpts.selected = sim.selectedIdx;
         renderOpts.higgsField = null;
         renderOpts.axionField = null;
         renderOpts.heatmapBuffers = null;

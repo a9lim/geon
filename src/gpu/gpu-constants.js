@@ -80,6 +80,8 @@ export function buildWGSLConstants() {
     const textLight = paletteRGB(_PAL.light.text);
     const textDark = paletteRGB(_PAL.dark.text);
     const lightAccent = paletteRGB(_PAL.light.accent);
+    const canvasLight = paletteRGB(_PAL.light.canvas);
+    const canvasDark = paletteRGB(_PAL.dark.canvas);
     const darkAccent = paletteRGB(_PAL.dark.accent);
 
     _cached = `// ── Auto-generated from config.js + _PALETTE ──
@@ -233,8 +235,11 @@ const COLOR_TEXT_LIGHT: vec3f = ${wv3(textLight)};
 const COLOR_TEXT_DARK: vec3f = ${wv3(textDark)};
 const COLOR_ACCENT_LIGHT: vec3f = ${wv3(lightAccent)};
 const COLOR_ACCENT_DARK: vec3f = ${wv3(darkAccent)};
-
-// Spin ring colors (HSL-derived from palette hues, 80% sat, 60% lightness)
+const COLOR_CANVAS_LIGHT: vec3f = ${wv3(canvasLight)};
+const COLOR_CANVAS_DARK: vec3f = ${wv3(canvasDark)};
+// A horizon is the darkest thing on the page in both themes: the text ink on the light
+// ground, and below the dark ground's own value on the dark one
+const COLOR_VOID_DARK: vec3f = vec3f(0.016, 0.016, 0.016);
 
 `;
     return _cached;
