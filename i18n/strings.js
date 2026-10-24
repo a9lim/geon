@@ -408,7 +408,7 @@ const UI_EN = {
     'preset.twinBounce.name': 'Twin paradox',
     'preset.twinBounce.desc': 'One twin flies to a wall at 0.8c and back, returning younger; on the traveller’s slice the home clock leaps 2vd at the turn',
     'preset.bremsstrahlung.name': 'Bremsstrahlung',
-    'preset.bremsstrahlung.desc': 'Charged particles deflected by a heavy nucleus emit photons',
+    'preset.bremsstrahlung.desc': 'A beam of electrons at 0.95c swings past a heavy nucleus, and each, bent, sheds light beamed along its path',
 
     // ── Edu-content (long-form crawler text) ──
     'edu.summary': 'About this simulation',
@@ -839,7 +839,7 @@ const UI_JA = {
     'preset.twinBounce.name': '双子のパラドックス',
     'preset.twinBounce.desc': '双子の一方が0.8cで壁まで行って戻り、若いまま帰る — 折り返すとき、旅する側の「今」の上で家の時計が2vdだけ跳ぶ',
     'preset.bremsstrahlung.name': '制動放射',
-    'preset.bremsstrahlung.desc': '重い原子核に偏向された荷電粒子が光子を放出',
+    'preset.bremsstrahlung.desc': '0.95cの電子の列が重い原子核のそばを通り、曲げられるたびに進行方向へ集中した光を放つ',
 
     // ── Edu-content (long-form crawler text) ──
     'edu.summary': 'このシミュレーションについて',

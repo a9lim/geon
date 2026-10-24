@@ -520,6 +520,7 @@ class Simulation {
 
     /** Clear the simulation: particles, bosons, fields, selection. */
     reset() {
+        this.presetTick = null;
         this.select(-1);
         if (this.gpu) this.gpu.reset(this);
         this.camera.minZoom = ZOOM_MIN;
@@ -568,6 +569,7 @@ class Simulation {
             const maxAccum = PHYSICS_DT * MAX_SUBSTEPS * ACCUMULATOR_CAP;
             if (this.accumulator > maxAccum) this.accumulator = maxAccum;
             gpu.step(this);
+            if (this.presetTick) this.presetTick();
         }
 
         this.input.pollGPUHitResult();

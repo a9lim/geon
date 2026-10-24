@@ -74,7 +74,7 @@ export const PRESETS = {
 
     bremsstrahlung: {
         name: 'Bremsstrahlung',
-        desc: 'Radiation from accelerating charges — watch the photons',
+        desc: 'A beam of electrons at 0.95c swings past a heavy nucleus, and each, bent, sheds light beamed along its path',
         toggles: {
             gravity: false, coulomb: true, magnetic: true, gravitomag: false,
             relativity: true, onepn: false, blackhole: false,
@@ -84,11 +84,26 @@ export const PRESETS = {
         settings: { collision: 'pass', boundary: 'despawn', speed: 32 },
         visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
         spawn(sim) {
+            // A nucleus of charge 6, heavy enough to barely recoil, and the first electron of a
+            // beam already on its way. At 0.95c (γ = 3.2) an electron is unbound anywhere in the
+            // domain; passing within the softening length (8) it turns through tens of degrees
+            // and radiates a few photons, beamed forward by Larmor's γ⁴. The beam alternates
+            // sides, so the momentum the deflected electrons hand the nucleus cancels
             const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            // Heavy target at center
-            sim.addParticle(cx, cy, 0, 0, { mass: 5, charge: 3, spin: 0 });
-            // Projectile on near-miss trajectory
-            sim.addParticle(cx - 25, cy + 5, 0.5, 0, { mass: 0.2, charge: -2, spin: 0 });
+            sim.addParticle(cx, cy, 0, 0, { mass: 60, charge: 6, spin: 0 });
+            this._beam = { next: 0, k: 0 };
+            this._fire(sim, cx - 18);
+        },
+        /** The beam: another electron every 24, from alternate edges, at the next impact parameter. */
+        tick(sim) {
+            if (sim._gpuPhysics.simTime >= this._beam.next) this._fire(sim);
+        },
+        _fire(sim, x) {
+            const k = this._beam.k++, dir = k % 2 ? -1 : 1;
+            const b = [2, -4, 6, -3, 5, -7][k % 6];
+            const x0 = x ?? (dir > 0 ? 1 : sim.domainW - 1);
+            sim.addParticle(x0, sim.domainH / 2 + b, 0.95 * dir, 0, { mass: 0.3, charge: -1, spin: 0 });
+            this._beam.next = sim._gpuPhysics.simTime + 24;
         },
     },
 
@@ -328,6 +343,8 @@ export function loadPreset(name, sim, { quiet = false } = {}) {
     // 6. Spawn particles (as initial conditions: see Simulation.addParticle)
     sim._spawningPreset = true;
     try { preset.spawn(sim); } finally { sim._spawningPreset = false; }
+    // A preset may keep its scene going (the bremsstrahlung beam); Simulation.reset() stops it
+    sim.presetTick = preset.tick ? () => preset.tick(sim) : null;
 
     // 7. Reset baseline and notify (i18n: prefer translated preset name)
     sim.stats.resetBaseline();
