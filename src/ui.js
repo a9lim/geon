@@ -508,11 +508,7 @@ export function setupUI(sim) {
     const G_SIM   = () => _T('shortcut.group.simulation', 'Simulation');
     const G_VIEW  = () => _T('shortcut.group.view',       'View');
     const G_SL    = () => _T('shortcut.group.saveload',   'Save / load');
-    const G_PRES  = () => _T('preset.group.gravity',      'Presets'); // not perfect; see note below
-    // Note: presets shown in shortcut help reuse the preset-name strings
-    // directly. The "Presets" header is intentionally rendered as the gravity
-    // group label so that it shows "重力" in JA — close enough for v1, since
-    // the shortcut help groups by preset category.
+    const G_PRES  = () => _T('shortcut.group.presets',    'Presets');
     const _buildShortcuts = () => [
         { key: 'Space', label: _T('shortcut.pausePlay',     'Pause / play'),     group: G_SIM(), action: togglePause },
         { key: 'R',     label: _T('shortcut.resetSim',      'Reset simulation'), group: G_SIM(), action: () => document.getElementById('clearBtn').click() },

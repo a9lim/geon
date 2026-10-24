@@ -5,10 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="meta.title">Worldline — Interactive Particle Physics Simulator | a9l.im</title>
-    <meta name="description" data-i18n-content="meta.description" content="Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-four browser presets.">
+    <meta name="description" data-i18n-content="meta.description" content="Explore relativistic many-body dynamics, electromagnetism, light and scalar fields in six curated presets, and tilt the plane into spacetime to see the world lines they trace.">
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
     <meta property="og:title" data-i18n-content="meta.ogTitle" content="Worldline — Interactive Particle Physics Simulator">
-    <meta property="og:description" data-i18n-content="meta.ogDescription" content="Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-four browser presets.">
+    <meta property="og:description" data-i18n-content="meta.ogDescription" content="Explore relativistic many-body dynamics, electromagnetism, light and scalar fields in six curated presets, and tilt the plane into spacetime to see the world lines they trace.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://a9l.im/worldline">
     <meta property="og:site_name" content="a9l.im">
@@ -23,7 +23,7 @@
     <meta name="twitter:site" content="@_a9lim">
     <meta name="twitter:creator" content="@_a9lim">
     <meta name="twitter:title" data-i18n-content="meta.twitterTitle" content="Worldline — Interactive Particle Physics Simulator">
-    <meta name="twitter:description" data-i18n-content="meta.twitterDescription" content="Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-four browser presets.">
+    <meta name="twitter:description" data-i18n-content="meta.twitterDescription" content="Explore relativistic many-body dynamics, electromagnetism, light and scalar fields in six curated presets, and tilt the plane into spacetime to see the world lines they trace.">
     <meta name="author" content="a9lim">
     <link rel="icon" href="/favicon.ico">
     <meta name="theme-color" content="#FCFCFB">
@@ -68,7 +68,7 @@
       "@type": ["WebApplication", "LearningResource"],
       "name": "Worldline",
       "url": "https://a9l.im/worldline",
-      "description": "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-four browser presets.",
+      "description": "Explore relativistic many-body dynamics, electromagnetism, light and scalar fields in six curated presets, and tilt the plane into spacetime to see the world lines they trace.",
       "speakable": {
         "@type": "SpeakableSpecification",
         "cssSelector": ["meta[name='description']"]
@@ -255,7 +255,7 @@
       "@type": "HowTo",
       "name": "How to simulate particle physics with Worldline",
       "step": [
-        {"@type": "HowToStep", "position": 1, "name": "Choose a preset", "text": "Select one of 23 curated presets from the dropdown — each configures initial conditions and force parameters to demonstrate a specific physical phenomenon."},
+        {"@type": "HowToStep", "position": 1, "name": "Choose a preset", "text": "Select one of six curated presets from the dropdown — each configures initial conditions and force parameters to demonstrate a specific physical phenomenon."},
         {"@type": "HowToStep", "position": 2, "name": "Place particles", "text": "Click or drag on the canvas to spawn particles with the mass, charge, and spin values set in the controls panel."},
         {"@type": "HowToStep", "position": 3, "name": "Toggle forces", "text": "Enable or disable individual forces — gravity, electromagnetism, Yukawa, Higgs, axion — to isolate and study specific physical interactions."},
         {"@type": "HowToStep", "position": 4, "name": "Observe trajectories", "text": "Watch particles interact in real time. Use pause, step, and speed controls to examine dynamics at different timescales."},
@@ -323,40 +323,12 @@
                         <h2 class="group-label" data-i18n="group.preset">Preset</h2>
                         <select id="preset-select" class="sim-select">
                             <option value="none" data-i18n="preset.option.none" selected>None</option>
-                            <optgroup label="Gravity" data-i18n-label="preset.group.gravity">
-                                <option value="kepler" data-i18n="preset.kepler.name">Kepler orbits</option>
-                                <option value="precession" data-i18n="preset.precession.name">Precession</option>
-                                <option value="inspiral" data-i18n="preset.inspiral.name">Binary inspiral</option>
-                                <option value="hawking" data-i18n="preset.hawking.name">Hawking evaporation</option>
-                                <option value="microlensing" data-i18n="preset.microlensing.name">Microlensing</option>
-                            </optgroup>
-                            <optgroup label="Relativity" data-i18n-label="preset.group.relativity">
-                                <option value="wheel" data-i18n="preset.wheel.name">Relativistic wheel</option>
-                                <option value="thomas" data-i18n="preset.thomas.name">Thomas precession</option>
-                                <option value="geodetic" data-i18n="preset.geodetic.name">Geodetic precession</option>
-                                <option value="twinBounce" data-i18n="preset.twinBounce.name">Twin paradox</option>
-                                <option value="twinTorus" data-i18n="preset.twinTorus.name">Twin on a torus</option>
-                            </optgroup>
-                            <optgroup label="Electromagnetism" data-i18n-label="preset.group.em">
-                                <option value="atom" data-i18n="preset.atom.name">Atom</option>
-                                <option value="cyclotron" data-i18n="preset.cyclotron.name">Cyclotron drift</option>
-                                <option value="bremsstrahlung" data-i18n="preset.bremsstrahlung.name">Bremsstrahlung</option>
-                                <option value="magnetic" data-i18n="preset.magnetic.name">Magnetic dipoles</option>
-                            </optgroup>
-                            <optgroup label="Exotic" data-i18n-label="preset.group.exotic">
-                                <option value="nucleus" data-i18n="preset.nucleus.name">Atomic nucleus</option>
-                                <option value="axion" data-i18n="preset.axion.name">Axion field</option>
-                                <option value="pionexchange" data-i18n="preset.pionexchange.name">Pion exchange</option>
-                                <option value="higgs" data-i18n="preset.higgs.name">Higgs mechanism</option>
-                                <option value="higgsboson" data-i18n="preset.higgsboson.name">Higgs boson</option>
-                                <option value="axionburst" data-i18n="preset.axionburst.name">Axion burst</option>
-                                <option value="pecceiQuinn" data-i18n="preset.pecceiQuinn.name">Peccei–Quinn</option>
-                            </optgroup>
-                            <optgroup label="Cosmological" data-i18n-label="preset.group.cosmological">
-                                <option value="expansion" data-i18n="preset.expansion.name">Expanding universe</option>
-                                <option value="misalignment" data-i18n="preset.misalignment.name">Axion misalignment</option>
-                                <option value="kibbleZurek" data-i18n="preset.kibbleZurek.name">Kibble–Zurek walls</option>
-                            </optgroup>
+                            <option value="cyclotron" data-i18n="preset.cyclotron.name">Cyclotron drift</option>
+                            <option value="twinBounce" data-i18n="preset.twinBounce.name">Twin paradox</option>
+                            <option value="wheel" data-i18n="preset.wheel.name">Relativistic wheel</option>
+                            <option value="bremsstrahlung" data-i18n="preset.bremsstrahlung.name">Bremsstrahlung</option>
+                            <option value="kibbleZurek" data-i18n="preset.kibbleZurek.name">Kibble–Zurek walls</option>
+                            <option value="microlensing" data-i18n="preset.microlensing.name">Microlensing</option>
                         </select>
                     </div>
                     <div class="panel-section">
@@ -717,7 +689,7 @@
         <h3 data-i18n="edu.h.fields">Scalar fields</h3>
         <p data-i18n="edu.p.fields">Two scalar fields — Higgs and axion — live on a PQS grid with C² interpolation. The Higgs field modulates particle mass through its local vacuum expectation value, while the axion field couples to charge. Both evolve via Störmer-Verlet integration and exert gradient forces on particles.</p>
         <h3 data-i18n="edu.h.presets">Presets</h3>
-        <p data-i18n="edu.p.presets">Twenty-four curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, the twin paradox on a line and on a torus, atomic and nuclear toy systems, cyclotron drift, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, an expanding universe, axion misalignment, Kibble–Zurek domain walls, and microlensing.</p>
+        <p data-i18n="edu.p.presets">Six curated presets each make one figure: cyclotron drift, where charges of both signs trace helices in spacetime; the twin paradox; a relativistic wheel; bremsstrahlung, where a deflected charge radiates; Kibble–Zurek walls in a quenched Higgs field; and microlensing of a backdrop star.</p>
     <h3 data-i18n="edu.h.frames">Frames</h3>
     <p data-i18n="edu.p.frames">The view can be drawn for observers other than the lab: the zero-momentum frame, the selected particle's rest frame, a boost at a chosen speed and direction, or a frame rotating at a chosen rate. Worldline records every body's world line and redraws the scene on the observer's surface of simultaneity, so in a boosted frame moving rulers contract, clocks synchronized in the lab disagree across the view, and a fast wheel can be followed in its own rest frame, where it is round. The observer's present is set far enough into the lab's past that everything shown has already been computed, and the Frame tab reports how far behind the lab it is. A background grid of rulers at rest in the lab contracts and shears with the observer, and a spacetime diagram plots nearby world lines in the observer's coordinates with its light cone and proper-time ticks.</p>
     <h3 data-i18n="edu.h.expansion">Cosmological expansion</h3>

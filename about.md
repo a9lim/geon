@@ -1,7 +1,7 @@
 ---
 name: Worldline
 title: Worldline — Interactive Particle Physics Simulator
-description: Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-four browser presets.
+description: Explore relativistic many-body dynamics, electromagnetism, light and scalar fields in six curated presets, and tilt the plane into spacetime to see the world lines they trace.
 updated: 2026-10-24
 ---
 
@@ -33,7 +33,7 @@ The spoke's orientation is a transported axis, and it precesses even when the bo
 
 The view can be drawn for observers other than the lab: the zero-momentum frame, the selected particle's rest frame, a boost at a chosen speed and direction, or a frame rotating at a chosen rate. Worldline records every body's world line and redraws the scene on the observer's surface of simultaneity, so in a boosted frame moving rulers contract, clocks synchronized in the lab disagree across the view, and a fast wheel can be followed in its own rest frame, where it is round. The observer's present is set far enough into the lab's past that everything shown has already been computed, and the Frame tab reports how far behind the lab it is. A background grid of rulers at rest in the lab contracts and shears with the observer, and a spacetime diagram plots nearby world lines in the observer's coordinates with its light cone and proper-time ticks.
 
-On a torus the lab is a preferred frame: opposite edges are identified at equal lab time, so a traveller circling a torus of length L at speed v sees its own images, in its own frame, spaced γL apart with clocks γvL apart. A twin who circles the torus at 0.8c meets the stay-at-home twin every lap, younger each time, without ever turning around (Barrow and Levin, 2001). In the other twin preset the traveller bounces off a wall, and at the turn the home clock's reading on the traveller's slice jumps ahead by 2vd.
+On a torus the lab is a preferred frame: opposite edges are identified at equal lab time, so a traveller circling a torus of length L at speed v sees its own images, in its own frame, spaced γL apart with clocks γvL apart. A twin who circles the torus at 0.8c meets the stay-at-home twin every lap, younger each time, without ever turning around (Barrow and Levin, 2001). In the twin-paradox preset the traveller bounces off a wall instead, and at the turn the home clock's reading on the traveller's slice jumps ahead by 2vd.
 
 ## Expansion
 
@@ -49,7 +49,7 @@ The Higgs and axion fields evolve on a 128 × 128 grid. With gravity on, they ev
 
 ## Presets
 
-Twenty-four curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, the twin paradox on a line and on a torus, atomic and nuclear toy systems, cyclotron drift, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, an expanding universe, axion misalignment, Kibble–Zurek domain walls, and microlensing. Each preset sets initial conditions and force parameters for one compact demonstration.
+Six curated presets each make one figure: cyclotron drift, where charges of both signs trace helices in spacetime; the twin paradox; a relativistic wheel; bremsstrahlung, where a deflected charge radiates; Kibble–Zurek walls in a quenched Higgs field; and microlensing of a backdrop star. Each sets its initial conditions and forces and opens on its own frame; everything else Worldline models stays a toggle away.
 
 ## Black Hole Physics
 

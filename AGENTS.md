@@ -41,7 +41,7 @@ src/input.js             spawn, select, delete through GPU hit tests; Alt/Shift-
 src/spacetime.js         the spacetime view: orbit camera over the 2D camera, Lab/Observer boost
 src/caption.js           the live figure caption under the scene (en, ja)
 src/overlay.js           the 2D canvas above the GPU canvas: spawn-drag line, the spacetime box and presents
-src/presets.js           23 presets (PRESET_ORDER); each may set its domain
+src/presets.js           six curated presets (PRESET_ORDER); each may set its domain
 src/cosmology.js         the scale factor a(t): schedules, the Friedmann closure, horizons
 src/cosmology-panel.js   the Stats tab's expansion readouts and the overlay's horizons
 src/frames.js            the observer the view is drawn for (sim.frames), FrameParams

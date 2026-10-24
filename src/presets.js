@@ -1,277 +1,10 @@
 // ─── Preset Definitions ───
-// Each preset configures toggles, engine settings, visuals, and spawns particles.
-import { PI, TWO_PI, DEFAULT_DOMAIN, SOFTENING_SQ, DEFAULT_PION_MASS, DEFAULT_HIGGS_MASS, DEFAULT_AXION_MASS, SPEED_OPTIONS, DEFAULT_SPEED_INDEX } from './config.js';
-
-// Plummer-softened circular orbit velocity: F = coupling*r/(r²+ε²)^{3/2}, set F/m = v²/r
-const _vCirc = (coupling, r, m) => {
-    const rSq = r * r + SOFTENING_SQ;
-    return Math.sqrt(Math.abs(coupling) * r * r / (m * rSq * Math.sqrt(rSq)));
-};
-
-// Gravitational circular orbit: _vCirc(M, r, 1)
-const _vGrav = (M, r) => {
-    const rSq = r * r + SOFTENING_SQ;
-    return Math.sqrt(M * r * r / (rSq * Math.sqrt(rSq)));
-};
-
-// Relativistic circular orbit speed under a softened central force of strength k
-// (F = k·r/(r²+ε²)^{3/2}) on mass m: solves γ·m·v²/r = F, i.e. v²/√(1−v²) = s.
-const _vCircRel = (k, r, m) => {
-    const rSq = r * r + SOFTENING_SQ;
-    const s = Math.abs(k) * r * r / (m * rSq * Math.sqrt(rSq));
-    const x = (-s * s + Math.sqrt(s ** 4 + 4 * s * s)) / 2; // v²
-    return Math.sqrt(x);
-};
+// Six curated presets, each a figure that opens on its own frame. A preset sets toggles,
+// engine settings and visuals, then spawns its bodies.
+import { DEFAULT_DOMAIN, DEFAULT_PION_MASS, DEFAULT_HIGGS_MASS, DEFAULT_AXION_MASS, SPEED_OPTIONS, DEFAULT_SPEED_INDEX } from './config.js';
 
 // Each preset may set `domain: [w, h]` in world units; the default is DEFAULT_DOMAIN square.
 export const PRESETS = {
-    // ─── Gravity ───
-
-    kepler: {
-        name: 'Kepler orbits',
-        desc: 'Classical gravity — Keplerian motion and conservation laws',
-        toggles: {
-            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: false, onepn: false, blackhole: false,
-            radiation: false, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
-        },
-        settings: { collision: 'pass', boundary: 'despawn', speed: 32 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2, M = 5;
-            // Planets at random angles; the star recoils so the total momentum is zero
-            const planets = [8, 13, 18, 23, 28].map(r => {
-                const angle = Math.random() * TWO_PI, v = _vGrav(M, r);
-                const cos = Math.cos(angle), sin = Math.sin(angle);
-                return { x: cx + cos * r, y: cy + sin * r, vx: -sin * v, vy: cos * v, m: 0.3 + Math.random() * 0.7 };
-            });
-            const px = planets.reduce((s, p) => s + p.m * p.vx, 0), py = planets.reduce((s, p) => s + p.m * p.vy, 0);
-            sim.addParticle(cx, cy, -px / M, -py / M, { mass: M, charge: 0, spin: 0 });
-            for (const p of planets) sim.addParticle(p.x, p.y, p.vx, p.vy, { mass: p.m, charge: 0, spin: 0 });
-        },
-    },
-
-    precession: {
-        name: 'Precession',
-        desc: 'Relativistic perihelion advance — watch the rosette orbit',
-        toggles: {
-            gravity: true, coulomb: false, magnetic: false, gravitomag: true,
-            relativity: true, onepn: true, blackhole: false,
-            radiation: false, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
-        },
-        settings: { collision: 'pass', boundary: 'despawn', speed: 32 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: true, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            const starM = 5;
-            sim.addParticle(cx, cy, 0, 0, { mass: starM, charge: 0, spin: 0 });
-            // Eccentric orbit: start at perihelion with ~1.3x circular velocity
-            const rPeri = 10;
-            const vCirc = _vGrav(starM, rPeri);
-            const vPeri = vCirc * 1.3;
-            sim.addParticle(cx + rPeri, cy, 0, vPeri, { mass: 0.5, charge: 0, spin: 0 });
-        },
-    },
-
-    inspiral: {
-        name: 'Binary inspiral',
-        desc: 'Gravitational wave emission — quadrupole radiation drains orbital energy',
-        // particles carry zero charge so EM forces contribute nothing.
-        toggles: {
-            gravity: true, coulomb: false, magnetic: false, gravitomag: true,
-            relativity: true, onepn: true, blackhole: false,
-            radiation: true, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
-        },
-        settings: { collision: 'merge', boundary: 'despawn', speed: 32 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            // Wide, weakly-relativistic binary so 1PN doesn't overshoot at perihelion
-            // and radiation reaction can drive a slow inward spiral instead of a fling.
-            const M = 3;
-            const sep = 22;
-            // Equal-mass binary: each circles CoM at radius `sep`; v_circ = sqrt(GM/(4·sep))
-            const v = Math.sqrt(M / (4 * sep));
-            // Aligned spins — GM dipole 3L₁L₂/r⁴ is attractive (repulsive when anti-aligned),
-            // so frame-dragging tightens the orbit instead of throwing them apart.
-            sim.addParticle(cx - sep, cy, 0, v, { mass: M, charge: 0, spin: 0.5 });
-            sim.addParticle(cx + sep, cy, 0, -v, { mass: M, charge: 0, spin: 0.5 });
-        },
-    },
-
-    hawking: {
-        name: 'Hawking evaporation',
-        desc: 'Small black holes radiate and evaporate',
-        toggles: {
-            gravity: true, coulomb: false, magnetic: false, gravitomag: true,
-            relativity: true, onepn: false, blackhole: true,
-            radiation: true, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
-        },
-        settings: { collision: 'merge', boundary: 'despawn', speed: 32 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            // Small BHs that will visibly evaporate (P ∝ 1/M²)
-            const masses = [0.3, 0.4, 0.5, 0.65, 0.8];
-            for (let i = 0; i < masses.length; i++) {
-                const angle = (TWO_PI * i) / masses.length;
-                const r = 12 + Math.random() * 8;
-                sim.addParticle(
-                    cx + Math.cos(angle) * r, cy + Math.sin(angle) * r,
-                    (Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1,
-                    { mass: masses[i], charge: 0, spin: 0 }
-                );
-            }
-        },
-    },
-
-    // ─── Relativity ───
-
-    wheel: {
-        name: 'Relativistic wheel',
-        desc: 'A wheel spinning at 0.9c, moving at 0.9c: contracted, its spoke bent, its clock slow',
-        toggles: {
-            gravity: false, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: true, onepn: false, blackhole: false,
-            radiation: false, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
-        },
-        settings: { collision: 'pass', boundary: 'loop', topology: 'torus', speed: 16 },
-        visuals: { trails: false, clocks: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            // The same wheel twice, rim speed 0.9: at rest, and crossing the torus at 0.9c.
-            // The moving spoke bends by 2·v·v_rim ≈ 93° across the diameter.
-            sim.addParticle(cx, cy - 12, 0, 0, { mass: 40, charge: 0, spin: 0.9 });
-            sim.addParticle(cx, cy + 12, 0.9, 0, { mass: 40, charge: 0, spin: 0.9 });
-        },
-    },
-
-    thomas: {
-        name: 'Thomas precession',
-        desc: 'A non-spinning charge on a relativistic Coulomb orbit: its spoke turns back 2π(γ−1) per orbit',
-        toggles: {
-            gravity: false, coulomb: true, magnetic: false, gravitomag: false,
-            relativity: true, onepn: false, blackhole: false,
-            radiation: false, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
-        },
-        settings: { collision: 'pass', boundary: 'despawn', speed: 16 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            // v ≈ 0.80, γ ≈ 5/3: the spoke falls back ≈ 240° per orbit. The nucleus starts
-            // with the opposite momentum, so the pair's centre of mass stays put. It is heavy
-            // because the electron's Liénard–Wiechert field at the centre has a tangential
-            // part, qv/r², which drags a light nucleus round and unravels the orbit.
-            const nucM = 600, nucQ = 12, r = 16;
-            const v = _vCircRel(nucQ * 2, r, 1);
-            const p = v / Math.sqrt(1 - v * v);
-            sim.addParticle(cx, cy, 0, -p / nucM, { mass: nucM, charge: nucQ, spin: 0 });
-            sim.addParticle(cx + r, cy, 0, v, { mass: 1, charge: -2, spin: 0 });
-        },
-    },
-
-    geodetic: {
-        name: 'Geodetic precession',
-        desc: 'A gyroscope orbiting a mass: its spoke turns forward 3πM/r per orbit, as on Gravity Probe B',
-        toggles: {
-            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: true, onepn: false, blackhole: false,
-            radiation: false, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
-        },
-        settings: { collision: 'pass', boundary: 'despawn', speed: 16 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            // v ≈ 0.45 at r = 16: about 121° of geodetic precession per orbit, prograde,
-            // with the orbiting clock at about half rate (deeper, and it nearly stops).
-            const M = 5, m = 0.5, r = 16;
-            const v = _vCircRel(M, r, 1);
-            const p = m * v / Math.sqrt(1 - v * v);
-            sim.addParticle(cx, cy, 0, -p / M, { mass: M, charge: 0, spin: 0 });
-            sim.addParticle(cx + r, cy, 0, v, { mass: m, charge: 0, spin: 0 });
-        },
-    },
-
-    twinBounce: {
-        name: 'Twin paradox',
-        desc: 'One twin flies to a wall at 0.8c and back, returning younger; on the traveller’s slice the home clock leaps 2vd at the turn',
-        toggles: {
-            gravity: false, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: true, onepn: false, blackhole: false,
-            radiation: false, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
-        },
-        settings: { collision: 'pass', boundary: 'bounce', speed: 16 },
-        visuals: { trails: false, clocks: true, velocity: false, force: false, forceComponents: false, potential: false },
-        domain: [160, 40],
-        spawn(sim) {
-            // Home at rest; the traveller leaves at 0.8c (γ = 5/3), turns at the far wall and
-            // comes back, ageing 0.6 of home's time apart from the turn
-            const y = sim.domainH / 2;
-            sim.addParticle(12, y - 3, 0, 0, { mass: 1, charge: 0, spin: 0 });
-            sim.addParticle(12, y + 3, 0.8, 0, { mass: 1, charge: 0, spin: 0 });
-        },
-    },
-
-    twinTorus: {
-        name: 'Twin on a torus',
-        desc: 'A twin circling a torus at 0.8c meets home every lap, younger each time, with no turnaround: on a torus the lab is the preferred frame',
-        toggles: {
-            gravity: false, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: true, onepn: false, blackhole: false,
-            radiation: false, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
-        },
-        settings: { collision: 'pass', boundary: 'loop', topology: 'torus', speed: 16 },
-        visuals: { trails: false, clocks: true, velocity: false, force: false, forceComponents: false, potential: false },
-        domain: [96, 32],
-        spawn(sim) {
-            // In the traveller's own frame its images sit γL apart and read γvL apart: the torus
-            // identification holds at equal lab time only (Barrow & Levin 2001)
-            const y = sim.domainH / 2;
-            sim.addParticle(16, y - 3, 0, 0, { mass: 1, charge: 0, spin: 0 });
-            sim.addParticle(16, y + 3, 0.8, 0, { mass: 1, charge: 0, spin: 0 });
-        },
-    },
-
-    // ─── Electromagnetism ───
-
-    atom: {
-        name: 'Atom',
-        desc: 'Coulomb binding — electromagnetic atomic structure',
-        toggles: {
-            gravity: false, coulomb: true, magnetic: true, gravitomag: false,
-            relativity: true, onepn: false, blackhole: false,
-            radiation: false, spinorbit: true, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
-        },
-        settings: { collision: 'pass', boundary: 'despawn', speed: 32 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            const nucQ = 3;
-            sim.addParticle(cx, cy, 0, 0, { mass: 5, charge: nucQ, spin: 0 });
-            // 2 electrons with screened Coulomb coupling (inner screens outer)
-            const eM = 1.0, eQ = -1;
-            const shells = [{ r: 12, effectiveQ: 3 }, { r: 18, effectiveQ: 2 }];
-            for (let i = 0; i < shells.length; i++) {
-                const { r, effectiveQ } = shells[i];
-                const angle = PI * i;
-                const v = _vCirc(effectiveQ * Math.abs(eQ), r, eM);
-                const cos = Math.cos(angle), sin = Math.sin(angle);
-                sim.addParticle(cx + cos * r, cy + sin * r, -sin * v, cos * v,
-                    { mass: eM, charge: eQ, spin: 0.3 });
-            }
-        },
-    },
-
     cyclotron: {
         name: 'Cyclotron drift',
         desc: 'Charges of both signs circle a uniform magnetic field and drift together across an electric one: in spacetime, helices of opposite hand leaning the same way',
@@ -298,6 +31,47 @@ export const PRESETS = {
         },
     },
 
+    twinBounce: {
+        name: 'Twin paradox',
+        desc: 'One twin flies to a wall at 0.8c and back, returning younger; on the traveller’s slice the home clock leaps 2vd at the turn',
+        toggles: {
+            gravity: false, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: true, onepn: false, blackhole: false,
+            radiation: false, spinorbit: false, disintegration: false,
+            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
+        },
+        settings: { collision: 'pass', boundary: 'bounce', speed: 16 },
+        visuals: { trails: false, clocks: true, velocity: false, force: false, forceComponents: false, potential: false },
+        domain: [160, 40],
+        spawn(sim) {
+            // Home at rest; the traveller leaves at 0.8c (γ = 5/3), turns at the far wall and
+            // comes back, ageing 0.6 of home's time apart from the turn
+            const y = sim.domainH / 2;
+            sim.addParticle(12, y - 3, 0, 0, { mass: 1, charge: 0, spin: 0 });
+            sim.addParticle(12, y + 3, 0.8, 0, { mass: 1, charge: 0, spin: 0 });
+        },
+    },
+
+    wheel: {
+        name: 'Relativistic wheel',
+        desc: 'A wheel spinning at 0.9c, moving at 0.9c: contracted, its spoke bent, its clock slow',
+        toggles: {
+            gravity: false, coulomb: false, magnetic: false, gravitomag: false,
+            relativity: true, onepn: false, blackhole: false,
+            radiation: false, spinorbit: false, disintegration: false,
+            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
+        },
+        settings: { collision: 'pass', boundary: 'loop', topology: 'torus', speed: 16 },
+        visuals: { trails: false, clocks: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            const cx = sim.domainW / 2, cy = sim.domainH / 2;
+            // The same wheel twice, rim speed 0.9: at rest, and crossing the torus at 0.9c.
+            // The moving spoke bends by 2·v·v_rim ≈ 93° across the diameter.
+            sim.addParticle(cx, cy - 12, 0, 0, { mass: 40, charge: 0, spin: 0.9 });
+            sim.addParticle(cx, cy + 12, 0.9, 0, { mass: 40, charge: 0, spin: 0.9 });
+        },
+    },
+
     bremsstrahlung: {
         name: 'Bremsstrahlung',
         desc: 'Radiation from accelerating charges — watch the photons',
@@ -315,294 +89,6 @@ export const PRESETS = {
             sim.addParticle(cx, cy, 0, 0, { mass: 5, charge: 3, spin: 0 });
             // Projectile on near-miss trajectory
             sim.addParticle(cx - 25, cy + 5, 0.5, 0, { mass: 0.2, charge: -2, spin: 0 });
-        },
-    },
-
-    magnetic: {
-        name: 'Magnetic dipoles',
-        desc: 'Dipole interactions, Lorentz force, and spin-orbit coupling',
-        toggles: {
-            gravity: false, coulomb: true, magnetic: true, gravitomag: false,
-            relativity: true, onepn: false, blackhole: false,
-            radiation: false, spinorbit: true, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
-        },
-        settings: { collision: 'bounce', boundary: 'loop', topology: 'torus', speed: 32, friction: 0.4 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            const spacing = 10;
-            for (let i = -1; i <= 2; i++) {
-                for (let j = -1; j <= 2; j++) {
-                    sim.addParticle(
-                        cx + i * spacing + (Math.random() - 0.5) * 3,
-                        cy + j * spacing + (Math.random() - 0.5) * 3,
-                        (Math.random() - 0.5) * 0.08,
-                        (Math.random() - 0.5) * 0.08,
-                        { mass: 2, charge: 3, spin: 0.8 }
-                    );
-                }
-            }
-        },
-    },
-
-    // ─── Exotic ───
-
-    nucleus: {
-        name: 'Atomic nucleus',
-        desc: 'Yukawa potential — short-range force binds nucleons like a liquid drop',
-        toggles: {
-            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: false, onepn: false, blackhole: false,
-            radiation: false, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: true, axion: false, expansion: false, higgs: false,
-        },
-        settings: { collision: 'bounce', boundary: 'bounce', speed: 32, yukawaMu: 1 / 15 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            // Nucleons in a ring — gravity + Yukawa pull them into a bound cluster
-            const N = 7;
-            for (let i = 0; i < N; i++) {
-                const angle = (TWO_PI * i) / N;
-                const r = 10 + Math.random() * 4;
-                const cos = Math.cos(angle), sin = Math.sin(angle);
-                // Small tangential velocity → rotating collapse
-                const v = 0.04;
-                sim.addParticle(
-                    cx + cos * r, cy + sin * r,
-                    -sin * v + (Math.random() - 0.5) * 0.02,
-                    cos * v + (Math.random() - 0.5) * 0.02,
-                    { mass: 2, charge: 0, spin: (Math.random() - 0.5) * 0.3 }
-                );
-            }
-        },
-    },
-
-    axion: {
-        name: 'Axion field',
-        desc: 'Scalar aF² coupling makes EM strength position-dependent',
-        toggles: {
-            gravity: false, coulomb: true, magnetic: true, gravitomag: false,
-            relativity: true, onepn: false, blackhole: false,
-            radiation: false, spinorbit: true, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: true, expansion: false, higgs: false,
-        },
-        settings: { collision: 'pass', boundary: 'despawn', speed: 32, axionMass: 0.15 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            const sep = 28;
-            // Two atoms side by side — axion makes both breathe in unison
-            for (let s = -1; s <= 1; s += 2) {
-                const nx = cx + s * sep / 2;
-                const nucQ = 3;
-                sim.addParticle(nx, cy, 0, 0, { mass: 4, charge: nucQ, spin: 0 });
-                const r = 10;
-                const v = _vCirc(nucQ, r, 0.8);
-                const angle = s > 0 ? 0 : PI;
-                const cos = Math.cos(angle), sin = Math.sin(angle);
-                sim.addParticle(
-                    nx + cos * r, cy + sin * r,
-                    -sin * v, cos * v,
-                    { mass: 0.8, charge: -1, spin: 0.2 }
-                );
-            }
-        },
-    },
-
-    higgs: {
-        name: 'Higgs mechanism',
-        desc: 'Spontaneous symmetry breaking — particles gain mass from the Higgs field',
-        toggles: {
-            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: false, onepn: false, blackhole: false,
-            radiation: false, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: true,
-        },
-        settings: { collision: 'bounce', boundary: 'bounce', speed: 32 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            // Particles scattered around — watch them gain mass and attract
-            for (let i = 0; i < 8; i++) {
-                const angle = (TWO_PI * i) / 8;
-                const r = 8 + Math.random() * 10;
-                sim.addParticle(
-                    cx + Math.cos(angle) * r, cy + Math.sin(angle) * r,
-                    (Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1,
-                    { mass: 1 + Math.random(), charge: 0, spin: 0 }
-                );
-            }
-        },
-    },
-
-    pionexchange: {
-        name: 'Pion exchange',
-        desc: 'Yukawa scattering emits massive pions — watch them carry force between nucleons',
-        toggles: {
-            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: false, onepn: false, blackhole: false,
-            radiation: false, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: true, axion: false, expansion: false, higgs: false,
-        },
-        settings: { collision: 'bounce', boundary: 'bounce', speed: 32, yukawaMu: 0.1 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            const N = 5;
-            for (let i = 0; i < N; i++) {
-                const angle = (TWO_PI * i) / N;
-                const r = 8;
-                const v = 0.04;
-                const cos = Math.cos(angle), sin = Math.sin(angle);
-                sim.addParticle(cx + cos * r, cy + sin * r,
-                    -sin * v + (Math.random() - 0.5) * 0.02,
-                    cos * v + (Math.random() - 0.5) * 0.02,
-                    { mass: 3, charge: 0, spin: (Math.random() - 0.5) * 0.2 });
-            }
-        },
-    },
-
-    higgsboson: {
-        name: 'Higgs boson',
-        desc: 'Particle collisions excite the Higgs field — watch wave packets ripple outward',
-        toggles: {
-            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: false, onepn: false, blackhole: false,
-            radiation: false, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: true,
-        },
-        settings: { collision: 'merge', boundary: 'bounce', speed: 32 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            // Head-on collision to produce Higgs excitation
-            sim.addParticle(cx - 15, cy, 0.4, 0, { mass: 3, charge: 0, spin: 0 });
-            sim.addParticle(cx + 15, cy, -0.4, 0, { mass: 3, charge: 0, spin: 0 });
-            // Stationary witnesses to feel the wave
-            for (let i = 0; i < 6; i++) {
-                const angle = (TWO_PI * i) / 6;
-                const r = 20;
-                sim.addParticle(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, 0, 0,
-                    { mass: 1, charge: 0, spin: 0 });
-            }
-        },
-    },
-
-    axionburst: {
-        name: 'Axion burst',
-        desc: 'Charged collisions excite the axion field — EM coupling ripples outward',
-        toggles: {
-            gravity: false, coulomb: true, magnetic: true, gravitomag: false,
-            relativity: true, onepn: false, blackhole: false,
-            radiation: false, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: true, expansion: false, higgs: false,
-        },
-        settings: { collision: 'merge', boundary: 'despawn', speed: 32, axionMass: 0.1 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            // Charged head-on collision
-            sim.addParticle(cx - 12, cy, 0.3, 0, { mass: 2, charge: 3, spin: 0 });
-            sim.addParticle(cx + 12, cy, -0.3, 0, { mass: 2, charge: -3, spin: 0 });
-            // Orbiting electrons to feel axion EM modulation
-            const r = 22;
-            for (let i = 0; i < 4; i++) {
-                const angle = (TWO_PI * i) / 4;
-                sim.addParticle(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, 0, 0,
-                    { mass: 0.5, charge: -1, spin: 0.2 });
-            }
-        },
-    },
-
-    pecceiQuinn: {
-        name: 'Peccei\u2013Quinn',
-        desc: 'CP violation \u2014 axion field makes Yukawa bind matter and antimatter differently',
-        domain: [80, 64],
-        toggles: {
-            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: false, onepn: false, blackhole: false,
-            radiation: false, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: true, axion: true, expansion: false, higgs: false,
-        },
-        settings: { collision: 'bounce', boundary: 'bounce', speed: 32, axionMass: 0.05 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            const cx = sim.domainW / 2, cy = sim.domainH / 2;
-            const sep = 24, n = 4, r = 10;
-            // Matter cluster (left)
-            for (let i = 0; i < n; i++) {
-                const angle = (TWO_PI * i) / n;
-                sim.addParticle(cx - sep + Math.cos(angle) * r, cy + Math.sin(angle) * r, 0, 0,
-                    { mass: 4, charge: 0, spin: 0.5 });
-            }
-            // Antimatter cluster (right) — mirror image
-            for (let i = 0; i < n; i++) {
-                const angle = (TWO_PI * i) / n;
-                sim.addParticle(cx + sep + Math.cos(angle) * r, cy + Math.sin(angle) * r, 0, 0,
-                    { mass: 4, charge: 0, spin: 0.5, antimatter: true });
-            }
-        },
-    },
-
-    // ─── Cosmological ───
-
-    expansion: {
-        name: 'Expanding universe',
-        desc: 'A de Sitter torus: bound binaries keep their size while free bodies at rest recede with the comoving grid',
-        toggles: {
-            gravity: true, coulomb: false, magnetic: false, gravitomag: false,
-            relativity: false, onepn: false, blackhole: false,
-            radiation: false, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: true, higgs: false,
-        },
-        settings: { collision: 'pass', boundary: 'loop', topology: 'torus', speed: 16, schedule: 1, hubble: 0.01 },
-        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            // Binaries on a coarse lattice: each is bound far beyond the tidal H²d, so it keeps
-            // its physical size while the lattice between them stretches
-            const M = 2, d = 4;
-            const v = 0.5 * Math.sqrt(2 * M * d * d / Math.pow(d * d + SOFTENING_SQ, 1.5));
-            for (let i = 0; i < 2; i++) {
-                for (let j = 0; j < 2; j++) {
-                    const cx = (i + 0.25) * sim.domainW / 2, cy = (j + 0.25) * sim.domainH / 2;
-                    sim.addParticle(cx - d / 2, cy, 0, -v, { mass: M, charge: 0, spin: 0 });
-                    sim.addParticle(cx + d / 2, cy, 0, v, { mass: M, charge: 0, spin: 0 });
-                }
-            }
-            // Free bodies at rest in comoving coordinates: they recede, each from every other
-            for (let i = 0; i < 4; i++) {
-                for (let j = 0; j < 4; j++) {
-                    sim.addParticle((i + 0.5) * sim.domainW / 4 + 3, (j + 0.5) * sim.domainH / 4 - 3, 0, 0,
-                        { mass: 0.02, charge: 0, spin: 0 });
-                }
-            }
-        },
-    },
-
-    misalignment: {
-        name: 'Axion misalignment',
-        desc: 'A uniform axion field frozen by Hubble friction until H falls to m_a, then oscillating as cold matter whose density dilutes as a⁻³',
-        toggles: {
-            gravity: false, coulomb: true, magnetic: false, gravitomag: false,
-            relativity: false, onepn: false, blackhole: false,
-            radiation: false, spinorbit: false, disintegration: false,
-            barneshut: false, bosonInter: false, yukawa: false, axion: true, expansion: true, higgs: false,
-        },
-        // Radiation era from H₀ = 5m_a: oscillations start near a ≈ √5, with no ether damping
-        settings: { collision: 'pass', boundary: 'loop', topology: 'torus', speed: 16,
-                    schedule: 3, hubble: 0.5, axionMass: 0.1, fieldDamping: false },
-        visuals: { trails: false, velocity: false, force: false, forceComponents: false, potential: false },
-        spawn(sim) {
-            sim._gpuPhysics.setField('axion', 1);
-            // Neutral tracers at rest in comoving coordinates (the axion couples only to charge)
-            for (let i = 0; i < 3; i++) {
-                for (let j = 0; j < 3; j++) {
-                    sim.addParticle((i + 0.5) * sim.domainW / 3, (j + 0.5) * sim.domainH / 3, 0, 0,
-                        { mass: 0.05, charge: 0, spin: 0 });
-                }
-            }
         },
     },
 
@@ -628,8 +114,6 @@ export const PRESETS = {
             sim.addParticle(sim.domainW / 2, sim.domainH / 2, 0, 0, { mass: 1e-3, charge: 0, spin: 0 });
         },
     },
-
-    // ─── Lensing ───
 
     microlensing: {
         name: 'Microlensing',
@@ -659,11 +143,7 @@ export const PRESETS = {
 };
 
 export const PRESET_ORDER = [
-    'kepler', 'precession', 'inspiral', 'hawking',
-    'wheel', 'thomas', 'geodetic', 'twinBounce', 'twinTorus',
-    'atom', 'cyclotron', 'bremsstrahlung', 'magnetic',
-    'nucleus', 'axion', 'pionexchange', 'higgs', 'higgsboson', 'axionburst', 'pecceiQuinn',
-    'expansion', 'misalignment', 'kibbleZurek', 'microlensing',
+    'cyclotron', 'twinBounce', 'wheel', 'bremsstrahlung', 'kibbleZurek', 'microlensing',
 ];
 
 // ─── Toggle/Setting Application ───
