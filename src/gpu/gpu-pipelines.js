@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 140;
+const SHADER_VERSION = 142;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -1005,7 +1005,7 @@ export async function createBosonRenderPipelines(device, format, isLight, wgslCo
         layout: pipelineLayout,
         vertex: { module, entryPoint: 'vertexPhoton' },
         fragment: {
-            module, entryPoint: 'fragmentBoson',
+            module, entryPoint: 'fragmentPhoton',
             targets: [{ format, blend: blendState }],
         },
         primitive: { topology: 'triangle-strip' },

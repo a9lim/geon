@@ -1,7 +1,8 @@
 // ─── Boson Rendering ───
-// Instanced point sprites for photons and pions.
-// Photons: ochre (EM) / madder (gravitons), alpha fading over their lifetime.
-// Pions mulberry, leptons verdigris, constant alpha.
+// Photons are wave packets: a hairline sinusoid under a Gaussian envelope, drawn along the
+// photon's direction, its wavelength on screen falling as its energy rises (λ ∝ E′^−½, so a
+// blueshifted photon has more wiggles in the same span: pattern before hue). Ochre for light, madder for
+// gravitons, alpha fading over their pool age. Pions mulberry, leptons verdigris, as dots.
 // In a non-lab frame each boson is drawn where its straight path crosses the observer's
 // slice (frame-slice.wgsl), back no further than its emission; photons take the Doppler
 // factor E′/E = γ(1 − u·v̂) in their size. Lensing inside the lag window is ignored.
@@ -45,9 +46,13 @@ struct FrameState {
 struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) color: vec4f,
-    @location(1) uv: vec2f,
+    @location(1) uv: vec2f,                         // pions: [-1,1]²; photons: px along, across
     @location(2) isDark: f32,
+    @location(3) @interpolate(flat) wave: vec2f,    // photons: wavelength, half-length (px)
 };
+
+const WAVE_AMP: f32 = 2.6;        // px
+const WAVE_E_REF: f32 = 0.05;     // the energy drawn at 6 px a wavelength
 
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
 @group(0) @binding(1) var<storage, read> frame: FrameState;
@@ -137,12 +142,8 @@ fn vertexPhoton(
     }
 
     let rawAlpha = max(0.0, 1.0 - ph.lifetime / PHOTON_CULL_AGE);
-    // Alpha scale: 0.6 for light, 0.8 for dark (matches CPU renderer)
     let isDark = camera.isDarkMode;
-    let alphaScale = select(0.6, 0.8, isDark > 0.5);
-    let alpha = rawAlpha * alphaScale;
-
-    let quadScale = 1.0 + isDark * (DARK_QUAD_SCALE - 1.0);
+    let alpha = rawAlpha * select(0.85, 0.95, isDark > 0.5);
 
     let seen = bosonInFrame(vec2f(ph.posX, ph.posY), vec2f(ph.velX, ph.velY), ph.lifetime);
     if (seen.z < 0.5) {
@@ -150,21 +151,28 @@ fn vertexPhoton(
         return out;
     }
 
-    // Point sprite quad — energy-proportional size in world space (matches CPU renderer)
+    // A wave packet along the photon's direction on screen
     let qOff = quadOffset(vertexIdx);
-    let worldRadius = clamp(0.25 + 2.0 * ph.energy * seen.w, 0.25, 5.0);
-    let pixelRadius = max(worldRadius * camera.zoom, 2.0);
+    let E = max(ph.energy * seen.w, 1e-5);
+    // One packet length for all, so more energy reads as more wiggles in the same span
+    let lam = clamp(6.0 * sqrt(WAVE_E_REF / E), 3.5, 12.0);
+    let halfL = 11.0;
     let clipPos = camera.viewMatrix * vec4f(seen.x, seen.y, 0.0, 1.0);
-
-    out.position = clipPos + vec4f(qOff * pixelRadius * quadScale * 2.0 / vec2f(camera.canvasWidth, camera.canvasHeight), 0.0, 0.0);
+    let ahead = camera.viewMatrix * vec4f(seen.x + ph.velX, seen.y + ph.velY, 0.0, 1.0);
+    var dir = (ahead.xy - clipPos.xy) * vec2f(camera.canvasWidth, camera.canvasHeight) * 0.5;
+    dir = select(vec2f(1.0, 0.0), normalize(dir), dot(dir, dir) > 1e-8);
+    let perp = vec2f(-dir.y, dir.x);
+    let local = vec2f(qOff.x * (halfL + 1.0), qOff.y * (WAVE_AMP + 1.5));
+    let px = dir * local.x + perp * local.y;
+    out.position = clipPos + vec4f(px * 2.0 / vec2f(camera.canvasWidth, camera.canvasHeight), 0.0, 0.0);
 
     // Color: ochre for EM, madder for gravitons (theme-paired inks). In a frame, light takes
     // its Doppler factor E′/E = γ(1 − u·v̂): sienna as it reddens, indigo as it blues
     let isGrav = (ph.flags & 2u) != 0u;
     let dk = isDark > 0.5;
     out.color = vec4f(select(dopplerInk(select(INK_OCHRE_L, INK_OCHRE_D, dk), seen.w, dk), select(INK_MADDER_L, INK_MADDER_D, dk), isGrav), alpha);
-    // UV in [-1,1] scaled by quadScale so dist==1 is the circle edge
-    out.uv = qOff * quadScale;
+    out.uv = local;
+    out.wave = vec2f(lam, halfL);
     out.isDark = isDark;
     return out;
 }
@@ -212,7 +220,31 @@ fn vertexPion(
     out.color = vec4f(select(select(INK_MULBERRY_L, INK_MULBERRY_D, dk), select(INK_VERDIGRIS_L, INK_VERDIGRIS_D, dk), isLepton), bosonAlpha);
     out.uv = qOff * quadScale;
     out.isDark = isDark;
+    out.wave = vec2f(0.0);
     return out;
+}
+
+/** A photon: the hairline y = A·env(s)·sin(2πs/λ), its distance taken along the normal. */
+@fragment
+fn fragmentPhoton(
+    @location(0) color: vec4f,
+    @location(1) uv: vec2f,
+    @location(2) isDark: f32,
+    @location(3) @interpolate(flat) wave: vec2f,
+) -> @location(0) vec4f {
+    let lam = wave.x;
+    let halfL = wave.y;
+    let s = uv.x;
+    let u = s / halfL;
+    let env = exp(-2.2 * u * u);
+    let k = 6.2831853 / lam;
+    let y = WAVE_AMP * env * sin(k * s);
+    let dy = WAVE_AMP * env * (k * cos(k * s) - 4.4 * s / (halfL * halfL) * sin(k * s));
+    let d = abs(uv.y - y) / sqrt(1.0 + dy * dy);
+    let cover = (1.0 - smoothstep(0.1, 1.2, d)) * (1.0 - smoothstep(0.75, 1.0, abs(u)));
+    let a = cover * color.a;
+    if (a < 0.003) { discard; }
+    return vec4f(color.rgb * a, a);
 }
 
 @fragment
