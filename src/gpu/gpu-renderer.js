@@ -46,10 +46,16 @@ const _lightAccent = paletteRGB(_PAL.light.accent);
 const _darkAccent = paletteRGB(_PAL.dark.accent);
 const _textLight = paletteRGB(_PAL.light.text);
 const _textDark = paletteRGB(_PAL.dark.text);
-const _fieldColors = {
-    higgs: [paletteRGB(_PAL.extended.purple), paletteRGB(_PAL.extended.lime)],
-    axion: [paletteRGB(_PAL.extended.indigo), paletteRGB(_PAL.extended.yellow)],
+// Ink colors per theme: inks(isLight).name → [r, g, b]
+const _inkRGB = (T) => Object.fromEntries(Object.entries(T.inks).map(([k, v]) => [k, paletteRGB(v)]));
+const _inksLight = { ..._inkRGB(_PAL.light), graphite: paletteRGB(_PAL.light.textMuted) };
+const _inksDark = { ..._inkRGB(_PAL.dark), graphite: paletteRGB(_PAL.dark.textMuted) };
+const inks = (isLight) => isLight ? _inksLight : _inksDark;
+const _fieldColors = (which, isLight) => {
+    const k = inks(isLight);
+    return which === 'higgs' ? [k.violet, k.sap] : [k.indigo, k.ochre];
 };
+let _forceLight, _forceDark, _torqueLight, _torqueDark;  // filled after the class
 
 /** Standard premultiplied alpha-over blend (light mode). */
 const BLEND_ALPHA = {
@@ -965,7 +971,7 @@ export default class GPURenderer {
                     ];
                     for (const [ft, enabled] of pairs) {
                         if (enabled) {
-                            arrowDraws.push({ slot: arrowDraws.length, ft, color: GPURenderer.FORCE_COLORS[ft] || [1, 1, 1], scale: arrowScale, minMag });
+                            arrowDraws.push({ slot: arrowDraws.length, ft, color: GPURenderer.forceColors(this.isLight)[ft] || [1, 1, 1], scale: arrowScale, minMag });
                         }
                     }
                 } else if (this.showForce) {
@@ -1026,15 +1032,15 @@ export default class GPURenderer {
                 const torqueDraws = [];
                 if (this.showForceComponents) {
                     // spinOrbit: type 0, slot 0, purple
-                    if (enabledForces.spinOrbit) torqueDraws.push({ slot: 0, type: 0, color: GPURenderer.TORQUE_COLORS[0] });
+                    if (enabledForces.spinOrbit) torqueDraws.push({ slot: 0, type: 0, color: GPURenderer.torqueColors(this.isLight)[0] });
                     // frameDrag: type 1, slot 1, rose
-                    if (enabledForces.gravitomag) torqueDraws.push({ slot: 1, type: 1, color: GPURenderer.TORQUE_COLORS[1] });
+                    if (enabledForces.gravitomag) torqueDraws.push({ slot: 1, type: 1, color: GPURenderer.torqueColors(this.isLight)[1] });
                     // tidal: type 2, slot 2, red
-                    if (enabledForces.gravity) torqueDraws.push({ slot: 2, type: 2, color: GPURenderer.TORQUE_COLORS[2] });
+                    if (enabledForces.gravity) torqueDraws.push({ slot: 2, type: 2, color: GPURenderer.torqueColors(this.isLight)[2] });
                     // contact: type 3, slot 3, brown (always active with bounce)
-                    torqueDraws.push({ slot: 3, type: 3, color: GPURenderer.TORQUE_COLORS[3] });
+                    torqueDraws.push({ slot: 3, type: 3, color: GPURenderer.torqueColors(this.isLight)[3] });
                     // superradiance: type 4, slot 5, indigo (requires axion + BH)
-                    if (enabledForces.axion && opts.blackHoleEnabled) torqueDraws.push({ slot: 5, type: 4, color: GPURenderer.TORQUE_COLORS[4] });
+                    if (enabledForces.axion && opts.blackHoleEnabled) torqueDraws.push({ slot: 5, type: 4, color: GPURenderer.torqueColors(this.isLight)[4] });
                 } else if (this.showForce) {
                     const accentColor = this.isLight ? _lightAccent : _darkAccent;
                     torqueDraws.push({ slot: 4, type: 11, color: accentColor });
@@ -1090,23 +1096,24 @@ export default class GPURenderer {
      * Force type colors matching CPU renderer (from renderer.js).
      * Index matches getForceVector() in arrow-render.wgsl.
      */
-    static FORCE_COLORS = (() => {
-        const ext = window._PALETTE.extended;
-        const rgb = paletteRGB;
+    static forceColors(isLight) { return isLight ? _forceLight : _forceDark; }
+
+    static _buildForceColors(isLight) {
+        const k = inks(isLight);
         return [
-            rgb(ext.red),       // 0: gravity
-            rgb(ext.blue),      // 1: coulomb
-            rgb(ext.cyan),      // 2: magnetic
-            rgb(ext.rose),      // 3: gravitomag
-            rgb(ext.orange),    // 4: 1pn
-            rgb(ext.purple),    // 5: spinCurv
-            rgb(ext.yellow),    // 6: radiation
-            rgb(ext.green),     // 7: yukawa
-            rgb(ext.brown),     // 8: external
-            rgb(ext.lime),      // 9: higgs
-            rgb(ext.indigo),    // 10: axion
+            k.umber,       // 0: gravity
+            k.prussian,    // 1: coulomb
+            k.verdigris,   // 2: magnetic
+            k.madder,      // 3: gravitomag
+            k.sienna,      // 4: 1pn
+            k.violet,      // 5: spinCurv
+            k.ochre,       // 6: radiation
+            k.viridian,    // 7: yukawa
+            k.graphite,    // 8: external
+            k.sap,         // 9: higgs
+            k.indigo,      // 10: axion
         ];
-    })();
+    }
 
     /**
      * Submit a single arrow draw with its own encoder + render pass.
@@ -1144,19 +1151,20 @@ export default class GPURenderer {
 
     /**
      * Torque type colors matching CPU renderer.
-     * 0: spinOrbit (purple), 1: frameDrag (rose), 2: tidal (red), 3: contact (brown).
+     * 0: spinOrbit (violet), 1: frameDrag (madder), 2: tidal (umber), 3: contact (graphite).
      */
-    static TORQUE_COLORS = (() => {
-        const ext = window._PALETTE.extended;
-        const rgb = paletteRGB;
+    static torqueColors(isLight) { return isLight ? _torqueLight : _torqueDark; }
+
+    static _buildTorqueColors(isLight) {
+        const k = inks(isLight);
         return [
-            rgb(ext.purple),    // 0: spinOrbit
-            rgb(ext.rose),      // 1: frameDrag
-            rgb(ext.red),       // 2: tidal
-            rgb(ext.brown),     // 3: contact
-            rgb(ext.indigo),    // 4: superradiance
+            k.violet,      // 0: spinOrbit
+            k.madder,      // 1: frameDrag
+            k.umber,       // 2: tidal
+            k.graphite,    // 3: contact
+            k.indigo,      // 4: superradiance
         ];
-    })();
+    }
 
     /**
      * Submit a single torque arc + arrowhead draw.
@@ -1293,7 +1301,7 @@ export default class GPURenderer {
         u[7] = this.isLight ? 1 : 0;
         u[8] = which === 'higgs' ? 0 : 1;
         f[9] = this.higgsVev ?? 1; f[10] = 0; f[11] = 0;
-        const [c0, c1] = _fieldColors[which];
+        const [c0, c1] = _fieldColors(which, this.isLight);
         f[12] = c0[0]; f[13] = c0[1]; f[14] = c0[2]; f[15] = 1.0;
         f[16] = c1[0]; f[17] = c1[1]; f[18] = c1[2]; f[19] = 1.0;
         this.device.queue.writeBuffer(this._fieldRenderUniformBuffers[which], 0, _fieldRenderData);
@@ -1471,3 +1479,8 @@ export default class GPURenderer {
 }
 
 // fetchShader imported from gpu-pipelines.js (single source of truth)
+
+_forceLight = GPURenderer._buildForceColors(true);
+_forceDark = GPURenderer._buildForceColors(false);
+_torqueLight = GPURenderer._buildTorqueColors(true);
+_torqueDark = GPURenderer._buildTorqueColors(false);

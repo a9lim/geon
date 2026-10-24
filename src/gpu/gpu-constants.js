@@ -67,33 +67,20 @@ export function buildWGSLConstants() {
     const HGRID = GPU_HEATMAP_GRID;
     const HGRID_SQ = HGRID * HGRID;
 
-    // Palette colors
-    const ext = _PAL.extended;
-    const colors = {
-        SLATE: paletteRGB(ext.slate),
-        RED: paletteRGB(ext.red),
-        BLUE: paletteRGB(ext.blue),
-        GREEN: paletteRGB(ext.green),
-        CYAN: paletteRGB(ext.cyan),
-        ORANGE: paletteRGB(ext.orange),
-        YELLOW: paletteRGB(ext.yellow),
-        ROSE: paletteRGB(ext.rose),
-        PURPLE: paletteRGB(ext.purple),
-        BROWN: paletteRGB(ext.brown),
-        LIME: paletteRGB(ext.lime),
-        INDIGO: paletteRGB(ext.indigo),
-        MAGENTA: paletteRGB(ext.magenta),
-    };
+    // The shared inks, one light/dark pair each (INK_<NAME>_L / _D), and
+    // graphite, the neutral data hue (the theme's textMuted)
+    const inkConsts = Object.keys(_PAL.light.inks).map(k => {
+        const n = k.toUpperCase();
+        return `const INK_${n}_L: vec3f = ${wv3(paletteRGB(_PAL.light.inks[k]))};\n` +
+               `const INK_${n}_D: vec3f = ${wv3(paletteRGB(_PAL.dark.inks[k]))};`;
+    }).join('\n') + `\nconst INK_GRAPHITE_L: vec3f = ${wv3(paletteRGB(_PAL.light.textMuted))};` +
+        `\nconst INK_GRAPHITE_D: vec3f = ${wv3(paletteRGB(_PAL.dark.textMuted))};`;
 
     // Theme colors
     const textLight = paletteRGB(_PAL.light.text);
     const textDark = paletteRGB(_PAL.dark.text);
     const lightAccent = paletteRGB(_PAL.light.accent);
     const darkAccent = paletteRGB(_PAL.dark.accent);
-
-    // Spin ring colors: HSL-derived from palette hues (80% sat, 60% lightness)
-    const spinCW = window._hsl2rgb(_PAL.spinPos, 0.8, 0.6);
-    const spinCCW = window._hsl2rgb(_PAL.spinNeg, 0.8, 0.6);
 
     _cached = `// ── Auto-generated from config.js + _PALETTE ──
 
@@ -239,19 +226,7 @@ const MIN_KUGELBLITZ_ENERGY: f32 = ${wf(MIN_KUGELBLITZ_ENERGY)};
 const MIN_KUGELBLITZ_COUNT: u32 = ${MIN_KUGELBLITZ_COUNT}u;
 
 // Palette colors
-const COLOR_SLATE: vec3f = ${wv3(colors.SLATE)};
-const COLOR_RED: vec3f = ${wv3(colors.RED)};
-const COLOR_BLUE: vec3f = ${wv3(colors.BLUE)};
-const COLOR_GREEN: vec3f = ${wv3(colors.GREEN)};
-const COLOR_CYAN: vec3f = ${wv3(colors.CYAN)};
-const COLOR_ORANGE: vec3f = ${wv3(colors.ORANGE)};
-const COLOR_YELLOW: vec3f = ${wv3(colors.YELLOW)};
-const COLOR_ROSE: vec3f = ${wv3(colors.ROSE)};
-const COLOR_PURPLE: vec3f = ${wv3(colors.PURPLE)};
-const COLOR_BROWN: vec3f = ${wv3(colors.BROWN)};
-const COLOR_LIME: vec3f = ${wv3(colors.LIME)};
-const COLOR_INDIGO: vec3f = ${wv3(colors.INDIGO)};
-const COLOR_MAGENTA: vec3f = ${wv3(colors.MAGENTA)};
+${inkConsts}
 
 // Theme colors
 const COLOR_TEXT_LIGHT: vec3f = ${wv3(textLight)};
@@ -260,8 +235,6 @@ const COLOR_ACCENT_LIGHT: vec3f = ${wv3(lightAccent)};
 const COLOR_ACCENT_DARK: vec3f = ${wv3(darkAccent)};
 
 // Spin ring colors (HSL-derived from palette hues, 80% sat, 60% lightness)
-const COLOR_SPIN_CW: vec3f = ${wv3(spinCW)};
-const COLOR_SPIN_CCW: vec3f = ${wv3(spinCCW)};
 
 `;
     return _cached;

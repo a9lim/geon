@@ -86,40 +86,40 @@
 /* ═══════════════════════════════════════════════
    Force Toggle Colors
    ═══════════════════════════════════════════════ */
-.tog-gravity     { --tog-color: var(--ext-red); }
-.tog-bosoninter  { --tog-color: var(--ext-brown); }
-.tog-gravitomag  { --tog-color: var(--ext-rose); }
-.tog-coulomb     { --tog-color: var(--ext-blue); }
-.tog-magnetic    { --tog-color: var(--ext-cyan); }
-.tog-relativity  { --tog-color: var(--ext-orange); }
-.tog-radiation    { --tog-color: var(--ext-yellow); }
-.tog-spinorbit    { --tog-color: var(--ext-purple); }
-.tog-onepn        { --tog-color: var(--ext-orange); }
+.tog-gravity     { --tog-color: var(--ink-umber); }
+.tog-bosoninter  { --tog-color: var(--ink-mulberry); }
+.tog-gravitomag  { --tog-color: var(--ink-madder); }
+.tog-coulomb     { --tog-color: var(--ink-prussian); }
+.tog-magnetic    { --tog-color: var(--ink-verdigris); }
+.tog-relativity  { --tog-color: var(--ink-sienna); }
+.tog-radiation    { --tog-color: var(--ink-ochre); }
+.tog-spinorbit    { --tog-color: var(--ink-violet); }
+.tog-onepn        { --tog-color: var(--ink-sienna); }
 .tog-blackhole    { --tog-color: var(--text); }
-.tog-yukawa       { --tog-color: var(--ext-green); }
-.tog-axion        { --tog-color: var(--ext-indigo); }
-.tog-higgs        { --tog-color: var(--ext-lime); }
+.tog-yukawa       { --tog-color: var(--ink-viridian); }
+.tog-axion        { --tog-color: var(--ink-indigo); }
+.tog-higgs        { --tog-color: var(--ink-sap); }
 
 /* ═══════════════════════════════════════════════
    Themed Slider Colors
    ═══════════════════════════════════════════════ */
 /* ─── Particle Property Sliders ─── */
-#massInput   { --slider-color: var(--ext-red); }
-#chargeInput { --slider-color: var(--ext-blue); }
-#spinInput   { --slider-color: var(--ext-purple); }
+#massInput   { --slider-color: var(--ink-umber); }
+#chargeInput { --slider-color: var(--ink-prussian); }
+#spinInput   { --slider-color: var(--ink-violet); }
 
 /* ─── Force Sub-Sliders ─── */
-#yukawa-sliders input[type=range] { --slider-color: var(--ext-green); }
-#axion-sliders  input[type=range] { --slider-color: var(--ext-indigo); }
-#higgs-sliders  input[type=range] { --slider-color: var(--ext-lime); }
+#yukawa-sliders input[type=range] { --slider-color: var(--ink-viridian); }
+#axion-sliders  input[type=range] { --slider-color: var(--ink-indigo); }
+#higgs-sliders  input[type=range] { --slider-color: var(--ink-sap); }
 
 /* ─── External Field Sliders ─── */
-#extGravityInput, #extGravityAngleInput   { --slider-color: var(--ext-red); }
-#extElectricInput, #extElectricAngleInput { --slider-color: var(--ext-blue); }
-#extBzInput                               { --slider-color: var(--ext-cyan); }
+#extGravityInput, #extGravityAngleInput   { --slider-color: var(--ink-umber); }
+#extElectricInput, #extElectricAngleInput { --slider-color: var(--ink-prussian); }
+#extBzInput                               { --slider-color: var(--ink-verdigris); }
 
 /* ─── Bounce Friction Slider ─── */
-#frictionInput { --slider-color: var(--ext-brown); }
+#frictionInput { --slider-color: var(--text-muted); }
 
 /* ═══════════════════════════════════════════════
    Particle Selection

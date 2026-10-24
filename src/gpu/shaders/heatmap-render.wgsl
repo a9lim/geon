@@ -101,7 +101,7 @@ fn fsHeatmapOverlay(in: VertexOutput) -> @location(0) vec4<f32> {
         eI = abs(fastTanh(eVal * ru.sensitivity));
     }
 
-    // Yukawa channel (green from palette)
+    // Yukawa channel (viridian)
     if (ru.doYukawa != 0u) {
         let y00 = yukawaPotential[iy0 * HGRID + ix0];
         let y10 = yukawaPotential[iy0 * HGRID + ix1];
@@ -116,8 +116,10 @@ fn fsHeatmapOverlay(in: VertexOutput) -> @location(0) vec4<f32> {
     if (totalI < 0.001) {
         return vec4<f32>(0.0, 0.0, 0.0, 0.0);
     }
-    let eColor = select(COLOR_BLUE, COLOR_RED, eSign >= 0.0);
-    let rgb = (COLOR_SLATE * gI + eColor * eI + COLOR_GREEN * yI) / totalI;
+    // Gravity graphite, electric sienna (+) or prussian (−), Yukawa viridian
+    let lt = ru.isLight != 0u;
+    let eColor = select(select(INK_PRUSSIAN_D, INK_PRUSSIAN_L, lt), select(INK_SIENNA_D, INK_SIENNA_L, lt), eSign >= 0.0);
+    let rgb = (select(INK_GRAPHITE_D, INK_GRAPHITE_L, lt) * gI + eColor * eI + select(INK_VIRIDIAN_D, INK_VIRIDIAN_L, lt) * yI) / totalI;
     // CPU: alpha = min(totalA, 120) where totalA = sum of (fastTanh * 100) per channel
     // GPU: totalI in [0,3], maxAlpha = 100/255, cap at 120/255
     let alpha = min(totalI * ru.maxAlpha, 120.0 / 255.0);

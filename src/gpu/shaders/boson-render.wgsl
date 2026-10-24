@@ -157,9 +157,10 @@ fn vertexPhoton(
 
     out.position = clipPos + vec4f(qOff * pixelRadius * quadScale * 2.0 / vec2f(camera.canvasWidth, camera.canvasHeight), 0.0, 0.0);
 
-    // Color: yellow for EM, red for grav (from palette)
+    // Color: ochre for EM, madder for gravitons (theme-paired inks)
     let isGrav = (ph.flags & 2u) != 0u;
-    out.color = select(vec4f(COLOR_YELLOW, alpha), vec4f(COLOR_RED, alpha), isGrav);
+    let dk = isDark > 0.5;
+    out.color = vec4f(select(select(INK_OCHRE_L, INK_OCHRE_D, dk), select(INK_MADDER_L, INK_MADDER_D, dk), isGrav), alpha);
     // UV in [-1,1] scaled by quadScale so dist==1 is the circle edge
     out.uv = qOff * quadScale;
     out.isDark = isDark;
@@ -202,10 +203,11 @@ fn vertexPion(
 
     out.position = clipPos + vec4f(qOff * pixelRadius * quadScale * 2.0 / vec2f(camera.canvasWidth, camera.canvasHeight), 0.0, 0.0);
 
-    // Pion: green, lepton: blue (from palette), theme-dependent alpha (0.7 light / 0.9 dark)
-    let bosonAlpha = select(0.7, 0.9, isDark > 0.5);
+    // Pion: mulberry, lepton: verdigris (theme-paired inks), alpha 0.7 light / 0.9 dark
+    let dk = isDark > 0.5;
+    let bosonAlpha = select(0.7, 0.9, dk);
     let isLepton = pi.kind == 1u;
-    out.color = select(vec4f(COLOR_GREEN, bosonAlpha), vec4f(COLOR_CYAN, bosonAlpha), isLepton);
+    out.color = vec4f(select(select(INK_MULBERRY_L, INK_MULBERRY_D, dk), select(INK_VERDIGRIS_L, INK_VERDIGRIS_D, dk), isLepton), bosonAlpha);
     out.uv = qOff * quadScale;
     out.isDark = isDark;
     return out;

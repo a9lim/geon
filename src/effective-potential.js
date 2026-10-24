@@ -237,7 +237,7 @@ export default class EffectivePotentialPlot {
             if (!started) { c.moveTo(x, y); started = true; }
             else c.lineTo(x, y);
         }
-        c.strokeStyle = _PAL.extended.blue + 'CC';
+        c.strokeStyle = (isLight ? _PAL.light : _PAL.dark).inks.prussian + 'CC';
         c.stroke();
 
         // Current position marker

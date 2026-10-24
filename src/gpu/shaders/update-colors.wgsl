@@ -1,9 +1,9 @@
 // update-colors.wgsl — Recompute per-particle packed RGBA from charge/mass/antimatter.
 //
 // Matches CPU Particle.getColor() logic:
-//   neutral → slate (COLOR_SLATE), or theme text color in BH mode
-//   positive charge → lerp base toward red (COLOR_RED), intensity = |q|/5
-//   negative charge → lerp base toward blue (COLOR_BLUE), intensity = |q|/5
+//   neutral → graphite (INK_GRAPHITE), or theme text color in BH mode
+//   positive charge → lerp base toward sienna (INK_SIENNA), intensity = |q|/5
+//   negative charge → lerp base toward prussian (INK_PRUSSIAN), intensity = |q|/5
 //   BH mode → use theme text color as base (COLOR_TEXT_LIGHT / COLOR_TEXT_DARK)
 //   antimatter → visual distinction via dashed ring overlay (rendered separately)
 
@@ -20,7 +20,7 @@ struct ColorUniforms {
 @group(0) @binding(1) var<storage, read_write> particles: array<ParticleState>;
 @group(0) @binding(2) var<storage, read_write> color: array<u32>;
 
-// Constants (FLAG_ALIVE, FLAG_ANTIMATTER, COLOR_SLATE, COLOR_RED, COLOR_BLUE)
+// Constants (FLAG_ALIVE, FLAG_ANTIMATTER, the INK_* pairs)
 // provided by generated wgslConstants block.
 
 fn packRGBA(r: f32, g: f32, b: f32, a: f32) -> u32 {
@@ -49,10 +49,12 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let absQ = abs(q);
     let intensity = clamp(absQ / 5.0, 0.0, 1.0);
 
-    // BH mode: use theme text color as base instead of slate
+    // BH mode: use theme text color as base instead of graphite
     let isDark = (params.isDarkMode != 0u);
     let bhColor = select(COLOR_TEXT_LIGHT, COLOR_TEXT_DARK, isDark);
-    let baseColor = select(COLOR_SLATE, bhColor, isBH);
+    let baseColor = select(select(INK_GRAPHITE_L, INK_GRAPHITE_D, isDark), bhColor, isBH);
+    let posColor = select(INK_SIENNA_L, INK_SIENNA_D, isDark);
+    let negColor = select(INK_PRUSSIAN_L, INK_PRUSSIAN_D, isDark);
 
     var r: f32;
     var g: f32;
@@ -62,15 +64,15 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
         // Neutral
         r = baseColor.r; g = baseColor.g; b = baseColor.b;
     } else if (q > 0.0) {
-        // Positive: lerp base → red
-        r = mix(baseColor.r, COLOR_RED.r, intensity);
-        g = mix(baseColor.g, COLOR_RED.g, intensity);
-        b = mix(baseColor.b, COLOR_RED.b, intensity);
+        // Positive: lerp base → sienna
+        r = mix(baseColor.r, posColor.r, intensity);
+        g = mix(baseColor.g, posColor.g, intensity);
+        b = mix(baseColor.b, posColor.b, intensity);
     } else {
-        // Negative: lerp base → blue
-        r = mix(baseColor.r, COLOR_BLUE.r, intensity);
-        g = mix(baseColor.g, COLOR_BLUE.g, intensity);
-        b = mix(baseColor.b, COLOR_BLUE.b, intensity);
+        // Negative: lerp base → prussian
+        r = mix(baseColor.r, negColor.r, intensity);
+        g = mix(baseColor.g, negColor.g, intensity);
+        b = mix(baseColor.b, negColor.b, intensity);
     }
 
     // Antimatter: no color inversion — charge is already negated at spawn time,

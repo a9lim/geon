@@ -64,8 +64,8 @@ const BOSON_ARGS_NODES = 36;
 const DISINT_FEATURE_BREAKUP = 1;
 const DISINT_FEATURE_EXTREMAL = 2;
 
-// Pack palette slate hex to ABGR u32 for WebGPU color buffers
-const _sN = parseInt(window._PALETTE.extended.slate.slice(1), 16);
+// Pack graphite (light textMuted) to ABGR u32 as a new slot's color until update-colors runs
+const _sN = parseInt(window._PALETTE.light.textMuted.slice(1), 16);
 const _DEFAULT_SLATE_ABGR = 0xFF000000 | ((_sN & 0xFF) << 16) | (_sN & 0xFF00) | ((_sN >> 16) & 0xFF);
 
 // Pre-allocated typed arrays for per-frame writeBuffer calls (avoid GC pressure)
