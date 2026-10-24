@@ -14,7 +14,8 @@
 //
 // Draws (instances × vertices):
 //   vs_line    maxParticles × 4·(WL_LEN + 1), triangle strip: per sample an incoming and
-//              an outgoing pair, so a break zeroes one segment without bridging it
+//              an outgoing pair, so a break zeroes one segment without bridging it. In the
+//              plane view the same lines, seen from straight above, are the trails
 //   vs_cone    4 rings × 2·(CONE_SEGS + 1), triangle strip
 //   vs_boson   (MAX_PHOTONS + PION_POOL_CAP) × 4, triangle strip
 //   vs_pierce  maxParticles × 4, triangle strip: where each world line crosses the
@@ -64,6 +65,8 @@ struct SpacetimeParams {
     frameOn: u32,       // 1 in the boost frame: read the anchor from the slicer instead
     pierce: f32,        // slice points: 0 none, 1 rings (lab, tilted present), 2 filled (boosting)
     phi: f32,           // the observer's rapidity, atanh|u|
+    trails: f32,        // 1: world lines show in the plane view too, as its trails
+    _pad: f32,
 };
 
 // The slicer's observer (frame-slice.wgsl)
@@ -336,7 +339,9 @@ fn pierceOf(s: u32, l: Line, o: Obs) -> Pierce {
 
 @vertex
 fn vs_line(@builtin(vertex_index) vid: u32, @builtin(instance_index) s: u32) -> VOut {
-    if (params.tilt < 0.002) { return collapsed(); }
+    // Seen from above, the world lines are the plane view's trails
+    let show = max(params.tilt, params.trails);
+    if (show < 0.002) { return collapsed(); }
     let o = observer();
     let l = lineOf(s, o);
     if (!l.ok) { return collapsed(); }
@@ -372,8 +377,8 @@ fn vs_line(@builtin(vertex_index) vid: u32, @builtin(instance_index) s: u32) -> 
     let selected = s == params.selected;
     var rgb = mix(unpack(color[s]), ink(), 0.35);
     if (selected) { rgb = accent(); }
-    var a = ageAlpha(h) * params.tilt * select(0.85, 1.0, selected);
-    if (ahead) { a = mix(0.3, 0.12, o.s) * params.tilt; }
+    var a = ageAlpha(h) * show * select(0.85, 1.0, selected);
+    if (ahead) { a = mix(0.3, 0.12, o.s) * show; }
     a = select(0.0, a, visible && (h <= 0.0 || ahead));
 
     var out: VOut;

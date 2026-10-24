@@ -144,7 +144,6 @@ export default class GPUBackend {
         this.renderer.showForce = sim.view.showForce;
         this.renderer.showForceComponents = sim.view.showForceComponents;
         this.renderer.showVelocity = sim.view.showVelocity;
-        this.renderer.showTrails = sim.view.trails;
         this.renderer.showClocks = sim.view.showClocks;
         this.renderer.relativityOn = sim.settings.relativityEnabled;
         this.renderer.blackHoleOn = sim.settings.blackHoleEnabled;
@@ -169,11 +168,6 @@ export default class GPUBackend {
         this.renderer.frameOn = !!frameParams;
         this.renderer.frameImages = frameParams ? frameParams.images : 1;
 
-        this.physics.setTrailsEnabled(sim.view.trails);
-        const trailBufs = this.physics.getTrailBuffers();
-        if (trailBufs && !this.renderer._trailReady) {
-            this.renderer.initTrailRendering(trailBufs);
-        }
         if ((ph.higgsEnabled || ph.axionEnabled) && !this.renderer._fieldRenderReady) {
             this.renderer.initFieldOverlay();
         }
@@ -202,15 +196,17 @@ export default class GPUBackend {
         renderOpts.heatmapBuffers = null;
 
         // The spacetime view: world lines in the lab's coordinates or, boosted, an observer's;
-        // and the bodies' slice points on that observer's present (src/spacetime.js)
+        // and the bodies' slice points on that observer's present (src/spacetime.js). Seen
+        // from above, the same world lines are the plane view's trails
         renderOpts.spacetime = null;
         const obs = view ? view.observer() : null;
         const boosting = view && view.boosting && obs.active;
         const pierce = boosting ? 2 : (obs && obs.active && !obs.frameOn ? 1 : 0);
-        if (view && (view.tilt > 0.002 || pierce) && (!frameParams || obs.active)) {
+        if (view && (view.tilt > 0.002 || pierce || sim.view.trails) && (!frameParams || obs.active)) {
             const st = sim._spacetimeOpts || (sim._spacetimeOpts = {});
             st.obs = obs;
             st.pierce = pierce;
+            st.trails = sim.view.trails;
             st.tilt = view.tilt;
             st.depth = view.depth();
             st.beadStep = 2 ** Math.round(Math.log2(st.depth / 14));

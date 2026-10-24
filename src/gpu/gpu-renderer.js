@@ -2,14 +2,14 @@
  * @fileoverview GPURenderer — WebGPU instanced rendering for particles + bosons.
  *
  * Phase 1: particles. Phase 4: photon/pion boson rendering.
- * Also: clock rings, trails, field overlays, heatmap, force arrows.
+ * Also: clock rings, field overlays, heatmap, force arrows; world lines (plane-view trails
+ * included) in the spacetime pass.
  *
  * Dual-pipeline per renderer type: light mode uses standard alpha blending,
  * dark mode uses additive blending ('lighter' equivalent, matching CPU Canvas 2D).
  * On theme change setTheme() swaps _pipeline / _photonPipeline / _pionPipeline.
  */
-import { fetchShader, getSharedPrefix, createBosonRenderPipelines, createFieldRenderPipeline, createHeatmapRenderPipeline, createArrowRenderPipeline, createClockRenderPipeline, createTorqueRenderPipeline, createRingRenderPipeline, createTrailRenderPipeline, createGridRenderPipeline, createSpacetimeRenderPipelines } from './gpu-pipelines.js';
-import { TRAIL_LEN } from './gpu-buffers.js';
+import { fetchShader, getSharedPrefix, createBosonRenderPipelines, createFieldRenderPipeline, createHeatmapRenderPipeline, createArrowRenderPipeline, createClockRenderPipeline, createTorqueRenderPipeline, createRingRenderPipeline, createGridRenderPipeline, createSpacetimeRenderPipelines } from './gpu-pipelines.js';
 import { buildWGSLConstants, paletteRGB } from './gpu-constants.js';
 import { HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA, GPU_MAX_PHOTONS, GPU_MAX_PIONS, GPU_MAX_LEPTONS, WORLDLINE_LEN } from '../config.js';
 
@@ -19,9 +19,6 @@ const _cameraF32 = new Float32Array(_cameraData);
 const _gridData = new ArrayBuffer(64);   // GridParams (grid-render.wgsl)
 const _gridF32 = new Float32Array(_gridData);
 const _gridU32 = new Uint32Array(_gridData);
-const _trailData = new ArrayBuffer(16);
-const _trailU32 = new Uint32Array(_trailData);
-const _trailF32 = new Float32Array(_trailData);
 const _arrowData = new ArrayBuffer(32);
 const _arrowU32 = new Uint32Array(_arrowData);
 const _arrowF32 = new Float32Array(_arrowData);
@@ -179,17 +176,10 @@ export default class GPURenderer {
         this._ringBindGroups = null;    // Array<GPUBindGroup>[2]
         this._ringReady = false;
 
-        // Trail rendering
-        this._trailPipeline = null;
-        this._trailBindGroup = null;
-        this._trailUniformBuffer = null;
-        this._trailReady = false;
-
         // Visual toggle state (synced from sim.view and sim.settings by GPUBackend.render)
         this.showForce = false;
         this.showForceComponents = false;
         this.showVelocity = false;
-        this.showTrails = true;
         this.showClocks = false;
         this.relativityOn = false;  // Lorentz-contracted bodies and bent spokes
         this.blackHoleOn = false;   // spokes turn at the horizon's Ω_H
@@ -354,12 +344,13 @@ export default class GPURenderer {
 
     /**
      * Draw the spacetime view's world lines under the present plane, and the bodies' slice
-     * points on the observer's present. `st` carries the view's state: { tilt, depth,
-     * beadStep, tNow, selected, topology, scaleA, obs, pierce } (src/spacetime.js observer()).
+     * points on the observer's present. Seen from straight above, the world lines are the
+     * plane view's trails. `st` carries the view's state: { tilt, depth, beadStep, tNow,
+     * selected, topology, scaleA, obs, pierce, trails } (src/spacetime.js observer()).
      */
     _renderSpacetime(textureView, st, slots) {
         const sp = this._spacetime;
-        if (!sp || !st || (st.tilt < 0.002 && !st.pierce)) return;
+        if (!sp || !st || (st.tilt < 0.002 && !st.pierce && !st.trails)) return;
         const o = st.obs;
         _spacetimeF32[0] = st.tNow;
         _spacetimeF32[1] = st.depth;
@@ -384,6 +375,7 @@ export default class GPURenderer {
         _spacetimeU32[23] = o.frameOn ? 1 : 0;
         _spacetimeF32[24] = st.pierce;
         _spacetimeF32[25] = Math.atanh(Math.min(Math.hypot(o.u[0], o.u[1]), 0.999));
+        _spacetimeF32[26] = st.trails ? 1 : 0;
         this.device.queue.writeBuffer(this._spacetimeUniformBuffer, 0, _spacetimeData);
         const enc = this.device.createCommandEncoder({ label: 'spacetime-render' });
         const pass = enc.beginRenderPass({
@@ -704,49 +696,6 @@ export default class GPURenderer {
     }
 
     /**
-     * Initialize trail render pipeline. Call after trail buffers are allocated.
-     * @param {Object} trailBuffers - from GPUPhysics.getTrailBuffers()
-     */
-    async initTrailRendering(trailBuffers) {
-        if (this._trailReady || !trailBuffers) return;
-        try {
-            const { pipeline, bindGroupLayout } =
-                await createTrailRenderPipeline(this.device, this.format, this.isLight, this._wgslConstants || '');
-            this._trailPipeline = pipeline;
-
-            // Store trail buffer reference for theme-change rebuild
-            this._trailBuffersRef = trailBuffers;
-
-            if (!this._trailUniformBuffer) {
-                this._trailUniformBuffer = this.device.createBuffer({
-                    label: 'trailUniforms', size: 16,
-                    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-                });
-            }
-
-            const b = this.buffers;
-            this._trailBindGroup = this.device.createBindGroup({
-                label: 'trailRender',
-                layout: bindGroupLayout,
-                entries: [
-                    { binding: 0, resource: { buffer: this.cameraBuffer } },
-                    { binding: 1, resource: { buffer: this._trailUniformBuffer } },
-                    { binding: 2, resource: { buffer: trailBuffers.trailX } },
-                    { binding: 3, resource: { buffer: trailBuffers.trailY } },
-                    { binding: 4, resource: { buffer: trailBuffers.trailWriteIdx } },
-                    { binding: 5, resource: { buffer: trailBuffers.trailCount } },
-                    { binding: 6, resource: { buffer: b.color } },
-                    { binding: 7, resource: { buffer: b.particleState } },
-                    { binding: 8, resource: { buffer: b.particleAux } },
-                ],
-            });
-            this._trailReady = true;
-        } catch (e) {
-            console.warn('[physsim] Trail render pipeline creation failed, skipping:', e.message);
-        }
-    }
-
-    /**
      * Update camera uniform buffer. Call before render(). With a spacetime view
      * (src/spacetime.js) the matrices come from it: the plane tilted into time.
      */
@@ -770,7 +719,7 @@ export default class GPURenderer {
         // View matrix
         f[0] = sx; f[1] = 0;  f[2] = 0; f[3] = 0;
         f[4] = 0;  f[5] = sy; f[6] = 0; f[7] = 0;
-        f[8] = 0;  f[9] = 0;  f[10] = 1; f[11] = 0;
+        f[8] = 0;  f[9] = 0;  f[10] = 0; f[11] = 0;   // h, a world line's time before now, flattens
         f[12] = tx; f[13] = ty; f[14] = 0; f[15] = 1;
         // Inverse view matrix
         const isx = 1 / sx;
@@ -806,7 +755,7 @@ export default class GPURenderer {
         const textureView = this.context.getCurrentTexture().createView();
 
         // In a non-lab frame the body passes draw the view buffers, frameImages per slot;
-        // trails, vectors, torques and the field and potential overlays are lab-only
+        // vectors, torques and the field and potential overlays are lab-only
         const frame = this.frameOn && !!this._bindGroupView;
         const instances = frame ? aliveCount * this.frameImages : aliveCount;
 
@@ -850,38 +799,12 @@ export default class GPURenderer {
             this.device.queue.submit([gridEncoder.finish()]);
         }
 
-        // Pass 0a: the spacetime view's world lines, hanging below the present plane
+        // Pass 0a: the world lines, hanging below the present plane, or seen from straight
+        // above as the plane view's trails
         if (opts.spacetime) this._renderSpacetime(textureView, opts.spacetime, aliveCount);
-        const tilt = opts.spacetime ? opts.spacetime.tilt : 0;
-
-        // Pass 0b: Trail rendering (behind particles), lab frame only; trails are the plane
-        // view's shadows of the world lines, so they give way as the view tilts
+        // While the lab boosts toward an observer, the bodies show where their world lines
+        // pierce its present (vs_pierce) instead of where they are now
         const boosting = opts.spacetime && opts.spacetime.pierce === 2;
-        const trailsDrawn = !frame && !boosting && this._trailReady && this.showTrails && aliveCount > 0 && tilt < 0.98;
-        if (trailsDrawn) {
-            try {
-                // Write trail uniforms (pre-allocated buffer)
-                _trailU32[0] = TRAIL_LEN;
-                _trailF32[1] = this._domainW || 1;
-                _trailF32[2] = this._domainH || 1;
-                _trailF32[3] = 1 - tilt;   // opacity
-                this.device.queue.writeBuffer(this._trailUniformBuffer, 0, _trailData);
-
-                const trailEncoder = this.device.createCommandEncoder({ label: 'trail-render' });
-                const trailPass = trailEncoder.beginRenderPass({
-                    label: 'trail render',
-                    colorAttachments: [{ view: textureView, loadOp: 'load', storeOp: 'store' }],
-                });
-                trailPass.setPipeline(this._trailPipeline);
-                trailPass.setBindGroup(0, this._trailBindGroup);
-                trailPass.draw(TRAIL_LEN * 2, aliveCount);
-                trailPass.end();
-                this.device.queue.submit([trailEncoder.finish()]);
-            } catch (e) {
-                console.warn('[physsim] Trail render failed, disabling:', e.message);
-                this._trailReady = false;
-            }
-        }
 
         // Pass 1: Particle rendering
         const encoder = this.device.createCommandEncoder({ label: 'render' });
@@ -1494,13 +1417,6 @@ export default class GPURenderer {
             this._initClockRendering();
         }
 
-        // Rebuild trail pipeline (blend mode depends on theme).
-        // Save trail bind group resources so initTrailRendering can rebind them.
-        if (this._trailReady) {
-            this._trailReady = false;
-            this._rebuildTrailPipeline();
-        }
-
         // Rebuild arrow pipeline (blend mode depends on theme).
         if (this._arrowReady) {
             this._arrowReady = false;
@@ -1520,44 +1436,6 @@ export default class GPURenderer {
         }
     }
 
-    /** Rebuild trail pipeline with current theme, preserving existing bind group bindings. */
-    async _rebuildTrailPipeline() {
-        try {
-            const { pipeline, bindGroupLayout } =
-                await createTrailRenderPipeline(this.device, this.format, this.isLight, this._wgslConstants || '');
-            this._trailPipeline = pipeline;
-
-            // Recreate bind group with same buffers using the new layout
-            const oldBG = this._trailBindGroup;
-            if (oldBG) {
-                // Extract buffer references from existing bind group entries
-                // We stored the buffers during initTrailRendering, reuse them
-                const b = this.buffers;
-                const trailBuffers = this._trailBuffersRef;
-                if (trailBuffers) {
-                    this._trailBindGroup = this.device.createBindGroup({
-                        label: 'trailRender',
-                        layout: bindGroupLayout,
-                        entries: [
-                            { binding: 0, resource: { buffer: this.cameraBuffer } },
-                            { binding: 1, resource: { buffer: this._trailUniformBuffer } },
-                            { binding: 2, resource: { buffer: trailBuffers.trailX } },
-                            { binding: 3, resource: { buffer: trailBuffers.trailY } },
-                            { binding: 4, resource: { buffer: trailBuffers.trailWriteIdx } },
-                            { binding: 5, resource: { buffer: trailBuffers.trailCount } },
-                            { binding: 6, resource: { buffer: b.color } },
-                            { binding: 7, resource: { buffer: b.particleState } },
-                            { binding: 8, resource: { buffer: b.particleAux } },
-                        ],
-                    });
-                }
-            }
-            this._trailReady = true;
-        } catch (e) {
-            console.warn('[physsim] Trail pipeline rebuild failed:', e.message);
-        }
-    }
-
     /** Size in CSS px; the backing store is drawn at the device's pixel ratio (up to 2). */
     resize(width, height, dpr = 1) {
         this.dpr = dpr;
@@ -1571,7 +1449,6 @@ export default class GPURenderer {
         const _d = b => { if (b) b.destroy(); };
         this.cameraBuffer.destroy();
         _d(this._arrowUniformBuffer);
-        _d(this._trailUniformBuffer);
         _d(this._torqueUniformBuffer);
         _d(this._ringUniformBuffer);
         if (this._fieldRenderUniformBuffers) {
@@ -1580,7 +1457,6 @@ export default class GPURenderer {
         }
         _d(this._heatmapRenderUniformBuffer);
         this._arrowUniformBuffer = null;
-        this._trailUniformBuffer = null;
         this._torqueUniformBuffer = null;
         this._ringUniformBuffer = null;
         this._heatmapRenderUniformBuffer = null;

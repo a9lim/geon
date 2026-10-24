@@ -13,7 +13,7 @@
  */
 
 import {
-    WORLDLINE_LEN, GPU_MAX_PHOTONS, GPU_MAX_PIONS, MAX_TRAIL_LENGTH,
+    WORLDLINE_LEN, GPU_MAX_PHOTONS, GPU_MAX_PIONS,
     GPU_SCALAR_GRID, GPU_MAX_LEPTONS,
 } from '../config.js';
 import { WL_STRIDE, WL_META_STRIDE } from './gpu-constants.js';
@@ -484,26 +484,6 @@ export function createKugelblitzBuffers(device) {
     };
 }
 
-// Trail rendering constants
-const TRAIL_LEN = MAX_TRAIL_LENGTH;
-
-/**
- * Allocate trail ring buffer storage for GPU trail rendering.
- * @param {GPUDevice} device
- * @param {number} maxParticles
- */
-export function createTrailBuffers(device, maxParticles) {
-    const posBytes = maxParticles * TRAIL_LEN * 4; // f32
-    const metaBytes = maxParticles * 4; // u32 per particle
-    const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
-    return {
-        trailX:        device.createBuffer({ label: 'trailX',        size: posBytes, usage }),
-        trailY:        device.createBuffer({ label: 'trailY',        size: posBytes, usage }),
-        trailWriteIdx: device.createBuffer({ label: 'trailWriteIdx', size: metaBytes, usage }),
-        trailCount:    device.createBuffer({ label: 'trailCount',    size: metaBytes, usage }),
-    };
-}
-
 /** Torus frames draw each body's 3×3 nearest images. */
 export const FRAME_IMAGES_MAX = 9;
 export const FRAME_PARAMS_SIZE = 96;   // FrameParams (frame-slice.wgsl)
@@ -532,7 +512,7 @@ export function createFrameBuffers(device, maxParticles) {
 export {
     FIELD_GRID_RES, FIELD_GRID_SQ,
     PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE,
-    PHOTON_SIZE, PION_SIZE, DERIVED_SIZE, VEC2_SIZE, VEC4_SIZE, ALLFORCES_SIZE, TRAIL_LEN,
+    PHOTON_SIZE, PION_SIZE, DERIVED_SIZE, VEC2_SIZE, VEC4_SIZE, ALLFORCES_SIZE,
 };
 
 /**

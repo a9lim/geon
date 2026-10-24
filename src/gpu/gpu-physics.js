@@ -37,8 +37,8 @@
  *  Under expansion the domain is a × the comoving domain and the world-line clock is
  *  conformal time (cosmology.js, expansion.wgsl).
  */
-import { createParticleBuffers, createUniformBuffer, writeFrameUniforms, writeSubstepUniforms, createFieldBuffers, createGravityGridBuffers, createAtomicGridBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createKugelblitzBuffers, createTrailBuffers, createFrameBuffers, FRAME_PARAMS_SIZE, FRAME_STATE_SIZE, FIELD_GRID_RES, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
-import { fetchShader, createLensPipeline, createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createMergePhotonPipeline, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldGravityPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createBosonDispatchArgsPipeline, createUpdateColorsPipeline, createTrailRecordPipeline, createHitTestPipeline, createComputeStatsPipeline, createFrameSlicePipelines } from './gpu-pipelines.js';
+import { createParticleBuffers, createUniformBuffer, writeFrameUniforms, writeSubstepUniforms, createFieldBuffers, createGravityGridBuffers, createAtomicGridBuffer, createHeatmapBuffers, createExcitationBuffers, createDisintegrationBuffers, createKugelblitzBuffers, createFrameBuffers, FRAME_PARAMS_SIZE, FRAME_STATE_SIZE, FIELD_GRID_RES, PARTICLE_STATE_SIZE, PARTICLE_AUX_SIZE, RADIATION_STATE_SIZE, PHOTON_SIZE, PION_SIZE, DERIVED_SIZE } from './gpu-buffers.js';
+import { fetchShader, createLensPipeline, createPhase2Pipelines, createGhostGenPipeline, createTreeBuildPipelines, createTreeForcePipeline, createCollisionPipelines, createMergePhotonPipeline, createDeadGCPipeline, createPhase4Pipelines, createFieldDepositPipelines, createFieldEvolvePipelines, createFieldForcesPipelines, createFieldParticleGravPipeline, createFieldGravityPipelines, createFFTPipelines, createFieldExcitationPipeline, createHeatmapPipelines, createExpansionPipeline, createDisintegrationPipeline, createBosonDispatchArgsPipeline, createUpdateColorsPipeline, createHitTestPipeline, createComputeStatsPipeline, createFrameSlicePipelines } from './gpu-pipelines.js';
 import { buildWGSLConstants, GRAVITY_BIT, COULOMB_BIT, MAGNETIC_BIT, GRAVITOMAG_BIT, ONE_PN_BIT, RELATIVITY_BIT, SPIN_ORBIT_BIT, RADIATION_BIT, BLACK_HOLE_BIT, DISINTEGRATION_BIT, EXPANSION_BIT, YUKAWA_BIT, HIGGS_BIT, AXION_BIT, BARNES_HUT_BIT, BOSON_INTER_BIT, FIELD_GRAV_BIT_T1, HERTZ_BOUNCE_BIT_T1, EM_PAIRWISE_BIT_T1, WL_STRIDE, WL_META_STRIDE } from './gpu-constants.js';
 import { createGPUDispatchPlan, updateGPUDispatchPlan } from './pass-graph.js';
 import {
@@ -49,7 +49,7 @@ import {
     SOFTENING, BH_SOFTENING, SOFTENING_SQ, BH_SOFTENING_SQ, SHEET_THICKNESS_SQ, CLOCK_PERIOD,
     HIGGS_MASS_FLOOR, HIGGS_MASS_MAX_DELTA, HIGGS_COUPLING, AXION_COUPLING,
     TIDAL_STRENGTH, ROCHE_THRESHOLD, ROCHE_TRANSFER_RATE, MIN_MASS, SPAWN_COUNT, BOSON_CHARGE,
-    EPOCH_SPAN, EPOCH_STEP, MAX_TRAIL_LENGTH, kerrNewmanRadius,
+    EPOCH_SPAN, EPOCH_STEP, kerrNewmanRadius,
 } from '../config.js';
 import Cosmology, { SCHEDULE_KEYS, slabVolume } from '../cosmology.js';
 import { GPU_PARAMETER_SLOTS } from '../physics-contract.js';
@@ -405,7 +405,6 @@ export default class GPUPhysics {
         this._heatmapBGs = null;
         this._heatmapBlurBGs = {};
         this._expansionBG = null;
-        this._expansionBGTrails = null;
         this._disintBGs = null;
         this._bosonDispatchArgsBG = null;
 
@@ -420,11 +419,6 @@ export default class GPUPhysics {
         this._updateColorsBindGroup = null;
         this._colorUniformBuffer = null;
 
-        // Trail recording pipeline + buffers (lazy-allocated)
-        this._trailRecordPipeline = null;
-        this._trailRecordBindGroup = null;
-        this._trailBuffers = null;
-        this._trailsEnabled = true; // default on (matches CPU)
 
         // Hit test pipeline + buffers
         this._hitTestPipeline = null;
@@ -515,7 +509,7 @@ export default class GPUPhysics {
         });
 
         // --- All pipelines: fetch shaders in parallel ---
-        const [phase2, ghostGen, treeBuild, treeForce, collisionPipelines, mergePhotons, deadGC, phase4, updateColors, trailRecord, hitTest, computeStats] =
+        const [phase2, ghostGen, treeBuild, treeForce, collisionPipelines, mergePhotons, deadGC, phase4, updateColors, hitTest, computeStats] =
             await Promise.all([
                 createPhase2Pipelines(this.device, wgslConstants),
                 createGhostGenPipeline(this.device, wgslConstants),
@@ -526,7 +520,6 @@ export default class GPUPhysics {
                 createDeadGCPipeline(this.device, wgslConstants),
                 createPhase4Pipelines(this.device, wgslConstants),
                 createUpdateColorsPipeline(this.device, wgslConstants),
-                createTrailRecordPipeline(this.device, wgslConstants),
                 createHitTestPipeline(this.device, wgslConstants),
                 createComputeStatsPipeline(this.device, wgslConstants),
             ]);
@@ -577,12 +570,6 @@ export default class GPUPhysics {
                     { binding: 2, resource: { buffer: this.buffers.color } },
                 ],
             });
-        }
-
-        // --- Trail record ---
-        {
-            this._trailRecordPipeline = trailRecord.pipeline;
-            this._trailRecordLayout = trailRecord.bindGroupLayout;
         }
 
         // --- Hit test ---
@@ -2178,13 +2165,6 @@ export default class GPUPhysics {
             this.device.queue.writeBuffer(this.buffers.clocks, idx * 16, _addParticleClockData);
         }
 
-        // Reset trail ring buffer for this slot (clear writeIdx + count)
-        if (this._trailBuffers) {
-            const tb = this._trailBuffers;
-            this.device.queue.writeBuffer(tb.trailWriteIdx, idx * 4, _zeroU32);
-            this.device.queue.writeBuffer(tb.trailCount, idx * 4, _zeroU32);
-        }
-
         // World line: one sample at birth, so signal delay has a state to extrapolate
         // from before the first recorded one. Meta (shared-worldline.wgsl): writeIdx, count,
         // creation time, generation, and an identity deck (the cover starts on the domain).
@@ -3280,7 +3260,7 @@ export default class GPUPhysics {
 
     /**
      * Grow the universe by `ratio` = a_new/a_old (expansion.wgsl): positions ×ratio,
-     * peculiar momenta and photon energies ÷ratio, trails with their bodies. Once per frame,
+     * peculiar momenta and photon energies ÷ratio. Once per frame,
      * after the substeps; the caller then sets the domain to the new a.
      */
     _dispatchExpansion(encoder, ratio) {
@@ -3291,25 +3271,16 @@ export default class GPUPhysics {
                 label: 'expansionUniforms', size: 32,
                 usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
             });
-            // Dummy trail rings while trails are off (one buffer may not fill two writable bindings)
-            this._expansionDummyTrails = [0, 1].map(i => this.device.createBuffer({
-                label: `expansionDummyTrail${i}`, size: 16, usage: GPUBufferUsage.STORAGE,
-            }));
         }
-        const tb = this._trailBuffers;
-        const trailCount = tb ? this.aliveCount * MAX_TRAIL_LENGTH : 0;
         _expansionUniformF32[0] = ratio;
         _expansionUniformU32[1] = this._relativityEnabled ? 1 : 0;
         _expansionUniformU32[2] = this.aliveCount;
         _expansionUniformU32[3] = GPU_MAX_PHOTONS;
         _expansionUniformU32[4] = PION_POOL_CAP;
-        _expansionUniformU32[5] = trailCount;
         this.device.queue.writeBuffer(this._expansionUniformBuffer, 0, _expansionUniformData);
 
-        if (!this._expansionBG || this._expansionBGTrails !== tb) {
+        if (!this._expansionBG) {
             const b = this.buffers;
-            const [dx, dy] = this._expansionDummyTrails;
-            this._expansionBGTrails = tb;
             this._expansionBG = this.device.createBindGroup({
                 label: 'expansion_g0',
                 layout: pl.bindGroupLayouts[0],
@@ -3318,11 +3289,9 @@ export default class GPUPhysics {
                     { binding: 1, resource: { buffer: b.particleState } },
                     { binding: 2, resource: { buffer: b.photonPool } },
                     { binding: 3, resource: { buffer: b.pionPool } },
-                    { binding: 4, resource: { buffer: tb ? tb.trailX : dx } },
-                    { binding: 5, resource: { buffer: tb ? tb.trailY : dy } },
-                    { binding: 6, resource: { buffer: this._cosmoAccum } },
-                    { binding: 7, resource: { buffer: b.phCount } },
-                    { binding: 8, resource: { buffer: b.piCount } },
+                    { binding: 4, resource: { buffer: this._cosmoAccum } },
+                    { binding: 5, resource: { buffer: b.phCount } },
+                    { binding: 6, resource: { buffer: b.piCount } },
                 ],
             });
         }
@@ -3335,10 +3304,6 @@ export default class GPUPhysics {
         p.dispatchWorkgroups(Math.ceil(GPU_MAX_PHOTONS / 64));
         p.setPipeline(pl.pions);
         p.dispatchWorkgroups(Math.ceil(PION_POOL_CAP / 64));
-        if (trailCount > 0) {
-            p.setPipeline(pl.trails);
-            p.dispatchWorkgroups(Math.ceil(trailCount / 64));
-        }
         p.end();
     }
 
@@ -3619,32 +3584,6 @@ export default class GPUPhysics {
     /** Expose heatmap buffers for renderer overlay drawing */
     getHeatmapBuffers() { return this._heatmapBuffers; }
 
-    /** Expose trail buffers for renderer trail drawing */
-    getTrailBuffers() { return this._trailBuffers; }
-
-    /** Set trails enabled state and lazily allocate trail buffers */
-    setTrailsEnabled(enabled) {
-        this._trailsEnabled = enabled;
-        if (enabled && !this._trailBuffers) {
-            this._trailBuffers = createTrailBuffers(this.device, this.buffers.maxParticles);
-            // Create bind group for trail recording
-            if (this._trailRecordPipeline) {
-                const tb = this._trailBuffers;
-                this._trailRecordBindGroup = this.device.createBindGroup({
-                    label: 'trailRecord',
-                    layout: this._trailRecordLayout,
-                    entries: [
-                        { binding: 0, resource: { buffer: this.buffers.particleState } },
-                        { binding: 1, resource: { buffer: tb.trailX } },
-                        { binding: 2, resource: { buffer: tb.trailY } },
-                        { binding: 3, resource: { buffer: tb.trailWriteIdx } },
-                        { binding: 4, resource: { buffer: tb.trailCount } },
-                    ],
-                });
-            }
-        }
-    }
-
     /**
      * Run one frame: adaptive substepping with full Phase 2 force computation + Boris integrator.
      * When paused, the caller does not call update() — no compute dispatches are issued.
@@ -3784,15 +3723,6 @@ export default class GPUPhysics {
                 const p = encoder.beginComputePass({ label: 'updateColors' });
                 p.setPipeline(this._updateColorsPipeline);
                 p.setBindGroup(0, this._updateColorsBindGroup);
-                p.dispatchWorkgroups(Math.ceil(this.aliveCount / 64));
-                p.end();
-            }
-
-            // Record trail positions (every frame when trails enabled)
-            if (this._trailRecordPipeline && this._trailBuffers && this._trailsEnabled && this.aliveCount > 0) {
-                const p = encoder.beginComputePass({ label: 'trailRecord' });
-                p.setPipeline(this._trailRecordPipeline);
-                p.setBindGroup(0, this._trailRecordBindGroup);
                 p.dispatchWorkgroups(Math.ceil(this.aliveCount / 64));
                 p.end();
             }
@@ -4387,8 +4317,8 @@ export default class GPUPhysics {
         if (this.buffers.piCount) {
             this.device.queue.writeBuffer(this.buffers.piCount, 0, _zeroU32);
         }
-        // Clear heatmap + trail buffers (batch into one encoder/submit)
-        if (this._heatmapBuffers || this._trailBuffers) {
+        // Clear the heatmap buffers (batch into one encoder/submit)
+        if (this._heatmapBuffers) {
             const enc = this.device.createCommandEncoder({ label: 'clearReset' });
             if (this._heatmapBuffers) {
                 enc.clearBuffer(this._heatmapBuffers.gravPotential);
@@ -4396,10 +4326,6 @@ export default class GPUPhysics {
                 enc.clearBuffer(this._heatmapBuffers.elecPotential);
                 enc.clearBuffer(this._heatmapBuffers.yukawaPotential);
                 enc.clearBuffer(this._heatmapBuffers.output);
-            }
-            if (this._trailBuffers) {
-                enc.clearBuffer(this._trailBuffers.trailWriteIdx);
-                enc.clearBuffer(this._trailBuffers.trailCount);
             }
             this.device.queue.submit([enc.finish()]);
         }
@@ -4797,14 +4723,10 @@ export default class GPUPhysics {
         _d(this._disintUniformBuffer);
         _d(this._bosonDispatchArgs);
 
-        // Trails
-        _dObj(this._trailBuffers);
-
         // Expansion
         _d(this._expansionUniformBuffer);
         _d(this._cosmoAccum);
         if (this.lensBuffers) Object.values(this.lensBuffers).forEach(_d);
-        if (this._expansionDummyTrails) this._expansionDummyTrails.forEach(_d);
 
         // FFT
         _d(this._fftParamsBuffer);
@@ -4833,7 +4755,6 @@ export default class GPUPhysics {
         this._disintBGs = null;
         this._bosonDispatchArgs = null;
         this._bosonDispatchArgsBG = null;
-        this._trailBuffers = null;
         this._fieldUniformBuffer = null;
         this._higgsUniformBuffer = null;
         this._axionUniformBuffer = null;

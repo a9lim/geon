@@ -142,7 +142,6 @@ export const DRAG_THRESHOLD = 4;
 export const SHOOT_VELOCITY_SCALE = 0.02;
 
 // ── Display ──
-export const MAX_TRAIL_LENGTH = 256;
 export const DISPLAY_SCALE = 100;
 export const STATS_THROTTLE_MASK = 7;           // stats update every 8th frame
 export const PHASE_BUFFER_LEN = 512;

@@ -3,13 +3,13 @@
 // every position scales by r about the domain's corner, and every peculiar momentum by 1/r.
 // On a torus, Klein bottle or RP² the scaling is homogeneous, with no centre, and it is
 // the comoving dynamics exactly. Massive bodies keep a·w (peculiar momentum ∝ 1/a holds at
-// any speed), photons redshift (E ∝ 1/a), and trails and retired bodies' death positions
-// scale with everything else. Field grids are comoving already and don't move.
+// any speed), photons redshift (E ∝ 1/a), and retired bodies' death positions scale with
+// everything else. World lines are comoving and need no scaling. Field grids are comoving already and don't move.
 //
 // The kinetic and radiation energy the expansion removes is summed into cosmoAccum[0]
 // (f32 bits, added by compare-and-swap) for the energy ledger.
 //
-// Entry points: expandParticles, expandPhotons, expandPions, expandTrails.
+// Entry points: expandParticles, expandPhotons, expandPions.
 
 struct ExpansionUniforms {
     ratio: f32,          // a_new / a_old
@@ -17,7 +17,7 @@ struct ExpansionUniforms {
     particleCount: u32,  // slots to scan (high-water mark)
     photonCount: u32,
     pionCount: u32,
-    trailCount: u32,     // trail entries to scale: particleCount × trail length
+    _pad2: u32,
     _pad0: u32,
     _pad1: u32,
 };
@@ -26,12 +26,10 @@ struct ExpansionUniforms {
 @group(0) @binding(1) var<storage, read_write> particles: array<ParticleState>;
 @group(0) @binding(2) var<storage, read_write> photons: array<Photon>;
 @group(0) @binding(3) var<storage, read_write> pions: array<Pion>;
-@group(0) @binding(4) var<storage, read_write> trailX: array<f32>;
-@group(0) @binding(5) var<storage, read_write> trailY: array<f32>;
-@group(0) @binding(6) var<storage, read_write> cosmoAccum: array<atomic<u32>>;
+@group(0) @binding(4) var<storage, read_write> cosmoAccum: array<atomic<u32>>;
 // The pools' high-water marks: entries past them are stale
-@group(0) @binding(7) var<storage, read_write> phCount: atomic<u32>;
-@group(0) @binding(8) var<storage, read_write> piCount: atomic<u32>;
+@group(0) @binding(5) var<storage, read_write> phCount: atomic<u32>;
+@group(0) @binding(6) var<storage, read_write> piCount: atomic<u32>;
 
 var<workgroup> wgWork: array<f32, 64>;
 
@@ -122,12 +120,4 @@ fn expandPions(@builtin(global_invocation_id) gid: vec3u, @builtin(local_invocat
         }
     }
     accumulateWork(lid, work);
-}
-
-@compute @workgroup_size(64)
-fn expandTrails(@builtin(global_invocation_id) gid: vec3u) {
-    let i = gid.x;
-    if (i >= eu.trailCount) { return; }
-    trailX[i] *= eu.ratio;
-    trailY[i] *= eu.ratio;
 }
