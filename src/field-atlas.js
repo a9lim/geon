@@ -6,10 +6,11 @@
 //     heavier and labelled, ticked downhill like a map's depression contours;
 //   - the charges' electric field as field lines in prussian, traced from the charges through
 //     the Liénard–Wiechert field (so an accelerating charge's lines kink where its news has
-//     reached), a line ending where it runs into another so they never bundle, with
-//     equipotentials at the index levels, solid in sienna where the potential is positive and
-//     dashed in prussian where it is negative. A uniform external field has no structure to draw and would swamp
-//     the charges' own (softened) fields, so it stays out of both and is named in the key;
+//     reached), a line ending where it runs into another so they never bundle; in the Electric
+//     view, with equipotentials one a decade, solid in sienna where the potential is positive
+//     and dashed in prussian where it is negative. A uniform external field has no structure
+//     to draw and would swamp the charges' own (softened) fields, so it stays out of both and
+//     is named in the key;
 //   - Yukawa's potential as dotted contours in viridian.
 // Bz stays on the GPU (heatmap-render.wgsl, ⊙ and ⊗). Everything keeps to the domain, and
 // maps through the camera, which src/spacetime.js routes through the tilt.
@@ -99,8 +100,8 @@ export default class FieldAtlas {
             let top = 0;
             for (let i = 0; i < f.length; i++) { const v = f[i] * sign; if (v > top) top = v; }
             for (const { v, index } of niceLevels(top, LEVEL_SPAN[kind])) {
-                // Equipotentials beside field lines: the index levels only, so the lines lead
-                if (kind !== 'gravity' && kind !== 'yukawa' && !index) continue;
+                // Equipotentials beside field lines: one a decade (1 × 10^k), so the lines lead
+                if (kind !== 'gravity' && kind !== 'yukawa' && Math.abs(v / 10 ** Math.floor(Math.log10(v) + 1e-9) - 1) > 1e-6) continue;
                 const L = v * sign;
                 for (const line of contourLines(f, n, L)) {
                     // Which side is downhill: probe the grid a cell to the left of the middle
@@ -113,7 +114,9 @@ export default class FieldAtlas {
             }
         };
         if (m.gravity) add(rb.grav, 'gravity', -1);
-        if (m.coulomb) { add(rb.elec, 'elecPos', 1); add(rb.elec, 'elecNeg', -1); }
+        // Among all the layers the field lines carry the electric field; its own view adds
+        // the equipotentials
+        if (m.coulomb && this.sim.heatmap.mode === 'electric') { add(rb.elec, 'elecPos', 1); add(rb.elec, 'elecNeg', -1); }
         if (m.yukawa) add(rb.yuk, 'yukawa', -1);
         this.contours = contours;
         this.lines = m.coulomb ? this._traceLines(rb) : [];

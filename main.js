@@ -16,6 +16,7 @@ import CosmologyPanel from './src/cosmology-panel.js';
 import LensPanel from './src/lens-panel.js';
 import SpacetimeView, { EL_SPACETIME, AZ_SPACETIME } from './src/spacetime.js';
 import Caption from './src/caption.js';
+import SceneKey from './src/scene-key.js';
 
 /**
  * Request a WebGPU device with the limits the simulation needs.
@@ -331,6 +332,7 @@ class Simulation {
         this.cosmologyPanel = new CosmologyPanel(this);
         this.lensPanel = new LensPanel(this);
         this.caption = new Caption(this);
+        this.sceneKey = new SceneKey(this);
 
         // Re-apply DOM translations after UI setup in case any modules
         // mutated text content during their wiring (e.g. mode-btn label).
@@ -576,6 +578,7 @@ class Simulation {
         this.spacetime.step(rawDt);
         this.spacetime.stepCoords(rawDt);
         this.caption?.update();
+        this.sceneKey?.update();
 
         // Refresh hover tooltip periodically (every 8th frame, matching stats rate)
         if (this.running && !(++this._ttFrame & STATS_THROTTLE_MASK)) {

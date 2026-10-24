@@ -67,7 +67,7 @@ const UI_EN = {
     'group.view': 'View',
     'view.trails': 'Trails',
     'view.clocks': 'Clocks',
-    'view.grid': 'Grid',
+    'view.grid': 'Rulers and key',
     'view.velocity': 'Velocity vectors',
     'view.accel': 'Acceleration vectors',
     'view.accelComponents': 'Acceleration components',
@@ -82,6 +82,7 @@ const UI_EN = {
     'canvas.ago': '{n} ago',
     'canvas.observerPresent': 'the observer’s present',
     'canvas.labPresent': 'the lab’s present',
+    'canvas.length': 'length, c = 1',
 
     // ── Sidebar tabs / sections ──
     'tab.settings': 'Settings',
@@ -323,7 +324,7 @@ const UI_EN = {
     'shortcut.toggleAccel': 'Toggle acceleration vectors',
     'shortcut.toggleAccelComp': 'Toggle acceleration components',
     'shortcut.toggleClocks': 'Toggle clocks',
-    'shortcut.toggleGrid': 'Toggle grid',
+    'shortcut.toggleGrid': 'Toggle rulers and key',
     'shortcut.toggleSpacetime': 'Plane or spacetime',
     'shortcut.toggleCoords': 'Lab or observer coordinates',
     'shortcut.cycleFrame': 'Next frame',
@@ -498,7 +499,7 @@ const UI_JA = {
     'group.view': '表示',
     'view.trails': '軌跡',
     'view.clocks': '時計',
-    'view.grid': 'グリッド',
+    'view.grid': '目盛りと凡例',
     'view.velocity': '速度ベクトル',
     'view.accel': '加速度ベクトル',
     'view.accelComponents': '加速度の成分',
@@ -513,6 +514,7 @@ const UI_JA = {
     'canvas.ago': '{n}前',
     'canvas.observerPresent': '観測者の現在',
     'canvas.labPresent': '実験室の現在',
+    'canvas.length': '長さ（c = 1）',
 
     // ── Sidebar tabs / sections ──
     'tab.settings': '設定',
@@ -754,7 +756,7 @@ const UI_JA = {
     'shortcut.toggleAccel': '加速度ベクトル表示',
     'shortcut.toggleAccelComp': '加速度成分表示',
     'shortcut.toggleClocks': '時計表示',
-    'shortcut.toggleGrid': 'グリッド表示',
+    'shortcut.toggleGrid': '目盛りと凡例の表示',
     'shortcut.toggleSpacetime': '平面／時空',
     'shortcut.toggleCoords': '実験室／観測者の座標',
     'shortcut.cycleFrame': '次の座標系',

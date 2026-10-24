@@ -72,6 +72,55 @@ body.wl.margin-open { grid-template-columns: minmax(0, 1fr) var(--margin-w); }
     z-index: 5;
 }
 
+/* ─── The key: the plate's Reference at the stage's bottom right (src/scene-key.js) ───
+   A double hairline like a map's cartouche; the swatches are the scene's own marks. The
+   scale bar takes the bottom left, as the spacetime view's time axis does */
+.scene-key {
+    position: absolute;
+    right: var(--gutter);
+    bottom: 16px;
+    z-index: 4;
+    padding: 3px;
+    white-space: nowrap;
+    background: color-mix(in srgb, var(--bg-canvas) 92%, transparent);
+    border: 1px solid color-mix(in srgb, var(--text) 42%, transparent);
+    font-size: var(--font-sm);
+    pointer-events: none;
+    --key-body: 48%;
+    --key-void: var(--text);
+    --key-void-edge: var(--text);
+}
+
+[data-theme="dark"] .scene-key {
+    --key-body: 62%;
+    --key-void: #040404;
+    --key-void-edge: color-mix(in srgb, var(--text) 30%, transparent);
+}
+
+.scene-key-in {
+    border: 1px solid var(--border);
+    padding: 5px 12px 7px 9px;
+}
+
+.scene-key-title {
+    margin: 0 0 3px;
+    text-align: center;
+    font-style: italic;
+    color: var(--text-muted);
+}
+
+:lang(ja) .scene-key-title { font-style: normal; font-weight: 500; letter-spacing: 0.1em; }
+
+.scene-key-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.scene-key-row svg { flex: none; overflow: visible; }
+
 .touch-only { display: none; }
 @media (pointer: coarse) { .touch-only { display: inline-block; } }
 

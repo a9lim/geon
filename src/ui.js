@@ -487,6 +487,7 @@ export function setupUI(sim) {
             ago: (n) => _T('canvas.ago', '{n} ago').replace('{n}', n),
             observer: _T('canvas.observerPresent'),
             lab: _T('canvas.labPresent'),
+            length: _T('canvas.length', 'length, c = 1'),
         };
     };
     labelCanvas();

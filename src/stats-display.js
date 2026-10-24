@@ -51,6 +51,7 @@ export default class StatsDisplay {
         const allFieldE = e.fieldEnergy + (e.higgsFieldEnergy + e.axionFieldEnergy) * e.scaleA;
         const radiated = e.photonE + e.pionE + e.pendingRadiation + L.escapedE + L.escapedMatterE;
         this.radiated = radiated;   // for the caption
+        this.photonE = e.photonE;   // for the key: light is on the scene
         const total = e.totalMass + e.linearKE + e.spinKE + pe + allFieldE + radiated;
         const ledgerTotal = total + L.expansionWork;
 

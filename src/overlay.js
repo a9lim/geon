@@ -38,21 +38,24 @@ export default class Overlay {
     _labels = {
         now: 'now', ago: (s) => `${s} ago`,
         observer: 'the observer’s present', lab: 'the lab’s present',
+        length: 'length, c = 1',
     };
 
     /**
      * Clear the canvas, then draw the field atlas (`atlas`, when the Fields overlay is on), the
      * spacetime view's box (`box`: { view, w, h, obs, x0, y0 } when the view is tilted), the
-     * horizons (`horizons`: { center, hubble, event, labels }, physical lengths) and the drag
-     * line, if one is in progress.
+     * scale (`rulers`: { tilt } while the rulers show: a scale bar seen from above, the box's
+     * dimension line tilted), the horizons (`horizons`: { center, hubble, event, labels },
+     * physical lengths) and the drag line, if one is in progress.
      */
-    draw(camera, input, horizons = null, box = null, atlas = null) {
+    draw(camera, input, horizons = null, box = null, atlas = null, rulers = null) {
         const ctx = this.ctx;
         const d = this.dpr || 1;
         ctx.setTransform(d, 0, 0, d, 0, 0);
         ctx.clearRect(0, 0, this.width, this.height);
         if (atlas) atlas.draw(ctx, camera, this.isLight, _FONT.text);
-        if (box) this._drawBox(box);
+        if (box) this._drawBox(box, rulers);
+        if (rulers && rulers.tilt < 0.98) this._drawScaleBar(camera.zoom, 1 - rulers.tilt);
         if (horizons) this._drawHorizons(camera, horizons);
         if (!input || !input.isDragging) return;
         const a = camera.worldToScreen(input.dragStart.x, input.dragStart.y);
@@ -72,7 +75,7 @@ export default class Overlay {
      * presents that aren't the plane on top get their own outlines: the observer's, tilted
      * in the lab's coordinates, and the lab's, tilted the other way in the observer's.
      */
-    _drawBox({ view, w, h, obs, x0, y0 }) {
+    _drawBox({ view, w, h, obs, x0, y0 }, rulers) {
         const ctx = this.ctx;
         const f = view.frame();
         const t = view.tilt;
@@ -129,6 +132,10 @@ export default class Overlay {
         // The time axis: ticks every few bead steps, read as time before the present on top
         let k = 0;
         for (let i = 1; i < 4; i++) if (top[i].x < top[k].x) k = i;
+        if (rulers && t > 0.02) {
+            const fade = t * (obs.active ? 1 - obs.s : 1);
+            if (fade > 0.02) this._drawDimension(corners, k, f, now, at, fade);
+        }
         const base = obs.active && obs.s > 0.5
             ? at(corners[k][0], corners[k][1], obs.tA + obs.u[0] * (corners[k][0] - obs.xA[0]) + obs.u[1] * (corners[k][1] - obs.xA[1]))
             : top[k];
@@ -150,6 +157,89 @@ export default class Overlay {
             ctx.stroke();
             ctx.fillText(s === 0 ? this._labels.now : this._labels.ago(s), base.x - 8, y);
         }
+    }
+
+    /**
+     * A scale bar at the stage's bottom left, as on a map: a length of 1, 2 or 5 × 10^k at most
+     * 120 px long, ticked in fifths or quarters, `S` px to the unit.
+     */
+    _drawScaleBar(S, alpha) {
+        if (!(S > 0) || this.width < 420) return;
+        const ctx = this.ctx;
+        const raw = 120 / S, p10 = 10 ** Math.floor(Math.log10(raw));
+        const m = [5, 2, 1].find((v) => v * p10 <= raw) || 1;
+        const step = m * p10, L = step * S, n = m === 2 ? 4 : 5;
+        const x = window.innerWidth > 900 ? 20 : 14, y = this.height - 22;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = _r(this._ink, 0.7 * alpha);
+        ctx.beginPath();
+        ctx.moveTo(x, y + 0.5);
+        ctx.lineTo(x + L, y + 0.5);
+        for (let i = 0; i <= n; i++) {
+            const X = Math.round(x + L * i / n) + 0.5;
+            ctx.moveTo(X, y + 0.5);
+            ctx.lineTo(X, y + 0.5 - (i === 0 || i === n ? 5 : 3));
+        }
+        ctx.stroke();
+        ctx.fillStyle = _r(this._labelColor, alpha);
+        ctx.font = `12.5px ${_FONT.text}`;
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'center';
+        ctx.fillText('0', x, y + 5);
+        ctx.fillText(String(+step.toPrecision(3)), x + L, y + 5);
+        ctx.font = `italic 12.5px ${_FONT.text}`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(this._labels.length, x, y - 8);
+    }
+
+    /**
+     * The box's dimension line, as on a drawing: along the present's front edge away from the
+     * time axis, set out from the box, ticked every 1, 2 or 5 × 10^k, with 0, the edge's length
+     * and the unit.
+     */
+    _drawDimension(corners, k, f, now, at, alpha) {
+        const ctx = this.ctx;
+        // Of the two edges not meeting the time axis's corner, the one nearer the viewer
+        const edges = [[(k + 1) % 4, (k + 2) % 4], [(k + 2) % 4, (k + 3) % 4]];
+        const mid = ([i, j]) => at((corners[i][0] + corners[j][0]) / 2, (corners[i][1] + corners[j][1]) / 2, now).y;
+        let [i, j] = mid(edges[0]) > mid(edges[1]) ? edges[0] : edges[1];
+        // Read left to right on screen
+        if (at(...corners[i], now).x > at(...corners[j], now).x) [i, j] = [j, i];
+        const [ax, ay] = corners[i], [bx, by] = corners[j];
+        const len = Math.hypot(bx - ax, by - ay);
+        const cx = (corners[0][0] + corners[2][0]) / 2, cy = (corners[0][1] + corners[2][1]) / 2;
+        // Out from the box, about 14 px on the plane
+        let nx = -(by - ay) / len, ny = (bx - ax) / len;
+        if (nx * ((ax + bx) / 2 - cx) + ny * ((ay + by) / 2 - cy) < 0) { nx = -nx; ny = -ny; }
+        const off = 14 / f.kz, tick = 4 / f.kz;
+        const P = (s, o) => at(ax + (bx - ax) * s / len + nx * o, ay + (by - ay) * s / len + ny * o, now);
+        const raw = len / 6, p10 = 10 ** Math.floor(Math.log10(raw));
+        const step = ([1, 2, 5, 10].map((v) => v * p10).find((v) => v >= raw)) || p10;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = _r(this._ink, 0.45 * alpha);
+        ctx.beginPath();
+        const a0 = P(0, off), a1 = P(len, off);
+        ctx.moveTo(a0.x, a0.y);
+        ctx.lineTo(a1.x, a1.y);
+        for (let s = 0; s <= len + 1e-6; s += step) {
+            const p = P(s, off), q = P(s, off - tick);
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(q.x, q.y);
+        }
+        const e0 = P(len, off), e1 = P(len, off - tick);
+        ctx.moveTo(e0.x, e0.y);
+        ctx.lineTo(e1.x, e1.y);
+        ctx.stroke();
+        ctx.fillStyle = _r(this._labelColor, alpha);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `12px ${_FONT.text}`;
+        const l0 = P(0, off + 12 / f.kz), l1 = P(len, off + 12 / f.kz), lm = P(len / 2, off + 12 / f.kz);
+        ctx.fillText('0', l0.x, l0.y);
+        ctx.fillText(String(+len.toPrecision(3)), l1.x, l1.y);
+        ctx.font = `italic 12px ${_FONT.text}`;
+        ctx.fillText(this._labels.length, lm.x, lm.y);
     }
 
     /** Dashed circles on the plane: c/H, and the event horizon when it is finite. */

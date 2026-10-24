@@ -283,6 +283,7 @@
     <main id="scene" class="scene">
         <div class="stage">
             <canvas id="simCanvas" aria-label="Interactive N-body particle simulation showing trajectories under gravity, electromagnetism, and relativistic forces"></canvas>
+            <div id="scene-key" class="scene-key" role="note" hidden></div>
             <div class="scene-tools">
                 <button id="mode-btn" class="text-btn touch-only" type="button" aria-pressed="false" data-i18n="topbar.antimatterShort">Antimatter</button>
                 <button id="speedBtn" class="text-btn" type="button" aria-label="Simulation speed" data-i18n-aria="topbar.speed" title="Speed: 1x"><span class="speed-label">1×</span></button>
@@ -339,7 +340,7 @@
                         <div class="ctrl-row"><label for="clocksToggle"><span data-i18n="view.clocks">Clocks</span></label>
                             <div class="tog-wrap"><input type="checkbox" id="clocksToggle" role="switch" aria-checked="false">
                             <label for="clocksToggle" class="tog"><span class="tog-thumb"></span></label></div></div>
-                        <div class="ctrl-row"><label for="gridToggle"><span data-i18n="view.grid">Grid</span></label>
+                        <div class="ctrl-row"><label for="gridToggle"><span data-i18n="view.grid">Rulers and key</span></label>
                             <div class="tog-wrap"><input type="checkbox" id="gridToggle" checked role="switch" aria-checked="true">
                             <label for="gridToggle" class="tog"><span class="tog-thumb"></span></label></div></div>
                         <div class="ctrl-row"><label for="velocityToggle"><span data-i18n="view.velocity">Velocity vectors</span></label>

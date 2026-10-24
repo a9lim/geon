@@ -292,7 +292,9 @@ export default class GPUBackend {
             if (rb && rb !== sim.atlas.source) sim.atlas.update(rb);
             if (rb) atlas = sim.atlas;
         }
-        sim.overlay.draw(sim.camera, sim.input, horizons, box, atlas);
+        const rulers = sim.view.grid ? (sim._rulerOpts || (sim._rulerOpts = {})) : null;
+        if (rulers) rulers.tilt = view ? view.tilt : 0;
+        sim.overlay.draw(sim.camera, sim.input, horizons, box, atlas, rulers);
         this._readScene(sim);
         this._renderStats(sim);
     }
