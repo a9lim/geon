@@ -17,9 +17,10 @@ export default class Overlay {
         this.setTheme(true);
     }
 
-    resize(width, height) {
+    resize(width, height, dpr = 1) {
         this.width = width;
         this.height = height;
+        this.dpr = dpr;
     }
 
     setTheme(isLight) {
@@ -45,7 +46,8 @@ export default class Overlay {
      */
     draw(camera, input, horizons = null, box = null) {
         const ctx = this.ctx;
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        const d = this.dpr || 1;
+        ctx.setTransform(d, 0, 0, d, 0, 0);
         ctx.clearRect(0, 0, this.width, this.height);
         if (box) this._drawBox(box);
         if (horizons) this._drawHorizons(camera, horizons);

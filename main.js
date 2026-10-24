@@ -402,10 +402,13 @@ class Simulation {
         const oldW = this.width, oldH = this.height;
         this.width = Math.max(1, this.stage.clientWidth);
         this.height = Math.max(1, this.stage.clientHeight);
-        if (this.width === oldW && this.height === oldH && this.canvas.width === oldW) return;
-        this.canvas.width = this.width;
-        this.canvas.height = this.height;
-        this.overlay.resize(this.width, this.height);
+        // Canvases draw at the device's pixel ratio (capped at 2) for crisp hairlines
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        if (this.width === oldW && this.height === oldH && dpr === this.dpr) return;
+        this.dpr = dpr;
+        this.canvas.width = Math.round(this.width * dpr);
+        this.canvas.height = Math.round(this.height * dpr);
+        this.overlay.resize(this.width, this.height, dpr);
         this.input.updateRect();
         if (this.gpu) this.gpu.resize(this);
         // Refresh cached layout dimensions for sidebar plots

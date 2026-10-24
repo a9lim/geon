@@ -19,13 +19,12 @@ export default class GPUBackend {
     static async create(sim, device) {
         const gpuCanvas = document.createElement('canvas');
         gpuCanvas.id = 'gpuCanvas';
-        gpuCanvas.width = sim.width;
-        gpuCanvas.height = sim.height;
-        gpuCanvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:-1;';
+        gpuCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:-1;';
         sim.canvas.parentElement.appendChild(gpuCanvas);
 
         const physics = new GPUPhysics(device, sim.domainW, sim.domainH);
         const renderer = new GPURenderer(gpuCanvas, device, physics.buffers);
+        renderer.resize(sim.width, sim.height, sim.dpr);
         await physics.init();
         renderer.frameBuffers = physics.frameBuffers;
         renderer.lensBuffers = physics.lensBuffers;
@@ -63,9 +62,7 @@ export default class GPUBackend {
     }
 
     resize(sim) {
-        this.canvas.width = sim.width;
-        this.canvas.height = sim.height;
-        this.renderer.resize(sim.width, sim.height);
+        this.renderer.resize(sim.width, sim.height, sim.dpr);
     }
 
     /** The comoving domain (sim.domainW/H); the physical one is a × it. */

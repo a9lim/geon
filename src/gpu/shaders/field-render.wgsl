@@ -44,6 +44,12 @@ struct CameraUniforms {
     canvasWidth: f32,
     canvasHeight: f32,
     isDarkMode: f32,
+    relativityOn: f32,
+    blackHoleOn: f32,
+    showClocks: f32,
+    frameOn: f32,
+    frameImages: f32,
+    dpr: f32,           // device px per CSS px (the uniform sizes are CSS px)
 };
 
 @group(0) @binding(0) var<storage, read> field: array<f32>;
@@ -77,7 +83,8 @@ fn contour(s: f32, px: f32) -> f32 {
 // zero, so the two vacua differ by pattern as well as ink.
 @fragment
 fn fsFieldOverlay(in: VertexOutput) -> @location(0) vec4<f32> {
-    let ndc = vec2(in.pos.x / camera.canvasWidth * 2.0 - 1.0, 1.0 - in.pos.y / camera.canvasHeight * 2.0);
+    let css = in.pos.xy / max(camera.dpr, 1.0);
+    let ndc = vec2(css.x / camera.canvasWidth * 2.0 - 1.0, 1.0 - css.y / camera.canvasHeight * 2.0);
     let world = (camera.invViewMatrix * vec4(ndc, 0.0, 1.0)).xy;
     let gx = world.x / renderUniforms.domainW * f32(GRID);
     let gy = world.y / renderUniforms.domainH * f32(GRID);
@@ -103,9 +110,9 @@ fn fsFieldOverlay(in: VertexOutput) -> @location(0) vec4<f32> {
     let dark = renderUniforms.isLight == 0u;
 
     // Contours fade where the field sits at its vacuum, so a calm field draws nothing
-    let lines = contour(c, 1.0) * smoothstep(0.02, 0.12, strength) * select(0.32, 0.4, dark);
-    let wall = contour(c * 0.25, 1.6) * (1.0 - step(0.5, abs(c))) * select(0.55, 0.7, dark);
-    let hatch = select(0.0, 1.0 - smoothstep(0.6, 1.6, abs(fract((in.pos.x + in.pos.y) / 7.0) - 0.5) * 7.0), other)
+    let lines = contour(c, camera.dpr) * smoothstep(0.02, 0.12, strength) * select(0.32, 0.4, dark);
+    let wall = contour(c * 0.25, 1.6 * camera.dpr) * (1.0 - step(0.5, abs(c))) * select(0.55, 0.7, dark);
+    let hatch = select(0.0, 1.0 - smoothstep(0.6, 1.6, abs(fract((css.x + css.y) / 7.0) - 0.5) * 7.0 * camera.dpr), other)
               * select(0.14, 0.18, dark);
     let tint = strength * select(0.10, 0.13, dark);
 

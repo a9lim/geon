@@ -97,6 +97,8 @@ export default class GPURenderer {
         this.cameraX = 0;
         this.cameraY = 0;
         this.zoom = 16; // WORLD_SCALE default
+        // Uniform sizes are CSS px; the backing store is that times dpr (resize())
+        this.dpr = 1;
         this.canvasWidth = canvas.width;
         this.canvasHeight = canvas.height;
         this.isLight = true;
@@ -752,9 +754,6 @@ export default class GPURenderer {
         this.cameraX = camera.x;
         this.cameraY = camera.y;
         this.zoom = camera.zoom;
-        this.canvasWidth = this.canvas.width;
-        this.canvasHeight = this.canvas.height;
-
         // Build 2D view matrix (world -> clip)
         // clip.x = (worldX - cameraX) * zoom * 2 / canvasWidth
         // clip.y = -(worldY - cameraY) * zoom * 2 / canvasHeight  (y-flip for clip space)
@@ -791,6 +790,7 @@ export default class GPURenderer {
         f[38] = this.showClocks ? 1.0 : 0.0;
         f[39] = this.frameOn ? 1.0 : 0.0;
         f[40] = this.frameImages;
+        f[41] = this.dpr;
 
         this.device.queue.writeBuffer(this.cameraBuffer, 0, _cameraData);
     }
@@ -1565,9 +1565,11 @@ export default class GPURenderer {
         }
     }
 
-    resize(width, height) {
-        this.canvas.width = width;
-        this.canvas.height = height;
+    /** Size in CSS px; the backing store is drawn at the device's pixel ratio (up to 2). */
+    resize(width, height, dpr = 1) {
+        this.dpr = dpr;
+        this.canvas.width = Math.round(width * dpr);
+        this.canvas.height = Math.round(height * dpr);
         this.canvasWidth = width;
         this.canvasHeight = height;
     }

@@ -33,6 +33,12 @@ struct CameraUniforms {
     canvasWidth: f32,
     canvasHeight: f32,
     isDarkMode: f32,
+    relativityOn: f32,
+    blackHoleOn: f32,
+    showClocks: f32,
+    frameOn: f32,
+    frameImages: f32,
+    dpr: f32,           // device px per CSS px (the uniform sizes are CSS px)
 };
 
 struct SpacetimeParams {
@@ -540,7 +546,7 @@ fn fs_pierce(in: POut) -> @location(0) vec4<f32> {
 fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     if (in.color.a < 0.004) { discard; }
     let d = abs(in.across);
-    let aa = 0.6;
+    let aa = 0.6 / max(camera.dpr, 1.0);   // a one-device-px edge (across is CSS px)
     var cover = 1.0 - smoothstep(in.core - aa, in.core + aa, d);
     if (in.tau >= 0.0 && in.pxPerTau > 0.0) {
         let spacing = params.beadStep * in.pxPerTau;

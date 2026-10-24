@@ -25,6 +25,8 @@ struct CameraUniforms {
     blackHoleOn: f32,
     showClocks: f32,
     frameOn: f32,
+    frameImages: f32,
+    dpr: f32,           // device px per CSS px (the uniform sizes are CSS px)
 };
 
 struct GridParams {
@@ -119,13 +121,19 @@ fn labOf(xo: vec2<f32>) -> vec2<f32> {
 }
 
 /** Coverage of the lines at multiples of s along one axis, given lab units per pixel. */
+// Hairlines are one CSS px wide whatever the pixel ratio, with a one-device-px edge
+fn hairline(distPx: f32) -> f32 {
+    let h = 0.5 * max(camera.dpr, 1.0);
+    return 1.0 - smoothstep(h - 0.5, h + 0.5, distPx);
+}
+
 fn lineCoverage(coord: f32, s: f32, perPx: f32) -> f32 {
     let distPx = abs(fract(coord / s + 0.5) - 0.5) * s / max(perPx, 1e-9);
-    return 1.0 - smoothstep(0.0, 1.0, distPx);
+    return hairline(distPx);
 }
 
 fn gridAlpha(lab: vec2<f32>, fw: vec2<f32>) -> f32 {
-    let f = max(fw.x, fw.y);
+    let f = max(fw.x, fw.y) * max(camera.dpr, 1.0);   // world units per CSS px
     // Finest level at least 12 px apart; it fades in from 12 to 24 px
     let k0 = ceil(log2(12.0 * f));
     var a = 0.0;
@@ -149,8 +157,8 @@ fn edgeAlpha(lab: vec2<f32>, fw: vec2<f32>, seams: bool) -> f32 {
     let inX = lab.x >= -fw.x && lab.x <= W + fw.x;
     let inY = lab.y >= -fw.y && lab.y <= H + fw.y;
     var a = 0.0;
-    if (inY) { a = max(a, max(1.0 - smoothstep(0.0, 1.0, abs(lab.x) / fw.x), 1.0 - smoothstep(0.0, 1.0, abs(lab.x - W) / fw.x))); }
-    if (inX) { a = max(a, max(1.0 - smoothstep(0.0, 1.0, abs(lab.y) / fw.y), 1.0 - smoothstep(0.0, 1.0, abs(lab.y - H) / fw.y))); }
+    if (inY) { a = max(a, max(hairline(abs(lab.x) / fw.x), hairline(abs(lab.x - W) / fw.x))); }
+    if (inX) { a = max(a, max(hairline(abs(lab.y) / fw.y), hairline(abs(lab.y - H) / fw.y))); }
     return a;
 }
 
@@ -169,7 +177,8 @@ fn starHash(k: vec2<f32>) -> vec4<f32> {
 
 @fragment
 fn fsGrid(in: VertexOutput) -> @location(0) vec4<f32> {
-    let ndc = vec2(in.pos.x / camera.canvasWidth * 2.0 - 1.0, 1.0 - in.pos.y / camera.canvasHeight * 2.0);
+    let css = in.pos.xy / max(camera.dpr, 1.0);
+    let ndc = vec2(css.x / camera.canvasWidth * 2.0 - 1.0, 1.0 - css.y / camera.canvasHeight * 2.0);
     let world = (camera.invViewMatrix * vec4(ndc, 0.0, 1.0)).xy;
     let lab = labOf(world);
     let fw = max(fwidth(lab), vec2(1e-6));
