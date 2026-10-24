@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 115;
+const SHADER_VERSION = 118;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -2193,4 +2193,31 @@ export async function createGridRenderPipeline(device, format, wgslConstants = '
         primitive: { topology: 'triangle-list' },
     });
     return { pipeline, bindGroupLayout };
+}
+
+/**
+ * The spacetime view's passes (spacetime-render.wgsl): world lines, the selected body's
+ * past light cone, and boson world lines. One module, three pipelines with auto layouts,
+ * so each bind group carries only the buffers its entry point reads.
+ */
+export async function createSpacetimeRenderPipelines(device, format, wgslConstants = '') {
+    const prefix = await getSharedPrefix(wgslConstants);
+    const code = await fetchShader('spacetime-render.wgsl', prefix);
+    const module = device.createShaderModule({ label: 'spacetimeRender', code });
+    const blend = {
+        color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+        alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+    };
+    const make = (label, entryPoint) => device.createRenderPipeline({
+        label,
+        layout: 'auto',
+        vertex: { module, entryPoint },
+        fragment: { module, entryPoint: 'fs_main', targets: [{ format, blend }] },
+        primitive: { topology: 'triangle-strip' },
+    });
+    return {
+        line: make('spacetimeLines', 'vs_line'),
+        cone: make('spacetimeCone', 'vs_cone'),
+        boson: make('spacetimeBosons', 'vs_boson'),
+    };
 }

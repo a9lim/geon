@@ -113,6 +113,7 @@ export default class StatsDisplay {
     updateSelectedGPU(sel, settings) {
         const dom = this.selDom;
         if (!sel || sel.mass <= 0) {
+            this.selected = null;
             dom.details.hidden = true;
             dom.hint.hidden = false;
             dom.phaseSection.hidden = true;
@@ -140,6 +141,8 @@ export default class StatsDisplay {
         if (dom.tau) _set(dom.tau, fmtRaw(sel.tau));
         if (dom.lapse) _set(dom.lapse, sel.lapse.toFixed(4));
         _set(dom.force, fmt(forceMag));
+        // For the figure caption (src/caption.js)
+        this.selected = { speed, gamma, tau: sel.tau, mass: sel.mass, charge: sel.charge };
 
         const forces = this._forceDescs;
         forces[0].vec = sel.forceGravity;

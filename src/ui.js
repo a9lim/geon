@@ -5,8 +5,6 @@ import { WORLD_SCALE, DEFAULT_DOMAIN, COL_BOUNCE, BOUND_BOUNCE, BOUND_LOOP, SPEE
 import { REFERENCE } from './reference.js';
 import { quickSave, quickLoad, downloadState, uploadState } from './save-load.js';
 
-const HINT_FADE_DELAY = 5000;
-
 let antimatterMode = false;
 export function getAntimatterMode() { return antimatterMode; }
 
@@ -19,19 +17,26 @@ export function setupUI(sim) {
     const panel = document.getElementById('control-panel');
     const panelToggle = document.getElementById('panelToggle');
 
-    const hint = document.getElementById('hint-bar');
-    if (hint) setTimeout(() => hint.classList.add('fade-out'), HINT_FADE_DELAY);
-
-    // ─── Panel toggle ───
-    _toolbar.initSidebar(panelToggle, panel, document.getElementById('panelClose'));
-
     // i18n helper bound to global runtime; falls back to passed default.
     const _T = (k, fb) => (window._i18n ? window._i18n.t(k, fb) : (fb != null ? fb : k));
 
-    // ─── Antimatter mode toggle ───
+    // ─── The margin: the controls column, opened by Controls and closed by its × ───
+    // On a wide window it opens beside the scene, which shrinks to make room; on a narrow
+    // one it rises over the scene as a sheet.
+    const setMargin = (open) => {
+        document.body.classList.toggle('margin-open', open);
+        panelToggle.setAttribute('aria-expanded', String(open));
+        _haptics.trigger('light');
+    };
+    const toggleMargin = () => setMargin(!document.body.classList.contains('margin-open'));
+    panelToggle.addEventListener('click', toggleMargin);
+    document.getElementById('panelClose').addEventListener('click', () => setMargin(false));
+    panel.querySelector('.sheet-handle').addEventListener('click', () => setMargin(false));
+    if (window.innerWidth > 900) setMargin(true);
+
+    // ─── Antimatter mode (touch: a tap spawns antimatter while it is on) ───
     const modeBtn = document.getElementById('mode-btn');
     const _syncModeBtnLabels = () => {
-        modeBtn.setAttribute('aria-label', antimatterMode ? _T('topbar.modeAntimatter') : _T('topbar.modeNormal'));
         modeBtn.title = antimatterMode ? _T('topbar.modeAntimatterTitle') : _T('topbar.modeNormalTitle');
     };
     _syncModeBtnLabels();
@@ -39,34 +44,7 @@ export function setupUI(sim) {
         antimatterMode = !antimatterMode;
         modeBtn.setAttribute('aria-pressed', String(antimatterMode));
         _syncModeBtnLabels();
-        const svg = modeBtn.querySelector('svg');
-        let vl = svg.querySelector('.vert-line');
-        if (antimatterMode && !vl) {
-            vl = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            vl.setAttribute('x1', '12'); vl.setAttribute('y1', '8');
-            vl.setAttribute('x2', '12'); vl.setAttribute('y2', '16');
-            vl.setAttribute('stroke', 'currentColor'); vl.setAttribute('stroke-width', '2');
-            vl.setAttribute('stroke-linecap', 'square');
-            vl.classList.add('vert-line');
-            svg.appendChild(vl);
-        } else if (!antimatterMode && vl) {
-            vl.remove();
-        }
     });
-
-    // ─── Mobile hint bar ───
-    if (window.matchMedia('(pointer: coarse)').matches) {
-        const hintEl = document.getElementById('hint-bar');
-        const hintP = hintEl ? hintEl.querySelector('p') : null;
-        if (hintP) {
-            // Re-key the paragraph so applyDOM picks the mobile string up
-            // on subsequent language switches as well.
-            hintP.dataset.i18n = 'hint.mobile';
-            hintP.textContent = _T('hint.mobile');
-        } else if (hintEl) {
-            hintEl.textContent = _T('hint.mobile');
-        }
-    }
 
     // ─── Preset dropdown ───
     const presetSelect = document.getElementById('preset-select');
@@ -91,34 +69,40 @@ export function setupUI(sim) {
         _haptics.trigger('warning');
     });
 
-    // ─── Pause / Resume ───
-    const playBtn = document.getElementById('playBtn');
-
+    // ─── Pause / Resume (the colophon's play button; mounted below with the theme) ───
+    let colophon = null;
     const togglePause = () => {
         sim.running = !sim.running;
         _haptics.trigger(sim.running ? 'medium' : 'light');
-        _toolbar.updatePlayBtn(playBtn, sim.running);
+        if (colophon) colophon.setPlaying(sim.running);
+        sim.caption?.refresh();
+        return sim.running;
     };
-    playBtn.addEventListener('click', togglePause);
-    _toolbar.updatePlayBtn(playBtn, sim.running);
 
-    // ─── Speed Button ───
+    // ─── Speed: a text button reading the multiple of real time ───
     const speedBtn = document.getElementById('speedBtn');
-
+    const speedLabel = speedBtn.querySelector('.speed-label');
+    const syncSpeed = () => {
+        const x = sim.speedScale / 16;
+        speedLabel.textContent = x + '×';
+        speedBtn.title = _T('topbar.speedTitle', 'Speed') + ': ' + x + '× (, .)';
+    };
     const cycleSpeed = () => {
         sim.speedIndex = (sim.speedIndex + 1) % SPEED_OPTIONS.length;
         sim.speedScale = SPEED_OPTIONS[sim.speedIndex];
-        _toolbar.updateSpeedBtn(speedBtn, sim.speedScale / 16);
+        syncSpeed();
         _haptics.trigger('selection');
     };
     const decycleSpeed = () => {
         sim.speedIndex = (sim.speedIndex - 1 + SPEED_OPTIONS.length) % SPEED_OPTIONS.length;
         sim.speedScale = SPEED_OPTIONS[sim.speedIndex];
-        _toolbar.updateSpeedBtn(speedBtn, sim.speedScale / 16);
+        syncSpeed();
         _haptics.trigger('selection');
     };
     speedBtn.addEventListener('click', cycleSpeed);
     speedBtn.addEventListener('contextmenu', (e) => { e.preventDefault(); decycleSpeed(); });
+    sim.syncSpeed = syncSpeed;
+    syncSpeed();
 
     // ─── Mode toggles ───
     const collisionToggles = document.getElementById('collision-toggles');
@@ -143,30 +127,6 @@ export function setupUI(sim) {
     });
 
 
-    // ─── Settings dropdown (GPU, Barnes-Hut, visual overlays) ───
-    const settingsBtn = document.getElementById('settings-btn');
-    if (settingsBtn) {
-        _settings.create(settingsBtn, [
-            { type: 'toggle', label: 'Barnes-Hut', id: 'barneshut-toggle', checked: false },
-            { type: 'toggle', label: 'Trails', id: 'trailsToggle', checked: true },
-            { type: 'toggle', label: 'Clocks', id: 'clocksToggle', checked: false },
-            { type: 'toggle', label: 'Grid', id: 'gridToggle', checked: true },
-            { type: 'toggle', label: 'Velocity vectors', id: 'velocityToggle', checked: false },
-            { type: 'toggle', label: 'Accel. vectors', id: 'forceToggle', checked: false },
-            { type: 'toggle', label: 'Accel. components', id: 'forceComponentsToggle', checked: false },
-            { type: 'toggle', label: 'Potential field', id: 'potentialToggle', checked: false },
-            { type: 'mode', label: 'Potential mode', id: 'potential-mode-toggles', dataAttr: 'potential',
-              buttons: [
-                  { value: 'all', label: 'All', active: true },
-                  { value: 'gravity', label: 'Grav' },
-                  { value: 'electric', label: 'Elec' },
-                  { value: 'yukawa', label: 'Yukawa' }
-              ]
-            }
-        ], { width: 280 });
-        // Hide potential mode bar until potential field is enabled
-        document.getElementById('potential-mode-toggles').closest('.settings-dd-row').style.display = 'none';
-    }
 
     // ─── Physics toggles ───
     const toggleDefs = [
@@ -301,9 +261,7 @@ export function setupUI(sim) {
     const potentialModeBar = document.getElementById('potential-mode-toggles');
     potentialToggle?.addEventListener('change', (e) => {
         sim.heatmap.enabled = e.target.checked;
-        const modeRow = potentialModeBar?.closest('.settings-dd-row');
-        if (modeRow) modeRow.style.display = e.target.checked ? '' : 'none';
-        else if (potentialModeBar) potentialModeBar.style.display = e.target.checked ? '' : 'none';
+        if (potentialModeBar) potentialModeBar.parentElement.style.display = e.target.checked ? '' : 'none';
         _syncGPU(sim);
         sim._dirty = true;
         _haptics.trigger('light');
@@ -446,32 +404,70 @@ export function setupUI(sim) {
             sim._dirty = true;
         }
     };
-    document.getElementById('stepBtn').addEventListener('click', stepSim);
 
-    // ─── Zoom controls ───
-    sim.camera.bindZoomButtons({
-        zoomIn: document.getElementById('zoom-in-btn'),
-        zoomOut: document.getElementById('zoom-out-btn'),
-        reset: document.getElementById('zoom-reset-btn'),
-        display: document.getElementById('zoom-level'),
-        onReset: () => sim.fitCamera(),
-        formatZoom: (z) => Math.round(z / WORLD_SCALE * 100) + '%',
-    });
-
-    // ─── Theme toggle ───
+    // ─── Theme, and the colophon ───
     const syncRendererTheme = () => {
         const isLight = document.documentElement.dataset.theme !== 'dark';
         sim.overlay.setTheme(isLight);
         if (sim._gpuRenderer) sim._gpuRenderer.setTheme(isLight);
         sim._dirty = true;
     };
-    _toolbar.initTheme('geon-theme', syncRendererTheme);
+    let _aboutHandle = null;
+    colophon = _colophon.mount({
+        themeKey: 'geon-theme',
+        onTheme: syncRendererTheme,
+        playing: sim.running,
+        onPlay: togglePause,
+        onStep: stepSim,
+        onHelp: () => _aboutHandle && _aboutHandle.show(),
+        labels: () => ({
+            play: _T('topbar.play'), pause: _T('topbar.pause'), step: _T('topbar.step'),
+            theme: _T('topbar.theme'), help: _T('topbar.about'),
+        }),
+    });
     syncRendererTheme();
-    const toggleTheme = () => {
-        _toolbar.toggleTheme('geon-theme');
-        syncRendererTheme();
+    const toggleTheme = () => document.getElementById('themeToggleBtn').click();
+
+    // ─── The view: plane or spacetime (src/spacetime.js) ───
+    const viewPlane = document.getElementById('view-plane');
+    const viewSpacetime = document.getElementById('view-spacetime');
+    const syncView = (tilted) => {
+        viewPlane.setAttribute('aria-pressed', String(!tilted));
+        viewSpacetime.setAttribute('aria-pressed', String(tilted));
+        sim.caption?.refresh();
     };
-    document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
+    sim.spacetime.onChange = syncView;
+    const toPlane = () => { sim.spacetime.toPlane(); syncView(false); };
+    const toSpacetime = () => { sim.spacetime.toSpacetime(); syncView(true); };
+    viewPlane.addEventListener('click', toPlane);
+    viewSpacetime.addEventListener('click', toSpacetime);
+    const toggleView = () => (sim.spacetime.tilted ? toPlane() : toSpacetime());
+
+    // ─── Coordinates and boost: the observer moving along x at v (frames.js) ───
+    const boostInput = document.getElementById('boost-input');
+    const boostOut = document.getElementById('boost-out');
+    const coordsLab = document.getElementById('coords-lab');
+    const coordsObserver = document.getElementById('coords-observer');
+    const syncCoords = () => {
+        const obs = sim.frames.active;
+        coordsLab.setAttribute('aria-pressed', String(!obs));
+        coordsObserver.setAttribute('aria-pressed', String(obs));
+        sim.caption?.refresh();
+    };
+    const setBoost = (v) => {
+        sim.frames.rapidity = Math.atanh(Math.min(Math.abs(v), 0.99));
+        sim.frames.direction = v < 0 ? Math.PI : 0;
+        boostOut.textContent = (v < 0 ? '−' : '') + Math.abs(v).toFixed(2) + 'c';
+        sim.boost = v;
+        sim.framePanel?.update();
+        sim._dirty = true;
+        sim.caption?.refresh();
+    };
+    boostInput.addEventListener('input', () => setBoost(+boostInput.value));
+    coordsLab.addEventListener('click', () => { sim.framePanel?.choose('lab'); syncCoords(); });
+    coordsObserver.addEventListener('click', () => { sim.framePanel?.choose('boost'); syncCoords(); });
+    sim.syncCoords = syncCoords;
+    setBoost(+boostInput.value);
 
     // ─── Tab cycling helper ───
 
@@ -538,8 +534,10 @@ export function setupUI(sim) {
         { key: 'B',          label: _T('shortcut.cycleFrame',        'Next frame'),                    group: G_VIEW(), action: () => sim.framePanel?.cycle() },
         { key: 'L',          label: _T('shortcut.labFrame',          'Back to the lab frame'),         group: G_VIEW(), action: () => sim.framePanel?.choose('lab') },
         { key: 'T',          label: _T('shortcut.toggleTheme',       'Toggle theme'),                  group: G_VIEW(), action: toggleTheme },
-        { key: 'S',          label: _T('shortcut.toggleSidebar',     'Toggle sidebar'),                group: G_VIEW(), action: () => _toolbar.toggleSidebar() },
-        { key: 'Escape',     label: _T('shortcut.closePanel',        'Close panel'),                   group: G_VIEW(), action: () => _toolbar.closeSidebar() },
+        { key: 'W',          label: _T('shortcut.toggleSpacetime',   'Plane or spacetime'),            group: G_VIEW(), action: toggleView },
+        { key: 'O',          label: _T('shortcut.toggleCoords',      'Lab or observer coordinates'),   group: G_VIEW(), action: () => (sim.frames.active ? coordsLab : coordsObserver).click() },
+        { key: 'S',          label: _T('shortcut.toggleSidebar',     'Toggle sidebar'),                group: G_VIEW(), action: toggleMargin },
+        { key: 'Escape',     label: _T('shortcut.closePanel',        'Close panel'),                   group: G_VIEW(), action: () => setMargin(false) },
         { key: '[',          label: _T('shortcut.prevTab',           'Previous tab'),                  group: G_VIEW(), action: () => cycleTab(-1) },
         { key: ']',          label: _T('shortcut.nextTab',           'Next tab'),                      group: G_VIEW(), action: () => cycleTab(1) },
         { key: '=',          label: _T('shortcut.zoomIn',            'Zoom in'),                       group: G_VIEW(), action: zoomIn },
@@ -559,7 +557,6 @@ export function setupUI(sim) {
     }
 
     // ─── About panel ───
-    let _aboutHandle = null;
     const _buildAboutConfig = () => ({
         title: _T('about.title', 'Worldline'),
         lastUpdated: '2026-10-23',
@@ -641,6 +638,9 @@ export function setupUI(sim) {
                 _shortcutHandle.destroy();
                 _shortcutHandle = initShortcuts(shortcuts, { helpTitle: _T('shortcut.help.title', 'Keyboard shortcuts') });
             }
+            colophon.relabel();
+            syncSpeed();
+            _syncModeBtnLabels();
             // About panel: destroy + recreate. _buildAboutConfig closes over
             // `shortcuts` (let-binding), so the new array is picked up here.
             if (_aboutHandle && typeof _aboutHandle.destroy === 'function' && typeof initAboutPanel === 'function') {

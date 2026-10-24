@@ -40,6 +40,9 @@ export default class InputHandler {
         canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
         canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
         canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+        // Alt- or Shift-drag turns and tilts the spacetime view (src/spacetime.js)
+        this._orbit = null;
+        window.addEventListener('mouseup', () => { this._orbit = null; });
         canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
         canvas.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
         canvas.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: false });
@@ -176,6 +179,10 @@ export default class InputHandler {
     // ─── Mouse events ───
 
     onMouseDown(e) {
+        if (e.button === 0 && (e.altKey || e.shiftKey)) {
+            this._orbit = { x: e.clientX, y: e.clientY };
+            return;
+        }
         const isRight = e.button === 2;
         if (e.button !== 0 && !isRight) return;
         // Frames are view-only: spawning, selecting and deleting act in the lab
@@ -192,6 +199,12 @@ export default class InputHandler {
     }
 
     onMouseMove(e) {
+        if (this._orbit) {
+            this.sim.spacetime.orbitBy(e.clientX - this._orbit.x, e.clientY - this._orbit.y);
+            this._orbit.x = e.clientX;
+            this._orbit.y = e.clientY;
+            return;
+        }
         const pos = this.getPos(e.clientX, e.clientY);
         this.currentPos.set(pos.x, pos.y);
         this._screenX = e.clientX;
@@ -218,6 +231,7 @@ export default class InputHandler {
     }
 
     onMouseUp(e) {
+        if (this._orbit) { this._orbit = null; return; }
         if (!this.isDragging) return;
         this.isDragging = false;
         this.sim._dirty = true;

@@ -44,7 +44,6 @@
     <link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" as="style" crossorigin="anonymous" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous"></noscript>
     <link rel="stylesheet" href="/shared/base.css">
-    <link rel="stylesheet" href="/shared/hud.css">
     <link rel="stylesheet" href="styles.css">
     <script src="/shared/tokens.js"></script>
     <script defer src="/shared/utils.js"></script>
@@ -55,9 +54,7 @@
     <script defer src="/shared/info.js"></script>
     <script defer src="/shared/icons.js"></script>
     <script defer src="/shared/colophon.js"></script>
-    <script defer src="/shared/toolbar.js"></script>
     <script defer src="/shared/forms.js"></script>
-    <script defer src="/shared/settings.js"></script>
     <script defer src="/shared/dropdown.js"></script>
 
     <script defer src="/shared/shortcuts.js"></script>
@@ -268,53 +265,58 @@
     </script>
 </head>
 
-<body class="sim-body app-ready">
+<body class="sim-body wl app-ready">
     <a href="#control-panel" class="skip-link">Skip to controls</a>
     <a href="#simCanvas" class="skip-link">Skip to simulation</a>
 
-    <canvas id="simCanvas" aria-label="Interactive N-body particle simulation showing trajectories under gravity, electromagnetism, and relativistic forces"></canvas>
-
-    <nav id="topbar" class="sim-toolbar glass" role="toolbar" aria-label="Simulation controls">
-        <div class="topbar-left">
-            <a href="/" class="sim-home" title="a9l.im"><img src="/logo.svg" alt="a9l.im" height="28"></a>
-            <h1 class="sim-brand">Worldline</h1>
+    <header class="colophon">
+        <a class="colophon-seal" href="/" title="a9l.im" aria-label="a9l.im" data-icon="seal" data-icon-size="26"></a>
+        <h1 class="colophon-name">Worldline</h1>
+        <div class="colophon-tools" role="toolbar" aria-label="Simulation" data-i18n-aria="topbar.toolbar">
+            <button id="playBtn" class="colophon-btn" data-colophon="play"></button>
+            <button id="stepBtn" class="colophon-btn" data-colophon="step" title="Step forward (/)" data-i18n-title="topbar.step" data-i18n-aria="topbar.stepAria" data-icon="step"></button>
+            <button id="themeToggleBtn" class="colophon-btn" data-colophon="theme" data-i18n-title="topbar.theme" data-i18n-aria="topbar.themeAria" data-icon="theme"></button>
+            <button id="helpBtn" class="colophon-btn" data-colophon="help" data-i18n-title="topbar.about" data-i18n-aria="topbar.about" data-icon="about"></button>
         </div>
-        <div class="topbar-right sim-toolbar-actions">
-            <button id="mode-btn" class="tool-btn" aria-label="Normal mode" aria-pressed="false" title="Normal mode (X)" data-icon="modeNormal"></button>
-            <div class="tool-sep"></div>
-            <button id="playBtn" class="tool-btn" title="Pause" aria-label="Pause simulation"></button>
-            <button id="speedBtn" class="tool-btn speed-btn" aria-label="Simulation speed" data-i18n-aria="topbar.speed" title="Speed: 1x">
-                <span class="speed-label">1x</span>
-            </button>
-            <button id="stepBtn" class="tool-btn hide-sm" title="Step forward" aria-label="Step forward" data-i18n-title="topbar.step" data-i18n-aria="topbar.stepAria" data-icon="step"></button>
-            <div class="tool-sep"></div>
-            <button id="clearBtn" class="tool-btn" title="Reset" aria-label="Reset simulation" data-i18n-title="topbar.reset" data-i18n-aria="topbar.resetAria" data-icon="reset"></button>
-            <button id="saveBtn" class="tool-btn hide-sm" title="Quick save (Ctrl+S)" aria-label="Quick save" data-i18n-title="topbar.save" data-i18n-aria="topbar.saveAria" data-icon="save"></button>
-            <button id="loadBtn" class="tool-btn hide-sm" title="Quick load (Ctrl+L)" aria-label="Quick load" data-i18n-title="topbar.load" data-i18n-aria="topbar.loadAria" data-icon="load"></button>
-            <div class="tool-sep hide-sm"></div>
-            <button id="themeToggleBtn" class="tool-btn hide-sm" title="Toggle theme" aria-label="Toggle theme" data-i18n-title="topbar.theme" data-i18n-aria="topbar.themeAria" data-icon="theme"></button>
-            <button id="lang-btn" class="tool-btn lang-btn" type="button" title="Switch to Japanese (日本語)" aria-label="Switch to Japanese (日本語)">
-                <span class="lang-label">日本語</span>
-            </button>
-            <button id="settings-btn" class="tool-btn" title="Settings" aria-label="Settings" data-i18n-title="topbar.settings" data-i18n-aria="topbar.settings" data-icon="gear"></button>
-            <button id="about-btn" class="tool-btn" aria-label="About" title="About" data-i18n-title="topbar.about" data-i18n-aria="topbar.about" data-icon="about"></button>
-            <button id="panelToggle" class="tool-btn" title="Settings" aria-label="Toggle settings panel" data-i18n-title="topbar.menu" data-i18n-aria="topbar.menuAria" aria-expanded="false" data-icon="menu"></button>
-        </div>
-    </nav>
+    </header>
 
-    <aside id="control-panel" class="sim-panel glass" role="complementary" aria-label="Controls panel">
-        <div class="sheet-handle"></div>
-        <div class="stats-header">
+    <main id="scene" class="scene">
+        <div class="stage">
+            <canvas id="simCanvas" aria-label="Interactive N-body particle simulation showing trajectories under gravity, electromagnetism, and relativistic forces"></canvas>
+            <div class="scene-tools">
+                <button id="mode-btn" class="text-btn touch-only" type="button" aria-pressed="false" data-i18n="topbar.antimatterShort">Antimatter</button>
+                <button id="speedBtn" class="text-btn" type="button" aria-label="Simulation speed" data-i18n-aria="topbar.speed" title="Speed: 1x"><span class="speed-label">1×</span></button>
+                <button id="lang-btn" class="text-btn lang-btn" type="button" title="Switch to Japanese (日本語)" aria-label="Switch to Japanese (日本語)"><span class="lang-label">日本語</span></button>
+                <button id="panelToggle" class="text-btn" type="button" aria-controls="control-panel" aria-expanded="false" data-i18n="topbar.controls">Controls</button>
+            </div>
+        </div>
+        <div class="figure-bar">
+            <p class="caption" id="caption"><span class="caption-n" id="caption-title"></span><span id="caption-text"></span></p>
+            <div class="scene-controls">
+                <span class="seg" role="group" aria-label="View" data-i18n-aria="view.group">
+                    <button id="view-plane" type="button" aria-pressed="true" data-i18n="view.plane">Plane</button><button id="view-spacetime" type="button" aria-pressed="false" data-i18n="view.spacetime">Spacetime</button>
+                </span>
+                <span class="seg" role="group" aria-label="Coordinates" data-i18n-aria="coords.group">
+                    <button id="coords-lab" type="button" aria-pressed="true" data-i18n="coords.lab">Lab</button><button id="coords-observer" type="button" aria-pressed="false" data-i18n="coords.observer">Observer</button>
+                </span>
+                <label class="boost" for="boost-input"><span data-i18n="boost.label">Boost</span> <input type="range" id="boost-input" min="-0.9" max="0.9" step="0.01" value="0"> <output id="boost-out" for="boost-input">0.00c</output></label>
+            </div>
+        </div>
+    </main>
+
+    <aside id="control-panel" class="margin" aria-label="Controls panel">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="margin-head">
             <div class="sidebar-tabs" role="tablist" aria-label="Sidebar tabs">
                 <button class="tab-btn active" data-tab="settings" role="tab" aria-selected="true" data-i18n="tab.settings">Settings</button>
                 <button class="tab-btn" data-tab="stats" role="tab" aria-selected="false" data-i18n="tab.stats">Stats</button>
                 <button class="tab-btn" data-tab="particle" role="tab" aria-selected="false" data-i18n="tab.particle">Particle</button>
                 <button class="tab-btn" data-tab="frame" role="tab" aria-selected="false" data-i18n="tab.frame">Frame</button>
             </div>
-            <button id="panelClose" class="tool-btn icon-tight" title="Close" aria-label="Close panel" data-i18n-title="topbar.close" data-i18n-aria="topbar.closePanel" data-icon="close" data-icon-size="16"></button>
+            <button id="panelClose" class="margin-close" type="button" title="Close" aria-label="Close panel" data-i18n-title="topbar.close" data-i18n-aria="topbar.closePanel" data-icon="close" data-icon-size="16"></button>
         </div>
         <div class="tabs-wrap">
-            <div class="tab-panels scrollbar-thin">
+            <div class="tab-panels">
                 <!-- ── Settings ── -->
                 <div class="tab-panel active" id="tab-settings" role="tabpanel">
                     <div class="panel-section">
@@ -352,6 +354,38 @@
                                 <option value="expansion" data-i18n="preset.expansion.name">Expanding universe</option>
                             </optgroup>
                         </select>
+                    </div>
+                    <div class="panel-section">
+                        <h2 class="group-label" data-i18n="group.view">View</h2>
+                        <div class="ctrl-row"><label for="trailsToggle"><span data-i18n="view.trails">Trails</span></label>
+                            <div class="tog-wrap"><input type="checkbox" id="trailsToggle" checked role="switch" aria-checked="true">
+                            <label for="trailsToggle" class="tog"><span class="tog-thumb"></span></label></div></div>
+                        <div class="ctrl-row"><label for="clocksToggle"><span data-i18n="view.clocks">Clocks</span></label>
+                            <div class="tog-wrap"><input type="checkbox" id="clocksToggle" role="switch" aria-checked="false">
+                            <label for="clocksToggle" class="tog"><span class="tog-thumb"></span></label></div></div>
+                        <div class="ctrl-row"><label for="gridToggle"><span data-i18n="view.grid">Grid</span></label>
+                            <div class="tog-wrap"><input type="checkbox" id="gridToggle" checked role="switch" aria-checked="true">
+                            <label for="gridToggle" class="tog"><span class="tog-thumb"></span></label></div></div>
+                        <div class="ctrl-row"><label for="velocityToggle"><span data-i18n="view.velocity">Velocity vectors</span></label>
+                            <div class="tog-wrap"><input type="checkbox" id="velocityToggle" role="switch" aria-checked="false">
+                            <label for="velocityToggle" class="tog"><span class="tog-thumb"></span></label></div></div>
+                        <div class="ctrl-row"><label for="forceToggle"><span data-i18n="view.accel">Acceleration vectors</span></label>
+                            <div class="tog-wrap"><input type="checkbox" id="forceToggle" role="switch" aria-checked="false">
+                            <label for="forceToggle" class="tog"><span class="tog-thumb"></span></label></div></div>
+                        <div class="ctrl-row"><label for="forceComponentsToggle"><span data-i18n="view.accelComponents">Acceleration components</span></label>
+                            <div class="tog-wrap"><input type="checkbox" id="forceComponentsToggle" role="switch" aria-checked="false">
+                            <label for="forceComponentsToggle" class="tog"><span class="tog-thumb"></span></label></div></div>
+                        <div class="ctrl-row"><label for="potentialToggle"><span data-i18n="view.potential">Potential field</span></label>
+                            <div class="tog-wrap"><input type="checkbox" id="potentialToggle" role="switch" aria-checked="false">
+                            <label for="potentialToggle" class="tog"><span class="tog-thumb"></span></label></div></div>
+                        <div class="control-group ctrl-sub" id="potential-mode-group" style="display:none">
+                            <div class="mode-toggles" id="potential-mode-toggles" role="group" aria-label="Potential" data-i18n-aria="view.potential">
+                                <button class="mode-btn active" data-potential="all" data-i18n="view.potentialAll">All</button>
+                                <button class="mode-btn" data-potential="gravity" data-i18n="view.potentialGravity">Gravity</button>
+                                <button class="mode-btn" data-potential="electric" data-i18n="view.potentialElectric">Electric</button>
+                                <button class="mode-btn" data-potential="yukawa" data-i18n="view.potentialYukawa">Yukawa</button>
+                            </div>
+                        </div>
                     </div>
                     <div class="panel-section">
                         <h2 class="group-label" data-i18n="group.particleProps">Particle properties</h2>
@@ -438,6 +472,9 @@
                     </div>
                     <div class="panel-section">
                         <h2 class="group-label" data-i18n="group.simulation">Simulation</h2>
+                        <div class="ctrl-row"><label for="barneshut-toggle"><span data-i18n="sim.barneshut">Barnes–Hut tree</span></label>
+                            <div class="tog-wrap"><input type="checkbox" id="barneshut-toggle" role="switch" aria-checked="false">
+                            <label for="barneshut-toggle" class="tog"><span class="tog-thumb"></span></label></div></div>
                         <div class="control-group">
                             <label><span><span data-i18n="sim.collision">Collision mode</span> <button class="info-trigger" data-info="collision" aria-label="Collision modes info" data-i18n-aria="sim.collisionAria">?</button></span></label>
                             <div class="mode-toggles" id="collision-toggles">
@@ -644,27 +681,16 @@
                         </div>
                         <p class="panel-hint" data-i18n="lens.hint">The grid is a sheet behind the plane, seen through the bodies' masses as a thin lens. The star sits in that sheet where the view's centre was.</p>
                     </div>
-                    <div class="panel-section" id="minkowski-section">
-                        <h2 class="group-label" data-i18n="group.minkowski">Spacetime diagram</h2>
-                        <div id="minkowski-container"></div>
-                        <p class="panel-hint" data-i18n="frame.minkowskiHint">World lines projected on the observer's direction of motion, with your now and light cone.</p>
-                    </div>
                 </div>
             </div>
         </div>
+        <div class="margin-foot">
+            <button id="clearBtn" class="text-btn" type="button" title="Reset (R)" data-i18n="topbar.reset" data-i18n-aria="topbar.resetAria">Reset</button>
+            <button id="saveBtn" class="text-btn" type="button" title="Quick save (Ctrl+S)" data-i18n="topbar.saveShort" data-i18n-title="topbar.save" data-i18n-aria="topbar.saveAria">Save</button>
+            <button id="loadBtn" class="text-btn" type="button" title="Quick load (Ctrl+L)" data-i18n="topbar.loadShort" data-i18n-title="topbar.load" data-i18n-aria="topbar.loadAria">Load</button>
+        </div>
     </aside>
 
-    <div id="sim-controls" class="sim-controls glass">
-        <button id="zoom-in-btn" class="tool-btn" title="Zoom in" aria-label="Zoom in" data-i18n-title="controls.zoomIn" data-i18n-aria="controls.zoomIn" data-icon="plus" data-icon-size="16"></button>
-        <span id="zoom-level" class="zoom-level">100%</span>
-        <button id="zoom-out-btn" class="tool-btn" title="Zoom out" aria-label="Zoom out" data-i18n-title="controls.zoomOut" data-i18n-aria="controls.zoomOut" data-icon="minus" data-icon-size="16"></button>
-        <div class="ctrl-sep"></div>
-        <button id="zoom-reset-btn" class="tool-btn" title="Reset zoom" aria-label="Reset zoom" data-i18n-title="controls.zoomReset" data-i18n-aria="controls.zoomReset" data-icon="fitView" data-icon-size="16"></button>
-    </div>
-
-    <div id="hint-bar" class="sim-bar glass">
-        <p data-i18n="hint.desktop">Left click to spawn · Right click to remove · Scroll to zoom</p>
-    </div>
 
     <div id="reference-overlay" class="sim-overlay" hidden>
         <div class="sim-overlay-panel glass">

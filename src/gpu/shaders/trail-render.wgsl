@@ -19,7 +19,7 @@ struct TrailUniforms {
     trailLen: u32,
     domainW: f32,
     domainH: f32,
-    _pad: f32,
+    opacity: f32,   // 1 in the plane view, fading as the view tilts into spacetime
 };
 
 // Struct definitions (ParticleState, ParticleAux) provided by shared-structs.wgsl.
@@ -146,7 +146,7 @@ fn vs_main(
     // Alpha fades from 0 (oldest) to alphaMax (newest): 0.7 light / 0.9 dark
     let age = f32(pointIdx) / f32(max(count - 1u, 1u));
     let alphaMax = select(0.7, 0.9, camera.isDarkMode > 0.5);
-    out.alpha = age * alphaMax;
+    out.alpha = age * alphaMax * trailParams.opacity;
 
     out.color = unpackRGBA(color[instIdx]);
     return out;

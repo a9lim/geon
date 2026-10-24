@@ -142,7 +142,8 @@ export default class GPUBackend {
 
     render(sim) {
         const ph = sim.settings;
-        this.renderer.updateCamera(sim.camera);
+        const view = sim.spacetime;
+        this.renderer.updateCamera(sim.camera, view && (view.tilted || view.az !== 0) ? view : null);
         this.renderer.showForce = sim.view.showForce;
         this.renderer.showForceComponents = sim.view.showForceComponents;
         this.renderer.showVelocity = sim.view.showVelocity;
@@ -168,7 +169,6 @@ export default class GPUBackend {
             }
             sim.framePanel?.update();
         }
-        sim.minkowski?.tick();
         this.renderer.frameOn = !!frameParams;
         this.renderer.frameImages = frameParams ? frameParams.images : 1;
 
@@ -202,6 +202,20 @@ export default class GPUBackend {
         renderOpts.higgsField = null;
         renderOpts.axionField = null;
         renderOpts.heatmapBuffers = null;
+
+        // The spacetime view's world lines (lab coordinates; a non-lab frame keeps the plane)
+        renderOpts.spacetime = null;
+        if (view && view.tilt > 0.002 && !frameParams) {
+            const st = sim._spacetimeOpts || (sim._spacetimeOpts = {});
+            st.tilt = view.tilt;
+            st.depth = view.depth();
+            st.beadStep = 2 ** Math.round(Math.log2(st.depth / 14));
+            st.tNow = this.physics.gpuTime;
+            st.selected = sim.selectedIdx;
+            st.topology = sim.boundaryMode === BOUND_LOOP ? sim.topology : -1;
+            st.scaleA = this.physics.scaleA;
+            renderOpts.spacetime = st;
+        }
 
         if (ph.higgsEnabled) {
             const hb = this.physics.getFieldBuffers('higgs');
@@ -247,7 +261,14 @@ export default class GPUBackend {
         // The horizons ring the selected body, or the middle of the view
         const horizons = sim.cosmologyPanel?.horizons();
         if (horizons) horizons.center = sim.selectedIdx >= 0 && sim._selPos ? sim._selPos : [sim.camera.x, sim.camera.y];
-        sim.overlay.draw(sim.camera, sim.input, horizons);
+        let box = null;
+        if (renderOpts.spacetime) {
+            box = sim._boxOpts || (sim._boxOpts = {});
+            box.view = view;
+            box.w = sim.physW;
+            box.h = sim.physH;
+        }
+        sim.overlay.draw(sim.camera, sim.input, horizons, box);
         this._renderStats(sim);
     }
 

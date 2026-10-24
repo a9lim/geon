@@ -11,9 +11,10 @@ import { loadState, quickSave, quickLoad, downloadState, uploadState } from './s
 import GPUBackend from './src/gpu/gpu-backend.js';
 import Frames from './src/frames.js';
 import FramePanel from './src/frame-panel.js';
-import MinkowskiPanel from './src/minkowski.js';
 import CosmologyPanel from './src/cosmology-panel.js';
 import LensPanel from './src/lens-panel.js';
+import SpacetimeView from './src/spacetime.js';
+import Caption from './src/caption.js';
 
 /**
  * Request a WebGPU device with the limits the simulation needs.
@@ -81,8 +82,10 @@ function showWebGPURequired() {
 class Simulation {
     constructor() {
         this.canvas = document.getElementById('simCanvas');
-        this.width = window.innerWidth;
-        this.height = window.innerHeight;
+        // The stage is the scene above its figure bar, beside the margin when that is open
+        this.stage = this.canvas.parentElement;
+        this.width = this.stage.clientWidth || window.innerWidth;
+        this.height = this.stage.clientHeight || window.innerHeight;
 
         this.settings = createPhysicsSettings();
         this.overlay = new Overlay(this.canvas);
@@ -118,6 +121,10 @@ class Simulation {
                 else cam.y = clamp(cam.y, halfH, dh - halfH);
             },
         });
+
+        // The canvas tilts from the plane into spacetime; the camera maps through the tilt
+        this.spacetime = new SpacetimeView(this);
+        this.spacetime.wrapCamera(this.camera);
 
         this.input = new InputHandler(this.canvas, this);
 
@@ -279,18 +286,17 @@ class Simulation {
 
     init() {
         this.resize();
-        window.addEventListener('resize', () => this.resize());
+        new ResizeObserver(() => this.resize()).observe(this.stage);
 
         // Initialize i18n before UI setup so static labels are correct on first paint.
         initI18n();
         this._wireLangButton();
-        this._wrapSharedToolbar();
 
         setupUI(this);
         this.framePanel = new FramePanel(this);
-        this.minkowski = new MinkowskiPanel(this, document.getElementById('minkowski-container'));
         this.cosmologyPanel = new CosmologyPanel(this);
         this.lensPanel = new LensPanel(this);
+        this.caption = new Caption(this);
 
         // Re-apply DOM translations after UI setup in case any modules
         // mutated text content during their wiring (e.g. mode-btn label).
@@ -320,48 +326,6 @@ class Simulation {
         });
 
         this._scheduleLoop();
-    }
-
-    /**
-     * Wrap shared-toolbar APIs that bake English strings into aria/title.
-     * The shared module is consumed by every sim, so we don't fork it —
-     * instead we run our translation pass over the affected button after
-     * each call. Idempotent and safe.
-     */
-    _wrapSharedToolbar() {
-        if (typeof _toolbar === 'undefined') return;
-        const origPlay = _toolbar.updatePlayBtn;
-        const origSpeed = _toolbar.updateSpeedBtn;
-        const _retranslatePlay = (btn, playing) => {
-            btn.setAttribute('aria-label', tI18n(playing ? 'topbar.pauseAria' : 'topbar.playAria'));
-            btn.title = tI18n(playing ? 'topbar.pause' : 'topbar.play');
-        };
-        const _retranslateSpeed = (btn, speed) => {
-            btn.title = tI18n('topbar.speedTitle', 'Speed') + ': ' + speed + 'x';
-            btn.setAttribute('aria-label', tI18n('topbar.speed'));
-        };
-        _toolbar.updatePlayBtn = function(btn, playing) {
-            origPlay.call(_toolbar, btn, playing);
-            _retranslatePlay(btn, playing);
-            // Stash state so we can re-translate on language change.
-            btn.dataset._playing = playing ? '1' : '0';
-        };
-        _toolbar.updateSpeedBtn = function(btn, speed) {
-            origSpeed.call(_toolbar, btn, speed);
-            _retranslateSpeed(btn, speed);
-            btn.dataset._speed = String(speed);
-        };
-        // On language change, re-apply current state to play/speed buttons.
-        onI18nChange(() => {
-            const playBtn = document.getElementById('playBtn');
-            if (playBtn && playBtn.dataset._playing != null) {
-                _retranslatePlay(playBtn, playBtn.dataset._playing === '1');
-            }
-            const speedBtn = document.getElementById('speedBtn');
-            if (speedBtn && speedBtn.dataset._speed != null) {
-                _retranslateSpeed(speedBtn, Number(speedBtn.dataset._speed));
-            }
-        });
     }
 
     /**
@@ -404,8 +368,9 @@ class Simulation {
 
     resize() {
         const oldW = this.width, oldH = this.height;
-        this.width = window.innerWidth;
-        this.height = window.innerHeight;
+        this.width = Math.max(1, this.stage.clientWidth);
+        this.height = Math.max(1, this.stage.clientHeight);
+        if (this.width === oldW && this.height === oldH && this.canvas.width === oldW) return;
         this.canvas.width = this.width;
         this.canvas.height = this.height;
         this.overlay.resize(this.width, this.height);
@@ -414,7 +379,6 @@ class Simulation {
         // Refresh cached layout dimensions for sidebar plots
         this.phasePlot.cacheSize();
         this.effPotPlot.cacheSize();
-        this.minkowski?.cacheSize();
         // Preserve the top-left world position across resize (a frame keeps its observer centred)
         if (!this.frames.active) {
             this.camera.x += (this.width - oldW) / (2 * this.camera.zoom);
@@ -570,6 +534,8 @@ class Simulation {
         }
 
         this.input.pollGPUHitResult();
+        this.spacetime.step(rawDt);
+        this.caption?.update();
 
         // Refresh hover tooltip periodically (every 8th frame, matching stats rate)
         if (this.running && !(++this._ttFrame & STATS_THROTTLE_MASK)) {

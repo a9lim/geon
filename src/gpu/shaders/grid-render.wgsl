@@ -43,7 +43,7 @@ struct GridParams {
     starX: f32,         // the probe's backdrop star (lab)
     starY: f32,
     starR: f32,
-    _pad0: f32,
+    tilt: f32,          // the spacetime view's tilt (src/spacetime.js): 0 flat … 1
 };
 
 // FrameState as frame-slice.wgsl writes it
@@ -164,7 +164,7 @@ fn fsGrid(in: VertexOutput) -> @location(0) vec4<f32> {
     let dark = camera.isDarkMode > 0.5;
     let ink = select(COLOR_TEXT_LIGHT, COLOR_TEXT_DARK, dark);
     // Hairline weights: the edge matches --border (text at 12% / 13%), rulers sit below it
-    let edge = edgeAlpha(lab, fw) * select(0.12, 0.13, dark);
+    var edge = edgeAlpha(lab, fw) * select(0.12, 0.13, dark);
 
     // The backdrop: lensed rulers and the probe's star
     var backdrop = lab;
@@ -178,7 +178,19 @@ fn fsGrid(in: VertexOutput) -> @location(0) vec4<f32> {
     let bfw = max(fwidth(backdrop), vec2(1e-6));
     var lines = select(0.0, gridAlpha(backdrop / grid.scaleA, bfw / grid.scaleA) * select(0.075, 0.09, dark), grid.showLines != 0u);
     lines *= 1.0 - smoothstep(0.3, 0.7, shadow);
-    var a = max(edge, lines);
+    // Tilted into spacetime the sheet is the present: the rulers keep to the domain, which
+    // takes a faint fill and a firmer edge, so the plane reads as a slice above its past
+    let tilt = select(grid.tilt, 0.0, camera.frameOn > 0.5);
+    var fill = 0.0;
+    if (tilt > 0.0) {
+        let m = fw * 1.5;
+        let inside = smoothstep(-m.x, m.x, lab.x) * smoothstep(-m.x, m.x, grid.domainW - lab.x)
+                   * smoothstep(-m.y, m.y, lab.y) * smoothstep(-m.y, m.y, grid.domainH - lab.y);
+        lines *= mix(1.0, inside, tilt);
+        fill = inside * tilt * select(0.03, 0.045, dark);
+        edge = edge * mix(1.0, 3.2, tilt);
+    }
+    var a = max(max(edge, lines), fill);
     var color = ink * a;
     if (lensed && grid.starOn != 0u) {
         // A captured ray sees no star (the probe doesn't count it either)

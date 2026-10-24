@@ -1,223 +1,582 @@
 /* ═══════════════════════════════════════════════
-   Design Tokens
+   Worldline — the scene, its figure bar, and the margin
+   The colophon and caption come from shared/base.css (shared/colophon.js). The
+   scene is a figure: the canvas above a hairline figure bar holding the live
+   caption and the view controls. The controls live in a margin column on the
+   same paper, ruled off by a hairline; on a narrow window it rises as a sheet.
    ═══════════════════════════════════════════════ */
 
 :root {
-    /* Spacing */
-    --sp-1: 4px;
-    --sp-2: 8px;
-    --sp-3: 12px;
-    --sp-4: 16px;
-    --sp-5: 20px;
-    --sp-6: 24px;
-    --sp-8: 32px;
-
-    /* Layout */
-    --inset: 12px;
+    --margin-w: 340px;
+    --gutter: 20px;
 }
 
-/* ═══════════════════════════════════════════════
-   Canvas — Full Viewport
-   ═══════════════════════════════════════════════ */
+/* ─── Layout ─── */
+.sim-body.wl {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 0;
+    height: 100vh;
+    height: 100dvh;
+}
+
+body.wl.margin-open { grid-template-columns: minmax(0, 1fr) var(--margin-w); }
+
+.scene {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+}
+
+/* The canvases fill the stage; GPUBackend adds #gpuCanvas behind #simCanvas */
+.stage {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    z-index: 0;
+}
 
 #simCanvas {
-    position: fixed;
+    position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     display: block;
-    z-index: 0;
 }
 
-/* ═══════════════════════════════════════════════
-   Topbar — Overrides
-   ═══════════════════════════════════════════════ */
-
-#topbar {
-    top: var(--inset);
-    left: var(--inset);
-    right: var(--inset);
+/* ─── Text buttons (scene tools, margin foot) ─── */
+.text-btn {
+    background: none;
+    border: 0;
+    padding: 4px 2px;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.2;
+    cursor: pointer;
+    font-variant-numeric: lining-nums tabular-nums;
+    transition: color 0.15s var(--ease-out);
 }
 
-.topbar-left {
+.text-btn:hover { color: var(--text); }
+.text-btn[aria-pressed="true"],
+.text-btn[aria-expanded="true"] { color: var(--accent); }
+
+.scene-tools {
+    position: absolute;
+    top: 16px;
+    right: var(--gutter);
     display: flex;
     align-items: center;
-    gap: var(--sp-6);
+    gap: 16px;
+    z-index: 5;
+}
+
+.touch-only { display: none; }
+@media (pointer: coarse) { .touch-only { display: inline-block; } }
+
+/* The margin's own × closes it, so its opener stays out of the way meanwhile */
+@media (min-width: 901px) {
+    body.margin-open #panelToggle { display: none; }
+}
+
+/* ─── The figure bar: caption and view controls ─── */
+.figure-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px 28px;
+    padding: 10px var(--gutter) 14px;
+    border-top: 1px solid var(--border);
+}
+
+.figure-bar .caption {
+    flex: 1 1 420px;
     min-width: 0;
+    max-width: 78ch;
 }
 
-/* ─── Language Toggle Button ─── */
-/* Text-pill: label shows the destination language in its own script
-   (日本語 in EN, EN in JA). Mirrors root-site .lang-toggle. */
-.lang-btn {
-    width: auto;
-    min-width: 36px;
-    padding: 0 8px;
-    font-family: var(--font-text);
-    font-size: var(--font-sm);
-    font-weight: 500;
+.scene-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
 }
 
-.lang-btn .lang-label {
-    font-family: inherit;
-    font-size: inherit;
-    font-weight: inherit;
+.seg { display: inline-flex; }
+.seg button + button { margin-left: -1px; }
+
+.seg button {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 0;
+    padding: 4px 11px;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: color 0.15s var(--ease-out), background-color 0.15s var(--ease-out);
 }
 
-.lang-btn:hover { color: var(--text); }
+.seg button:hover { color: var(--text); }
+.seg button[aria-pressed="true"] { color: var(--accent); background: var(--bg-panel-solid); }
 
-
-/* ═══════════════════════════════════════════════
-   Control Panel — Overrides
-   ═══════════════════════════════════════════════ */
-
-#control-panel {
-    top: calc(var(--inset) + var(--toolbar-h) + var(--inset));
-    right: var(--inset);
-    bottom: var(--inset);
-    max-width: calc(100vw - var(--inset) * 2);
-    pointer-events: none;
+.boost {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
 }
 
-#control-panel.open {
-    pointer-events: auto;
+.boost input { width: 140px; --slider-color: var(--text); }
+
+.boost output {
+    min-width: 3.6em;
+    font-style: italic;
+    font-variant-numeric: lining-nums tabular-nums;
 }
 
-/* ═══════════════════════════════════════════════
-   Force Toggle Colors
-   ═══════════════════════════════════════════════ */
+/* ─── The margin ─── */
+.margin {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border-left: 1px solid var(--border);
+    background: var(--bg-canvas);
+    user-select: none;
+}
+
+body.wl:not(.margin-open) .margin { visibility: hidden; }
+
+.margin-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 18px var(--gutter) 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.sidebar-tabs { display: flex; gap: 18px; }
+
+.tab-btn {
+    position: relative;
+    background: none;
+    border: 0;
+    padding: 2px 0 9px;
+    color: var(--text-muted);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: color 0.15s var(--ease-out);
+}
+
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--accent); }
+
+.tab-btn.active::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 1px;
+    background: var(--accent);
+}
+
+.margin-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin-bottom: 4px;
+    background: none;
+    border: 0;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.margin-close:hover { color: var(--text); }
+
+.tabs-wrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.tab-panels {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 var(--gutter) 24px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+}
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.panel-section {
+    padding: 14px 0 12px;
+    border-top: 1px solid var(--border);
+}
+
+.tab-panel > .panel-section:first-child { border-top: 0; }
+
+.group-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+    font-weight: 400;
+    font-style: italic;
+    color: var(--text-muted);
+}
+
+.margin-foot {
+    display: flex;
+    gap: 18px;
+    padding: 10px var(--gutter) 14px;
+    border-top: 1px solid var(--border);
+}
+
+/* ─── Rows ─── */
+.ctrl-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 0;
+}
+
+.ctrl-row > label,
+.control-group > label,
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.95rem;
+    color: var(--text);
+}
+
+.ctrl-row > label { justify-content: flex-start; }
+.ctrl-sub { padding-left: 14px; }
+.ctrl-sub > label { color: var(--text-secondary); }
+.ctrl-disabled { opacity: 0.4; pointer-events: none; }
+
+.control-group { margin: 6px 0 10px; }
+.control-group > label { margin-bottom: 2px; }
+
+.slider-value {
+    color: var(--text-secondary);
+    font-variant-numeric: lining-nums tabular-nums;
+}
+
+.checkbox-label input { accent-color: var(--text); }
+
+.panel-hint {
+    margin: 4px 0 0;
+    font-size: 0.86rem;
+    font-style: italic;
+    line-height: 1.45;
+    color: var(--text-muted);
+}
+
+.stat-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 2px 0;
+    font-size: 0.92rem;
+}
+
+.stat-label { color: var(--text-secondary); }
+.stat-value { color: var(--text); font-variant-numeric: lining-nums tabular-nums; }
+.stat-sub { padding-left: 14px; }
+.stat-sub .stat-label { color: var(--text-muted); }
+.stat-group { display: block; }
+
+#selected-particle-section .stat-value { color: var(--accent); }
+
+#phase-plot-container canvas,
+#eff-pot-container canvas {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+}
+
+/* The Stats tab's a(t), H(t) plot and the lens light curve (their panels size them) */
+.cosmo-plot {
+    display: block;
+    margin: 6px 0 2px;
+}
+
+/* ─── Switches: a hairline track, a dot that slides over and takes the force's ink ─── */
+.tog-wrap { position: relative; display: flex; }
+
+.tog-wrap input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+}
+
+.tog {
+    --tog-color: var(--text);
+    position: relative;
+    display: inline-block;
+    width: 28px;
+    height: 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    cursor: pointer;
+    transition: border-color 0.2s var(--ease-out);
+}
+
+.tog-thumb {
+    position: absolute;
+    top: 50%;
+    left: 3px;
+    width: 6px;
+    height: 6px;
+    margin-top: -3px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: left 0.2s var(--ease-out), background-color 0.2s var(--ease-out), width 0.2s var(--ease-out), height 0.2s var(--ease-out), margin 0.2s var(--ease-out);
+}
+
+.tog-wrap input:checked + .tog { border-color: var(--tog-color); }
+
+.tog-wrap input:checked + .tog .tog-thumb {
+    left: 16px;
+    width: 8px;
+    height: 8px;
+    margin-top: -4px;
+    background: var(--tog-color);
+}
+
+.tog-wrap input:focus-visible + .tog { outline: 1.5px solid var(--accent); outline-offset: 2px; }
+.tog-wrap input:disabled + .tog { cursor: default; }
+
+/* ─── Sliders: a hairline track, a dot in the parameter's ink ─── */
+input[type=range] {
+    --slider-color: var(--text);
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 18px;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+input[type=range]::-webkit-slider-runnable-track { height: 1px; background: var(--border-strong); }
+input[type=range]::-moz-range-track { height: 1px; background: var(--border-strong); }
+input[type=range]::-moz-range-progress { height: 1px; background: var(--slider-color); }
+
+input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 11px;
+    height: 11px;
+    margin-top: -5px;
+    border-radius: 50%;
+    border: 2px solid var(--bg-canvas);
+    background: var(--slider-color);
+}
+
+input[type=range]::-moz-range-thumb {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    border: 2px solid var(--bg-canvas);
+    background: var(--slider-color);
+}
+
+input[type=range]:focus-visible { outline: none; }
+input[type=range]:focus-visible::-webkit-slider-thumb { outline: 1.5px solid var(--accent); outline-offset: 1px; }
+
+/* ─── Segmented rows in the margin: hairline boxes, no sliding fill ─── */
+.margin .mode-toggles {
+    display: flex;
+    gap: 0;
+    padding: 0;
+    background: none;
+    margin-top: 4px;
+}
+
+.margin .mode-indicator { display: none; }
+
+.margin .mode-btn {
+    flex: 1;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.margin .mode-btn + .mode-btn { margin-left: -1px; }
+.margin .mode-btn.active { color: var(--accent); background: var(--bg-panel-solid); }
+
+/* ─── Dropdowns (shared/dropdown.js): a ruled line that opens a list ─── */
+.sim-select { width: 100%; }
+.sim-dropdown { position: relative; width: 100%; }
+.sim-dropdown.disabled { opacity: 0.4; pointer-events: none; }
+
+.sim-dropdown-trigger {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 5px 0;
+    border: 0;
+    border-bottom: 1px solid var(--border-strong);
+    border-radius: 0;
+    background: none;
+    color: var(--text);
+    font-size: 0.95rem;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.sim-dropdown-trigger:focus-visible { outline: 1.5px solid var(--accent); outline-offset: 2px; }
+.sim-dropdown-chevron { color: var(--text-muted); font-size: 0.7em; }
+
+.sim-dropdown-list {
+    display: none;
+    position: absolute;
+    z-index: 300;
+    top: calc(100% + 2px);
+    left: 0;
+    right: 0;
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 4px 0;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    scrollbar-width: thin;
+}
+
+.sim-dropdown.open .sim-dropdown-list { display: block; animation: wlDropIn 0.12s var(--ease-out) both; }
+.sim-dropdown.closing .sim-dropdown-list { animation: wlDropOut 0.12s var(--ease-in-out) both; }
+
+@keyframes wlDropIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes wlDropOut { from { opacity: 1; } to { opacity: 0; } }
+
+.sim-dropdown-item {
+    padding: 4px 12px;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.sim-dropdown-item:hover,
+.sim-dropdown-item.focused { background: var(--bg-hover); color: var(--text); }
+.sim-dropdown-item.selected { color: var(--accent); }
+.sim-dropdown-item.disabled { color: var(--text-muted); opacity: 0.5; cursor: default; }
+
+/* ─── Overlays (reference, WebGPU notice) ─── */
+.stats-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.stats-title { font-size: 1.15rem; font-weight: 400; }
+#reference-overlay { z-index: 9999; }
+
+/* ─── Force and parameter inks ─── */
 .tog-gravity     { --tog-color: var(--ink-umber); }
 .tog-bosoninter  { --tog-color: var(--ink-mulberry); }
 .tog-gravitomag  { --tog-color: var(--ink-madder); }
 .tog-coulomb     { --tog-color: var(--ink-prussian); }
 .tog-magnetic    { --tog-color: var(--ink-verdigris); }
 .tog-relativity  { --tog-color: var(--ink-sienna); }
-.tog-radiation    { --tog-color: var(--ink-ochre); }
-.tog-spinorbit    { --tog-color: var(--ink-violet); }
-.tog-onepn        { --tog-color: var(--ink-sienna); }
-.tog-blackhole    { --tog-color: var(--text); }
-.tog-yukawa       { --tog-color: var(--ink-viridian); }
-.tog-axion        { --tog-color: var(--ink-indigo); }
-.tog-higgs        { --tog-color: var(--ink-sap); }
+.tog-radiation   { --tog-color: var(--ink-ochre); }
+.tog-spinorbit   { --tog-color: var(--ink-violet); }
+.tog-onepn       { --tog-color: var(--ink-sienna); }
+.tog-blackhole   { --tog-color: var(--text); }
+.tog-yukawa      { --tog-color: var(--ink-viridian); }
+.tog-axion       { --tog-color: var(--ink-indigo); }
+.tog-higgs       { --tog-color: var(--ink-sap); }
 
-/* ═══════════════════════════════════════════════
-   Themed Slider Colors
-   ═══════════════════════════════════════════════ */
-/* ─── Particle Property Sliders ─── */
 #massInput   { --slider-color: var(--ink-umber); }
 #chargeInput { --slider-color: var(--ink-prussian); }
 #spinInput   { --slider-color: var(--ink-violet); }
-
-/* ─── Force Sub-Sliders ─── */
 #yukawa-sliders input[type=range] { --slider-color: var(--ink-viridian); }
 #axion-sliders  input[type=range] { --slider-color: var(--ink-indigo); }
 #higgs-sliders  input[type=range] { --slider-color: var(--ink-sap); }
-
-/* ─── External Field Sliders ─── */
 #extGravityInput, #extGravityAngleInput   { --slider-color: var(--ink-umber); }
 #extElectricInput, #extElectricAngleInput { --slider-color: var(--ink-prussian); }
 #extBzInput                               { --slider-color: var(--ink-verdigris); }
-
-/* ─── Bounce Friction Slider ─── */
 #frictionInput { --slider-color: var(--text-muted); }
 
-/* ═══════════════════════════════════════════════
-   Particle Selection
-   ═══════════════════════════════════════════════ */
-
-#selected-particle-section .stat-value {
-    color: var(--accent);
-}
-
-#phase-plot-container canvas,
-#eff-pot-container canvas {
-    display: block;
-    width: 100%;
-    border-radius: var(--radius);
-    aspect-ratio: 1;
-}
-
-/* The Stats tab's a(t), H(t) plot (cosmology-panel.js sizes it) */
-.cosmo-plot {
-    display: block;
-    margin: 6px 0 2px;
-}
-
-/* ═══════════════════════════════════════════════
-   Controls
-   ═══════════════════════════════════════════════ */
-
-label {
-    font-size: var(--font-base);
-    color: var(--text);
-    font-weight: 400;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-/* ═══════════════════════════════════════════════
-   Hint Bar — Overrides
-   ═══════════════════════════════════════════════ */
-
-#hint-bar {
-    padding: var(--sp-2) var(--sp-5);
-    z-index: 10;
-}
-
-#hint-bar p {
-    font-size: var(--font-base);
-    color: var(--text-muted);
-    white-space: nowrap;
-}
-
-#hint-bar.fade-out {
-    opacity: 0;
-    pointer-events: none;
-}
-
-/* ═══════════════════════════════════════════════
-   Reference Overlay — z-index override
-   ═══════════════════════════════════════════════ */
-
-#reference-overlay {
-    z-index: 9999;
-}
-
-/* ═══════════════════════════════════════════════
-   Responsive — Tablet / Mobile
-   ═══════════════════════════════════════════════ */
+/* ─── Narrow windows: the margin rises over the scene as a sheet ─── */
+.sheet-handle { display: none; }
 
 @media (max-width: 900px) {
-    :root {
-        --inset: 8px;
-        --panel-w: 100%;
+    :root { --gutter: 14px; }
+
+    .sim-body.wl,
+    body.wl.margin-open { grid-template-columns: minmax(0, 1fr); }
+
+    .margin {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 200;
+        max-height: 62dvh;
+        border-left: 0;
+        border-top: 1px solid var(--border-strong);
     }
 
-    /* Override desktop max-width for bottom sheet */
-    #control-panel {
-        max-width: 100%;
+    body.wl:not(.margin-open) .margin { display: none; }
+
+    .sheet-handle {
+        display: flex;
+        justify-content: center;
+        padding: 10px 0 2px;
+        cursor: pointer;
     }
 
-    #hint-bar {
-        bottom: var(--sp-2);
+    .sheet-handle::after {
+        content: '';
+        width: 36px;
+        height: 3px;
+        border-radius: 2px;
+        background: var(--border-strong);
     }
 
-    #hint-bar p {
-        font-size: var(--font-sm);
-    }
+    .margin-head { padding-top: 6px; }
+    .scene-tools { top: 12px; gap: 12px; }
+    .figure-bar { padding: 8px var(--gutter) 12px; gap: 8px 18px; }
+    .figure-bar .caption { font-size: 0.92rem; flex-basis: 100%; }
+    .boost input { width: min(140px, 34vw); }
 }
 
-/* ═══════════════════════════════════════════════
-   Reduced Motion
-   ═══════════════════════════════════════════════ */
-
-@media (prefers-reduced-motion: reduce) {
-    .tab-panels,
-    #topbar,
-    #hint-bar {
-        backdrop-filter: none;
-        -webkit-backdrop-filter: none;
-        background: var(--bg-panel-solid);
-    }
+@media (max-width: 600px) {
+    .scene-tools { top: 46px; }
+    .seg button { padding: 4px 9px; }
 }
