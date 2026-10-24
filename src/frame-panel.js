@@ -25,14 +25,19 @@ export default class FramePanel {
         };
         this.el.select.addEventListener('change', () => this.choose(this.el.select.value));
 
+        this._fmtSpeed = v => Math.tanh(v).toFixed(2) + 'c';
+        this._fmtDir = v => Math.round(v) + '°';
+        // The boost here and the scene's Boost slider are one setting (ui.js setBoost)
         _forms.bindSlider($('frameRapidityInput'), $('frameSpeedValue'), v => {
             sim.frames.rapidity = v;
+            sim.syncBoost?.();
             sim._dirty = true;
-        }, v => Math.tanh(v).toFixed(2) + 'c');
+        }, this._fmtSpeed);
         _forms.bindSlider($('frameDirInput'), $('frameDirValue'), v => {
             sim.frames.direction = v * Math.PI / 180;
+            sim.syncBoost?.();
             sim._dirty = true;
-        }, v => Math.round(v) + '°');
+        }, this._fmtDir);
         _forms.bindSlider($('frameOmegaInput'), $('frameOmegaValue'), v => {
             sim.frames.omega = v;
             sim._dirty = true;
@@ -55,6 +60,16 @@ export default class FramePanel {
             if (typeof showToast === 'function') showToast(t('frame.needSelection'));
         }
         this._sync();
+    }
+
+    /** Show the boost frame's speed and direction as frames.js holds them. */
+    syncBoost() {
+        const f = this.sim.frames, $ = (id) => document.getElementById(id);
+        const deg = ((f.direction * 180 / Math.PI) % 360 + 360) % 360;
+        $('frameRapidityInput').value = f.rapidity;
+        $('frameSpeedValue').textContent = this._fmtSpeed(f.rapidity);
+        $('frameDirInput').value = deg;
+        $('frameDirValue').textContent = this._fmtDir(deg);
     }
 
     /** The next frame in the list (B). */
@@ -81,6 +96,7 @@ export default class FramePanel {
         show(this.el.corotate, frames.kind === FRAME_COROTATE);
         this.el.readout.hidden = !frames.active;
         this.update();
+        this.sim.syncCoords?.();
     }
 
     /** Refresh the readouts (each rendered frame). */

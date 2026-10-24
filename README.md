@@ -74,7 +74,7 @@ substepping advances them.
   per-force breakdown for the selected particle; a potential heatmap (gravity,
   electric, Yukawa, or all); and a phase-space plot and an effective-potential curve
   for the selected particle against the heaviest other body.
-- **Presets.** Twenty-three scenarios, from Kepler orbits and binary inspiral through
+- **Presets.** Twenty-four scenarios, from Kepler orbits and binary inspiral through
   Hawking evaporation, a relativistic wheel, Thomas and geodetic precession, the twin
   paradox on a line and on a torus, atoms,
   nuclei, and pion exchange to the Higgs boson, axion bursts, an expanding universe,

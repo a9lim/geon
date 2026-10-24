@@ -47,9 +47,7 @@ function syncUI(sim) {
         const target = group.querySelector(`[data-${attr}="${sim[prop]}"]`);
         if (target) target.click();
     }
-    // Sync speed button
-    const speedBtn = document.getElementById('speedBtn');
-    if (speedBtn && typeof _toolbar !== 'undefined') _toolbar.updateSpeedBtn(speedBtn, sim.speedScale / 16);
+    sim.syncSpeed?.();
     const frictionEl = document.getElementById('frictionInput');
     if (frictionEl) { frictionEl.value = ph.bounceFriction; frictionEl.dispatchEvent(new Event('input')); }
     const hubbleEl = document.getElementById('hubbleInput');

@@ -203,10 +203,16 @@ export default class GPUBackend {
         renderOpts.axionField = null;
         renderOpts.heatmapBuffers = null;
 
-        // The spacetime view's world lines (lab coordinates; a non-lab frame keeps the plane)
+        // The spacetime view: world lines in the lab's coordinates or, boosted, an observer's;
+        // and the bodies' slice points on that observer's present (src/spacetime.js)
         renderOpts.spacetime = null;
-        if (view && view.tilt > 0.002 && !frameParams) {
+        const obs = view ? view.observer() : null;
+        const boosting = view && view.boosting && obs.active;
+        const pierce = boosting ? 2 : (obs && obs.active && !obs.frameOn ? 1 : 0);
+        if (view && (view.tilt > 0.002 || pierce) && (!frameParams || obs.active)) {
             const st = sim._spacetimeOpts || (sim._spacetimeOpts = {});
+            st.obs = obs;
+            st.pierce = pierce;
             st.tilt = view.tilt;
             st.depth = view.depth();
             st.beadStep = 2 ** Math.round(Math.log2(st.depth / 14));
@@ -267,6 +273,7 @@ export default class GPUBackend {
             box.view = view;
             box.w = sim.physW;
             box.h = sim.physH;
+            box.obs = renderOpts.spacetime.obs;
         }
         sim.overlay.draw(sim.camera, sim.input, horizons, box);
         this._renderStats(sim);

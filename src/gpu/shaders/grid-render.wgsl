@@ -139,10 +139,10 @@ fn gridAlpha(lab: vec2<f32>, fw: vec2<f32>) -> f32 {
     return a;
 }
 
-fn edgeAlpha(lab: vec2<f32>, fw: vec2<f32>) -> f32 {
+fn edgeAlpha(lab: vec2<f32>, fw: vec2<f32>, seams: bool) -> f32 {
     let W = grid.domainW;
     let H = grid.domainH;
-    if (grid.periodic != 0u) {
+    if (seams) {
         // The seams: every multiple of the domain size
         return max(lineCoverage(lab.x, W, fw.x), lineCoverage(lab.y, H, fw.y));
     }
@@ -164,7 +164,7 @@ fn fsGrid(in: VertexOutput) -> @location(0) vec4<f32> {
     let dark = camera.isDarkMode > 0.5;
     let ink = select(COLOR_TEXT_LIGHT, COLOR_TEXT_DARK, dark);
     // Hairline weights: the edge matches --border (text at 12% / 13%), rulers sit below it
-    var edge = edgeAlpha(lab, fw) * select(0.12, 0.13, dark);
+    var edge = edgeAlpha(lab, fw, grid.periodic != 0u) * select(0.12, 0.13, dark);
 
     // The backdrop: lensed rulers and the probe's star
     var backdrop = lab;
@@ -188,6 +188,10 @@ fn fsGrid(in: VertexOutput) -> @location(0) vec4<f32> {
                    * smoothstep(-m.y, m.y, lab.y) * smoothstep(-m.y, m.y, grid.domainH - lab.y);
         lines *= mix(1.0, inside, tilt);
         fill = inside * tilt * select(0.03, 0.045, dark);
+        // A periodic domain's seams repeat without end on the flat sheet; tilted, the box is one
+        if (grid.periodic != 0u) {
+            edge = mix(edge, edgeAlpha(lab, fw, false) * select(0.12, 0.13, dark), tilt);
+        }
         edge = edge * mix(1.0, 3.2, tilt);
     }
     var a = max(max(edge, lines), fill);

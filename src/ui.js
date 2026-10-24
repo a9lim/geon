@@ -53,7 +53,7 @@ export function setupUI(sim) {
         if (key === 'none') {
             document.getElementById('clearBtn').click();
         } else if (key) {
-            loadPreset(key, sim);
+            loadPreset(key, sim, { quiet: sim._openingScene });
             sim._dirty = true;
             _haptics.trigger('medium');
         }
@@ -426,6 +426,7 @@ export function setupUI(sim) {
         }),
     });
     syncRendererTheme();
+    sim.colophon = colophon;
     const toggleTheme = () => document.getElementById('themeToggleBtn').click();
 
     // ─── The view: plane or spacetime (src/spacetime.js) ───
@@ -449,24 +450,48 @@ export function setupUI(sim) {
     const coordsLab = document.getElementById('coords-lab');
     const coordsObserver = document.getElementById('coords-observer');
     const syncCoords = () => {
-        const obs = sim.frames.active;
+        const obs = sim.frames.active || sim.spacetime._sTo === 1;
         coordsLab.setAttribute('aria-pressed', String(!obs));
         coordsObserver.setAttribute('aria-pressed', String(obs));
+        sim.caption?.refresh();
+    };
+    // The Boost slider reads the boost frame's velocity along x (frames.js), which the Frame
+    // tab's speed and direction also set: one setting, two controls
+    const showBoost = () => {
+        const v = sim.frames.boostSpeed * Math.sign(Math.cos(sim.frames.direction) || 1);
+        boostInput.value = v;
+        boostOut.textContent = (v < 0 ? '−' : '') + Math.abs(v).toFixed(2) + 'c';
         sim.caption?.refresh();
     };
     const setBoost = (v) => {
         sim.frames.rapidity = Math.atanh(Math.min(Math.abs(v), 0.99));
         sim.frames.direction = v < 0 ? Math.PI : 0;
-        boostOut.textContent = (v < 0 ? '−' : '') + Math.abs(v).toFixed(2) + 'c';
-        sim.boost = v;
+        showBoost();
+        sim.framePanel?.syncBoost();
         sim.framePanel?.update();
         sim._dirty = true;
-        sim.caption?.refresh();
     };
     boostInput.addEventListener('input', () => setBoost(+boostInput.value));
-    coordsLab.addEventListener('click', () => { sim.framePanel?.choose('lab'); syncCoords(); });
-    coordsObserver.addEventListener('click', () => { sim.framePanel?.choose('boost'); syncCoords(); });
+    coordsLab.addEventListener('click', () => { sim.spacetime.toCoords(false); syncCoords(); });
+    coordsObserver.addEventListener('click', () => {
+        // An observer at rest is the lab: give it somewhere to go
+        if (sim.frames.boostSpeed < 0.01) setBoost(0.5);
+        sim.spacetime.toCoords(true);
+        syncCoords();
+    });
+    sim.spacetime.onCoords = syncCoords;
+    // Words drawn on the canvas
+    const labelCanvas = () => {
+        sim.overlay._labels = {
+            now: _T('canvas.now', 'now'),
+            ago: (n) => _T('canvas.ago', '{n} ago').replace('{n}', n),
+            observer: _T('canvas.observerPresent'),
+            lab: _T('canvas.labPresent'),
+        };
+    };
+    labelCanvas();
     sim.syncCoords = syncCoords;
+    sim.syncBoost = showBoost;
     setBoost(+boostInput.value);
 
     // ─── Tab cycling helper ───
@@ -639,6 +664,7 @@ export function setupUI(sim) {
                 _shortcutHandle = initShortcuts(shortcuts, { helpTitle: _T('shortcut.help.title', 'Keyboard shortcuts') });
             }
             colophon.relabel();
+            labelCanvas();
             syncSpeed();
             _syncModeBtnLabels();
             // About panel: destroy + recreate. _buildAboutConfig closes over

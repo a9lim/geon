@@ -272,6 +272,32 @@ export const PRESETS = {
         },
     },
 
+    cyclotron: {
+        name: 'Cyclotron drift',
+        desc: 'Charges of both signs circle a uniform magnetic field and drift together across an electric one: in spacetime, helices of opposite hand leaning the same way',
+        toggles: {
+            gravity: false, coulomb: true, magnetic: true, gravitomag: false,
+            relativity: true, onepn: false, blackhole: false,
+            radiation: true, spinorbit: false, disintegration: false,
+            barneshut: false, bosonInter: false, yukawa: false, axion: false, expansion: false, higgs: false,
+        },
+        settings: { collision: 'pass', boundary: 'loop', topology: 'torus', speed: 16, extBz: 0.8, extElectric: 0.12, extElectricAngle: 90 },
+        visuals: { trails: true, velocity: false, force: false, forceComponents: false, potential: false },
+        spawn(sim) {
+            // Gyration radius r = γmv/(qB) and period T = 2πγm/(qB): at v = 0.5c, |q| = 0.4 and
+            // B = 0.8, r ≈ 1.8 and T ≈ 23, so the default depth shows three or four turns. The
+            // drift E×B/B² = 0.15c is the same for either sign; synchrotron light leaves at 45°.
+            const W = sim.domainW, H = sim.domainH;
+            const spots = [[0.2, 0.25], [0.45, 0.2], [0.75, 0.3], [0.3, 0.55], [0.6, 0.5], [0.85, 0.62], [0.2, 0.8], [0.55, 0.82]];
+            spots.forEach(([fx, fy], i) => {
+                const q = i % 2 ? -0.4 : 0.4;
+                const v = 0.35 + 0.25 * ((i * 37) % 7) / 6;
+                const a = i * 2.1;
+                sim.addParticle(fx * W, fy * H, v * Math.cos(a), v * Math.sin(a), { mass: 1, charge: q, spin: 0 });
+            });
+        },
+    },
+
     bremsstrahlung: {
         name: 'Bremsstrahlung',
         desc: 'Radiation from accelerating charges — watch the photons',
@@ -635,7 +661,7 @@ export const PRESETS = {
 export const PRESET_ORDER = [
     'kepler', 'precession', 'inspiral', 'hawking',
     'wheel', 'thomas', 'geodetic', 'twinBounce', 'twinTorus',
-    'atom', 'bremsstrahlung', 'magnetic',
+    'atom', 'cyclotron', 'bremsstrahlung', 'magnetic',
     'nucleus', 'axion', 'pionexchange', 'higgs', 'higgsboson', 'axionburst', 'pecceiQuinn',
     'expansion', 'misalignment', 'kibbleZurek', 'microlensing',
 ];
@@ -714,7 +740,7 @@ const SLIDER_MAP = {
     extBz: 'extBzInput',
 };
 
-export function loadPreset(name, sim) {
+export function loadPreset(name, sim, { quiet = false } = {}) {
     const preset = PRESETS[name];
     if (!preset) return;
 
@@ -790,8 +816,7 @@ export function loadPreset(name, sim) {
             sim.speedIndex = DEFAULT_SPEED_INDEX;
         }
         sim.speedScale = SPEED_OPTIONS[sim.speedIndex];
-        const speedBtn = document.getElementById('speedBtn');
-        if (speedBtn && typeof _toolbar !== 'undefined') _toolbar.updateSpeedBtn(speedBtn, sim.speedScale / 16);
+        sim.syncSpeed?.();
     }
 
     // 4. Apply visual toggles
@@ -829,5 +854,5 @@ export function loadPreset(name, sim) {
     const localized = (typeof window !== 'undefined' && window._i18n)
         ? window._i18n.t('preset.' + name + '.name', preset.name)
         : preset.name;
-    showToast(localized);
+    if (!quiet) showToast(localized);
 }

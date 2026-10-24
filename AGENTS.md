@@ -29,22 +29,23 @@ physics bugs. This file describes the code as it is.
 ## Layout
 
 ```
-index.html               page shell, sidebar (Settings / Stats / Particle / Frame), JSON-LD
+index.html               page shell: colophon, scene and figure bar, margin (Settings / Stats / Particle / Frame), JSON-LD
 main.js                  Simulation: state, device lifecycle, fixed-timestep loop
-colors.js                charge and spin hues added to the shared palette
+colors.js                freezes the shared tokens (Worldline reads the inks directly)
 i18n/strings.js          UI strings (en, ja); merges strings-reference.js (reference overlay)
 src/config.js            constants, mode enums, Kerr–Newman and Paczyński–Wiita helpers
 src/physics-settings.js  the toggle and parameter store (sim.settings)
 src/physics-contract.js  toggle/parameter keys shared by save/load and the GPU slot map
-src/ui.js                controls, toggle dependencies, settings dropdown, shortcuts, about
-src/input.js             spawn, select, delete through GPU hit tests
-src/overlay.js           the 2D canvas above the GPU canvas: the spawn-drag line
+src/ui.js                colophon, margin, view and boost controls, toggle dependencies, shortcuts, about
+src/input.js             spawn, select, delete through GPU hit tests; Alt/Shift-drag orbits the view
+src/spacetime.js         the spacetime view: orbit camera over the 2D camera, Lab/Observer boost
+src/caption.js           the live figure caption under the scene (en, ja)
+src/overlay.js           the 2D canvas above the GPU canvas: spawn-drag line, the spacetime box and presents
 src/presets.js           23 presets (PRESET_ORDER); each may set its domain
 src/cosmology.js         the scale factor a(t): schedules, the Friedmann closure, horizons
 src/cosmology-panel.js   the Stats tab's expansion readouts and the overlay's horizons
 src/frames.js            the observer the view is drawn for (sim.frames), FrameParams
 src/frame-panel.js       the Frame tab: frame choice, parameters, readouts, scrubber
-src/minkowski.js         the Frame tab's 1+1 spacetime diagram
 src/lens-panel.js        the Frame tab's Backdrop section: lensing, the microlensing probe
 src/save-load.js         quick save (localStorage), JSON download/upload
 src/stats-display.js     conservation readouts, selected-particle panel
@@ -57,7 +58,7 @@ src/gpu/gpu-buffers.js   allocation and packed struct sizes
 src/gpu/gpu-constants.js generated WGSL constants and toggle bits
 src/gpu/gpu-renderer.js  instanced rendering, light/dark pipeline pairs
 src/gpu/pass-graph.js    per-frame dispatch plan
-src/gpu/shaders/         63 WGSL files; shared-*.wgsl are prepended includes
+src/gpu/shaders/         64 WGSL files; shared-*.wgsl are prepended includes
 tests/physics-validation.html   analytic oracles against a headless GPUPhysics
 ```
 
@@ -215,7 +216,7 @@ velocity-Verlet correction.
 Sixteen toggles (`TOGGLE_KEYS`). Their dependency graph is the declarative
 `_forms.bindDeps()` list in `ui.js`; `updateAllDeps()` adds the mode locks (Black hole
 and the hidden Disintegration force Merge collisions, Expansion forces Loop). Less
-obvious couplings: Boson interaction needs the Barnes–Hut toggle (settings dropdown);
+obvious couplings: Boson interaction needs the Barnes–Hut toggle (Simulation section);
 signal delay runs whenever Relativity is on, and with it charges interact through their
 Liénard–Wiechert fields; field gravity follows Gravity; kugelblitz runs under Boson
 interaction with Gravity. The 1PN pair forces (`shared-1pn.wgsl`, shared by the force
@@ -269,7 +270,7 @@ created at `−∞` and act at once.
   `Δ + (γ − 1)(Δ·n̂)n̂` and draws the spoke at `θ + ω·(−γvΔ∥)`, the angle it held at
   that point's rest-frame time, so a spinning, moving spoke bends by `2·v·v_rim` across
   the diameter. The spoke is drawn only on bodies at least 4 px in radius.
-- **The Clocks overlay** (K, settings dropdown; `clock-render.wgsl`): a faint ring per
+- **The Clocks overlay** (K, the View section; `clock-render.wgsl`): a faint ring per
   body and an accent arc that fills once per `CLOCK_PERIOD` (16) of its proper time,
   contracted with the body. The particle panel shows τ and dτ/dt.
 - **World lines** (`worldline.wgsl` writes, `shared-worldline.wgsl` reads): a ring of
@@ -291,6 +292,63 @@ created at `−∞` and act at once.
   carry on; disintegration fragments and Roche transfers copy the parent's clock
   (`addParticle({ inheritClockFrom })`, through `_clockScratch`, since
   `copyBufferToBuffer` cannot copy within one buffer).
+
+### The spacetime view
+
+The canvas tilts from the plane into the world lines it shows (`spacetime.js`,
+`spacetime-render.wgsl`). An orbit camera sits over the 2D camera: elevation `el` (π/2 is
+straight down the time axis, the plane view) and azimuth `az`. A point (x, y) on the present
+plane at time h before it projects with time and space at one scale, so light keeps to 45°,
+and the plane view is the same projection seen from above, so the two never disagree.
+`SpacetimeView.writeMatrices()` gives the renderer a view matrix taking (x, y, h) to clip
+space (depth always 0) and the plane's inverse, so every existing pass draws on the tilted
+plane unchanged; `wrapCamera()` routes the 2D camera's screen mapping (picking, spawning,
+panning, zoom about the cursor) through the tilt. Alt- or Shift-drag orbits; W, or the Plane
+and Spacetime buttons, ease between the two (`EL_SPACETIME` ≈ 30°).
+
+- **Depth.** The time shown below the plane is `DEPTH_FRACTION` (1.2) of the visible plane's
+  height, capped by the world lines' reach (127); the fit `k` shrinks the scene so the plane
+  and its past share the screen.
+- **World lines** (`vs_line`): one triangle strip per slot straight from the history ring
+  (4 vertices a sample, an incoming and an outgoing pair, so a seam or merge break zeroes a
+  segment without bridging it), mapped from the cover through the slot's deck and on a
+  periodic domain to the image nearest the body (or the observer). The fragment draws a
+  hairline and a bead every `beadStep` of the body's proper time (a power of 2 near depth/14),
+  fading beads closer than ~8 px. Opacity falls with age; the selected body is the accent.
+- **The selected body's past light cone** (`vs_cone`): four lab-time rings, boosted like
+  everything else. **Bosons** (`vs_boson`): photons on 45° lines back to their emission,
+  pions and leptons on timelike lines beaded by their own clocks.
+- **The plane and box.** `grid-render.wgsl` keeps the rulers to the domain and gives it a faint
+  fill when tilted (`GridParams.tilt`); a periodic domain's seams give way to the box. The
+  overlay draws the box's corner world lines, its floor at the depth and a time axis.
+- **Trails** are the plane view's shadows of the world lines; they fade out as it tilts.
+
+**Lab and Observer coordinates.** The Boost slider sets the boost frame's velocity along x
+(`frames.rapidity`, `direction` 0 or π; the Frame tab's speed and direction are the same
+setting). Every event is drawn through a boost at rapidity ψ = s·atanh|u| about an anchor A
+on the observer's present: s = 0 is the lab's coordinates, s = 1 the observer's, and
+`toCoords()` eases between them. The display transform is `SpacetimeView.display()` in JS and
+`disp()` in the shader:
+
+    Δ = (x − x_A, t − t_A),  x′∥ = cosh ψ·Δ∥ − sinh ψ·Δt,  t′ = cosh ψ·Δt − sinh ψ·Δ∥
+    shown at offset + Δ⊥ + x′∥ n̂,  h = t′ − (1 − s)·lag
+
+with `offset` = (1 − s)·x_A + s·a_now, so s = 0 is the identity and at s = 1 the observer sits at
+the camera's centre. In the lab the observer is the inertial one moving at u through the
+camera's centre now, with frameAnchor's lag (the visible slice in the computed past); at
+s = 1 `stepCoords()` hands over to the boost frame, whose observer is that same world line,
+so its picture continues without a jump, and the shader then reads the anchor from the
+slicer's `FrameState` buffer. While the lab boosts (0 < s < 1) the bodies and their overlays
+are hidden and `vs_pierce` draws each body where its world line crosses the observer's
+present (found by bisection: g = (t − t_A) − u·(x − x_A) rises along a timelike line); in lab
+coordinates with a boost set, the same points show as rings on the tilted present. World-line
+segments beyond the observer's present are faint. The overlay outlines the presents that
+aren't the flat plane on top: the observer's (lab coordinates) and the lab's (observer's).
+Co-rotating and free-fall frames are not boosts and keep the plane.
+
+**The opening.** `Simulation._openScene()` loads the cyclotron preset quietly and, 2.6 s later,
+tilts into spacetime once unless the visitor has acted. Under reduced motion it runs 240
+frames up front, pauses and opens tilted.
 
 ### Frames
 
@@ -331,14 +389,11 @@ canvas while a frame is active.
   observer centred.
 - **The scrubber** (Look back) adds lag while paused, so a paused run can be re-sliced
   further into its past.
-- **The spacetime diagram** (`minkowski.js`): while the Frame tab is visible it reads the
-  observer (or selection) and the 11 bodies nearest it every 250 ms
-  (`readSlotsSnapshot`, `readWorldLines`) and plots their world lines projected on the
-  observer's direction of motion, x′∥ across and t′ up at equal scales, with the
-  observer's now, its light cone, the lab's now and proper-time ticks every `CLOCK_PERIOD/2`.
-  In the lab its axes are lab x and t through the camera's centre.
+- **The spacetime view** replaced the Frame tab's side diagram: the canvas itself tilts
+  (above). `readSlotsSnapshot` and `readWorldLines` remain for the tests.
 - **Shortcuts:** B cycles frames (skipping the particle frame without a selection),
-  L returns to the lab, G toggles the grid.
+  L returns to the lab, G toggles the grid, W tilts between plane and spacetime, O boosts
+  between Lab and Observer coordinates.
 
 ### Lensing
 
@@ -500,6 +555,21 @@ per stage would land before the whole encoder ran (that bug left Φ ≡ 0 until
   particles from them.
 - `_phase5Ready` holds field dispatches until the async field pipelines exist.
 
+### Chrome
+
+Worldline was the overhaul's pilot (`../../docs/sim-overhaul/PLAN.md`) and loads neither
+`shared/hud.css` nor `toolbar.js`. The page is a grid: the scene (a stage for the canvases
+over a hairline figure bar) and the margin. The shared colophon (`_colophon.mount`, with
+translated labels) carries play, step, theme and help; the figure bar carries the caption
+(`caption.js`: the preset's name, then what the view shows with its values, rebuilt a few
+times a second) and the Plane/Spacetime, Lab/Observer and Boost controls; the stage's top
+right has speed, language, the touch-only antimatter mode and the Controls toggle. The
+margin holds the old sidebar's tabs on the same paper, ruled off by a hairline, with the
+gear menu's view toggles moved into Settings and Reset/Save/Load at its foot; on a narrow
+window it rises as a sheet. `styles.css` styles every control here (hairline switches and
+sliders in the force's ink, ruled dropdowns), since `hud.css` no longer applies. `resize()`
+sizes the canvases to the stage (a ResizeObserver), so opening the margin narrows the scene.
+
 ### Rendering
 
 `GPURenderer` draws on `#gpuCanvas`, behind the 2D `#simCanvas` that `Overlay` uses for
@@ -511,7 +581,10 @@ non-lab frame each pixel maps back through the observer's slice and the rulers c
 1/γ along u and turn with co-rotation; `sim.view.grid` (G) hides the rulers but not the
 edge. Bodies, their clock rings, and their ring overlays share the camera uniforms'
 `relativityOn`, `blackHoleOn`, `showClocks`, `frameOn` and `frameImages` flags. It clears to `_PALETTE.{light,dark}.canvas`, with light/dark
-pipeline pairs that `setTheme()` swaps. `syncRendererTheme()` in `ui.js` sets both;
+pipeline pairs that `setTheme()` swaps; both blend alpha-over (the dark theme's additive
+blend and the bosons' glow halos are gone: they read no quantity). Colours are the shared
+inks, theme-paired: WGSL gets `INK_<NAME>_L`/`_D` constants (graphite is `textMuted`), and
+the force and torque tables are built per theme. `syncRendererTheme()` in `ui.js` sets both;
 `GPUBackend.create()` adopts `sim.overlay.isLight` after `renderer.init()` because it is
 created after the first sync. WGSL theme colors are light/dark constant pairs picked by
 the `isDarkMode` uniform. The sidebar plots redraw with every stats readback, so their
@@ -570,7 +643,7 @@ canvas text needs no font-load redraw.
 - **Topology.** Klein and RP² crossings flip velocity and spin and mirror θ; periodic
   modes add ghost copies so tree forces cross the boundary, and world-line
   interpolation wraps through `minImage()`.
-- **Input.** The antimatter toolbar mode (X) drives touch only; mouse users spawn
+- **Input.** The antimatter mode (X, a touch-only button) drives touch only; mouse users spawn
   antimatter with right-click. Click resolution is `InputHandler._resolveClickHit()`:
   a click of the particle's own kind selects, the other kind deletes; black-hole mode
   never spawns antimatter.

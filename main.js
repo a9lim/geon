@@ -13,7 +13,7 @@ import Frames from './src/frames.js';
 import FramePanel from './src/frame-panel.js';
 import CosmologyPanel from './src/cosmology-panel.js';
 import LensPanel from './src/lens-panel.js';
-import SpacetimeView from './src/spacetime.js';
+import SpacetimeView, { EL_SPACETIME, AZ_SPACETIME } from './src/spacetime.js';
 import Caption from './src/caption.js';
 
 /**
@@ -248,6 +248,38 @@ class Simulation {
         const device = await requestDevice();
         if (!device) { showWebGPURequired(); return; }
         await this._attachDevice(device);
+        if (this.gpu) this._openScene();
+    }
+
+    /**
+     * Open on a living frame: the cyclotron preset, already running and seen from above;
+     * a moment later the plane tilts into spacetime once, unless the visitor has taken over
+     * by then. With reduced motion it opens tilted and still, on a history run up front.
+     */
+    _openScene() {
+        const select = document.getElementById('preset-select');
+        if (select.value !== 'none' || this.gpu.physics.aliveCount > 0) return;
+        this._openingScene = true;
+        select.value = 'cyclotron';
+        select.dispatchEvent(new Event('change'));
+        this._openingScene = false;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            for (let i = 0; i < 240; i++) {
+                this.accumulator += this.speedScale / 60;
+                this.gpu.step(this);
+            }
+            this.running = false;
+            this.colophon?.setPlaying(false);
+            this.spacetime.set(EL_SPACETIME, AZ_SPACETIME);
+            return;
+        }
+        let touched = false;
+        const take = () => { touched = true; };
+        for (const ev of ['pointerdown', 'wheel', 'keydown']) window.addEventListener(ev, take, { once: true, capture: true });
+        setTimeout(() => {
+            if (touched || this.spacetime.tilted) return;
+            document.getElementById('view-spacetime').click();
+        }, 2600);
     }
 
     /** Build the GPU backend on a device, optionally restoring a saved state into it. */
@@ -535,6 +567,7 @@ class Simulation {
 
         this.input.pollGPUHitResult();
         this.spacetime.step(rawDt);
+        this.spacetime.stepCoords(rawDt);
         this.caption?.update();
 
         // Refresh hover tooltip periodically (every 8th frame, matching stats rate)

@@ -32,6 +32,12 @@ export default class Overlay {
         this._labelColor = T.textMuted;
     }
 
+    /** Words drawn on the canvas, in the page's language (main.js sets them). */
+    _labels = {
+        now: 'now', ago: (s) => `${s} ago`,
+        observer: 'the observer’s present', lab: 'the lab’s present',
+    };
+
     /**
      * Clear the canvas, then draw the spacetime view's box (`box`: { view, w, h } when the
      * view is tilted), the horizons (`horizons`: { center, hubble, event, labels }, physical
@@ -55,17 +61,26 @@ export default class Overlay {
     }
 
     /**
-     * The lab box under the present plane: its corners' world lines (at rest, so straight
-     * down), its floor at the depth, and a time axis at the corner nearest the left edge.
+     * The lab box under the present plane: its corners' world lines (at rest in the lab), its
+     * floor at the depth, and a time axis at the corner nearest the left edge. Boosted toward
+     * an observer (box.obs active) every event goes through the display transform, and the
+     * presents that aren't the plane on top get their own outlines: the observer's, tilted
+     * in the lab's coordinates, and the lab's, tilted the other way in the observer's.
      */
-    _drawBox({ view, w, h }) {
+    _drawBox({ view, w, h, obs }) {
         const ctx = this.ctx;
         const f = view.frame();
         const t = view.tilt;
         const D = f.depth;
+        const now = obs.nowGPU;
+        const at = (x, y, time) => {
+            const d = view.display(x, y, time, obs);
+            return view.toScreen(d.x, d.y, d.h, f);
+        };
+        // Near the observer, a periodic or large domain's box is the one around the camera
         const corners = [[0, 0], [w, 0], [w, h], [0, h]];
-        const top = corners.map(([x, y]) => view.toScreen(x, y, 0, f));
-        const bottom = corners.map(([x, y]) => view.toScreen(x, y, -D, f));
+        const top = corners.map(([x, y]) => at(x, y, now));
+        const bottom = corners.map(([x, y]) => at(x, y, now - D));
         ctx.lineWidth = 1;
         ctx.setLineDash([2, 4]);
         ctx.strokeStyle = _r(this._ink, 0.16 * t);
@@ -82,27 +97,53 @@ export default class Overlay {
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // The time axis: ticks every few bead steps, read as time before the present
+        ctx.font = `italic 12px ${_FONT.text}`;
+        if (obs.active) {
+            // The presents that are not the flat plane on top
+            const plane = (pts, alpha, label) => {
+                if (alpha < 0.02) return;
+                ctx.beginPath();
+                pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+                ctx.closePath();
+                ctx.fillStyle = _r(this._ink, 0.035 * alpha);
+                ctx.fill();
+                ctx.strokeStyle = _r(this._ink, 0.42 * alpha);
+                ctx.stroke();
+                let r = 0;
+                for (let i = 1; i < 4; i++) if (pts[i].x > pts[r].x) r = i;
+                ctx.fillStyle = _r(this._labelColor, alpha);
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(label, pts[r].x + 8, pts[r].y);
+            };
+            const sliceT = (x, y) => obs.tA + obs.u[0] * (x - obs.xA[0]) + obs.u[1] * (y - obs.xA[1]);
+            plane(corners.map(([x, y]) => at(x, y, sliceT(x, y))), (1 - obs.s) * t, this._labels.observer);
+            plane(top, obs.s * t, this._labels.lab);
+        }
+
+        // The time axis: ticks every few bead steps, read as time before the present on top
         let k = 0;
         for (let i = 1; i < 4; i++) if (top[i].x < top[k].x) k = i;
+        const base = obs.active && obs.s > 0.5
+            ? at(corners[k][0], corners[k][1], obs.tA + obs.u[0] * (corners[k][0] - obs.xA[0]) + obs.u[1] * (corners[k][1] - obs.xA[1]))
+            : top[k];
         const step = 2 ** Math.round(Math.log2(D / 4));
+        const unit = f.kz * f.ce;   // px per unit of display time
         ctx.strokeStyle = _r(this._ink, 0.32 * t);
         ctx.fillStyle = _r(this._labelColor, t);
-        ctx.font = `italic 12px ${_FONT.text}`;
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
         ctx.beginPath();
-        ctx.moveTo(top[k].x, top[k].y);
-        ctx.lineTo(bottom[k].x, bottom[k].y);
+        ctx.moveTo(base.x, base.y);
+        ctx.lineTo(base.x, base.y + D * unit);
         ctx.stroke();
-        const [cx, cy] = corners[k];
         for (let s = 0; s <= D + 1e-6; s += step) {
-            const p = view.toScreen(cx, cy, -s, f);
+            const y = base.y + s * unit;
             ctx.beginPath();
-            ctx.moveTo(p.x - 3, p.y);
-            ctx.lineTo(p.x + 3, p.y);
+            ctx.moveTo(base.x - 3, y);
+            ctx.lineTo(base.x + 3, y);
             ctx.stroke();
-            ctx.fillText(s === 0 ? 'now' : `${s} ago`, p.x - 8, p.y);
+            ctx.fillText(s === 0 ? this._labels.now : this._labels.ago(s), base.x - 8, y);
         }
     }
 

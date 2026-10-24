@@ -11,11 +11,11 @@ import { REFERENCE_STRINGS } from './strings-reference.js';
 const UI_EN = {
     // ── document <head> ──
     'meta.title': "Worldline — Interactive Particle Physics Simulator | a9l.im",
-    'meta.description': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-three browser presets.",
+    'meta.description': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-four browser presets.",
     'meta.ogTitle': "Worldline — Interactive Particle Physics Simulator",
-    'meta.ogDescription': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-three browser presets.",
+    'meta.ogDescription': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-four browser presets.",
     'meta.twitterTitle': "Worldline — Interactive Particle Physics Simulator",
-    'meta.twitterDescription': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-three browser presets.",
+    'meta.twitterDescription': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-four browser presets.",
 
     // ── Topbar ──
     'topbar.home': 'a9l.im',
@@ -77,6 +77,10 @@ const UI_EN = {
     'view.potentialElectric': 'Electric',
     'view.potentialYukawa': 'Yukawa',
     'sim.barneshut': 'Barnes–Hut tree',
+    'canvas.now': 'now',
+    'canvas.ago': '{n} ago',
+    'canvas.observerPresent': 'the observer’s present',
+    'canvas.labPresent': 'the lab’s present',
 
     // ── Sidebar tabs / sections ──
     'tab.settings': 'Settings',
@@ -398,6 +402,8 @@ const UI_EN = {
     'preset.kepler.desc': 'Classical gravity — Keplerian motion and conservation laws',
     'preset.precession.name': 'Precession',
     'preset.precession.desc': 'Relativistic perihelion advance — watch the rosette orbit',
+    'preset.cyclotron.name': 'Cyclotron drift',
+    'preset.cyclotron.desc': 'Charges of both signs circle a uniform magnetic field and drift together across an electric one: in spacetime, helices of opposite hand leaning the same way',
     'preset.wheel.name': 'Relativistic wheel',
     'preset.wheel.desc': 'A wheel spinning at 0.9c, moving at 0.9c: contracted, its spoke bent, its clock slow',
     'preset.thomas.name': 'Thomas precession',
@@ -444,7 +450,7 @@ const UI_EN = {
     'edu.h.fields': 'Scalar fields',
     'edu.p.fields': 'Two scalar fields — Higgs and axion — live on a PQS grid with C² interpolation. The Higgs field modulates particle mass through its local vacuum expectation value, while the axion field couples to charge. Both evolve via Störmer-Verlet integration and exert gradient forces on particles.',
     'edu.h.presets': 'Presets',
-    'edu.p.presets': 'Twenty-three curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, the twin paradox on a line and on a torus, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, an expanding universe, axion misalignment, Kibble–Zurek domain walls, and microlensing.',
+    'edu.p.presets': 'Twenty-four curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, the twin paradox on a line and on a torus, atomic and nuclear toy systems, cyclotron drift, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, an expanding universe, axion misalignment, Kibble–Zurek domain walls, and microlensing.',
     'edu.h.expansion': 'Cosmological expansion',
     'edu.p.expansion': "With expansion on, the periodic domain becomes a slice of an expanding Friedmann–Robertson–Walker universe. Bodies at rest keep their comoving positions while the space between them grows; peculiar momenta and photon energies fall as 1/a; scalar fields feel Hubble friction; and bound systems keep their size. The history can be imposed (de Sitter, matter, radiation, ΛCDM) or follow from the universe's own contents through the Friedmann equation, with matter, radiation and field energy each diluting at its own rate. Signals travel on light cones that are straight in comoving coordinates and conformal time, and because Maxwell's equations are conformally invariant a charge's Liénard–Wiechert field stays exact, its radiation dimmed by the redshift. The Stats tab shows the scale factor, the Hubble rate, the Hubble radius and the event horizon, and books the energy the expansion takes or gives as its own line, so the energy drift still measures numerical error. An axion field frozen by Hubble friction starts oscillating once the Hubble rate falls below its mass and then dilutes like cold matter (misalignment), and a Higgs field quenched through its symmetry-breaking transition freezes into domains, and a slower quench leaves fewer walls between them: the Kibble–Zurek mechanism (Kibble, 1976; Zurek, 1985).",
     'edu.h.lensing': 'Gravitational lensing',
@@ -469,11 +475,11 @@ const UI_EN = {
 const UI_JA = {
     // ── document <head> ──
     'meta.title': 'Worldline | a9l.im',
-    'meta.description': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。11種の力、スカラー場、23の教育用プリセットを備えたインタラクティブな多体シミュレータ。WebGPUによりブラウザ上でリアルタイム動作。',
+    'meta.description': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。11種の力、スカラー場、24の教育用プリセットを備えたインタラクティブな多体シミュレータ。WebGPUによりブラウザ上でリアルタイム動作。',
     'meta.ogTitle': 'Worldline — インタラクティブ粒子物理シミュレータ',
-    'meta.ogDescription': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。23の教育用プリセットを備えたインタラクティブな多体シミュレータ、ブラウザ上でリアルタイム動作。',
+    'meta.ogDescription': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。24の教育用プリセットを備えたインタラクティブな多体シミュレータ、ブラウザ上でリアルタイム動作。',
     'meta.twitterTitle': 'Worldline — インタラクティブ粒子物理シミュレータ',
-    'meta.twitterDescription': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。23の教育用プリセットを備えたインタラクティブな多体シミュレータ。',
+    'meta.twitterDescription': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。24の教育用プリセットを備えたインタラクティブな多体シミュレータ。',
 
     // ── Topbar ──
     'topbar.home': 'a9l.im',
@@ -533,6 +539,10 @@ const UI_JA = {
     'view.potentialElectric': '電気',
     'view.potentialYukawa': '湯川',
     'sim.barneshut': 'Barnes–Hut 木',
+    'canvas.now': '現在',
+    'canvas.ago': '{n}前',
+    'canvas.observerPresent': '観測者の現在',
+    'canvas.labPresent': '実験室の現在',
 
     // ── Sidebar tabs / sections ──
     'tab.settings': '設定',
@@ -748,7 +758,7 @@ const UI_JA = {
 
     // ── About panel ──
     'about.title': 'Worldline',
-    'about.description': '粒子を生成し、重力・電磁気・エキゾチックな力を介した相互作用を観察します。物質を軌道に投げ込み、スカラー場を切り替え、23のプリセットを切り替えながら、相対論的ブラックホール物理をリアルタイムで探ってください。',
+    'about.description': '粒子を生成し、重力・電磁気・エキゾチックな力を介した相互作用を観察します。物質を軌道に投げ込み、スカラー場を切り替え、24のプリセットを切り替えながら、相対論的ブラックホール物理をリアルタイムで探ってください。',
     'about.controls.addParticle': '粒子を追加',
     'about.controls.addParticleVal': 'キャンバスをクリック',
     'about.controls.fling': '粒子を投げる',
@@ -854,6 +864,8 @@ const UI_JA = {
     'preset.kepler.desc': '古典重力 — ケプラー運動と保存則',
     'preset.precession.name': '歳差',
     'preset.precession.desc': '相対論的近日点移動 — ロゼット軌道を観察',
+    'preset.cyclotron.name': 'サイクロトロン・ドリフト',
+    'preset.cyclotron.desc': '正負の電荷が一様な磁場のまわりを回り、電場を横切ってそろって漂う。時空では、巻きの向きが逆のらせんが同じ方へ傾く',
     'preset.wheel.name': '相対論的な車輪',
     'preset.wheel.desc': '0.9cで回転しながら0.9cで進む車輪 — ローレンツ収縮し、スポークが曲がり、時計が遅れる',
     'preset.thomas.name': 'トーマス歳差',
@@ -900,7 +912,7 @@ const UI_JA = {
     'edu.h.fields': 'スカラー場',
     'edu.p.fields': '2つのスカラー場 — ヒッグスとアクシオン — はC²補間付きのPQS格子上で定義されます。ヒッグス場は局所的な真空期待値を通じて粒子質量を変調し、アクシオン場は電荷に結合します。両者ともストーマー＝ヴェルレ法で時間発展し、勾配力で粒子に作用します。',
     'edu.h.presets': 'プリセット',
-    'edu.p.presets': '23のプリセットが、ケプラー運動、相対論的歳差、連星インスパイラル、ホーキング蒸発、相対論的な車輪、トーマス歳差と測地歳差、直線上とトーラス上の双子のパラドックス、原子・原子核のトイ系、制動放射、磁気双極子、パイオン交換、ヒッグス場とアクシオン場、ペッチェイ＝クイン力学、膨張する宇宙、アクシオンのミスアラインメント、キブル＝ズレック機構の磁壁、マイクロレンズを扱います。',
+    'edu.p.presets': '24のプリセットが、ケプラー運動、相対論的歳差、連星インスパイラル、ホーキング蒸発、相対論的な車輪、トーマス歳差と測地歳差、直線上とトーラス上の双子のパラドックス、原子・原子核のトイ系、サイクロトロン・ドリフト、制動放射、磁気双極子、パイオン交換、ヒッグス場とアクシオン場、ペッチェイ＝クイン力学、膨張する宇宙、アクシオンのミスアラインメント、キブル＝ズレック機構の磁壁、マイクロレンズを扱います。',
     'edu.h.expansion': '宇宙膨張',
     'edu.p.expansion': '膨張をオンにすると、周期的な領域は膨張するフリードマン＝ロバートソン＝ウォーカー宇宙の一断面になります。静止した物体は共動座標に留まり、その間の空間が伸びます。特異運動量と光子のエネルギーは 1/a で減り、スカラー場はハッブル摩擦を受け、束縛系は大きさを保ちます。膨張の歴史は課すこと（ド・ジッター、物質優勢、放射優勢、ΛCDM）も、宇宙自身の内容物からフリードマン方程式で決めることもでき、物質・放射・場のエネルギーはそれぞれ固有の割合で薄まります。信号は共動座標と共形時間で真っ直ぐな光円錐の上を伝わり、マクスウェル方程式が共形不変なので、電荷のリエナール＝ヴィーヘルト場は厳密なまま、その放射は赤方偏移の分だけ弱まります。統計タブにはスケール因子、ハッブル率、ハッブル半径、事象の地平面が表示され、膨張が奪い与えるエネルギーは別の行に記録されるので、エネルギーのドリフトは数値誤差を表し続けます。ハッブル摩擦で凍結したアクシオン場はハッブル率が質量を下回ると振動を始めて冷たい物質のように薄まり（ミスアラインメント）、対称性の破れる転移をクエンチしたヒッグス場は領域に凍結し、クエンチが遅いほど領域の間の壁は少なくなります。これがキブル＝ズレック機構です（Kibble, 1976; Zurek, 1985）。',
     'edu.h.lensing': '重力レンズ',

@@ -37,7 +37,7 @@ const _fieldRenderU32 = new Uint32Array(_fieldRenderData);
 const _heatmapRenderData = new ArrayBuffer(64);
 const _heatmapRenderF32 = new Float32Array(_heatmapRenderData);
 const _heatmapRenderU32 = new Uint32Array(_heatmapRenderData);
-const _spacetimeData = new ArrayBuffer(48);   // SpacetimeParams (spacetime-render.wgsl)
+const _spacetimeData = new ArrayBuffer(112);  // SpacetimeParams (spacetime-render.wgsl)
 const _spacetimeF32 = new Float32Array(_spacetimeData);
 const _spacetimeU32 = new Uint32Array(_spacetimeData);
 const _spacetimeI32 = new Int32Array(_spacetimeData);
@@ -67,10 +67,11 @@ const BLEND_ALPHA = {
     alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
 };
 
-/** Additive blend (dark mode — matches Canvas 2D globalCompositeOperation:'lighter'). */
+/** The dark theme's blend: the same alpha-over as light. (It was additive, a glow that read no
+ *  quantity; inside a scene an effect ships only if it depicts one, AGENTS.md.) */
 const BLEND_ADDITIVE = {
-    color: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
-    alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
+    color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+    alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
 };
 
 export default class GPURenderer {
@@ -324,7 +325,7 @@ export default class GPURenderer {
             const p = await createSpacetimeRenderPipelines(this.device, this.format, this._wgslConstants || '');
             const b = this.buffers;
             this._spacetimeUniformBuffer = this.device.createBuffer({
-                label: 'spacetimeParams', size: 48, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+                label: 'spacetimeParams', size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
             });
             const group = (pipeline, label, extra) => this.device.createBindGroup({
                 label, layout: pipeline.getBindGroupLayout(0),
@@ -334,11 +335,14 @@ export default class GPURenderer {
                     ...extra.map(([binding, buffer]) => ({ binding, resource: { buffer } })),
                 ],
             });
+            const fs = this.frameBuffers.frameState;
+            const line = [[2, b.wlData], [3, b.wlMeta], [4, b.particleState], [10, fs]];
             this._spacetime = {
-                line: p.line, cone: p.cone, boson: p.boson,
-                lineGroup: group(p.line, 'spacetimeLines', [[2, b.wlData], [3, b.wlMeta], [4, b.particleState], [5, b.color]]),
-                coneGroup: group(p.cone, 'spacetimeCone', [[4, b.particleState]]),
-                bosonGroup: group(p.boson, 'spacetimeBosons', [[6, b.photonPool], [7, b.phCount], [8, b.pionPool], [9, b.piCount]]),
+                line: p.line, cone: p.cone, boson: p.boson, pierce: p.pierce,
+                lineGroup: group(p.line, 'spacetimeLines', [...line, [5, b.color]]),
+                coneGroup: group(p.cone, 'spacetimeCone', line),
+                bosonGroup: group(p.boson, 'spacetimeBosons', [[6, b.photonPool], [7, b.phCount], [8, b.pionPool], [9, b.piCount], [10, fs]]),
+                pierceGroup: group(p.pierce, 'spacetimePierce', [...line, [5, b.color], [11, b.particleAux]]),
             };
         } catch (e) {
             console.warn('[worldline] Spacetime render pipeline creation failed, skipping:', e.message);
@@ -347,12 +351,14 @@ export default class GPURenderer {
     }
 
     /**
-     * Draw the spacetime view's world lines under the present plane. `st` carries the
-     * view's state: { tilt, depth, beadStep, tNow, selected, topology, scaleA }.
+     * Draw the spacetime view's world lines under the present plane, and the bodies' slice
+     * points on the observer's present. `st` carries the view's state: { tilt, depth,
+     * beadStep, tNow, selected, topology, scaleA, obs, pierce } (src/spacetime.js observer()).
      */
     _renderSpacetime(textureView, st) {
         const sp = this._spacetime;
-        if (!sp || !st || st.tilt < 0.002) return;
+        if (!sp || !st || (st.tilt < 0.002 && !st.pierce)) return;
+        const o = st.obs;
         _spacetimeF32[0] = st.tNow;
         _spacetimeF32[1] = st.depth;
         _spacetimeF32[2] = st.tilt;
@@ -363,6 +369,18 @@ export default class GPURenderer {
         _spacetimeU32[7] = st.selected >= 0 ? st.selected : 0xFFFFFFFF;
         _spacetimeF32[8] = st.scaleA || 1;
         _spacetimeU32[9] = this.buffers.maxParticles;
+        _spacetimeF32[10] = o.s;
+        _spacetimeF32[11] = o.psi;
+        _spacetimeF32[12] = o.n[0]; _spacetimeF32[13] = o.n[1];
+        _spacetimeF32[14] = o.offset[0]; _spacetimeF32[15] = o.offset[1];
+        _spacetimeF32[16] = o.tA;
+        _spacetimeF32[17] = o.lag;
+        _spacetimeF32[18] = o.xA[0]; _spacetimeF32[19] = o.xA[1];
+        _spacetimeF32[20] = o.aNow[0]; _spacetimeF32[21] = o.aNow[1];
+        _spacetimeU32[22] = o.active ? 1 : 0;
+        _spacetimeU32[23] = o.frameOn ? 1 : 0;
+        _spacetimeF32[24] = st.pierce;
+        _spacetimeF32[25] = Math.atanh(Math.min(Math.hypot(o.u[0], o.u[1]), 0.999));
         this.device.queue.writeBuffer(this._spacetimeUniformBuffer, 0, _spacetimeData);
         const enc = this.device.createCommandEncoder({ label: 'spacetime-render' });
         const pass = enc.beginRenderPass({
@@ -378,6 +396,11 @@ export default class GPURenderer {
         pass.setPipeline(sp.line);
         pass.setBindGroup(0, sp.lineGroup);
         pass.draw(4 * (WORLDLINE_LEN + 1), this.buffers.maxParticles);
+        if (st.pierce) {
+            pass.setPipeline(sp.pierce);
+            pass.setBindGroup(0, sp.pierceGroup);
+            pass.draw(4, this.buffers.maxParticles);
+        }
         pass.end();
         this.device.queue.submit([enc.finish()]);
     }
@@ -832,7 +855,8 @@ export default class GPURenderer {
 
         // Pass 0b: Trail rendering (behind particles), lab frame only; trails are the plane
         // view's shadows of the world lines, so they give way as the view tilts
-        const trailsDrawn = !frame && this._trailReady && this.showTrails && aliveCount > 0 && tilt < 0.98;
+        const boosting = opts.spacetime && opts.spacetime.pierce === 2;
+        const trailsDrawn = !frame && !boosting && this._trailReady && this.showTrails && aliveCount > 0 && tilt < 0.98;
         if (trailsDrawn) {
             try {
                 // Write trail uniforms (pre-allocated buffer)
@@ -865,7 +889,7 @@ export default class GPURenderer {
             colorAttachments: [{ view: textureView, loadOp: 'load', storeOp: 'store' }],
         });
 
-        if (aliveCount > 0) {
+        if (aliveCount > 0 && !boosting) {
             pass.setPipeline(this._pipeline);
             pass.setBindGroup(0, frame ? this._bindGroupView : this._bindGroup);
             // 6 vertices per quad (2 triangles), one instance per body (and image)
@@ -943,7 +967,7 @@ export default class GPURenderer {
         }
 
         // Pass 3b: Clock rings (the Clocks overlay)
-        if (this._clockReady && this.showClocks && aliveCount > 0) {
+        if (this._clockReady && this.showClocks && aliveCount > 0 && !boosting) {
             try {
                 const clockEncoder = this.device.createCommandEncoder({ label: 'clock-render' });
                 const clockPass = clockEncoder.beginRenderPass({
@@ -971,7 +995,7 @@ export default class GPURenderer {
         // Pass 3c: Dashed ring overlays (ergosphere + antimatter)
         // Both ring types are batched into ONE encoder + ONE submit using per-slot
         // uniform buffers (slot 0 = ergosphere, slot 1 = antimatter).
-        if (this._ringReady && aliveCount > 0) {
+        if (this._ringReady && aliveCount > 0 && !boosting) {
             try {
                 const bhEnabled = opts.blackHoleEnabled || false;
 
@@ -1027,7 +1051,7 @@ export default class GPURenderer {
         // Each arrow type uses its own pre-allocated uniform buffer (slot = draw index)
         // so all writeBuffers execute before the encoder, yet each render pass reads
         // from its own buffer. Reduces up to 12 submits down to 1.
-        const wantsArrows = !frame && this._arrowReady && aliveCount > 0 &&
+        const wantsArrows = !frame && !boosting && this._arrowReady && aliveCount > 0 &&
             (this.showForce || this.showForceComponents || this.showVelocity);
         if (wantsArrows) {
             try {
@@ -1105,7 +1129,7 @@ export default class GPURenderer {
         // Pass 5: Torque arcs — batched into ONE encoder + ONE submit.
         // Each torque type uses its own pre-allocated uniform buffer. Arc + arrowhead
         // for all types share the same encoder; reduces up to 8 submits to 1.
-        const wantsTorques = !frame && this._torqueReady && aliveCount > 0 &&
+        const wantsTorques = !frame && !boosting && this._torqueReady && aliveCount > 0 &&
             (this.showForce || this.showForceComponents);
         if (wantsTorques) {
             try {

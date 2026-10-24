@@ -11,7 +11,8 @@
 // and lift the shift that centres that stack. Time and space share one scale, so light
 // keeps to 45°. At el = π/2, az = 0 this is the 2D camera exactly, so the two views never
 // disagree; the plane view is the spacetime view seen from straight above.
-import { WORLDLINE_LEN, WORLDLINE_DT } from './config.js';
+import { WORLDLINE_LEN, WORLDLINE_DT, MAX_SPEED_RATIO } from './config.js';
+import { FRAME_BOOST, FRAME_COROTATE, FRAME_FREEFALL } from './frames.js';
 
 export const EL_PLANE = Math.PI / 2;
 export const EL_SPACETIME = 0.52;      // about 30° above the plane
@@ -20,6 +21,7 @@ const EL_MIN = 0.16;
 const DEPTH_FRACTION = 1.2;            // time shown below the plane, per visible plane height
 const HISTORY = WORLDLINE_LEN * WORLDLINE_DT - 1;  // the world lines' recorded reach
 const EASE_RATE = 2.4;                 // per second, for the eased view changes
+const COORD_RATE = 1.6;                // per second, for the boost between coordinates
 
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 
@@ -31,6 +33,13 @@ export default class SpacetimeView {
         this._to = null;          // { el, az } while easing
         this.onChange = null;     // called when the view switches between plane and spacetime
         this._wasTilted = false;
+        // Coordinates: s eases 0 (lab) → 1 (the observer's) while the lab boosts at ψ = s·φ.
+        // At 1 the boost frame takes over (frames.js) and draws the bodies on its slice.
+        this.s = 0;
+        this._sTo = 0;
+        this.onCoords = null;     // called with true/false when the observer's frame starts/stops
+        this._obs = { s: 0, psi: 0, n: [1, 0], u: [0, 0], gamma: 1, tA: 0, xA: [0, 0], aNow: [0, 0],
+                      lag: 0, offset: [0, 0], frameOn: false, lorentz: true, active: false };
     }
 
     /** 0 in the plane view, 1 once tilted to the spacetime elevation or below. */
@@ -145,6 +154,108 @@ export default class SpacetimeView {
     }
 
     get easing() { return !!this._to; }
+
+    /** Boost into the observer's coordinates (true) or back to the lab's (false), eased. */
+    toCoords(observer) {
+        const frames = this.sim.frames;
+        this._sTo = observer ? 1 : 0;
+        if (!observer && frames.active) {
+            // Leave the frame first, with the lab camera on the observer's position now,
+            // so the boost back starts from the frame's own picture
+            const o = this._obs;
+            const at = o.frameOn ? [o.aNow[0], o.aNow[1]] : null;
+            this.s = 1;
+            this.sim.framePanel ? this.sim.framePanel.choose('lab') : frames.set(0);
+            if (at) this.sim.camera.reset(at[0], at[1], this.sim.camera.zoom);
+            if (this.onCoords) this.onCoords(false);
+        }
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) this.s = this._sTo;
+        this.sim._dirty = true;
+    }
+
+    /** True while the lab is part-way through the boost (bodies show as their slice points). */
+    get boosting() { return !this.sim.frames.active && this.s > 0.0005 && this.s < 0.9995; }
+
+    /** Advance the coordinate easing; hand over to the boost frame once it arrives. */
+    stepCoords(dt) {
+        const frames = this.sim.frames;
+        if (frames.active) { this.s = 1; this._sTo = 1; return; }
+        if (Math.abs(this._sTo - this.s) < 1e-4) { this.s = this._sTo; }
+        else {
+            const k = 1 - Math.exp(-COORD_RATE * 2.2 * dt);
+            this.s += (this._sTo - this.s) * k;
+            if (Math.abs(this._sTo - this.s) < 2e-3) this.s = this._sTo;
+            this.sim._dirty = true;
+        }
+        if (this.s === 1 && this._sTo === 1) {
+            // Arrived: the boost frame's observer is the one this boost followed, through the
+            // camera's centre now, so its picture continues this one without a jump
+            if (this.sim.framePanel) this.sim.framePanel.choose('boost'); else frames.set(FRAME_BOOST);
+            if (this.onCoords) this.onCoords(true);
+        }
+    }
+
+    /**
+     * The observer the display boosts toward, and the display transform's parameters, for
+     * this frame. In the boost frame they come from the frame's anchor (frame-slice.wgsl, read
+     * back a frame late; the shader reads the live buffer); in the lab, from an inertial
+     * observer moving at the boost and passing through the camera's centre now.
+     */
+    observer() {
+        const sim = this.sim, frames = sim.frames, cam = sim.camera, o = this._obs;
+        const lorentz = sim.settings.relativityEnabled;
+        o.frameOn = frames.active;
+        o.active = frames.active ? frames.kind !== FRAME_COROTATE && frames.kind !== FRAME_FREEFALL && lorentz
+                                 : frames.boostSpeed > 1e-4 && lorentz;
+        o.lorentz = lorentz;
+        const st = frames.state;
+        const gp = sim._gpuPhysics;
+        const nowGPU = gp ? gp.gpuTime : 0;
+        if (frames.active && st && st.valid) {
+            o.u[0] = st.ux; o.u[1] = st.uy;
+            o.lag = st.lag;
+            o.tA = st.tA - (gp ? gp.timeEpoch : 0);
+            o.xA[0] = st.xA[0]; o.xA[1] = st.xA[1];
+            o.aNow[0] = st.aNow[0]; o.aNow[1] = st.aNow[1];
+        } else {
+            const v = Math.min(frames.boostSpeed, MAX_SPEED_RATIO);
+            const dir = frames.direction;
+            o.u[0] = v * Math.cos(dir); o.u[1] = v * Math.sin(dir);
+            // frameAnchor's lag for a boost: the visible slice's leading corner in the past
+            const halfW = sim.width / (2 * cam.zoom), halfH = sim.height / (2 * cam.zoom);
+            const g = 1 / Math.sqrt(1 - v * v);
+            const reach = Math.abs(halfW * Math.cos(dir)) + Math.abs(halfH * Math.sin(dir));
+            o.lag = v > 1e-6 ? Math.min(v * g * reach + 0.25, HISTORY) : 0;
+            o.tA = nowGPU - o.lag;
+            o.aNow[0] = cam.x; o.aNow[1] = cam.y;
+            o.xA[0] = cam.x - o.u[0] * o.lag; o.xA[1] = cam.y - o.u[1] * o.lag;
+        }
+        const speed = Math.hypot(o.u[0], o.u[1]);
+        o.gamma = 1 / Math.sqrt(1 - Math.min(speed * speed, MAX_SPEED_RATIO * MAX_SPEED_RATIO));
+        if (speed > 1e-6) { o.n[0] = o.u[0] / speed; o.n[1] = o.u[1] / speed; } else { o.n[0] = 1; o.n[1] = 0; }
+        o.s = o.active ? (frames.active ? 1 : this.s) : 0;
+        o.psi = o.s * Math.atanh(Math.min(speed, MAX_SPEED_RATIO));
+        // Displayed position = boosted offset from the anchor + this offset: the lab's own
+        // coordinates at s = 0, the camera's centre on the observer at s = 1
+        if (frames.active) { o.offset[0] = 0; o.offset[1] = 0; }
+        else {
+            o.offset[0] = (1 - o.s) * o.xA[0] + o.s * o.aNow[0];
+            o.offset[1] = (1 - o.s) * o.xA[1] + o.s * o.aNow[1];
+        }
+        o.nowGPU = nowGPU;
+        return o;
+    }
+
+    /** A lab event (x, y, GPU time t) in display coordinates { x, y, h }, under observer() o. */
+    display(x, y, t, o) {
+        let dx = x - o.xA[0], dy = y - o.xA[1], dt = t - o.tA;
+        if (!o.active) return { x, y, h: t - o.nowGPU };
+        const par = dx * o.n[0] + dy * o.n[1];
+        const ch = Math.cosh(o.psi), sh = Math.sinh(o.psi);
+        const par2 = ch * par - sh * dt, dt2 = ch * dt - sh * par;
+        const px = dx - par * o.n[0], py = dy - par * o.n[1];
+        return { x: o.offset[0] + px + par2 * o.n[0], y: o.offset[1] + py + par2 * o.n[1], h: dt2 - (1 - o.s) * o.lag };
+    }
 
     _kick() {
         if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {

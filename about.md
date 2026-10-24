@@ -1,8 +1,8 @@
 ---
 name: Worldline
 title: Worldline — Interactive Particle Physics Simulator
-description: Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-three browser presets.
-updated: 2026-10-23
+description: Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-four browser presets.
+updated: 2026-10-24
 ---
 
 # Worldline — Interactive Particle Physics Simulator
@@ -49,7 +49,7 @@ The Higgs and axion fields evolve on a 128 × 128 grid. With gravity on, they ev
 
 ## Presets
 
-Twenty-three curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, the twin paradox on a line and on a torus, atomic and nuclear toy systems, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, an expanding universe, axion misalignment, Kibble–Zurek domain walls, and microlensing. Each preset sets initial conditions and force parameters for one compact demonstration.
+Twenty-four curated presets cover Keplerian motion, relativistic precession, binary inspiral, Hawking evaporation, the relativistic wheel, Thomas and geodetic precession, the twin paradox on a line and on a torus, atomic and nuclear toy systems, cyclotron drift, bremsstrahlung, magnetic dipoles, pion exchange, Higgs and axion fields, Peccei-Quinn dynamics, an expanding universe, axion misalignment, Kibble–Zurek domain walls, and microlensing. Each preset sets initial conditions and force parameters for one compact demonstration.
 
 ## Black Hole Physics
 

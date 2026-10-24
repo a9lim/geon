@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 118;
+const SHADER_VERSION = 124;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -996,8 +996,8 @@ export async function createBosonRenderPipelines(device, format, isLight, wgslCo
             alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         }
         : {
-            color: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
-            alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
+            color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+            alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         };
 
     const photonPipeline = device.createRenderPipeline({
@@ -1654,8 +1654,8 @@ export async function createClockRenderPipeline(device, format, isLight, wgslCon
             alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         }
         : {
-            color: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
-            alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
+            color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+            alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         };
 
     const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
@@ -1703,8 +1703,8 @@ export async function createRingRenderPipeline(device, format, isLight, wgslCons
             alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         }
         : {
-            color: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
-            alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
+            color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+            alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         };
 
     const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
@@ -1785,8 +1785,8 @@ export async function createTrailRenderPipeline(device, format, isLight, wgslCon
             alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         }
         : {
-            color: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
-            alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
+            color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+            alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         };
 
     const pipeline = device.createRenderPipeline({
@@ -1832,8 +1832,8 @@ export async function createArrowRenderPipeline(device, format, isLight, wgslCon
             alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         }
         : {
-            color: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
-            alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
+            color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+            alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         };
 
     const pipeline = device.createRenderPipeline({
@@ -1878,8 +1878,8 @@ export async function createTorqueRenderPipeline(device, format, isLight, wgslCo
             alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         }
         : {
-            color: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
-            alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
+            color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+            alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         };
 
     const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
@@ -2208,16 +2208,17 @@ export async function createSpacetimeRenderPipelines(device, format, wgslConstan
         color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
     };
-    const make = (label, entryPoint) => device.createRenderPipeline({
+    const make = (label, entryPoint, fragment = 'fs_main') => device.createRenderPipeline({
         label,
         layout: 'auto',
         vertex: { module, entryPoint },
-        fragment: { module, entryPoint: 'fs_main', targets: [{ format, blend }] },
+        fragment: { module, entryPoint: fragment, targets: [{ format, blend }] },
         primitive: { topology: 'triangle-strip' },
     });
     return {
         line: make('spacetimeLines', 'vs_line'),
         cone: make('spacetimeCone', 'vs_cone'),
         boson: make('spacetimeBosons', 'vs_boson'),
+        pierce: make('spacetimePierce', 'vs_pierce', 'fs_pierce'),
     };
 }

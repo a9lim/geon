@@ -1,8 +1,7 @@
 // ─── Boson Rendering ───
 // Instanced point sprites for photons and pions.
-// Photons: yellow (EM) / red (grav), alpha fades over lifetime.
-// Pions: green, constant alpha.
-// Dark mode: exponential glow halo (matches CPU shadowBlur = 12).
+// Photons: ochre (EM) / madder (gravitons), alpha fading over their lifetime.
+// Pions mulberry, leptons verdigris, constant alpha.
 // In a non-lab frame each boson is drawn where its straight path crosses the observer's
 // slice (frame-slice.wgsl), back no further than its emission; photons take the Doppler
 // factor E′/E = γ(1 − u·v̂) in their size. Lensing inside the lag window is ignored.
@@ -61,11 +60,8 @@ struct VertexOutput {
 @group(2) @binding(0) var<storage, read> pionPool: array<Pion>;
 @group(2) @binding(1) var<storage, read> piCount: array<u32>;
 
-// In dark mode, extend the quad for glow halo (matches particle.wgsl)
-const DARK_QUAD_SCALE: f32 = 1.8;
-// Glow decay rate for bosons (CPU shadowBlur = 12; roughly maps to medium decay)
-const BOSON_GLOW_INTENSITY: f32 = 0.5;
-const BOSON_GLOW_DECAY: f32 = 4.0;  // 6.0 - 4.0 * 0.5
+// The quad is the dot itself in both themes (no glow halo)
+const DARK_QUAD_SCALE: f32 = 1.0;
 
 /**
  * A boson at lab position pos with coordinate velocity v, emitted age ago, seen in the
@@ -140,7 +136,6 @@ fn vertexPhoton(
     let alphaScale = select(0.6, 0.8, isDark > 0.5);
     let alpha = rawAlpha * alphaScale;
 
-    // Expand quad in dark mode for glow halo
     let quadScale = 1.0 + isDark * (DARK_QUAD_SCALE - 1.0);
 
     let seen = bosonInFrame(vec2f(ph.posX, ph.posY), vec2f(ph.velX, ph.velY), ph.lifetime);
@@ -221,18 +216,12 @@ fn fragmentBoson(
 ) -> @location(0) vec4f {
     let dist = length(uv);
 
-    // Discard beyond glow range
     if (dist > DARK_QUAD_SCALE + 0.05) { discard; }
 
     // Sharp circle edge (matches CPU ctx.arc fill)
     let circleAlpha = select(0.0, 1.0, dist <= 1.0) * color.a;
 
-    // Dark mode glow halo: exponential falloff beyond circle edge (matches CPU shadowBlur=12)
-    let glowRange = DARK_QUAD_SCALE - 1.0;
-    let glowDist = clamp((dist - 1.0) / glowRange, 0.0, 1.0);
-    let glowAlpha = exp(-glowDist * BOSON_GLOW_DECAY) * (1.0 - glowDist) * color.a * isDark * 0.275;
-
-    let totalAlpha = clamp(circleAlpha + glowAlpha, 0.0, 1.0);
+    let totalAlpha = clamp(circleAlpha, 0.0, 1.0);
 
     // Premultiplied alpha output (matches particle.wgsl and canvas alphaMode: 'premultiplied')
     return vec4f(color.rgb * totalAlpha, totalAlpha);
