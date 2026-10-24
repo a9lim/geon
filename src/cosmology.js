@@ -1,7 +1,7 @@
 // ─── Cosmology ───
 // The scale factor a(t) behind Expansion. The universe is the periodic domain (Expansion
 // requires loop topology): homogeneous FRW, a slab of comoving thickness SHEET_THICKNESS
-// cut from flat 3D FRW. Geon keeps physical positions on a domain of physical size
+// cut from flat 3D FRW. Worldline keeps physical positions on a domain of physical size
 // a × the comoving domain (sim.domainW/H). Once per frame GPUPhysics scales every position
 // by r = a_new/a_old about the domain's corner and every peculiar momentum by 1/r
 // (expansion.wgsl). On a torus, Klein bottle or RP² that map is homogeneous, so it is the

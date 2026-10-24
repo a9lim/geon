@@ -35,12 +35,12 @@ async function requestDevice() {
             },
         });
     } catch (e) {
-        console.warn('[geon] WebGPU device request failed:', e);
+        console.warn('[worldline] WebGPU device request failed:', e);
         return null;
     }
 }
 
-/** The opening popup for browsers without WebGPU: Geon has no other backend. */
+/** The opening popup for browsers without WebGPU: Worldline has no other backend. */
 function showWebGPURequired() {
     if (document.getElementById('webgpu-overlay')) return;
     const overlay = document.createElement('div');
@@ -249,7 +249,7 @@ class Simulation {
         try {
             backend = await GPUBackend.create(this, device);
         } catch (e) {
-            console.error('[geon] GPU init failed:', e);
+            console.error('[worldline] GPU init failed:', e);
             showWebGPURequired();
             return;
         }
@@ -264,7 +264,7 @@ class Simulation {
     /** Recreate the device and restore the latest auto-save. */
     async _onDeviceLost(backend, info) {
         if (this.gpu !== backend) return;
-        console.error('[geon] GPU device lost:', info.message);
+        console.error('[worldline] GPU device lost:', info.message);
         const restore = backend.autoSave;
         this.gpu = null;
         this._gpuPhysics = null;
@@ -542,7 +542,7 @@ class Simulation {
     loop(timestamp) {
       this._loopScheduled = false;
       try { this._loopBody(timestamp); }
-      catch (e) { console.error('[geon] loop error:', e); }
+      catch (e) { console.error('[worldline] loop error:', e); }
       if (!this._hidden) this._scheduleLoop();
     }
 

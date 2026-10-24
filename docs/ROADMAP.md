@@ -1,16 +1,16 @@
-# Geon Roadmap
+# Worldline Roadmap
 
-The one authoritative future-plans document for Geon. It merges and
+The one authoritative future-plans document for Worldline. It merges and
 supersedes the June audit (`AUDIT.md`, 2026-06-09) and the 2.0 scouting plan
 (`PLAN-2.0.md`, 2026-10-23); both remain in git history.
 
-`AGENTS.md` describes Geon as it is. This file describes where it is going.
+`AGENTS.md` describes Worldline as it is. This file describes where it is going.
 When an item lands, delete it here, or move it to §2.1 with its commit, and
 update `AGENTS.md`.
 
 Written by Claude with a9. Codex adversarially reviewed the physics claims
 twice on 2026-10-23; corrections that changed the design are marked
-"(Codex)". Paths are relative to the Geon root. Line numbers are as of commit
+"(Codex)". Paths are relative to the Worldline root. Line numbers are as of commit
 `bda3baf` unless stated otherwise.
 
 This file lives in `docs/` so the parent build's stager never deploys it
@@ -70,7 +70,7 @@ Cost: **S** about one session · **M** a few sessions · **L** a milestone ·
 
 ### 1.1 Thesis: a spacetime simulator
 
-Geon 1.x computes *space at the current instant*. Every chosen feature from
+Worldline 1.x computes *space at the current instant*. Every chosen feature from
 1.5 on
 needs *spacetime*: a frame switch re-slices world-lines, a clock is a
 world-line's proper length, a light-cone view intersects world-lines with a
@@ -94,7 +94,7 @@ null cone, and cosmology is about how the slices themselves stretch.
 **Cross-cutting rule: every phenomenon ships with its analytic number.**
 Examples: γβcτ survival lengths, the spoke twist `2·v·v_rim`, the twin-paradox
 jump `2vd`, Einstein radii, `E ∝ 1/a`, and the 2D-hydrogen spectrum. These
-numbers are the test suite Geon has never had (§10.3).
+numbers are the test suite Worldline has never had (§10.3).
 
 ### 1.2 The 3D convention: 3D parent physics, named planar reductions
 
@@ -103,7 +103,7 @@ a9's decision: **the simulation is a 2D slice of a 3D world.**
 Codex's review turned that into a precise form: *3+1 parent physics with
 specified planar reductions*. A confined slab, a homogeneous cosmological
 slice and an equatorial symmetry plane are **different reductions**, not three
-readings of one model. Geon uses each where it fits, and says which.
+readings of one model. Worldline uses each where it fits, and says which.
 
 | Reduction | Applies to | Exact part | Approximate part |
 |---|---|---|---|
@@ -148,7 +148,7 @@ The tie is explicit and per mode, which is what Codex asked for.
     its own response function.
   - In an expanding background, with comoving k:
     `δ̈ + 2Hδ̇ + [c_s²k²/a² − 2πGΣ̄_phys|k|F(|k|ℓ)/a]·δ = 0`.
-  - Growth is scale-dependent, not the 3D δ ∝ a. Geon's in-plane structure
+  - Growth is scale-dependent, not the 3D δ ∝ a. Worldline's in-plane structure
     formation is galactic-disk dynamics.
   - F depends on the transverse profile, not just a nominal softening.
 - **Fields:**
@@ -208,7 +208,7 @@ The tie is explicit and per mode, which is what Codex asked for.
   with Kerr–Newman `r₊`, horizon capture in merge mode, and extremal
   censorship by quantized lepton shedding with a clamp backstop. All
   documented in `AGENTS.md`.
-- **Geon 2.0 scouting:** this document, `bda3baf` and later.
+- **Worldline 2.0 scouting:** this document, `bda3baf` and later.
 - **Doc drift:** `AGENTS.md`'s preset count now matches `presets.js` (15).
 - **M0 (2026-10-23), GPU only:**
   - Internal clocks on proper time (§5.1): pion decay, Hawking, Schwinger,
@@ -287,7 +287,7 @@ The tie is explicit and per mode, which is what Codex asked for.
     - moving-mass Bgz had the wrong sign, and spin-sourced Bgz was −2J/r³
       instead of +J/(2r³) (the gravitomagnetic clock effect now gives 4πJ/M);
     - the 1PN EIH block used the inward normal throughout, so with the Bgz
-      flip Geon applied −a₁PN, a retrograde perihelion advance. Now it is the
+      flip Worldline applied −a₁PN, a retrograde perihelion advance. Now it is the
       EIH remainder in N plus the kick correction ½v²a_N + v(v·a_N) for the
       w = γv integrator; the perihelion advance oracle gives 6πM/p to 0.1%;
     - Bažański's mixed coefficient becomes q₁q₂(6m₁ + 5m₂) − (q₁²m₂ + q₂²m₁)
@@ -514,12 +514,12 @@ The tie is explicit and per mode, which is what Codex asked for.
   - Nothing exercises superradiance, Schwinger discharge, kugelblitz,
     Roche/disintegration, the Klein/RP² topologies or the external fields.
   - Annihilation is only incidental (Peccei–Quinn).
-  - Geon still can't make a geon (§11.3).
+  - Worldline still can't make a geon (§11.3).
 - **Share-by-URL (audit §4):** not done. The only query parameter is `lang`;
   the domain is now state (M1), so a serialized state reproduces.
   - Plan: a `#state=` fragment holding the serialized state, gzipped with
     `CompressionStream` and base64url-encoded, plus `?preset=`.
-  - That lets blog posts embed live Geon states through the iframe directive.
+  - That lets blog posts embed live Worldline states through the iframe directive.
 - **GPU structure (audit §5):** status as of this writing. Recheck each
   before acting.
   - `gpu-physics.js` is 4442 lines. The audit recommended two extractions:
@@ -618,7 +618,7 @@ extract render concerns from the CPU particle and field classes for a headless
 CPU engine, the transpiler as a GPU↔CPU parity oracle, and the decomposition of
 `integrator.js`'s `update()`.
 
-## 5. Geon 1.5: relativity you can see, frames, cosmology
+## 5. Worldline 1.5: relativity you can see, frames, cosmology
 
 The 1.5 feature designs. §4 (retiring the CPU path) is also part of 1.5.
 
@@ -684,7 +684,7 @@ lost to the lagged view (decision 1). Not built:
 - **Spawning in a frame** (v2 below) and the heatmap in a frame (hidden).
 - **The covariance meter** below: seeding B's history to match a boosted A
   needs world-line seeding from a transformed history, which nothing writes yet.
-- **The slingshot twin:** every inertial "home" in Geon falls toward the
+- **The slingshot twin:** every inertial "home" in Worldline falls toward the
   slingshot mass during the trip, and a U-turn at relativistic speed needs a
   periapsis inside a few M. A fair version needs a body exempt from gravity.
 - **Aberrated photon directions** and transformed sampling weights.
@@ -764,14 +764,14 @@ The design as planned:
 
 **Covariance meter [synthesis]:**
 - **[standard]** By the Currie–Jordan–Sudarshan no-interaction theorem,
-  instantaneous forces make the lab Geon's ether.
+  instantaneous forces make the lab Worldline's ether.
 - **Preset:** atom A at rest. Atom B is A's state *consistently boosted* to
   0.8c, with history seeded to match. Switch to B's frame, overlay A, and
   report the mismatch.
 - **Expectations, stated carefully:**
   - Newtonian forces miss at O(v²).
   - Darwin/1PN is covariant only through its retained order, at small v.
-  - Geon's 1PN currently runs alongside the toy aberration factor, so it
+  - Worldline's 1PN currently runs alongside the toy aberration factor, so it
     certifies nothing.
   - Liénard–Wiechert restores covariance for EM only.
 - The meter measures covariance per force family.
@@ -822,7 +822,7 @@ a9's call: a grid rather than stars, because it reads at every scale.
    - The weak thin-lens formula *cannot* make a black-hole shadow. A
      `3√3 M` capture disk is an imposed, labelled overlay. The real shadow
      needs 3.0's ray-traced view (§9.2).
-   - Geon's in-plane photons are deflected separately, by 2× Newtonian
+   - Worldline's in-plane photons are deflected separately, by 2× Newtonian
      (`src/massless-boson.js:59-70` today).
 3. **Comoving coordinates (§5.6):** the lattice stretches with a(t) in the
    physical display and stays fixed in the comoving one.
@@ -916,7 +916,7 @@ The slab is a slice of homogeneous 3D FRW with comoving thickness ℓ_c.
 - the sheet dispersion relation `ω² = c_s²k² − 2πGΣ₀|k|·F(kℓ)` in a static
   background, and the expanding-sheet growth equation (§1.2).
 
-## 6. Geon 2.0: the full visual overhaul
+## 6. Worldline 2.0: the full visual overhaul
 
 a9's call: a full visual overhaul marks 2.0. Its scope is **not yet
 defined**. What follows is a starting sketch **[proposal]**, to be sharpened
@@ -987,7 +987,7 @@ with a9 before work starts (open decision 7).
 - a CVD-simulation pass over every colormap;
 - frame-time budgets from GPU timestamp queries.
 
-## 7. Geon 2.1: brushwork
+## 7. Worldline 2.1: brushwork
 
 In order: the brush and media (M8), then dust (M5), then gas (M6).
 
@@ -1053,7 +1053,7 @@ neighbour search, adaptive h, Monaghan viscosity, an energy equation.
 - gravity both ways;
 - accretion into particles and horizons, conserving momentum;
 - drag and ram pressure;
-- sinks: a Jeans-unstable clump becomes a Geon particle, star formation as a
+- sinks: a Jeans-unstable clump becomes a Worldline particle, star formation as a
   cousin of kugelblitz;
 - cooling into photons and photon heating; Eddington later.
 
@@ -1083,7 +1083,7 @@ rate; the Chandrasekhar friction time.
 **Staging:** M5, PM dust (L); then M6, SPH gas (L), with sinks, accretion,
 cooling (M) and painted gas through the brush (§7.1).
 
-## 8. Geon 2.5: the quantum layer (M7, XL, laddered)
+## 8. Worldline 2.5: the quantum layer (M7, XL, laddered)
 
 **What it looks like:**
 - A glowing field on its own grid: brightness is `|ψ|²`, hue is `arg ψ`.
@@ -1183,13 +1183,13 @@ particles on a line fit on one 2D grid **[speculative]**.
 spacing; AB shift `qΦ_B`; ZB frequency; Klein transmission; norm to machine
 precision.
 
-## 9. Geon 3.0: 3D
+## 9. Worldline 3.0: 3D
 
 **Decided 2026-10-23: all of this is parked for 3.0, after 2.5.** Until then
-Geon stays a 2D view, with 1.5's 1+1 Minkowski panel (§5.4) standing in for
+Worldline stays a 2D view, with 1.5's 1+1 Minkowski panel (§5.4) standing in for
 §9.1.
 
-The 3D convention makes "3D" more than decoration: Geon *is* a slice of a 3D
+The 3D convention makes "3D" more than decoration: Worldline *is* a slice of a 3D
 world, so a 3D camera is looking at something real. Four options, in rising
 ambition.
 
@@ -1266,7 +1266,7 @@ ambition.
   sheet shows only space. A Newtonian "rubber sheet" is potential-height, not
   curvature, and must be labelled so if shown at all.
 
-### 9.4 Geon 3.0: genuinely 3D physics (XL)
+### 9.4 Worldline 3.0: genuinely 3D physics (XL)
 
 - 3.0 is the parent world itself. 2.x's particles become a reflection-symmetric
   sector of it, and 2.x's slab models become explicit confinement inside it.
@@ -1439,7 +1439,7 @@ Ordered by how much they strengthen the chosen work.
      - an exact lapse for clocks;
      - Kerr V_eff in the panel;
      - Kerr ray tracing for 3.0's inclined view (§9.2).
-3. **Make a geon in Geon.**
+3. **Make a geon in Worldline.**
    - A photon ring on its own null orbit (~4E in toy units), which needs the
      cull exemption. It's unstable, as real geons are, ending in dispersal or
      kugelblitz.
@@ -1477,7 +1477,7 @@ Ordered by how much they strengthen the chosen work.
 - WebGPU has no float atomics (dust deposition).
 - The transpiler excludes textures, samplers and nested barriers.
 - Torus identifications are simultaneous only in the lab frame.
-- **Familiar approximation names don't certify Geon's hybrid integrator**
+- **Familiar approximation names don't certify Worldline's hybrid integrator**
   (Codex). PW's 6M ISCO and Darwin's O(v²) covariance must be *measured*.
 - **A dimensional label doesn't repair an equation** (Codex). The 3D
   convention fixes which parent equations to start from. The field equation,

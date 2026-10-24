@@ -75,7 +75,7 @@ const REF_EN = {
 
     'ref.magnetic.title': 'Magnetic interactions',
     'ref.magnetic.body': `
-<p>Magnetism comes from charges in motion. Geon models two sources: translating charges, whose field acts on other moving charges through the Lorentz force, and spinning charges, which are magnetic dipoles.</p>
+<p>Magnetism comes from charges in motion. Worldline models two sources: translating charges, whose field acts on other moving charges through the Lorentz force, and spinning charges, which are magnetic dipoles.</p>
 
 <h3>Lorentz force</h3>
 <p>$$\\mathbf{F} = q\\,\\mathbf{v}\\times\\mathbf{B}$$</p>
@@ -125,7 +125,7 @@ const REF_EN = {
 
     'ref.relativity.title': 'Special relativity',
     'ref.relativity.body': `
-<p>When particles move at appreciable fractions of $c$, Newtonian mechanics breaks down. Geon integrates proper velocity, so no body ever reaches the speed of light.</p>
+<p>When particles move at appreciable fractions of $c$, Newtonian mechanics breaks down. Worldline integrates proper velocity, so no body ever reaches the speed of light.</p>
 
 <h3>Proper velocity</h3>
 <p>$$\\mathbf{w} = \\gamma\\mathbf{v}, \\qquad \\gamma = \\frac{1}{\\sqrt{1-v^2}}$$</p>
@@ -147,14 +147,14 @@ const REF_EN = {
 <p>With Relativity on, forces travel at the speed of light. Every body's world line is recorded, and a body at time $t$ feels each source from the event on the source's world line where $|\\mathbf{x}(t) - \\mathbf{x}_s(t')| = t - t'$, on its past light cone.</p>
 <p>Charges act through the Liénard–Wiechert fields, the exact fields of a point charge in arbitrary motion:</p>
 <p>$$\\mathbf{E} = q\\left[\\frac{(\\hat{\\mathbf{n}}-\\boldsymbol{\\beta})(1-\\beta^2)}{\\kappa^3R^2} + \\frac{\\hat{\\mathbf{n}}\\times\\big((\\hat{\\mathbf{n}}-\\boldsymbol{\\beta})\\times\\dot{\\boldsymbol{\\beta}}\\big)}{\\kappa^3R}\\right], \\qquad \\mathbf{B} = \\hat{\\mathbf{n}}\\times\\mathbf{E}$$</p>
-<p>Here $\\hat{\\mathbf{n}}$ and $R$ are the direction and distance from the delayed position, $\\boldsymbol{\\beta}$ and $\\dot{\\boldsymbol{\\beta}}$ the source's velocity and acceleration at that moment, and $\\kappa = 1 - \\hat{\\mathbf{n}}\\cdot\\boldsymbol{\\beta}$. The first term is the velocity field: for a charge in uniform motion it points from the charge's present position and flattens into a pancake around it. The second is the radiation field, which falls off only as $1/R$. Geon softens both at short range and caps $1/\\kappa^3$ at 100.</p>
+<p>Here $\\hat{\\mathbf{n}}$ and $R$ are the direction and distance from the delayed position, $\\boldsymbol{\\beta}$ and $\\dot{\\boldsymbol{\\beta}}$ the source's velocity and acceleration at that moment, and $\\kappa = 1 - \\hat{\\mathbf{n}}\\cdot\\boldsymbol{\\beta}$. The first term is the velocity field: for a charge in uniform motion it points from the charge's present position and flattens into a pancake around it. The second is the radiation field, which falls off only as $1/R$. Worldline softens both at short range and caps $1/\\kappa^3$ at 100.</p>
 <p>Gravity, the Yukawa force and the dipole interactions use their static laws at the delayed position, times the aberration factor $(1 - \\hat{\\mathbf{n}}\\cdot\\mathbf{v})^{-3}$: a toy model of finite-speed propagation, not a field solution.</p>
 <p>A body spawned by hand exerts no force anywhere until its light arrives. Bodies placed by a preset or loaded from a save have always existed.</p>
 `,
 
     'ref.frames.title': 'Frames',
     'ref.frames.body': `
-<p>The view can be drawn for an observer other than the lab. Geon records every body's world line and redraws the scene on the observer's surface of simultaneity. Frames are a view: spawning and selecting still act in the lab.</p>
+<p>The view can be drawn for an observer other than the lab. Worldline records every body's world line and redraws the scene on the observer's surface of simultaneity. Frames are a view: spawning and selecting still act in the lab.</p>
 
 <h3>Slicing world lines</h3>
 <p>An inertial observer moving at velocity $\\mathbf{u}$ calls simultaneous the events on the hyperplane</p>
@@ -164,7 +164,7 @@ const REF_EN = {
 <p>and each clock shows the proper time it had at the crossing. Clocks synchronized in the lab a distance $L$ apart along $\\mathbf{u}$ read $uL$ apart on the observer's slice: the relativity of simultaneity.</p>
 
 <h3>The lagged view</h3>
-<p>Ahead of the observer the slice reaches into the lab's future, which hasn't been computed. Geon sets the observer's present far enough back, $t_A = t_{\\text{now}} - |\\mathbf{u}|\\gamma\\max x'_\\parallel$ over the visible area, that everything drawn has already happened. The Frame tab shows the lag, and says when part of the slice lies outside the recorded history (128 time units), where bodies are extrapolated at constant velocity.</p>
+<p>Ahead of the observer the slice reaches into the lab's future, which hasn't been computed. Worldline sets the observer's present far enough back, $t_A = t_{\\text{now}} - |\\mathbf{u}|\\gamma\\max x'_\\parallel$ over the visible area, that everything drawn has already happened. The Frame tab shows the lag, and says when part of the slice lies outside the recorded history (128 time units), where bodies are extrapolated at constant velocity.</p>
 
 <h3>The frames</h3>
 <ul>
@@ -190,7 +190,7 @@ const REF_EN = {
 <h3>The lens equation</h3>
 <p>A ray that reaches the eye at angle $\\boldsymbol\\theta$ left the backdrop at</p>
 <p>$$\\boldsymbol\\beta = \\boldsymbol\\theta - \\boldsymbol\\alpha(\\boldsymbol\\theta), \\qquad \\boldsymbol\\alpha(\\boldsymbol\\theta) = \\sum_i 4M_iD\\,\\frac{\\boldsymbol\\theta - \\boldsymbol\\theta_i}{|\\boldsymbol\\theta - \\boldsymbol\\theta_i|^2},$$</p>
-<p>the gradient of a two-dimensional logarithmic potential, twice what Newtonian gravity would give a fast particle. Geon works in lens-plane distances rather than angles, so the Backdrop distance slider sets $D = D_L D_{LS}/D_S$ in the simulation's length units. Each pixel draws the grid at $\\boldsymbol\\beta$, so the rulers bend around every mass. A tiny core, $10^{-4}$ of each lens's $4MD$, keeps a ray through a body finite.</p>
+<p>the gradient of a two-dimensional logarithmic potential, twice what Newtonian gravity would give a fast particle. Worldline works in lens-plane distances rather than angles, so the Backdrop distance slider sets $D = D_L D_{LS}/D_S$ in the simulation's length units. Each pixel draws the grid at $\\boldsymbol\\beta$, so the rulers bend around every mass. A tiny core, $10^{-4}$ of each lens's $4MD$, keeps a ray through a body finite.</p>
 
 <h3>Einstein rings</h3>
 <p>A backdrop point directly behind a lone mass is seen on a ring of radius</p>
@@ -200,10 +200,10 @@ const REF_EN = {
 <h3>Microlensing</h3>
 <p>The backdrop star is a small disk in the backdrop. Lensing magnifies it by the total area of its images over its own area, $\\mu = \\sum_{\\text{images}} |\\det \\partial\\boldsymbol\\beta/\\partial\\boldsymbol\\theta|^{-1}$. For one point lens at separation $u$ (in Einstein radii),</p>
 <p>$$\\mu(u) = \\frac{u^2 + 2}{u\\sqrt{u^2 + 4}},$$</p>
-<p>so a lens drifting past the star brightens it along a symmetric light curve, the signature astronomers use to find dark objects and planets. Geon measures $\\mu$ by shooting a ray through every cell of the view and counting those that land on the star, which works for any arrangement of lenses.</p>
+<p>so a lens drifting past the star brightens it along a symmetric light curve, the signature astronomers use to find dark objects and planets. Worldline measures $\\mu$ by shooting a ray through every cell of the view and counting those that land on the star, which works for any arrangement of lenses.</p>
 
 <h3>Limits</h3>
-<p>This is the weak, thin-lens approximation for lenses at rest at their current positions: no moving-lens corrections, time delays, or spin and charge effects. It has no black-hole shadow: around black holes Geon masks the Schwarzschild capture impact parameter $3\\sqrt3\\,M$, an imposed overlay rather than a computed one. On a periodic domain each lens is taken once, at its image nearest the centre of the view. The photons moving in the plane are deflected separately, by twice the Newtonian pull. Lensing is drawn in the lab frame only.</p>
+<p>This is the weak, thin-lens approximation for lenses at rest at their current positions: no moving-lens corrections, time delays, or spin and charge effects. It has no black-hole shadow: around black holes Worldline masks the Schwarzschild capture impact parameter $3\\sqrt3\\,M$, an imposed overlay rather than a computed one. On a periodic domain each lens is taken once, at its image nearest the centre of the view. The photons moving in the plane are deflected separately, by twice the Newtonian pull. Lensing is drawn in the lab frame only.</p>
 `,
 
     'ref.radiation.title': 'Radiation',
@@ -243,9 +243,9 @@ const REF_EN = {
 <h3>Einstein–Infeld–Hoffmann: gravity</h3>
 <p>Needs Gravitomagnetic. The EIH equations give the relativistic perihelion advance,</p>
 <p>$$\\Delta\\phi = \\frac{6\\pi M}{a(1-e^2)} \\text{ per orbit,}$$</p>
-<p>43 arcseconds per century for Mercury. Geon splits the EIH acceleration in two. Its $\\mathbf{v}_1\\cdot\\mathbf{v}_2$ sector is the gravitomagnetic Lorentz force $4m\\,\\mathbf{v}\\times\\mathbf{B}_g$ of the moving mass's field, applied as a rotation. The rest is a direct force; with $\\mathbf{N}$ the unit vector from the source (mass $M$, velocity $\\mathbf{v}_2$) to the body (mass $m$, velocity $\\mathbf{v}_1$),</p>
+<p>43 arcseconds per century for Mercury. Worldline splits the EIH acceleration in two. Its $\\mathbf{v}_1\\cdot\\mathbf{v}_2$ sector is the gravitomagnetic Lorentz force $4m\\,\\mathbf{v}\\times\\mathbf{B}_g$ of the moving mass's field, applied as a rotation. The rest is a direct force; with $\\mathbf{N}$ the unit vector from the source (mass $M$, velocity $\\mathbf{v}_2$) to the body (mass $m$, velocity $\\mathbf{v}_1$),</p>
 <p>$$\\mathbf{a} = \\frac{M}{r^2}\\Big\\{\\mathbf{N}\\Big[-v_1^2 - 2v_2^2 + \\tfrac{3}{2}(\\mathbf{N}\\cdot\\mathbf{v}_2)^2 + \\frac{5m+4M}{r}\\Big] + \\mathbf{v}_1\\big(4\\,\\mathbf{N}\\cdot\\mathbf{v}_1 - 3\\,\\mathbf{N}\\cdot\\mathbf{v}_2\\big) + 3\\,\\mathbf{v}_2\\,(\\mathbf{N}\\cdot\\mathbf{v}_2)\\Big\\}$$</p>
-<p>EIH gives $d\\mathbf{v}/dt$, while Geon integrates $\\mathbf{w} = \\gamma\\mathbf{v}$, so the kick also carries $\\tfrac{1}{2}v_1^2\\mathbf{a}_N + \\mathbf{v}_1(\\mathbf{v}_1\\cdot\\mathbf{a}_N)$ from the Newtonian acceleration $\\mathbf{a}_N$.</p>
+<p>EIH gives $d\\mathbf{v}/dt$, while Worldline integrates $\\mathbf{w} = \\gamma\\mathbf{v}$, so the kick also carries $\\tfrac{1}{2}v_1^2\\mathbf{a}_N + \\mathbf{v}_1(\\mathbf{v}_1\\cdot\\mathbf{a}_N)$ from the Newtonian acceleration $\\mathbf{a}_N$.</p>
 
 <h3>Electromagnetism</h3>
 <p>There is no Darwin term. With Relativity on, charges interact through their Liénard–Wiechert fields, which contain the Darwin interaction and every higher order in $v$.</p>
@@ -261,7 +261,7 @@ const REF_EN = {
 <p>Its acceleration terms are reduced to order with the two-body Yukawa accelerations. Scalar exchange has no magnetic-type field, so the whole correction is a direct force.</p>
 
 <h3>Integration</h3>
-<p>1PN forces depend on velocity and break Newton's third law. Geon recomputes them after the drift and applies the difference as a correction to the kick: an endpoint-force correction, not a full velocity-Verlet step.</p>
+<p>1PN forces depend on velocity and break Newton's third law. Worldline recomputes them after the drift and applies the difference as a correction to the kick: an endpoint-force correction, not a full velocity-Verlet step.</p>
 `,
 
     'ref.blackhole.title': 'Black hole mode',
@@ -274,10 +274,10 @@ const REF_EN = {
 <h3>Kerr-Newman horizon</h3>
 <p>The outer event horizon radius:</p>
 <p>$$r_+ = M + \\sqrt{M^2 - a^2 - Q^2}$$</p>
-<p>where $a = J/M$ is the spin parameter. The horizon exists only when $M^2 \\geq a^2 + Q^2$. In Geon's toy dynamics, over-extremal inputs shed same-sign leptons in charge quanta until they fit the bound; the radius is clamped to the effective extremal value $r_+ = M$ as a numerical backstop while that correction occurs.</p>
+<p>where $a = J/M$ is the spin parameter. The horizon exists only when $M^2 \\geq a^2 + Q^2$. In Worldline's toy dynamics, over-extremal inputs shed same-sign leptons in charge quanta until they fit the bound; the radius is clamped to the effective extremal value $r_+ = M$ as a numerical backstop while that correction occurs.</p>
 
 <h3>Pseudo-potential and capture</h3>
-<p>For near-horizon orbits, Geon replaces Newtonian black-hole gravity with a Paczynski-Wiita-style radial term, so the force and potential steepen as a particle approaches the horizon. This gives interactive plunge and capture behavior without solving the full Kerr-Newman geodesic equation. When one particle's center crosses another black hole's horizon, the simulator swallows it and transfers lab-frame four-momentum, charge, and spin/angular momentum into the captor.</p>
+<p>For near-horizon orbits, Worldline replaces Newtonian black-hole gravity with a Paczynski-Wiita-style radial term, so the force and potential steepen as a particle approaches the horizon. This gives interactive plunge and capture behavior without solving the full Kerr-Newman geodesic equation. When one particle's center crosses another black hole's horizon, the simulator swallows it and transfers lab-frame four-momentum, charge, and spin/angular momentum into the captor.</p>
 
 <h3>Ergosphere</h3>
 <p>The region between the horizon $r_+$ and the static limit:</p>
@@ -292,7 +292,7 @@ const REF_EN = {
 <p>Smaller black holes are hotter and radiate faster, creating a runaway: mass decreases $\\to$ temperature rises $\\to$ radiation intensifies $\\to$ evaporation. The final instant produces a burst of photons.</p>
 
 <h3>Extremal limit</h3>
-<p>When $M^2 = a^2 + Q^2$, the inner and outer horizons merge, surface gravity vanishes, and the temperature drops to zero — the black hole stops radiating. Extremal black holes are the most compact objects possible for their mass and charge, saturating the cosmic censorship bound. If a toy state crosses the bound, Geon emits same-sign leptons in $e$ units until the discrete charge state returns within the allowed region, with a hard clamp protecting the remaining floating-point edge cases.</p>
+<p>When $M^2 = a^2 + Q^2$, the inner and outer horizons merge, surface gravity vanishes, and the temperature drops to zero — the black hole stops radiating. Extremal black holes are the most compact objects possible for their mass and charge, saturating the cosmic censorship bound. If a toy state crosses the bound, Worldline emits same-sign leptons in $e$ units until the discrete charge state returns within the allowed region, with a hard clamp protecting the remaining floating-point edge cases.</p>
 
 <h3>Schwinger discharge</h3>
 <p>A sufficiently charged black hole generates an electric field strong enough to rip electron-positron pairs from the vacuum — the <b>Schwinger effect</b>. The rate per unit time for a Kerr-Newman black hole:</p>
@@ -849,7 +849,7 @@ const REF_JA = {
 
     'ref.magnetic.title': '磁気相互作用',
     'ref.magnetic.body': `
-<p>磁気は運動する電荷から生じます。Geonは2つの源をモデル化します。並進する電荷はその場がローレンツ力を通じて他の運動電荷に働き、自転する電荷は磁気双極子になります。</p>
+<p>磁気は運動する電荷から生じます。Worldlineは2つの源をモデル化します。並進する電荷はその場がローレンツ力を通じて他の運動電荷に働き、自転する電荷は磁気双極子になります。</p>
 
 <h3>ローレンツ力</h3>
 <p>$$\\mathbf{F} = q\\,\\mathbf{v}\\times\\mathbf{B}$$</p>
@@ -899,7 +899,7 @@ const REF_JA = {
 
     'ref.relativity.title': '特殊相対論',
     'ref.relativity.body': `
-<p>粒子が光速の相当な割合で運動すると、ニュートン力学は成り立ちません。Geonは固有速度を積分するので、どの物体も光速に達しません。</p>
+<p>粒子が光速の相当な割合で運動すると、ニュートン力学は成り立ちません。Worldlineは固有速度を積分するので、どの物体も光速に達しません。</p>
 
 <h3>固有速度</h3>
 <p>$$\\mathbf{w} = \\gamma\\mathbf{v}, \\qquad \\gamma = \\frac{1}{\\sqrt{1-v^2}}$$</p>
@@ -921,14 +921,14 @@ const REF_JA = {
 <p>相対論を有効にすると、力は光速で伝わります。すべての物体の世界線が記録され、時刻 $t$ の物体は、各発信源の世界線上で $|\\mathbf{x}(t) - \\mathbf{x}_s(t')| = t - t'$ を満たす事象、つまり自分の過去光円錐上の事象から力を受けます。</p>
 <p>電荷は、任意の運動をする点電荷の厳密な場であるリエナール＝ヴィーヘルト場を通じて相互作用します。</p>
 <p>$$\\mathbf{E} = q\\left[\\frac{(\\hat{\\mathbf{n}}-\\boldsymbol{\\beta})(1-\\beta^2)}{\\kappa^3R^2} + \\frac{\\hat{\\mathbf{n}}\\times\\big((\\hat{\\mathbf{n}}-\\boldsymbol{\\beta})\\times\\dot{\\boldsymbol{\\beta}}\\big)}{\\kappa^3R}\\right], \\qquad \\mathbf{B} = \\hat{\\mathbf{n}}\\times\\mathbf{E}$$</p>
-<p>$\\hat{\\mathbf{n}}$ と $R$ は遅延位置からの向きと距離、$\\boldsymbol{\\beta}$ と $\\dot{\\boldsymbol{\\beta}}$ はその時点での発信源の速度と加速度、$\\kappa = 1 - \\hat{\\mathbf{n}}\\cdot\\boldsymbol{\\beta}$ です。第1項は速度場で、等速運動する電荷では電荷の現在位置から放射状に向き、そのまわりでパンケーキ状に押しつぶされます。第2項は放射場で、$1/R$ でしか減衰しません。Geonは両方を近距離で軟化し、$1/\\kappa^3$ を100で打ち切ります。</p>
+<p>$\\hat{\\mathbf{n}}$ と $R$ は遅延位置からの向きと距離、$\\boldsymbol{\\beta}$ と $\\dot{\\boldsymbol{\\beta}}$ はその時点での発信源の速度と加速度、$\\kappa = 1 - \\hat{\\mathbf{n}}\\cdot\\boldsymbol{\\beta}$ です。第1項は速度場で、等速運動する電荷では電荷の現在位置から放射状に向き、そのまわりでパンケーキ状に押しつぶされます。第2項は放射場で、$1/R$ でしか減衰しません。Worldlineは両方を近距離で軟化し、$1/\\kappa^3$ を100で打ち切ります。</p>
 <p>重力・湯川力・双極子相互作用は、遅延位置での静的な法則に光行差因子 $(1 - \\hat{\\mathbf{n}}\\cdot\\mathbf{v})^{-3}$ を掛けたものです。有限速度の伝播を表すトイモデルで、場の解ではありません。</p>
 <p>手で生成した物体は、その光が届くまでどこにも力を及ぼしません。プリセットで置いた物体や保存から読み込んだ物体は、ずっと前から存在していたものとして扱います。</p>
 `,
 
     'ref.frames.title': '座標系',
     'ref.frames.body': `
-<p>実験室以外の観測者から見た様子を描けます。Geonはすべての物体の世界線を記録し、観測者の同時刻面で場面を描き直します。座標系は表示のみで、生成と選択は実験室系で行われます。</p>
+<p>実験室以外の観測者から見た様子を描けます。Worldlineはすべての物体の世界線を記録し、観測者の同時刻面で場面を描き直します。座標系は表示のみで、生成と選択は実験室系で行われます。</p>
 
 <h3>世界線を切る</h3>
 <p>速度 $\\mathbf{u}$ で動く慣性観測者にとって同時なのは、基準事象 $(t_A, \\mathbf{X}_A)$ を通る超平面</p>
@@ -938,7 +938,7 @@ const REF_JA = {
 <p>各時計は交点での固有時を示します。実験室で同期させ $\\mathbf{u}$ 方向に $L$ 離した時計は、観測者の断面では $uL$ だけ食い違います。これが同時性の相対性です。</p>
 
 <h3>遅らせた表示</h3>
-<p>観測者の前方では、断面が実験室のまだ計算していない未来に届きます。Geonは観測者の「今」を、見えている範囲で $t_A = t_{\\text{now}} - |\\mathbf{u}|\\gamma\\max x'_\\parallel$ まで戻し、描くものがすべて計算済みになるようにします。座標系タブには遅れの大きさが表示され、断面の一部が記録された履歴（128時間単位）の外にあるときはその旨も表示されます。そこでは物体を等速運動で外挿します。</p>
+<p>観測者の前方では、断面が実験室のまだ計算していない未来に届きます。Worldlineは観測者の「今」を、見えている範囲で $t_A = t_{\\text{now}} - |\\mathbf{u}|\\gamma\\max x'_\\parallel$ まで戻し、描くものがすべて計算済みになるようにします。座標系タブには遅れの大きさが表示され、断面の一部が記録された履歴（128時間単位）の外にあるときはその旨も表示されます。そこでは物体を等速運動で外挿します。</p>
 
 <h3>座標系の種類</h3>
 <ul>
@@ -964,7 +964,7 @@ const REF_JA = {
 <h3>レンズ方程式</h3>
 <p>角度 $\\boldsymbol\\theta$ で目に届く光線は、背景の次の位置から出ています。</p>
 <p>$$\\boldsymbol\\beta = \\boldsymbol\\theta - \\boldsymbol\\alpha(\\boldsymbol\\theta), \\qquad \\boldsymbol\\alpha(\\boldsymbol\\theta) = \\sum_i 4M_iD\\,\\frac{\\boldsymbol\\theta - \\boldsymbol\\theta_i}{|\\boldsymbol\\theta - \\boldsymbol\\theta_i|^2}$$</p>
-<p>これは2次元の対数ポテンシャルの勾配で、ニュートン重力が速い粒子に与える曲がりの2倍です。Geonは角度ではなくレンズ面上の距離で計算するので、「背景までの距離」スライダーはシミュレーションの長さの単位で $D = D_L D_{LS}/D_S$ を決めます。各画素は $\\boldsymbol\\beta$ の位置の格子を描くので、物差しはどの質量のまわりでも曲がります。物体を通る光線が発散しないよう、各レンズの $4MD$ の $10^{-4}$ の小さな芯を入れています。</p>
+<p>これは2次元の対数ポテンシャルの勾配で、ニュートン重力が速い粒子に与える曲がりの2倍です。Worldlineは角度ではなくレンズ面上の距離で計算するので、「背景までの距離」スライダーはシミュレーションの長さの単位で $D = D_L D_{LS}/D_S$ を決めます。各画素は $\\boldsymbol\\beta$ の位置の格子を描くので、物差しはどの質量のまわりでも曲がります。物体を通る光線が発散しないよう、各レンズの $4MD$ の $10^{-4}$ の小さな芯を入れています。</p>
 
 <h3>アインシュタイン・リング</h3>
 <p>孤立した質量の真後ろにある背景の点は、半径</p>
@@ -974,7 +974,7 @@ const REF_JA = {
 <h3>マイクロレンズ</h3>
 <p>背景の星は背景にある小さな円盤です。レンズは星を、像の面積の合計と星自身の面積の比 $\\mu = \\sum_{\\text{像}} |\\det \\partial\\boldsymbol\\beta/\\partial\\boldsymbol\\theta|^{-1}$ だけ増光します。点レンズからの距離が $u$（アインシュタイン半径単位）のとき</p>
 <p>$$\\mu(u) = \\frac{u^2 + 2}{u\\sqrt{u^2 + 4}}$$</p>
-<p>なので、星の前を横切るレンズは星を左右対称な光度曲線に沿って明るくします。天文学者が暗い天体や惑星を見つけるのに使う特徴です。Geonは表示のすべてのセルに光線を通し、星に届いたものを数えて $\\mu$ を求めるので、レンズがいくつあっても使えます。</p>
+<p>なので、星の前を横切るレンズは星を左右対称な光度曲線に沿って明るくします。天文学者が暗い天体や惑星を見つけるのに使う特徴です。Worldlineは表示のすべてのセルに光線を通し、星に届いたものを数えて $\\mu$ を求めるので、レンズがいくつあっても使えます。</p>
 
 <h3>制限</h3>
 <p>これは、レンズが現在の位置に静止しているとした弱い薄レンズ近似です。動くレンズの補正、時間の遅れ、スピンや電荷の効果は入りません。ブラックホールの影は生じないので、ブラックホールのまわりにはシュワルツシルトの捕獲衝突径数 $3\\sqrt3\\,M$ を、計算ではなく課した表示として描きます。周期的な領域では、各レンズを表示の中心に最も近い像として一度だけ数えます。平面内を動く光子は別に、ニュートン重力の2倍で曲げられます。レンズ効果は実験室系でのみ描かれます。</p>
@@ -1017,9 +1017,9 @@ const REF_JA = {
 <h3>アインシュタイン＝インフェルト＝ホフマン：重力</h3>
 <p>重力磁気が必要です。EIH方程式は相対論的な近日点移動を与えます。</p>
 <p>$$\\Delta\\phi = \\frac{6\\pi M}{a(1-e^2)} \\text{（1周あたり）}$$</p>
-<p>水星では1世紀に43秒角です。GeonはEIHの加速度を2つに分けます。$\\mathbf{v}_1\\cdot\\mathbf{v}_2$ の部分は運動する質量の場による重力磁気ローレンツ力 $4m\\,\\mathbf{v}\\times\\mathbf{B}_g$ で、回転として適用します。残りは直接の力です。発信源（質量 $M$、速度 $\\mathbf{v}_2$）から物体（質量 $m$、速度 $\\mathbf{v}_1$）へ向く単位ベクトルを $\\mathbf{N}$ とすると</p>
+<p>水星では1世紀に43秒角です。WorldlineはEIHの加速度を2つに分けます。$\\mathbf{v}_1\\cdot\\mathbf{v}_2$ の部分は運動する質量の場による重力磁気ローレンツ力 $4m\\,\\mathbf{v}\\times\\mathbf{B}_g$ で、回転として適用します。残りは直接の力です。発信源（質量 $M$、速度 $\\mathbf{v}_2$）から物体（質量 $m$、速度 $\\mathbf{v}_1$）へ向く単位ベクトルを $\\mathbf{N}$ とすると</p>
 <p>$$\\mathbf{a} = \\frac{M}{r^2}\\Big\\{\\mathbf{N}\\Big[-v_1^2 - 2v_2^2 + \\tfrac{3}{2}(\\mathbf{N}\\cdot\\mathbf{v}_2)^2 + \\frac{5m+4M}{r}\\Big] + \\mathbf{v}_1\\big(4\\,\\mathbf{N}\\cdot\\mathbf{v}_1 - 3\\,\\mathbf{N}\\cdot\\mathbf{v}_2\\big) + 3\\,\\mathbf{v}_2\\,(\\mathbf{N}\\cdot\\mathbf{v}_2)\\Big\\}$$</p>
-<p>EIHは $d\\mathbf{v}/dt$ を与えますが、Geonは $\\mathbf{w} = \\gamma\\mathbf{v}$ を積分するので、キックにはニュートン加速度 $\\mathbf{a}_N$ からの $\\tfrac{1}{2}v_1^2\\mathbf{a}_N + \\mathbf{v}_1(\\mathbf{v}_1\\cdot\\mathbf{a}_N)$ も加わります。</p>
+<p>EIHは $d\\mathbf{v}/dt$ を与えますが、Worldlineは $\\mathbf{w} = \\gamma\\mathbf{v}$ を積分するので、キックにはニュートン加速度 $\\mathbf{a}_N$ からの $\\tfrac{1}{2}v_1^2\\mathbf{a}_N + \\mathbf{v}_1(\\mathbf{v}_1\\cdot\\mathbf{a}_N)$ も加わります。</p>
 
 <h3>電磁気</h3>
 <p>ダーウィン項はありません。相対論を有効にすると電荷はリエナール＝ヴィーヘルト場で相互作用し、この場はダーウィン相互作用と $v$ のすべての高次を含みます。</p>
@@ -1035,7 +1035,7 @@ const REF_JA = {
 <p>加速度を含む項は、2体の湯川加速度で次数を落として置き換えます。スカラー交換には磁気型の場がないので、補正はすべて直接の力です。</p>
 
 <h3>積分</h3>
-<p>1PN力は速度に依存し、ニュートンの第3法則を破ります。Geonはドリフトの後に再計算し、その差をキックの補正として加えます。完全な速度ヴェルレ法ではなく、終点の力による補正です。</p>
+<p>1PN力は速度に依存し、ニュートンの第3法則を破ります。Worldlineはドリフトの後に再計算し、その差をキックの補正として加えます。完全な速度ヴェルレ法ではなく、終点の力による補正です。</p>
 `,
 
     'ref.blackhole.title': 'ブラックホールモード',
@@ -1048,10 +1048,10 @@ const REF_JA = {
 <h3>カー＝ニューマン地平面</h3>
 <p>外側事象の地平面の半径：</p>
 <p>$$r_+ = M + \\sqrt{M^2 - a^2 - Q^2}$$</p>
-<p>$a = J/M$ はスピンパラメータ。$M^2 \\geq a^2 + Q^2$ のときのみ地平面が存在します。Geon の玩具的な力学では、極限を超えた入力は同符号レプトンを電荷量子ごとに放出して境界内へ戻り、その補正中の数値的バックストップとして半径は有効極限値 $r_+ = M$ にクランプされます。</p>
+<p>$a = J/M$ はスピンパラメータ。$M^2 \\geq a^2 + Q^2$ のときのみ地平面が存在します。Worldline の玩具的な力学では、極限を超えた入力は同符号レプトンを電荷量子ごとに放出して境界内へ戻り、その補正中の数値的バックストップとして半径は有効極限値 $r_+ = M$ にクランプされます。</p>
 
 <h3>擬似ポテンシャルと捕獲</h3>
-<p>地平面近傍の軌道では、Geon はニュートン的なBH重力を Paczynski-Wiita 型の動径項へ置き換え、粒子が地平面へ近づくほど力とポテンシャルが急峻になります。完全なカー＝ニューマン測地線を解くのではなく、対話的な落下と捕獲の挙動を与える現象論的モデルです。ある粒子の中心が別のBHの地平面を越えると、シミュレータはそれを吸収し、実験室系の四元運動量、電荷、スピン/軌道角運動量を捕獲側へ移します。</p>
+<p>地平面近傍の軌道では、Worldline はニュートン的なBH重力を Paczynski-Wiita 型の動径項へ置き換え、粒子が地平面へ近づくほど力とポテンシャルが急峻になります。完全なカー＝ニューマン測地線を解くのではなく、対話的な落下と捕獲の挙動を与える現象論的モデルです。ある粒子の中心が別のBHの地平面を越えると、シミュレータはそれを吸収し、実験室系の四元運動量、電荷、スピン/軌道角運動量を捕獲側へ移します。</p>
 
 <h3>エルゴ球</h3>
 <p>地平面 $r_+$ と静止限界の間の領域：</p>
@@ -1066,7 +1066,7 @@ const REF_JA = {
 <p>小さなBHほど高温で放射が速く、暴走を生みます：質量減少 $\\to$ 温度上昇 $\\to$ 放射激化 $\\to$ 蒸発。最後の瞬間に光子バーストを放ちます。</p>
 
 <h3>極限</h3>
-<p>$M^2 = a^2 + Q^2$ のとき、内側と外側の地平面が合体し、表面重力が消え、温度はゼロまで下がります — BHは放射を止めます。極限BHは、質量と電荷に対して可能な最もコンパクトな天体で、宇宙検閲の限界を飽和します。玩具状態がこの境界を越えた場合、Geon は同符号レプトンを $e$ 単位で放出し、離散的な電荷状態が許容領域へ戻るまで補正します。ハードクランプは残る浮動小数点の端数を守るためのバックストップです。</p>
+<p>$M^2 = a^2 + Q^2$ のとき、内側と外側の地平面が合体し、表面重力が消え、温度はゼロまで下がります — BHは放射を止めます。極限BHは、質量と電荷に対して可能な最もコンパクトな天体で、宇宙検閲の限界を飽和します。玩具状態がこの境界を越えた場合、Worldline は同符号レプトンを $e$ 単位で放出し、離散的な電荷状態が許容領域へ戻るまで補正します。ハードクランプは残る浮動小数点の端数を守るためのバックストップです。</p>
 
 <h3>シュウィンガー放電</h3>
 <p>十分に帯電したBHは真空から電子陽電子対を引き剥がせるほど強い電場を生みます — <b>シュウィンガー効果</b>です。カー＝ニューマンBHにおける単位時間あたりのレート：</p>

@@ -1,5 +1,5 @@
 /* ===================================================================
-   colors.js — geon project-specific tokens
+   colors.js — worldline project-specific tokens
    Extends shared-tokens.js with particle physics colors & CSS vars.
    =================================================================== */
 

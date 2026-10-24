@@ -1,11 +1,11 @@
-# Geon
+# Worldline
 
-Geon is a relativistic many-body sandbox at a9l.im/geon: charged, spinning particles
+Worldline is a relativistic many-body sandbox at a9l.im/worldline: charged, spinning particles
 under gravity, electromagnetism, gravitomagnetism, Yukawa and scalar fields, with black
 holes, radiation, and photon/pion/lepton pools. Vanilla ES modules; the physics runs as
 WebGPU compute shaders and draws with WebGPU instanced rendering, with no CPU fallback.
 KaTeX from jsDelivr renders the reference overlay.
-It is a submodule of the a9l.im repository (`a9lim.github.io`, at `projects/geon`); the
+It is a submodule of the a9l.im repository (`a9lim.github.io`, at `projects/worldline`); the
 root `AGENTS.md` covers the shared layer, design system, build, and deployment.
 
 `docs/ROADMAP.md` is the plan of record: versions 1.5–3.0, open decisions, and known
@@ -13,15 +13,15 @@ physics bugs. This file describes the code as it is.
 
 ## Running and checking
 
-- Preview from the parent build at `http://localhost:8000/geon/`; `?lang=ja` gives
+- Preview from the parent build at `http://localhost:8000/worldline/`; `?lang=ja` gives
   Japanese, and `window.sim` is the live `Simulation`.
 - Syntax: `for f in main.js colors.js src/*.js src/gpu/*.js i18n/*.js; do node --check "$f"; done`
 - WGSL compiles only in the browser, so check the console after shader edits.
   Pipelines are created synchronously, so a compile error shows up as a WebGPU
   validation error rather than a throw; a missing shader file does throw, and the page
-  then logs `[geon] GPU init failed` and shows the WebGPU popup.
+  then logs `[worldline] GPU init failed` and shows the WebGPU popup.
 - `tests/physics-validation.html` runs analytic oracles against a headless `GPUPhysics`
-  (open `http://localhost:8000/geon/tests/physics-validation.html` and press Run, or call
+  (open `http://localhost:8000/worldline/tests/physics-validation.html` and press Run, or call
   `runAll()` from the console; `runAll('Liénard')` runs the cases whose names contain the
   string). Every new feature adds its oracle there (`docs/ROADMAP.md` §1.1).
   The stager skips `tests/`, so it never deploys.
@@ -75,7 +75,7 @@ The domain is state, not the window: `sim.domainW`/`domainH` in world units, squ
 `sim.setDomain()` resizes the GPU domain and calls `fitCamera()`, which fits it to the
 window; resizing the window moves only the camera. Clear restores the default.
 
-`startGPU()` requests the device; without one the page shows the "Geon needs WebGPU"
+`startGPU()` requests the device; without one the page shows the "Worldline needs WebGPU"
 popup and stays empty. `_attachDevice()` builds the `GPUBackend` and registers the
 device-loss handler, which recreates the device and restores the backend's auto-save
 (every 300 stepped frames; fields and bosons are not saved). `_loopBody` adds the capped
@@ -576,8 +576,12 @@ canvas text needs no font-load redraw.
   never spawns antimatter.
 - **CSS.** The shared `.mode-toggles` sets `display: flex`, which beats the `hidden`
   attribute, so those rows are shown and hidden with `style.display`.
-- **URLs.** Geon's own files load by relative URL (`styles.css`, `colors.js`, `main.js`,
-  the shaders), which resolves only under `/geon/` with its trailing slash.
+- **URLs.** Worldline's own files load by relative URL (`styles.css`, `colors.js`, `main.js`,
+  the shaders), which resolves only under `/worldline/` with its trailing slash.
+- **Storage keys keep earlier names.** Worldline was Geon until 2026-10-23
+  (`/geon` now redirects here), and No-Hair before that. `geon-lang`,
+  `geon-theme`, and `nohair-quicksave` stay as they are so saved settings and
+  quick saves survive; renaming them orphans user state.
 
 ## Open work
 

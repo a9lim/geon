@@ -1,11 +1,11 @@
-# Geon
+# Worldline
 
-Geon is a browser sandbox for relativistic many-body physics. You spawn charged,
+Worldline is a browser sandbox for relativistic many-body physics. You spawn charged,
 spinning particles, switch forces and corrections on and off, and watch orbits precess,
 charges radiate, black holes evaporate, and scalar fields ripple, with live conservation
 readouts to check the numbers.
 
-**[Open it](https://a9l.im/geon)** · part of [a9l.im](https://a9l.im)
+**[Open it](https://a9l.im/worldline)** · part of [a9l.im](https://a9l.im)
 
 ## What's in it
 
@@ -107,9 +107,9 @@ the parent site by absolute path. From a checkout of
 [a9lim.github.io](https://github.com/a9lim/a9lim.github.io) with submodules:
 
     npm install && npm run build
-    python3 -m http.server --directory dist 8000   # http://localhost:8000/geon/
+    python3 -m http.server --directory dist 8000   # http://localhost:8000/worldline/
 
-Geon needs WebGPU. `tests/physics-validation.html` checks the physics against analytic
+Worldline needs WebGPU. `tests/physics-validation.html` checks the physics against analytic
 results in the browser.
 
 ## How it's built

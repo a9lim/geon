@@ -561,7 +561,7 @@ export function setupUI(sim) {
     // ─── About panel ───
     let _aboutHandle = null;
     const _buildAboutConfig = () => ({
-        title: _T('about.title', 'Geon'),
+        title: _T('about.title', 'Worldline'),
         lastUpdated: '2026-10-23',
         description: _T('about.description'),
         controls: [
@@ -573,7 +573,7 @@ export function setupUI(sim) {
             { label: _T('about.controls.select'),             value: _T('about.controls.selectVal') },
         ],
         shortcuts: shortcuts,
-        repo: 'https://github.com/a9lim/geon',
+        repo: 'https://github.com/a9lim/worldline',
     });
     if (typeof initAboutPanel === 'function') {
         _aboutHandle = initAboutPanel(_buildAboutConfig());

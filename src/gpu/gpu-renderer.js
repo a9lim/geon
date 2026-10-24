@@ -326,7 +326,7 @@ export default class GPURenderer {
             });
             this._gridReady = true;
         } catch (e) {
-            console.warn('[geon] Grid render pipeline creation failed, skipping:', e.message);
+            console.warn('[worldline] Grid render pipeline creation failed, skipping:', e.message);
         }
     }
 
@@ -495,7 +495,7 @@ export default class GPURenderer {
             });
             this._clockReady = true;
         } catch (e) {
-            console.warn('[geon] Clock render pipeline creation failed, skipping:', e.message);
+            console.warn('[worldline] Clock render pipeline creation failed, skipping:', e.message);
         }
     }
 
@@ -873,7 +873,7 @@ export default class GPURenderer {
                 clockPass.end();
                 this.device.queue.submit([clockEncoder.finish()]);
             } catch (e) {
-                console.warn('[geon] Clock render failed, disabling:', e.message);
+                console.warn('[worldline] Clock render failed, disabling:', e.message);
                 this._clockReady = false;
             }
         }

@@ -1,5 +1,5 @@
 // ─── i18n Runtime ───
-// Lightweight runtime translator scoped to geon. Reads from a flat-key
+// Lightweight runtime translator scoped to worldline. Reads from a flat-key
 // dictionary in i18n/strings.js. Walks the DOM for data-i18n attributes,
 // swaps text/title/aria-label in place, and notifies subscribers so JS-driven
 // content (info popovers, presets dropdown, reference overlay, about panel)

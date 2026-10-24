@@ -1,17 +1,17 @@
 ---
-name: Geon
-title: Geon — Interactive Particle Physics Simulator
+name: Worldline
+title: Worldline — Interactive Particle Physics Simulator
 description: Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-three browser presets.
 updated: 2026-10-23
 ---
 
-# Geon — Interactive Particle Physics Simulator
+# Worldline — Interactive Particle Physics Simulator
 
-Geon is a real-time N-body simulator that models how particles move under gravity, electromagnetism, and relativistic effects. It runs in the browser on WebGPU compute shaders.
+Worldline is a real-time N-body simulator that models how particles move under gravity, electromagnetism, and relativistic effects. It runs in the browser on WebGPU compute shaders.
 
 ## Forces
 
-Geon exposes 11 force and correction families: Newtonian gravity, gravitomagnetism (frame-dragging), Coulomb electrostatics, magnetic (Lorentz) force, Yukawa interaction, Higgs field coupling, axion field coupling, cosmological expansion, first post-Newtonian correction, spin-orbit coupling, and radiation reaction. Applicable particle and boson interactions can use Barnes-Hut tree acceleration; scalar fields evolve on grids, and external or correction terms run in their own passes.
+Worldline exposes 11 force and correction families: Newtonian gravity, gravitomagnetism (frame-dragging), Coulomb electrostatics, magnetic (Lorentz) force, Yukawa interaction, Higgs field coupling, axion field coupling, cosmological expansion, first post-Newtonian correction, spin-orbit coupling, and radiation reaction. Applicable particle and boson interactions can use Barnes-Hut tree acceleration; scalar fields evolve on grids, and external or correction terms run in their own passes.
 
 ## Integration
 
@@ -31,7 +31,7 @@ The spoke's orientation is a transported axis, and it precesses even when the bo
 
 ## Frames
 
-The view can be drawn for observers other than the lab: the zero-momentum frame, the selected particle's rest frame, a boost at a chosen speed and direction, or a frame rotating at a chosen rate. Geon records every body's world line and redraws the scene on the observer's surface of simultaneity, so in a boosted frame moving rulers contract, clocks synchronized in the lab disagree across the view, and a fast wheel can be followed in its own rest frame, where it is round. The observer's present is set far enough into the lab's past that everything shown has already been computed, and the Frame tab reports how far behind the lab it is. A background grid of rulers at rest in the lab contracts and shears with the observer, and a spacetime diagram plots nearby world lines in the observer's coordinates with its light cone and proper-time ticks.
+The view can be drawn for observers other than the lab: the zero-momentum frame, the selected particle's rest frame, a boost at a chosen speed and direction, or a frame rotating at a chosen rate. Worldline records every body's world line and redraws the scene on the observer's surface of simultaneity, so in a boosted frame moving rulers contract, clocks synchronized in the lab disagree across the view, and a fast wheel can be followed in its own rest frame, where it is round. The observer's present is set far enough into the lab's past that everything shown has already been computed, and the Frame tab reports how far behind the lab it is. A background grid of rulers at rest in the lab contracts and shears with the observer, and a spacetime diagram plots nearby world lines in the observer's coordinates with its light cone and proper-time ticks.
 
 On a torus the lab is a preferred frame: opposite edges are identified at equal lab time, so a traveller circling a torus of length L at speed v sees its own images, in its own frame, spaced γL apart with clocks γvL apart. A twin who circles the torus at 0.8c meets the stay-at-home twin every lap, younger each time, without ever turning around (Barrow and Levin, 2001). In the other twin preset the traveller bounces off a wall, and at the turn the home clock's reading on the traveller's slice jumps ahead by 2vd.
 
@@ -65,7 +65,7 @@ Designed for undergraduate physics education. Students can toggle individual for
 
 ## Technical Details
 
-WebGPU compute shaders run the whole simulation and WebGPU instanced rendering draws it; there is no CPU fallback, and browsers without WebGPU see a notice instead. The simulation domain has a fixed size, 64 × 64 units unless a preset sets its own, and the window is a camera onto it; a background grid of lab rulers fills it, and a hairline marks its edge. Saves record the domain and every body's proper time and spoke angle. If the GPU device is lost, Geon recreates it and restores the latest auto-save. Simulation state and stepping stay client-side.
+WebGPU compute shaders run the whole simulation and WebGPU instanced rendering draws it; there is no CPU fallback, and browsers without WebGPU see a notice instead. The simulation domain has a fixed size, 64 × 64 units unless a preset sets its own, and the window is a camera onto it; a background grid of lab rulers fills it, and a hairline marks its edge. Saves record the domain and every body's proper time and spoke angle. If the GPU device is lost, Worldline recreates it and restores the latest auto-save. Simulation state and stepping stay client-side.
 
 ## Topology Modes
 
@@ -77,7 +77,7 @@ With relativity on, every force acts from where its source was when the signal l
 
 ## Accessibility
 
-Geon provides keyboard shortcuts, light and dark themes, labeled simulation controls, and numerical readouts for conserved quantities and selected particles. The canvas contains continuous motion and optional particle trails; users sensitive to motion can pause, single-step, or choose a lower-particle preset.
+Worldline provides keyboard shortcuts, light and dark themes, labeled simulation controls, and numerical readouts for conserved quantities and selected particles. The canvas contains continuous motion and optional particle trails; users sensitive to motion can pause, single-step, or choose a lower-particle preset.
 
 ## GPU Compute
 

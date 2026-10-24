@@ -10,11 +10,11 @@ import { REFERENCE_STRINGS } from './strings-reference.js';
 
 const UI_EN = {
     // ── document <head> ──
-    'meta.title': "Geon — Interactive Particle Physics Simulator | a9l.im",
+    'meta.title': "Worldline — Interactive Particle Physics Simulator | a9l.im",
     'meta.description': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-three browser presets.",
-    'meta.ogTitle': "Geon — Interactive Particle Physics Simulator",
+    'meta.ogTitle': "Worldline — Interactive Particle Physics Simulator",
     'meta.ogDescription': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-three browser presets.",
-    'meta.twitterTitle': "Geon — Interactive Particle Physics Simulator",
+    'meta.twitterTitle': "Worldline — Interactive Particle Physics Simulator",
     'meta.twitterDescription': "Explore relativistic many-body dynamics, electromagnetism, compact objects, scalar fields, and nontrivial topologies across twenty-three browser presets.",
 
     // ── Topbar ──
@@ -250,7 +250,7 @@ const UI_EN = {
     // ── GPU / system ──
     'gpu.lostRestored': 'GPU device lost — restored from auto-save',
     'gpu.lostReset': 'GPU device lost — restarted empty',
-    'webgpu.title': 'Geon needs WebGPU',
+    'webgpu.title': 'Worldline needs WebGPU',
     'webgpu.body': 'The simulation runs as WebGPU compute shaders, and this browser isn\u2019t providing WebGPU, so nothing can run here.',
     'webgpu.browsers': 'WebGPU is on by default in Chrome and Edge, in Safari 26 on macOS 26 and iOS 26, and in Firefox on Windows and on Apple Silicon Macs running macOS 26. On Linux it depends on the GPU driver.',
     'webgpu.close': 'Close',
@@ -266,7 +266,7 @@ const UI_EN = {
     'toast.quickLoadFailed': 'Failed to load quick save',
 
     // ── About panel ──
-    'about.title': 'Geon',
+    'about.title': 'Worldline',
     'about.description': 'Spawn particles and watch them interact through gravity, electromagnetism, and exotic forces. Fling matter into orbit, toggle scalar fields, switch between 23 preset scenarios, and explore relativistic black hole physics in real time.',
     'about.controls.addParticle': 'Add particle',
     'about.controls.addParticleVal': 'Click on canvas',
@@ -410,8 +410,8 @@ const UI_EN = {
 
     // ── Edu-content (long-form crawler text) ──
     'edu.summary': 'About this simulation',
-    'edu.h.what': 'What is Geon?',
-    'edu.p.what': 'Geon is a real-time N-body simulator for gravity, electromagnetism, scalar fields, and relativistic corrections. Applicable interactions can use a Barnes-Hut tree, while grid fields and correction terms run in dedicated passes. A Boris integrator advances the particle state with adaptive substeps.',
+    'edu.h.what': 'What is Worldline?',
+    'edu.p.what': 'Worldline is a real-time N-body simulator for gravity, electromagnetism, scalar fields, and relativistic corrections. Applicable interactions can use a Barnes-Hut tree, while grid fields and correction terms run in dedicated passes. A Boris integrator advances the particle state with adaptive substeps.',
     'edu.h.physics': 'Physics',
     'edu.p.physics': 'Eleven force and correction families are exposed: Newtonian gravity, gravitomagnetism (frame-dragging), Coulomb electrostatics, the magnetic Lorentz force, Yukawa interaction, Higgs field coupling, axion field coupling, cosmological expansion as a slice of an FRW universe, first post-Newtonian corrections, spin-orbit coupling, and radiation reaction. The controls enforce dependencies between coupled mechanisms.',
     'edu.h.fields': 'Scalar fields',
@@ -423,17 +423,17 @@ const UI_EN = {
     'edu.h.lensing': 'Gravitational lensing',
     'edu.p.lensing': "With lensing on, the grid becomes a backdrop far behind the plane, seen through the bodies' masses as a thin gravitational lens. Each pixel shows the backdrop where its ray came from, β = θ − α(θ), with the deflection α summed from every body's two-dimensional logarithmic potential; a lone mass bends the rulers into an Einstein ring of radius √(4MD), where D sets how far behind the plane the backdrop lies. A backdrop star can be placed in the sheet: its images appear as arcs and rings, and its magnification, measured by shooting a ray through every cell of the view, traces a microlensing light curve as a mass drifts past it, (u² + 2)/(u√(u² + 4)) for a single lens (Paczyński, 1986). The thin-lens approximation has no black-hole shadow, so the photon-capture disk around a black hole is drawn as an imposed overlay.",
     'edu.h.frames': 'Frames',
-    'edu.p.frames': "The view can be drawn for observers other than the lab: the zero-momentum frame, the selected particle's rest frame, a boost at a chosen speed and direction, or a frame rotating at a chosen rate. Geon records every body's world line and redraws the scene on the observer's surface of simultaneity, so in a boosted frame moving rulers contract, clocks synchronized in the lab disagree across the view, and a fast wheel can be followed in its own rest frame, where it is round. The observer's present is set far enough into the lab's past that everything shown has already been computed, and the Frame tab reports how far behind the lab it is. A background grid of rulers at rest in the lab contracts and shears with the observer, and a spacetime diagram plots nearby world lines in the observer's coordinates with its light cone and proper-time ticks.",
+    'edu.p.frames': "The view can be drawn for observers other than the lab: the zero-momentum frame, the selected particle's rest frame, a boost at a chosen speed and direction, or a frame rotating at a chosen rate. Worldline records every body's world line and redraws the scene on the observer's surface of simultaneity, so in a boosted frame moving rulers contract, clocks synchronized in the lab disagree across the view, and a fast wheel can be followed in its own rest frame, where it is round. The observer's present is set far enough into the lab's past that everything shown has already been computed, and the Frame tab reports how far behind the lab it is. A background grid of rulers at rest in the lab contracts and shears with the observer, and a spacetime diagram plots nearby world lines in the observer's coordinates with its light cone and proper-time ticks.",
     'edu.h.gm': 'Gravitomagnetism and frame-dragging',
-    'edu.p.gm': 'Gravitomagnetism is the gravitational analogue of the magnetic force. In Geon, rotating or co-moving masses generate a gravitomagnetic contribution that changes nearby trajectories. Enable the Gravitomagnetic control alongside gravity to isolate the toy model\'s velocity- and spin-dependent effects.',
+    'edu.p.gm': 'Gravitomagnetism is the gravitational analogue of the magnetic force. In Worldline, rotating or co-moving masses generate a gravitomagnetic contribution that changes nearby trajectories. Enable the Gravitomagnetic control alongside gravity to isolate the toy model\'s velocity- and spin-dependent effects.',
     'edu.h.bh': 'Black hole physics',
     'edu.p.bh': 'In black hole mode, particles use a Kerr-Newman-inspired effective radius characterized by mass, charge, and spin. Sub-extremal parameters use the usual outer-horizon formula; super-extremal toy inputs are clamped rather than modeled as physical naked singularities. Gravity switches to a Paczynski-Wiita-style pseudo-potential, so the effective potential steepens near the horizon and particles are swallowed once their centers cross it. Hawking radiation causes evaporation at a rate determined by the Kerr-Newman temperature — smaller black holes radiate faster, leading to runaway evaporation. Charged black holes also undergo Schwinger discharge near the effective horizon, with one lepton escaping and the other falling back in. Each event reduces the black hole’s charge by one quantized unit, driving it toward neutrality. Overcharged toy black holes shed same-sign leptons in quantized steps and clamp to the nearest allowed Kerr-Newman charge bound as a numerical backstop. Spinning black holes with the axion field enabled exhibit superradiance: when the horizon angular velocity exceeds the axion mass, the field extracts rotational energy and grows a scalar cloud around the black hole, spinning it down until the superradiance condition fails. All charges in the simulation are quantized in units of the boson charge, ensuring discrete conservation across emission, decay, and discharge.',
     'edu.h.boris': 'Boris integrator',
-    'edu.p.boris': 'Geon uses the Boris algorithm to integrate particle trajectories. It splits non-magnetic force application into half-kicks around a magnetic rotation, preserving phase-space volume for that core update. Adaptive substepping limits the timestep under high acceleration or cyclotron frequency.',
+    'edu.p.boris': 'Worldline uses the Boris algorithm to integrate particle trajectories. It splits non-magnetic force application into half-kicks around a magnetic rotation, preserving phase-space volume for that core update. Adaptive substepping limits the timestep under high acceleration or cyclotron frequency.',
     'edu.h.access': 'Accessibility',
-    'edu.p.access': 'Geon provides keyboard shortcuts, light and dark themes, labeled controls, and numerical readouts for conserved quantities and selected particles. The canvas contains continuous motion and optional particle trails; users sensitive to motion can pause, single-step, or choose a lower-particle preset.',
+    'edu.p.access': 'Worldline provides keyboard shortcuts, light and dark themes, labeled controls, and numerical readouts for conserved quantities and selected particles. The canvas contains continuous motion and optional particle trails; users sensitive to motion can pause, single-step, or choose a lower-particle preset.',
     'edu.h.outcomes': 'Learning outcomes',
-    'edu.p.outcomes': 'After using Geon, students should be able to: explain how gravitational and electromagnetic forces produce qualitatively different orbital dynamics; describe the role of the Barnes-Hut algorithm in reducing force computation from O(N²) to O(N log N); identify how relativistic corrections (1PN, gravitomagnetism) modify Newtonian predictions at high velocities; distinguish between conservative and dissipative forces in phase-space evolution; describe how horizon capture, Hawking radiation, Schwinger discharge, and extremal charge shedding govern black hole evolution in the toy model; and explain how superradiance transfers angular momentum from a spinning black hole to a scalar field.',
+    'edu.p.outcomes': 'After using Worldline, students should be able to: explain how gravitational and electromagnetic forces produce qualitatively different orbital dynamics; describe the role of the Barnes-Hut algorithm in reducing force computation from O(N²) to O(N log N); identify how relativistic corrections (1PN, gravitomagnetism) modify Newtonian predictions at high velocities; distinguish between conservative and dissipative forces in phase-space evolution; describe how horizon capture, Hawking radiation, Schwinger discharge, and extremal charge shedding govern black hole evolution in the toy model; and explain how superradiance transfers angular momentum from a spinning black hole to a scalar field.',
     'edu.h.prereq': 'Prerequisites',
     'edu.p.prereq': 'Familiarity with Newton’s laws of motion and basic vector calculus. No prior knowledge of relativity or particle physics is required — the presets are designed to introduce each concept incrementally.',
     'edu.h.refs': 'References',
@@ -441,11 +441,11 @@ const UI_EN = {
 
 const UI_JA = {
     // ── document <head> ──
-    'meta.title': 'Geon | a9l.im',
+    'meta.title': 'Worldline | a9l.im',
     'meta.description': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。11種の力、スカラー場、23の教育用プリセットを備えたインタラクティブな多体シミュレータ。WebGPUによりブラウザ上でリアルタイム動作。',
-    'meta.ogTitle': 'Geon — インタラクティブ粒子物理シミュレータ',
+    'meta.ogTitle': 'Worldline — インタラクティブ粒子物理シミュレータ',
     'meta.ogDescription': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。23の教育用プリセットを備えたインタラクティブな多体シミュレータ、ブラウザ上でリアルタイム動作。',
-    'meta.twitterTitle': 'Geon — インタラクティブ粒子物理シミュレータ',
+    'meta.twitterTitle': 'Worldline — インタラクティブ粒子物理シミュレータ',
     'meta.twitterDescription': '重力・電磁気・相対論的効果が粒子の運動をどう形作るかを探る。23の教育用プリセットを備えたインタラクティブな多体シミュレータ。',
 
     // ── Topbar ──
@@ -679,7 +679,7 @@ const UI_JA = {
     // ── GPU / system ──
     'gpu.lostRestored': 'GPUデバイスが失われました — オートセーブから復元',
     'gpu.lostReset': 'GPUデバイスが失われました — 空の状態で再開',
-    'webgpu.title': 'GeonにはWebGPUが必要です',
+    'webgpu.title': 'WorldlineにはWebGPUが必要です',
     'webgpu.body': 'このシミュレーションはWebGPUの計算シェーダーで動作しますが、このブラウザではWebGPUが利用できないため実行できません。',
     'webgpu.browsers': 'WebGPUはChromeとEdge、macOS 26とiOS 26のSafari 26、WindowsおよびmacOS 26を搭載したAppleシリコンのMacのFirefoxで標準で有効です。LinuxではGPUドライバーに依存します。',
     'webgpu.close': '閉じる',
@@ -695,7 +695,7 @@ const UI_JA = {
     'toast.quickLoadFailed': 'クイックロードに失敗しました',
 
     // ── About panel ──
-    'about.title': 'Geon',
+    'about.title': 'Worldline',
     'about.description': '粒子を生成し、重力・電磁気・エキゾチックな力を介した相互作用を観察します。物質を軌道に投げ込み、スカラー場を切り替え、23のプリセットを切り替えながら、相対論的ブラックホール物理をリアルタイムで探ってください。',
     'about.controls.addParticle': '粒子を追加',
     'about.controls.addParticleVal': 'キャンバスをクリック',
@@ -839,8 +839,8 @@ const UI_JA = {
 
     // ── Edu-content (long-form crawler text) ──
     'edu.summary': 'このシミュレーションについて',
-    'edu.h.what': 'Geonとは',
-    'edu.p.what': 'Geonは、重力・電磁気・スカラー場・相対論的補正を扱うリアルタイム多体シミュレータです。適用可能な相互作用にはバーンズ＝ハットツリーを使え、格子場と補正項は専用のパスで処理されます。粒子状態は適応的サブステップ付きのボリス積分器で更新されます。',
+    'edu.h.what': 'Worldlineとは',
+    'edu.p.what': 'Worldlineは、重力・電磁気・スカラー場・相対論的補正を扱うリアルタイム多体シミュレータです。適用可能な相互作用にはバーンズ＝ハットツリーを使え、格子場と補正項は専用のパスで処理されます。粒子状態は適応的サブステップ付きのボリス積分器で更新されます。',
     'edu.h.physics': '物理',
     'edu.p.physics': '11種類の力・補正系を操作できます：ニュートン重力、重力磁気（フレームドラッギング）、クーロン静電気、磁気ローレンツ力、湯川相互作用、ヒッグス場結合、アクシオン場結合、ハッブル流による宇宙膨張、第1ポストニュートン補正、スピン軌道結合、放射反作用。連成する機構の依存関係はコントロール側で維持されます。',
     'edu.h.fields': 'スカラー場',
@@ -852,17 +852,17 @@ const UI_JA = {
     'edu.h.lensing': '重力レンズ',
     'edu.p.lensing': 'レンズ効果をオンにすると、格子は平面のはるか奥の背景になり、物体の質量を薄い重力レンズとして通して見えます。各画素には光線が来た背景の位置 β = θ − α(θ) が映り、曲がり α はすべての物体の2次元対数ポテンシャルから足し合わせます。孤立した質量は物差しを半径 √(4MD) のアインシュタイン・リングに曲げ、D は背景が平面のどれだけ奥にあるかを決めます。背景には星を置くことができ、その像は弧やリングとして現れます。表示のすべてのセルに光線を通して測った増光率は、質量が星の前を横切るとマイクロレンズの光度曲線を描き、単一のレンズでは (u² + 2)/(u√(u² + 4)) です（Paczyński, 1986）。薄レンズ近似にはブラックホールの影がないので、ブラックホールのまわりの光子捕獲円盤は課した表示として描きます。',
     'edu.h.frames': '座標系',
-    'edu.p.frames': '実験室以外の観測者から見た様子も描けます。運動量ゼロ系、選択した粒子の静止系、速さと向きを指定したブースト、指定した角速度の回転系です。Geonはすべての物体の世界線を記録し、観測者の同時刻面で場面を描き直します。ブーストした系では動く物差しが縮み、実験室で同期した時計が視野の場所ごとに食い違い、高速の車輪をその静止系で追えば丸く見えます。観測者の「今」は実験室の過去へ十分にずらしてあり、表示されるものはすべて計算済みです。どれだけ遅れているかは座標系タブに表示されます。実験室に静止した背景の格子は観測者に応じて縮み、歪みます。時空図は近くの世界線を観測者の座標で、光円錐と固有時の目盛りとともに描きます。',
+    'edu.p.frames': '実験室以外の観測者から見た様子も描けます。運動量ゼロ系、選択した粒子の静止系、速さと向きを指定したブースト、指定した角速度の回転系です。Worldlineはすべての物体の世界線を記録し、観測者の同時刻面で場面を描き直します。ブーストした系では動く物差しが縮み、実験室で同期した時計が視野の場所ごとに食い違い、高速の車輪をその静止系で追えば丸く見えます。観測者の「今」は実験室の過去へ十分にずらしてあり、表示されるものはすべて計算済みです。どれだけ遅れているかは座標系タブに表示されます。実験室に静止した背景の格子は観測者に応じて縮み、歪みます。時空図は近くの世界線を観測者の座標で、光円錐と固有時の目盛りとともに描きます。',
     'edu.h.gm': '重力磁気とフレームドラッギング',
-    'edu.p.gm': '重力磁気は磁気力の重力的な対応物です。Geonでは、回転または共動する質量が近傍の軌道を変える重力磁気項を生みます。重力とともに「重力磁気」を有効にすると、このトイモデルの速度・スピン依存効果を分離して観察できます。',
+    'edu.p.gm': '重力磁気は磁気力の重力的な対応物です。Worldlineでは、回転または共動する質量が近傍の軌道を変える重力磁気項を生みます。重力とともに「重力磁気」を有効にすると、このトイモデルの速度・スピン依存効果を分離して観察できます。',
     'edu.h.bh': 'ブラックホール物理',
     'edu.p.bh': 'ブラックホールモードでは、各粒子は質量・電荷・スピンで決まるカー＝ニューマン風の有効半径を使います。亜極限パラメータでは通常の外側地平面式を使い、超極限の玩具入力は物理的な裸の特異点として扱わずクランプします。重力はパチンスキー＝ヴィータ風の擬ポテンシャルに切り替わるため、有効ポテンシャルは地平面近傍で急峻になり、粒子中心が地平面を越えると吸収されます。ホーキング放射はカー＝ニューマン温度に依存する速度で蒸発を引き起こします — 小さなBHほど速く放射し、暴走的な蒸発に至ります。荷電BHは有効地平面近傍でシュウィンガー放電も起こし、片方のレプトンは脱出し、もう片方は落下します。各事象でBHの電荷は1量子分減り、中性に向かいます。過剰に帯電した玩具BHは同符号レプトンを量子化された段階で放出し、数値的な安全策として許されるカー＝ニューマン電荷境界へクランプします。アクシオン場が有効なときの回転BHは超放射を示します：地平面の角速度がアクシオン質量を超えると、場が回転エネルギーを抜き取りBHの周りにスカラー雲を成長させ、超放射条件が破れるまで回転を緩めます。シミュレーション内のすべての電荷はボソン電荷の倍数として量子化され、放出・崩壊・対生成を通じて離散的な保存が保証されます。',
     'edu.h.boris': 'ボリス積分器',
-    'edu.p.boris': 'Geonは粒子軌道の積分にボリスアルゴリズムを使用します。非磁気力を磁場回転の前後のハーフキックに分け、中心となる更新で位相空間体積を保ちます。高加速度または高サイクロトロン周波数では、適応的サブステップが時間刻みを制限します。',
+    'edu.p.boris': 'Worldlineは粒子軌道の積分にボリスアルゴリズムを使用します。非磁気力を磁場回転の前後のハーフキックに分け、中心となる更新で位相空間体積を保ちます。高加速度または高サイクロトロン周波数では、適応的サブステップが時間刻みを制限します。',
     'edu.h.access': 'アクセシビリティ',
-    'edu.p.access': 'Geonにはキーボードショートカット、ライト／ダークテーマ、ラベル付きコントロール、保存量と選択粒子の数値表示があります。キャンバスには継続的な動きと任意の粒子トレイルが含まれます。動きに敏感な場合は、一時停止・1ステップ実行・粒子数の少ないプリセットを利用できます。',
+    'edu.p.access': 'Worldlineにはキーボードショートカット、ライト／ダークテーマ、ラベル付きコントロール、保存量と選択粒子の数値表示があります。キャンバスには継続的な動きと任意の粒子トレイルが含まれます。動きに敏感な場合は、一時停止・1ステップ実行・粒子数の少ないプリセットを利用できます。',
     'edu.h.outcomes': '学習成果',
-    'edu.p.outcomes': 'Geonを使った後、学習者は以下を達成できます：重力と電磁気が定性的に異なる軌道力学をどう生み出すかを説明する；バーンズ＝ハットアルゴリズムが力計算を O(N²) から O(N log N) に削減する役割を述べる；相対論的補正（1PN、重力磁気）が高速領域でニュートン的予測をどう修正するかを示す；位相空間発展における保存力と散逸力の区別ができる；地平面捕獲、ホーキング放射、シュウィンガー放電、極限電荷放出が玩具モデル内のBH発展をどう支配するかを述べる；超放射が回転BHから角運動量をスカラー場へ移す機構を説明する。',
+    'edu.p.outcomes': 'Worldlineを使った後、学習者は以下を達成できます：重力と電磁気が定性的に異なる軌道力学をどう生み出すかを説明する；バーンズ＝ハットアルゴリズムが力計算を O(N²) から O(N log N) に削減する役割を述べる；相対論的補正（1PN、重力磁気）が高速領域でニュートン的予測をどう修正するかを示す；位相空間発展における保存力と散逸力の区別ができる；地平面捕獲、ホーキング放射、シュウィンガー放電、極限電荷放出が玩具モデル内のBH発展をどう支配するかを述べる；超放射が回転BHから角運動量をスカラー場へ移す機構を説明する。',
     'edu.h.prereq': '前提知識',
     'edu.p.prereq': 'ニュートンの運動法則と基本的なベクトル解析に親しんでいること。相対論や素粒子物理の予備知識は不要です — プリセットは各概念を段階的に導入するよう設計されています。',
     'edu.h.refs': '参考文献',
