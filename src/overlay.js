@@ -69,7 +69,7 @@ export default class Overlay {
      * presents that aren't the plane on top get their own outlines: the observer's, tilted
      * in the lab's coordinates, and the lab's, tilted the other way in the observer's.
      */
-    _drawBox({ view, w, h, obs }) {
+    _drawBox({ view, w, h, obs, x0, y0 }) {
         const ctx = this.ctx;
         const f = view.frame();
         const t = view.tilt;
@@ -79,8 +79,8 @@ export default class Overlay {
             const d = view.display(x, y, time, obs);
             return view.toScreen(d.x, d.y, d.h, f);
         };
-        // Near the observer, a periodic or large domain's box is the one around the camera
-        const corners = [[0, 0], [w, 0], [w, h], [0, h]];
+        // The box's origin comes from GPUBackend.render (the one around the observer on a torus)
+        const corners = [[x0, y0], [x0 + w, y0], [x0 + w, y0 + h], [x0, y0 + h]];
         const top = corners.map(([x, y]) => at(x, y, now));
         const bottom = corners.map(([x, y]) => at(x, y, now - D));
         ctx.lineWidth = 1;

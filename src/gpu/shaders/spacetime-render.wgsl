@@ -16,10 +16,16 @@
 //   vs_line    maxParticles × 4·(WL_LEN + 1), triangle strip: per sample an incoming and
 //              an outgoing pair, so a break zeroes one segment without bridging it. In the
 //              plane view the same lines, seen from straight above, are the trails
-//   vs_cone    4 rings × 2·(CONE_SEGS + 1), triangle strip
+//   vs_cone    (4 rings + 2 generators) × 2·(CONE_SEGS + 1), triangle strip: drawn as a
+//              solid, its outline the two generators where its surface turns from the
+//              camera, the far halfAng of each ring dashed
+//   vs_event   maxParticles × WL_LEN × 4, triangle strip: an open circle at each event on a
+//              world line (a birth during the run, a death, a merge, a sudden kick)
 //   vs_boson   (MAX_PHOTONS + PION_POOL_CAP) × 4, triangle strip
 //   vs_pierce  maxParticles × 4, triangle strip: where each world line crosses the
 //              observer's present, while the lab is boosting toward it or shows it tilted
+//
+// In lab coordinates, lines below the sheet of the present are seen through it, lighter.
 //
 // Coordinates (src/spacetime.js): with an observer moving at u, every event is boosted at
 // rapidity ψ = s·atanh|u| about the anchor event A = (t_A, x_A) on the observer's present,
@@ -103,10 +109,15 @@ struct FrameState {
 @group(0) @binding(10) var<storage, read> frameState: FrameState;
 @group(0) @binding(11) var<storage, read> particleAux: array<ParticleAux>;
 
-const HALF_PX: f32 = 4.0;       // ribbon half-width, room for a bead
+const HALF_PX: f32 = 4.0;       // ribbon halfAng-width, room for a bead
 const BEAD_PX: f32 = 2.1;       // bead radius
 const CONE_SEGS: u32 = 72u;
+const CONE_RINGS: u32 = 4u;
+const CONE_REACH: f32 = 0.3;    // the cone's depth, as a fraction of the time shown
 const NO_TAU: f32 = -1.0;       // no clock along this line (light)
+const SEEN: f32 = 0.45;         // opacity of what lies under the sheet of the present
+const KICK_DW: f32 = 0.15;      // a jump in proper velocity between samples that marks an event
+const EVENT_PX: f32 = 3.6;      // an event circle's radius
 
 struct VOut {
     @builtin(position) position: vec4<f32>,
@@ -114,7 +125,7 @@ struct VOut {
     @location(1) across: f32,           // px from the line's centre
     @location(2) tau: f32,              // proper time here, or NO_TAU
     @location(3) pxPerTau: f32,         // screen px per unit of proper time along the line
-    @location(4) @interpolate(flat) core: f32,  // hairline half-width, px
+    @location(4) @interpolate(flat) core: f32,  // hairline halfAng-width, px
 };
 
 fn collapsed() -> VOut {
@@ -145,6 +156,7 @@ fn unpack(packed: u32) -> vec3<f32> {
 }
 
 fn ink() -> vec3<f32> { return select(COLOR_TEXT_LIGHT, COLOR_TEXT_DARK, camera.isDarkMode > 0.5); }
+fn ground() -> vec3<f32> { return select(COLOR_CANVAS_LIGHT, COLOR_CANVAS_DARK, camera.isDarkMode > 0.5); }
 fn accent() -> vec3<f32> { return select(COLOR_ACCENT_LIGHT, COLOR_ACCENT_DARK, camera.isDarkMode > 0.5); }
 fn dark() -> bool { return camera.isDarkMode > 0.5; }
 
@@ -152,6 +164,35 @@ fn dark() -> bool { return camera.isDarkMode > 0.5; }
 fn ageAlpha(h: f32) -> f32 {
     let D = params.depth;
     return (0.2 + 0.75 * clamp(1.0 + h / D, 0.0, 1.0)) * smoothstep(-D, -0.9 * D, h);
+}
+
+/** The direction toward the camera in display coordinates (x, y, h): the one direction the
+ *  projection collapses, from the null space of the view matrix's first two rows. */
+fn towardCamera() -> vec3<f32> {
+    let m = camera.viewMatrix;
+    let r0 = vec3(m[0].x, m[1].x, m[2].x);
+    let r1 = vec3(m[0].y, m[1].y, m[2].y);
+    var d = cross(r0, r1);
+    if (d.z < 0.0) { d = -d; }
+    return normalize(d);
+}
+
+/** True when clip-space point c lies within the projected sheet of the present (the lab box
+ *  at h = 0): something below the plane there is seen through it. */
+fn underSheet(c: vec4<f32>) -> bool {
+    let W = params.domainW;
+    let H = params.domainH;
+    let q = array<vec2<f32>, 4>(project(vec2(0.0, 0.0), 0.0).xy, project(vec2(W, 0.0), 0.0).xy,
+                                project(vec2(W, H), 0.0).xy, project(vec2(0.0, H), 0.0).xy);
+    var pos = 0;
+    var neg = 0;
+    for (var i = 0; i < 4; i++) {
+        let a = q[i];
+        let b = q[(i + 1) % 4];
+        let cr = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+        if (cr > 0.0) { pos++; } else if (cr < 0.0) { neg++; }
+    }
+    return pos == 0 || neg == 0;
 }
 
 // ─── The observer and the display transform ───
@@ -379,6 +420,7 @@ fn vs_line(@builtin(vertex_index) vid: u32, @builtin(instance_index) s: u32) -> 
     if (selected) { rgb = accent(); }
     var a = ageAlpha(h) * show * select(0.85, 1.0, selected);
     if (ahead) { a = mix(0.3, 0.12, o.s) * show; }
+    if (!o.observing && h < -1e-3 && params.tilt > 0.01 && underSheet(c)) { a *= mix(1.0, SEEN, params.tilt); }
     a = select(0.0, a, visible && (h <= 0.0 || ahead));
 
     var out: VOut;
@@ -393,6 +435,10 @@ fn vs_line(@builtin(vertex_index) vid: u32, @builtin(instance_index) s: u32) -> 
 }
 
 // ─── The selected body's past light cone ───
+// Drawn as a solid: four lab-time rings, invariant as a set so they boost like everything
+// else; the surface |x − a| = h_a − h faces the camera where (û, 1)·d > 0 (û the ring's
+// outward direction, d toward the camera), so its outline runs where cos(φ − β) = −d_h/|d_xy|
+// and the far halfAng of each ring, behind it, is dashed. Seen from above d_xy is 0: no outline.
 
 @vertex
 fn vs_cone(@builtin(vertex_index) vid: u32, @builtin(instance_index) k: u32) -> VOut {
@@ -408,26 +454,71 @@ fn vs_cone(@builtin(vertex_index) vid: u32, @builtin(instance_index) k: u32) -> 
         if (!pc.found) { return collapsed(); }
         apex = pc.p;
     }
-    let r = params.depth * f32(k + 1u) / 4.0;
-    let j = vid >> 1u;
+    let reach = CONE_REACH * params.depth;
+    let d = towardCamera();
+    let m = length(d.xy);
+    let outline = m > 1e-4 && d.z < m;
+    let beta = atan2(d.y, d.x);
+    let halfAng = acos(clamp(-d.z / max(m, 1e-6), -1.0, 1.0));
     let side = select(-1.0, 1.0, (vid & 1u) != 0u);
+    var out: VOut;
+    out.tau = 0.0;
+    out.pxPerTau = 0.0;
+
+    if (k >= CONE_RINGS) {
+        // The two generators of the outline, from the apex to the deepest ring; vertices past
+        // the fourth repeat it, so the rest of the strip is degenerate rather than a sliver
+        if (!outline) { return collapsed(); }
+        let phi = beta + select(-halfAng, halfAng, k == CONE_RINGS);
+        let c0 = projectEvent(o, apex.pos, apex.t);
+        let c1 = projectEvent(o, apex.pos + reach * vec2(cos(phi), sin(phi)), apex.t - reach);
+        var dir = toPx(c1) - toPx(c0);
+        if (dot(dir, dir) < 1e-8) { return collapsed(); }
+        dir = normalize(dir);
+        let v = min(vid, 3u);
+        out.position = offsetClip(select(c0, c1, (v & 2u) != 0u), vec2(-dir.y, dir.x) * select(-1.0, 1.0, (v & 1u) != 0u) * 2.0);
+        out.color = vec4(accent(), 0.4 * params.tilt);
+        out.across = select(-1.0, 1.0, (v & 1u) != 0u) * 2.0;
+        out.core = 0.5;
+        return out;
+    }
+
+    let r = reach * f32(k + 1u) / f32(CONE_RINGS);
+    let j = vid >> 1u;
     let ang = f32(j) * TWO_PI / f32(CONE_SEGS);
-    let d = 0.01;
-    // A lab-time ring of the cone: invariant as a set, so it boosts like everything else
+    let e = 0.01;
     let c = projectEvent(o, apex.pos + r * vec2(cos(ang), sin(ang)), apex.t - r);
-    let ahead = toPx(projectEvent(o, apex.pos + r * vec2(cos(ang + d), sin(ang + d)), apex.t - r));
-    let behind = toPx(projectEvent(o, apex.pos + r * vec2(cos(ang - d), sin(ang - d)), apex.t - r));
+    let ahead = toPx(projectEvent(o, apex.pos + r * vec2(cos(ang + e), sin(ang + e)), apex.t - r));
+    let behind = toPx(projectEvent(o, apex.pos + r * vec2(cos(ang - e), sin(ang - e)), apex.t - r));
     var dir = ahead - behind;
     if (dot(dir, dir) < 1e-8) { dir = vec2(1.0, 0.0); }
     dir = normalize(dir);
-    var out: VOut;
+    let back = outline && dot(vec3(cos(ang), sin(ang), 1.0), d) < 0.0;
     out.position = offsetClip(c, vec2(-dir.y, dir.x) * side * 2.0);
-    out.color = vec4(accent(), 0.42 * (1.0 - 0.18 * f32(k)) * params.tilt);
+    out.color = vec4(accent(), 0.42 * (1.0 - 0.18 * f32(k)) * params.tilt * select(1.0, 0.75, back));
     out.across = side * 2.0;
-    out.tau = NO_TAU;
-    out.pxPerTau = 0.0;
-    out.core = 0.5;
+    // Dashes, about 7 px a period: the ring's angle, and its dash count around
+    let rPx = length(ahead - behind) / (2.0 * e);
+    out.tau = ang;
+    out.pxPerTau = max(round(TWO_PI * rPx / 7.0), 4.0);
+    out.core = select(0.5, -0.5, back);
     return out;
+}
+
+/** The cone's fragment: a hairline, dashed where core < 0 (the far side of a ring). */
+@fragment
+fn fs_cone(in: VOut) -> @location(0) vec4<f32> {
+    if (in.color.a < 0.004) { discard; }
+    let aa = 0.6 / max(camera.dpr, 1.0);
+    let w = abs(in.core);
+    var cover = 1.0 - smoothstep(w - aa, w + aa, abs(in.across));
+    if (in.core < 0.0) {
+        let f = fract(in.tau * in.pxPerTau / TWO_PI);
+        cover *= 1.0 - smoothstep(0.48, 0.56, f);
+    }
+    let a = in.color.a * cover;
+    if (a < 0.003) { discard; }
+    return vec4(in.color.rgb * a, a);
 }
 
 // ─── Bosons: light on 45° lines, pions and leptons on timelike ones ───
@@ -492,7 +583,9 @@ fn vs_boson(@builtin(vertex_index) vid: u32, @builtin(instance_index) idx: u32) 
     let h = select(e0.z, e1.z, end);
     var out: VOut;
     out.position = offsetClip(c, vec2(-dir.y, dir.x) * side * HALF_PX);
-    out.color = vec4(rgb, strength * ageAlpha(min(h, 0.0)) * params.tilt * select(1.0, 0.0, h > 0.5));
+    var a = strength * ageAlpha(min(h, 0.0)) * params.tilt * select(1.0, 0.0, h > 0.5);
+    if (!o.observing && h < -1e-3 && underSheet(c)) { a *= mix(1.0, SEEN, params.tilt); }
+    out.color = vec4(rgb, a);
     out.across = side * HALF_PX;
     // Proper time from the emission: L/γ in all, for the beads of a massive boson
     out.tau = select(NO_TAU, select(0.0, L * invGamma, end), invGamma > 0.0);
@@ -550,6 +643,74 @@ fn fs_pierce(in: POut) -> @location(0) vec4<f32> {
     a *= in.color.a;
     if (a < 0.003) { discard; }
     return vec4(in.color.rgb * a, a);
+}
+
+// ─── Events: an open circle where a world line starts or ends during the run, merges, or
+// takes a sudden kick (a bounce, a collision, a close pass) ───
+
+/** |Δw| between samples i − 1 and i of slot s's ring (stored order), 0 at the ends. */
+fn kickAt(s: u32, l: Line, i: u32) -> f32 {
+    if (i == 0u || i >= l.count) { return 0.0; }
+    let a = s * WL_LEN * WL_STRIDE + ((l.start + i - 1u) & WL_MASK) * WL_STRIDE;
+    let b = s * WL_LEN * WL_STRIDE + ((l.start + i) & WL_MASK) * WL_STRIDE;
+    return length(vec2(wlData[b + 3u] - wlData[a + 3u], wlData[b + 4u] - wlData[a + 4u]));
+}
+
+@vertex
+fn vs_event(@builtin(vertex_index) vid: u32, @builtin(instance_index) idx: u32) -> POut {
+    var out: POut;
+    out.position = vec4(0.0, 0.0, 0.0, 1.0);
+    out.color = vec4(0.0);
+    out.uv = vec2(0.0);
+    out.ring = 1.0;
+    out.px = EVENT_PX;
+    if (params.tilt < 0.05) { return out; }
+    let s = idx / WL_LEN;
+    let i = idx % WL_LEN;
+    let o = observer();
+    let l = lineOf(s, o);
+    if (!l.ok || i >= l.count) { return out; }
+    let cur = pointOf(s, l, i);
+    var isEvent = false;
+    // A birth during the run: the first sample of a ring that never wrapped (preset and
+    // loaded bodies are created at −∞ and have none)
+    let mb = s * WL_META_STRIDE;
+    if (i == 0u && wlMeta[mb + 1u] < WL_LEN && bitcast<f32>(wlMeta[mb + 2u]) > -1e30) { isEvent = true; }
+    // A death: the last sample of a retired line
+    if (!l.alive && i == l.count - 1u) { isEvent = true; }
+    // A merge: two samples at one time
+    if (i > 0u) {
+        let prev = pointOf(s, l, i - 1u);
+        if (cur.t - prev.t < 1e-4 && length(cur.pos - prev.pos) > 1e-3) { isEvent = true; }
+    }
+    // A kick: the largest jump in a run of large jumps
+    let jump = kickAt(s, l, i);
+    if (jump > KICK_DW && jump >= kickAt(s, l, i - 1u) && jump > kickAt(s, l, i + 1u)) { isEvent = true; }
+    if (!isEvent) { return out; }
+    let e = disp(o, cur.pos, cur.t);
+    if (e.z > 1e-3 || e.z < -params.depth) { return out; }
+    let corner = vec2(select(-1.0, 1.0, (vid & 1u) != 0u), select(-1.0, 1.0, (vid & 2u) != 0u));
+    let c = project(e.xy, e.z);
+    out.position = offsetClip(c, corner * (EVENT_PX + 2.0));
+    out.uv = corner * (EVENT_PX + 2.0);
+    let selected = s == params.selected;
+    var a = ageAlpha(e.z) * params.tilt;
+    if (!o.observing && e.z < -1e-3 && underSheet(c)) { a *= mix(1.0, SEEN, params.tilt); }
+    out.color = vec4(select(mix(unpack(color[s]), ink(), 0.35), accent(), selected), a);
+    return out;
+}
+
+/** An open circle: the ground inside a hairline ring, so it reads over the line it marks. */
+@fragment
+fn fs_event(in: POut) -> @location(0) vec4<f32> {
+    let d = length(in.uv);
+    let aa = 0.6 / max(camera.dpr, 1.0);
+    let ring = 1.0 - smoothstep(0.6 - aa, 0.6 + aa, abs(d - in.px));
+    let fill = 1.0 - smoothstep(in.px - aa, in.px + aa, d);
+    let a = max(ring, fill) * in.color.a;
+    if (a < 0.003) { discard; }
+    let rgb = mix(ground(), in.color.rgb, ring / max(max(ring, fill), 1e-4));
+    return vec4(rgb * a, a);
 }
 
 // ─── Shared fragment: hairline core, proper-time beads ───

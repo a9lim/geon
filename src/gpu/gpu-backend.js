@@ -4,7 +4,7 @@
  */
 import {
     TWO_PI, PHYSICS_DT, SPAWN_COUNT, spawnOffset,
-    GPU_HEATMAP_GRID, STATS_THROTTLE_MASK, INERTIA_K, EPSILON, BOUND_LOOP,
+    GPU_HEATMAP_GRID, STATS_THROTTLE_MASK, INERTIA_K, EPSILON, BOUND_LOOP, TORUS,
 } from '../config.js';
 import GPUPhysics, { LENS_RES } from './gpu-physics.js';
 import GPURenderer from './gpu-renderer.js';
@@ -216,6 +216,16 @@ export default class GPUBackend {
             st.scaleA = this.physics.scaleA;
             renderOpts.spacetime = st;
         }
+        // The lab box the tilted sheet and its outline show. On a torus any translate of the
+        // domain is the domain: with an observer, the one around it, whose images the world
+        // lines are drawn through. It slides from the camera's centre in the lab's coordinates
+        // to the observer's anchor in its own, where the boost frame's camera sits
+        const bo = renderOpts.boxOrigin || (renderOpts.boxOrigin = [0, 0]);
+        bo[0] = 0; bo[1] = 0;
+        if (obs && obs.active && sim.boundaryMode === BOUND_LOOP && sim.topology === TORUS) {
+            bo[0] = (1 - obs.s) * obs.aNow[0] + obs.s * obs.xA[0] - sim.physW / 2;
+            bo[1] = (1 - obs.s) * obs.aNow[1] + obs.s * obs.xA[1] - sim.physH / 2;
+        }
 
         if (ph.higgsEnabled) {
             const hb = this.physics.getFieldBuffers('higgs');
@@ -271,6 +281,8 @@ export default class GPUBackend {
             box.w = sim.physW;
             box.h = sim.physH;
             box.obs = renderOpts.spacetime.obs;
+            box.x0 = renderOpts.boxOrigin[0];
+            box.y0 = renderOpts.boxOrigin[1];
         }
         sim.overlay.draw(sim.camera, sim.input, horizons, box);
         this._renderStats(sim);

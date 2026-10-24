@@ -46,6 +46,10 @@ struct GridParams {
     starY: f32,
     starR: f32,
     tilt: f32,          // the spacetime view's tilt (src/spacetime.js): 0 flat … 1
+    boxX: f32,          // the lab box's origin: the domain, or on a torus with an observer
+    boxY: f32,          // the translate of it around the observer (GPUBackend.render)
+    _pad0: f32,
+    _pad1: f32,
 };
 
 // FrameState as frame-slice.wgsl writes it
@@ -208,14 +212,15 @@ fn fsGrid(in: VertexOutput) -> @location(0) vec4<f32> {
     var insideMask = 1.0;
     if (tilt > 0.0) {
         let m = fw * 1.5;
-        let inside = smoothstep(-m.x, m.x, lab.x) * smoothstep(-m.x, m.x, grid.domainW - lab.x)
-                   * smoothstep(-m.y, m.y, lab.y) * smoothstep(-m.y, m.y, grid.domainH - lab.y);
+        let lb = lab - vec2(grid.boxX, grid.boxY);
+        let inside = smoothstep(-m.x, m.x, lb.x) * smoothstep(-m.x, m.x, grid.domainW - lb.x)
+                   * smoothstep(-m.y, m.y, lb.y) * smoothstep(-m.y, m.y, grid.domainH - lb.y);
         lines *= mix(1.0, inside, tilt);
         insideMask = mix(1.0, inside, tilt);
         fill = inside * tilt * select(0.03, 0.045, dark);
         // A periodic domain's seams repeat without end on the flat sheet; tilted, the box is one
         if (grid.periodic != 0u) {
-            edge = mix(edge, edgeAlpha(lab, fw, false) * select(0.12, 0.13, dark), tilt);
+            edge = mix(edge, edgeAlpha(lb, fw, false) * select(0.12, 0.13, dark), tilt);
         }
         edge = edge * mix(1.0, 3.2, tilt);
     }

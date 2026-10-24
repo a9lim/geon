@@ -16,7 +16,7 @@ import { HEATMAP_SENSITIVITY, HEATMAP_MAX_ALPHA, GPU_MAX_PHOTONS, GPU_MAX_PIONS,
 // Pre-allocated typed arrays for per-frame writeBuffer calls (eliminate GC pressure)
 const _cameraData = new ArrayBuffer(256);
 const _cameraF32 = new Float32Array(_cameraData);
-const _gridData = new ArrayBuffer(64);   // GridParams (grid-render.wgsl)
+const _gridData = new ArrayBuffer(80);   // GridParams (grid-render.wgsl)
 const _gridF32 = new Float32Array(_gridData);
 const _gridU32 = new Uint32Array(_gridData);
 const _arrowData = new ArrayBuffer(32);
@@ -330,11 +330,12 @@ export default class GPURenderer {
             const fs = this.frameBuffers.frameState;
             const line = [[2, b.wlData], [3, b.wlMeta], [4, b.particleState], [10, fs]];
             this._spacetime = {
-                line: p.line, cone: p.cone, boson: p.boson, pierce: p.pierce,
+                line: p.line, cone: p.cone, boson: p.boson, pierce: p.pierce, event: p.event,
                 lineGroup: group(p.line, 'spacetimeLines', [...line, [5, b.color]]),
                 coneGroup: group(p.cone, 'spacetimeCone', line),
                 bosonGroup: group(p.boson, 'spacetimeBosons', [[6, b.photonPool], [7, b.phCount], [8, b.pionPool], [9, b.piCount], [10, fs]]),
                 pierceGroup: group(p.pierce, 'spacetimePierce', [...line, [5, b.color], [11, b.particleAux]]),
+                eventGroup: group(p.event, 'spacetimeEvents', [...line, [5, b.color]]),
             };
         } catch (e) {
             console.warn('[worldline] Spacetime render pipeline creation failed, skipping:', e.message);
@@ -384,13 +385,18 @@ export default class GPURenderer {
         });
         pass.setPipeline(sp.cone);
         pass.setBindGroup(0, sp.coneGroup);
-        pass.draw(2 * (72 + 1), 4);
+        pass.draw(2 * (72 + 1), 6);   // four rings, two generators
         pass.setPipeline(sp.boson);
         pass.setBindGroup(0, sp.bosonGroup);
         pass.draw(4, GPU_MAX_PHOTONS + GPU_MAX_PIONS + GPU_MAX_LEPTONS);
         pass.setPipeline(sp.line);
         pass.setBindGroup(0, sp.lineGroup);
         if (slots > 0) pass.draw(4 * (WORLDLINE_LEN + 1), slots);
+        if (slots > 0 && st.tilt > 0.05) {
+            pass.setPipeline(sp.event);
+            pass.setBindGroup(0, sp.eventGroup);
+            pass.draw(4, slots * WORLDLINE_LEN);
+        }
         if (st.pierce && slots > 0) {
             pass.setPipeline(sp.pierce);
             pass.setBindGroup(0, sp.pierceGroup);
@@ -407,7 +413,7 @@ export default class GPURenderer {
                 await createGridRenderPipeline(this.device, this.format, this._wgslConstants || '');
             this._gridPipeline = pipeline;
             this._gridUniformBuffer = this.device.createBuffer({
-                label: 'gridParams', size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+                label: 'gridParams', size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
             });
             this._gridBindGroup = this.device.createBindGroup({
                 label: 'gridRender',
@@ -790,6 +796,8 @@ export default class GPURenderer {
                 _gridF32[13] = lens && lens.star ? lens.star.y : 0;
                 _gridF32[14] = lens && lens.star ? lens.star.r : 1;
                 _gridF32[15] = opts.spacetime ? opts.spacetime.tilt : 0;
+                _gridF32[16] = opts.boxOrigin ? opts.boxOrigin[0] : 0;
+                _gridF32[17] = opts.boxOrigin ? opts.boxOrigin[1] : 0;
                 this.device.queue.writeBuffer(this._gridUniformBuffer, 0, _gridData);
                 gridPass.setPipeline(this._gridPipeline);
                 gridPass.setBindGroup(0, this._gridBindGroup);

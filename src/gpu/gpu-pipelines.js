@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 137;
+const SHADER_VERSION = 140;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -2140,7 +2140,8 @@ export async function createSpacetimeRenderPipelines(device, format, wgslConstan
     });
     return {
         line: make('spacetimeLines', 'vs_line'),
-        cone: make('spacetimeCone', 'vs_cone'),
+        cone: make('spacetimeCone', 'vs_cone', 'fs_cone'),
+        event: make('spacetimeEvents', 'vs_event', 'fs_event'),
         boson: make('spacetimeBosons', 'vs_boson'),
         pierce: make('spacetimePierce', 'vs_pierce', 'fs_pierce'),
     };

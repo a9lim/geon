@@ -63,10 +63,16 @@ export default class SpacetimeView {
         // The plane's visible height foreshortens to H·se (up to √2 more once turned, a square's
         // diagonal) and its past adds D·z·ce: fit both in H. Turning alone never rescales.
         const tilt = clamp(ce / Math.cos(EL_SPACETIME), 0, 1);
-        const k = 1 / (se * (1 + (Math.SQRT2 - 1) * tilt) + ce * D * cam.zoom / H);
+        // In an observer's coordinates a column at rest in the lab leans into the past along
+        // the boost, tanh ψ per unit of time: centre the leaning stack and fit its width too
+        // (observer() is a frame late here, which only delays the refit by a frame)
+        const o = this._obs;
+        const lean = o.active ? Math.tanh(o.psi) * D * tilt : 0;
+        const kv = 1 / (se * (1 + (Math.SQRT2 - 1) * tilt) + ce * D * cam.zoom / H);
+        const k = kv * W / (W + lean * kv * cam.zoom);
         const kz = k * cam.zoom;
         return {
-            W, H, cx: cam.x, cy: cam.y, kz, se, ce,
+            W, H, cx: cam.x + o.n[0] * lean / 2, cy: cam.y + o.n[1] * lean / 2, kz, se, ce,
             ca: Math.cos(this.az), sa: Math.sin(this.az),
             lift: kz * D * ce / 2, depth: D,
         };
