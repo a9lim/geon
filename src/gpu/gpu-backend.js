@@ -7,6 +7,7 @@ import {
     GPU_HEATMAP_GRID, STATS_THROTTLE_MASK, INERTIA_K, EPSILON, BOUND_LOOP, TORUS,
 } from '../config.js';
 import GPUPhysics, { LENS_RES } from './gpu-physics.js';
+import { PARTICLE_STATE_SIZE } from './gpu-buffers.js';
 import GPURenderer from './gpu-renderer.js';
 import { t } from '../i18n.js';
 
@@ -292,7 +293,38 @@ export default class GPUBackend {
             if (rb) atlas = sim.atlas;
         }
         sim.overlay.draw(sim.camera, sim.input, horizons, box, atlas);
+        this._readScene(sim);
         this._renderStats(sim);
+    }
+
+    /**
+     * A slow snapshot of every body for the key and the caption (sim.scene): position, proper
+     * velocity, mass, charge, antimatter, and its clock's τ, a few times a second.
+     */
+    _readScene(sim) {
+        const now = performance.now();
+        if (this._scenePending || now - (this._sceneAt || 0) < 400) return;
+        const ph = this.physics, n = ph.aliveCount;
+        this._sceneAt = now;
+        if (n === 0) { sim.scene = { bodies: [], version: ph.stateVersion }; return; }
+        this._scenePending = true;
+        const version = ph.stateVersion;
+        ph._readRanges([
+            [ph.buffers.particleState, 0, n * PARTICLE_STATE_SIZE],
+            [ph.buffers.clocks, 0, n * 16],
+        ], 'scene').then((raw) => {
+            const f = new Float32Array(raw), u = new Uint32Array(raw), c0 = n * PARTICLE_STATE_SIZE / 4;
+            const bodies = [];
+            for (let i = 0; i < n; i++) {
+                const b = i * 9;
+                bodies.push({
+                    alive: (u[b + 8] & 1) !== 0, anti: (u[b + 8] & 4) !== 0,   // FLAG_ALIVE, FLAG_ANTIMATTER
+                    x: f[b], y: f[b + 1], wx: f[b + 2], wy: f[b + 3], m: f[b + 4], q: f[b + 5],
+                    tau: f[c0 + i * 4],
+                });
+            }
+            sim.scene = { bodies, version };
+        }).catch(() => {}).finally(() => { this._scenePending = false; });
     }
 
     _renderStats(sim) {

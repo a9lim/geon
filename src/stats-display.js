@@ -50,6 +50,7 @@ export default class StatsDisplay {
         // A scalar field's energy is the slab's, a·ℓ thick under expansion (cosmology.js)
         const allFieldE = e.fieldEnergy + (e.higgsFieldEnergy + e.axionFieldEnergy) * e.scaleA;
         const radiated = e.photonE + e.pionE + e.pendingRadiation + L.escapedE + L.escapedMatterE;
+        this.radiated = radiated;   // for the caption
         const total = e.totalMass + e.linearKE + e.spinKE + pe + allFieldE + radiated;
         const ledgerTotal = total + L.expansionWork;
 
