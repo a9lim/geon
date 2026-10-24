@@ -208,7 +208,7 @@ export default class SceneKey {
             if (!b.alive) continue;
             any = true;
             if (b.anti) anti = true;
-            else if (b.q > 0.05) pos = true;
+            if (b.q > 0.05) pos = true;
             else if (b.q < -0.05) neg = true;
             else neutral = true;
         }

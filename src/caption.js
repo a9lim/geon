@@ -122,14 +122,16 @@ export default class Caption {
             const D = sim.spacetime.depth();
             text += name + L.spacetime(Math.round(D), 2 ** Math.round(Math.log2(D / 14)));
         } else if (key !== 'none') {
-            // Seen from above, a preset says what it shows, with its numbers
+            // Seen from above, a preset says what it shows, with its numbers. Until the first
+            // snapshot of its bodies it gives its description; once the scene no longer fits
+            // it (bodies changed by hand), the plain view
             let desc = this._presetText(L, key);
-            if (!desc) {
+            if (!desc && (!sim.scene || sim.scene.bodies.length === 0)) {
                 const k = 'preset.' + key + '.desc';
                 const d = window._i18n ? window._i18n.t(k, '') : '';
-                desc = d && d !== k ? d + (getLang() === 'ja' ? '。' : '.') : L.plane(n, this._touch);
+                if (d && d !== k) desc = d + (getLang() === 'ja' ? '。' : '.');
             }
-            text += name + desc;
+            text += desc ? name + desc : L.plane(n, this._touch);
         } else {
             text += L.plane(n, this._touch);
         }
