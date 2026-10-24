@@ -40,9 +40,10 @@ struct ArrowUniforms {
 
 // Constants (FLAG_ALIVE, VELOCITY_VECTOR_SCALE) provided by generated wgslConstants block.
 // Shaft/head sizes in world units — scale naturally with camera zoom.
-const SHAFT_HALF_W: f32 = 0.125;  // matches CPU lineWidth 0.25 / 2
-const HEAD_HALF_W: f32 = 0.25;   // matches CPU headLen * 0.5
-const HEAD_LEN: f32 = 0.5;
+const SHAFT_HALF_PX: f32 = 0.6;    // a hairline, in CSS px
+const VEL_HALF_PX: f32 = 0.45;     // velocity arrows are lighter still
+const HEAD_HALF_PX: f32 = 3.0;
+const HEAD_LEN_PX: f32 = 7.0;
 
 fn getForceVector(idx: u32, forceType: u32) -> vec2f {
     let af = allForces[idx];
@@ -102,13 +103,18 @@ fn vs_main(
 
     let dir = f / mag;
     let perp = vec2f(-dir.y, dir.x);
+    // Widths in px, whatever the zoom
+    let px = 1.0 / max(camera.zoom, 1e-6);
+    let SHAFT_HALF_W = select(SHAFT_HALF_PX, VEL_HALF_PX, isVelocity) * px;
+    let HEAD_HALF_W = HEAD_HALF_PX * px;
+    let HEAD_LEN = HEAD_LEN_PX * px;
     let r = particleAux[instIdx].radius;
 
     // Arrow starts at particle center
     let base = vec2f(p.posX, p.posY);
     let tip = base + dir * scaledLen;
-    // Only draw arrowhead if arrow is long enough (matches CPU hasHead = mag >= 0.5)
-    let hasHead = scaledLen >= 0.5;
+    // Only draw an arrowhead on an arrow long enough to carry one
+    let hasHead = scaledLen >= 1.5 * HEAD_LEN;
     let headBase = select(tip, tip - dir * HEAD_LEN, hasHead);
 
     // 9 vertices (triangle-list): shaft quad (2 tris) + head (1 tri)

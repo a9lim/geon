@@ -486,7 +486,7 @@ const UI_JA = {
     'topbar.closePanel': 'パネルを閉じる',
     'topbar.toolbar': 'シミュレーション',
     'topbar.antimatterShort': '反物質',
-    'topbar.controls': 'コントロール',
+    'topbar.controls': '操作',
     'topbar.saveShort': '保存',
     'topbar.loadShort': '読込',
     'view.group': '表示',

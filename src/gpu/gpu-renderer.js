@@ -1005,12 +1005,13 @@ export default class GPURenderer {
                         }
                     }
                 } else if (this.showForce) {
-                    const accentColor = this.isLight ? _lightAccent : _darkAccent;
-                    arrowDraws.push({ slot: 0, ft: 11, color: accentColor, scale: arrowScale, minMag });
+                    // The total in the text ink: the one red is the selection's
+                    arrowDraws.push({ slot: 0, ft: 11, color: this.isLight ? _textLight : _textDark, scale: arrowScale, minMag });
                 }
                 if (this.showVelocity) {
-                    const textColor = this.isLight ? _textLight : _textDark;
-                    arrowDraws.push({ slot: arrowDraws.length, ft: 12, color: textColor, scale: 1.0, minMag: 1.0 * invZoom });
+                    // Graphite and lighter, so it reads apart from the total force's text ink
+                    const muted = inks(this.isLight).graphite;
+                    arrowDraws.push({ slot: arrowDraws.length, ft: 12, color: muted, scale: 1.0, minMag: 1.0 * invZoom });
                 }
 
                 if (arrowDraws.length > 0) {
@@ -1072,8 +1073,7 @@ export default class GPURenderer {
                     // superradiance: type 4, slot 5, indigo (requires axion + BH)
                     if (enabledForces.axion && opts.blackHoleEnabled) torqueDraws.push({ slot: 5, type: 4, color: GPURenderer.torqueColors(this.isLight)[4] });
                 } else if (this.showForce) {
-                    const accentColor = this.isLight ? _lightAccent : _darkAccent;
-                    torqueDraws.push({ slot: 4, type: 11, color: accentColor });
+                    torqueDraws.push({ slot: 4, type: 11, color: this.isLight ? _textLight : _textDark });
                 }
 
                 if (torqueDraws.length > 0) {
@@ -1135,7 +1135,7 @@ export default class GPURenderer {
             k.prussian,    // 1: coulomb
             k.verdigris,   // 2: magnetic
             k.madder,      // 3: gravitomag
-            k.sienna,      // 4: 1pn
+            k.mulberry,    // 4: 1pn (sienna is positive charge)
             k.violet,      // 5: spinCurv
             k.ochre,       // 6: radiation
             k.viridian,    // 7: yukawa

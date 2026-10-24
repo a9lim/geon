@@ -9,6 +9,17 @@
 :root {
     --margin-w: 340px;
     --gutter: 20px;
+    /* The swatches of the key and the margin's legend (src/scene-key.js): a body's fill is
+       this much of its ink in the ground, as particle.wgsl mixes it; a horizon is a void */
+    --key-body: 48%;
+    --key-void: var(--text);
+    --key-void-edge: var(--text);
+}
+
+[data-theme="dark"] {
+    --key-body: 62%;
+    --key-void: #040404;
+    --key-void-edge: color-mix(in srgb, var(--text) 30%, transparent);
 }
 
 /* ─── Layout ─── */
@@ -86,15 +97,6 @@ body.wl.margin-open { grid-template-columns: minmax(0, 1fr) var(--margin-w); }
     border: 1px solid color-mix(in srgb, var(--text) 42%, transparent);
     font-size: var(--font-sm);
     pointer-events: none;
-    --key-body: 48%;
-    --key-void: var(--text);
-    --key-void-edge: var(--text);
-}
-
-[data-theme="dark"] .scene-key {
-    --key-body: 62%;
-    --key-void: #040404;
-    --key-void-edge: color-mix(in srgb, var(--text) 30%, transparent);
 }
 
 .scene-key-in {
@@ -317,6 +319,9 @@ body.wl:not(.margin-open) .margin { visibility: hidden; }
 }
 
 .ctrl-row > label { justify-content: flex-start; }
+
+/* The Forces and Physics rows lead with their mark in the scene (src/scene-key.js) */
+.row-swatch { flex: none; margin-right: 2px; overflow: visible; }
 .ctrl-sub { padding-left: 14px; }
 .ctrl-sub > label { color: var(--text-secondary); }
 .ctrl-disabled { opacity: 0.4; pointer-events: none; }
@@ -369,7 +374,8 @@ body.wl:not(.margin-open) .margin { visibility: hidden; }
     margin: 6px 0 2px;
 }
 
-/* ─── Switches: a hairline track, a dot that slides over and takes the force's ink ─── */
+/* ─── Switches: a hairline track, a dot that slides over and takes the force's ink, and a
+   wash of the ink when on ─── */
 .tog-wrap { position: relative; display: flex; }
 
 .tog-wrap input {
@@ -405,7 +411,10 @@ body.wl:not(.margin-open) .margin { visibility: hidden; }
     transition: left 0.2s var(--ease-out), background-color 0.2s var(--ease-out), width 0.2s var(--ease-out), height 0.2s var(--ease-out), margin 0.2s var(--ease-out);
 }
 
-.tog-wrap input:checked + .tog { border-color: var(--tog-color); }
+.tog-wrap input:checked + .tog {
+    border-color: color-mix(in srgb, var(--tog-color) 55%, transparent);
+    background: color-mix(in srgb, var(--tog-color) 14%, transparent);
+}
 
 .tog-wrap input:checked + .tog .tog-thumb {
     left: 16px;
@@ -557,14 +566,14 @@ input[type=range]:focus-visible::-webkit-slider-thumb { outline: 1.5px solid var
 
 /* ─── Force and parameter inks ─── */
 .tog-gravity     { --tog-color: var(--ink-umber); }
-.tog-bosoninter  { --tog-color: var(--ink-mulberry); }
+.tog-bosoninter  { --tog-color: var(--text-muted); }
 .tog-gravitomag  { --tog-color: var(--ink-madder); }
 .tog-coulomb     { --tog-color: var(--ink-prussian); }
 .tog-magnetic    { --tog-color: var(--ink-verdigris); }
-.tog-relativity  { --tog-color: var(--ink-sienna); }
+.tog-relativity  { --tog-color: var(--text-muted); }
 .tog-radiation   { --tog-color: var(--ink-ochre); }
 .tog-spinorbit   { --tog-color: var(--ink-violet); }
-.tog-onepn       { --tog-color: var(--ink-sienna); }
+.tog-onepn       { --tog-color: var(--ink-mulberry); }
 .tog-blackhole   { --tog-color: var(--text); }
 .tog-yukawa      { --tog-color: var(--ink-viridian); }
 .tog-axion       { --tog-color: var(--ink-indigo); }
@@ -626,6 +635,7 @@ input[type=range]:focus-visible::-webkit-slider-thumb { outline: 1.5px solid var
 }
 
 @media (max-width: 600px) {
-    .scene-tools { top: 46px; }
     .seg button { padding: 4px 9px; }
+    /* src/ui.js moves speed and language here, and antimatter into the figure bar */
+    .margin-foot #speedBtn { margin-left: auto; }
 }

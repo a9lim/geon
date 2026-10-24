@@ -16,7 +16,7 @@ import CosmologyPanel from './src/cosmology-panel.js';
 import LensPanel from './src/lens-panel.js';
 import SpacetimeView, { EL_SPACETIME, AZ_SPACETIME } from './src/spacetime.js';
 import Caption from './src/caption.js';
-import SceneKey from './src/scene-key.js';
+import SceneKey, { decorateMargin } from './src/scene-key.js';
 
 /**
  * Request a WebGPU device with the limits the simulation needs.
@@ -333,6 +333,7 @@ class Simulation {
         this.lensPanel = new LensPanel(this);
         this.caption = new Caption(this);
         this.sceneKey = new SceneKey(this);
+        decorateMargin();
 
         // Re-apply DOM translations after UI setup in case any modules
         // mutated text content during their wiring (e.g. mode-btn label).

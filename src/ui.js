@@ -34,6 +34,24 @@ export function setupUI(sim) {
     panel.querySelector('.sheet-handle').addEventListener('click', () => setMargin(false));
     if (window.innerWidth > 900) setMargin(true);
 
+    // ─── A phone keeps the scene's top to one row: Controls beside the colophon, speed and
+    // language at the sheet's foot, and the (touch-only) antimatter switch in the figure bar ───
+    const narrow = window.matchMedia('(max-width: 600px)');
+    const placeTools = () => {
+        const tools = document.querySelector('.scene-tools');
+        const foot = document.querySelector('.margin-foot');
+        const bar = document.querySelector('.scene-controls');
+        const [mode, speed, lang] = ['mode-btn', 'speedBtn', 'lang-btn'].map((id) => document.getElementById(id));
+        if (narrow.matches) {
+            bar.append(mode);
+            foot.append(speed, lang);
+        } else {
+            tools.prepend(mode, speed, lang);
+        }
+    };
+    placeTools();
+    narrow.addEventListener('change', placeTools);
+
     // ─── Antimatter mode (touch: a tap spawns antimatter while it is on) ───
     const modeBtn = document.getElementById('mode-btn');
     const _syncModeBtnLabels = () => {

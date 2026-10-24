@@ -1,7 +1,7 @@
 // clock-render.wgsl — Proper-time clock rings around particles (the Clocks overlay).
 //
 // Each body's ring fills clockwise from the top once per CLOCK_PERIOD of its own proper
-// time, so moving bodies and bodies deep in a well visibly lag. The ring sits on the
+// time, in the body's ink, so moving bodies and bodies deep in a well visibly lag. The ring sits on the
 // body and contracts with it along v (Relativity on).
 //
 // Entry points, both triangle-strip ribbons of RING_SEGMENTS * 2 vertices per instance:
@@ -86,8 +86,14 @@ fn vs_track(@builtin(vertex_index) vertIdx: u32, @builtin(instance_index) instId
 fn vs_main(@builtin(vertex_index) vertIdx: u32, @builtin(instance_index) instIdx: u32) -> VertexOutput {
     if ((particles[instIdx].flags & FLAG_ALIVE) == 0u || vertIdx >= RING_SEGMENTS * 2u) { return offscreen(); }
     let elapsed = clocks[instIdx].y / CLOCK_PERIOD;
-    let accent = select(COLOR_ACCENT_LIGHT, COLOR_ACCENT_DARK, camera.isDarkMode > 0.5);
-    return ringVertex(instIdx, vertIdx, elapsed * TWO_PI, vec4f(accent, 0.85));
+    // The body's own ink (update-colors.wgsl): the one red is the selection's
+    let dk = camera.isDarkMode > 0.5;
+    let q = particles[instIdx].charge;
+    var ink = select(INK_GRAPHITE_L, INK_GRAPHITE_D, dk);
+    if (camera.blackHoleOn > 0.5) { ink = select(COLOR_TEXT_LIGHT, COLOR_TEXT_DARK, dk); }
+    else if (q > 0.5 * BOSON_CHARGE) { ink = select(INK_SIENNA_L, INK_SIENNA_D, dk); }
+    else if (q < -0.5 * BOSON_CHARGE) { ink = select(INK_PRUSSIAN_L, INK_PRUSSIAN_D, dk); }
+    return ringVertex(instIdx, vertIdx, elapsed * TWO_PI, vec4f(ink, 0.9));
 }
 
 @fragment

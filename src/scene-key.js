@@ -4,7 +4,8 @@
 // the spacetime view's cone and events, the Fields overlay's layers, the scalar fields' hatching,
 // a uniform external field with its value, the lensed backdrop. Each swatch is drawn with the
 // scene's own mark in the scene's own ink. Rebuilt only when its rows change; G hides it with
-// the rulers, and it stays out of a small stage.
+// the rulers, and it stays out of a small stage. The same swatches make the margin's Forces
+// and Physics sections a legend (decorateMargin).
 import { getLang } from './i18n.js';
 import { CLOCK_PERIOD } from './config.js';
 
@@ -104,7 +105,33 @@ const SWATCH = {
     extG: (o) => arrow(o.angle, ink('umber')),
     lens: () => path('M1,3 C9,3 10,7 13,7 C16,7 17,3 25,3', MUTED, 1) + path('M1,11 C9,11 10,9 13,9 C16,9 17,11 25,11', MUTED, 1),
     star: () => path('M6,9 A7,7 0 0 1 11,2.6', ACCENT, 1.6) + circle(19, 9, 1.6, 'none', ACCENT, 0),
+    // The margin's legend: a force that draws only its arrows, and the torque arc
+    force: (o) => arrow(0, ink(o.ink)),
+    torque: (o) => path('M8,10.5 A5.5,5.5 0 1 1 18.5,9', ink(o.ink), 1.1)
+        + path('M16.2,7.4 L18.5,9 L19.6,6.4', ink(o.ink), 1.1, ' stroke-linejoin="round"'),
 };
+
+/** An inline swatch: the scene's mark for `kind` (SWATCH), 26 × 14 px. */
+export function swatch(kind, o = {}, cls = '') {
+    return `<svg class="${cls}" viewBox="0 0 26 14" width="26" height="14" aria-hidden="true">${kind ? SWATCH[kind](o) : ''}</svg>`;
+}
+
+// The Forces and Physics sections as a legend: each switch's row leads with the mark that
+// force makes in the scene, in its ink (a mode, which draws nothing, keeps the space)
+const LEGEND = [
+    ['gravity-toggle', 'gravity'], ['gravitomag-toggle', 'force', { ink: 'madder' }],
+    ['coulomb-toggle', 'efield'], ['magnetic-toggle', 'bz'], ['yukawa-toggle', 'yukawa'],
+    ['axion-toggle', 'axion'], ['higgs-toggle', 'higgs'],
+    ['relativity-toggle', null], ['onepn-toggle', 'force', { ink: 'mulberry' }], ['blackhole-toggle', 'hole'],
+    ['spinorbit-toggle', 'torque', { ink: 'violet' }], ['radiation-toggle', 'light'], ['bosoninter-toggle', null],
+];
+
+export function decorateMargin() {
+    for (const [id, kind, o] of LEGEND) {
+        const label = document.querySelector(`.ctrl-row > label[for="${id}"]`);
+        if (label && !label.querySelector('.row-swatch')) label.insertAdjacentHTML('afterbegin', swatch(kind, o, 'row-swatch'));
+    }
+}
 
 const WORDS = {
     en: {
@@ -244,8 +271,7 @@ export default class SceneKey {
         this.el.hidden = !rows.length;
         if (!rows.length) { this.el.replaceChildren(); return; }
         this.el.innerHTML = `<div class="scene-key-in"><p class="scene-key-title">${L.title}</p>`
-            + rows.map(([kind, text, o]) =>
-                `<div class="scene-key-row"><svg viewBox="0 0 26 14" width="26" height="14" aria-hidden="true">${SWATCH[kind](o || {})}</svg><span>${text}</span></div>`,
-            ).join('') + '</div>';
+            + rows.map(([kind, text, o]) => `<div class="scene-key-row">${swatch(kind, o)}<span>${text}</span></div>`).join('')
+            + '</div>';
     }
 }
