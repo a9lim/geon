@@ -78,9 +78,19 @@ SHADER_VERSION is 147.
 
 The working tree was clean at the handoff.
 
+9. `60ff23e` Physics fixes: bounce wall (centre may cross by r, elastic beyond; the twin
+   returns at 0.80c), `PHOTON_QUANTUM` 0.02 for Larmor/quadrupole photons, Higgs wall and
+   v/4 contours gated on the field 2 cells away (no noise maze). SHADER_VERSION 151.
+10. `0dcd516` Bremsstrahlung beam: preset `tick(sim)` hook (`sim.presetTick`, cleared by
+    `reset()`), electrons m 0.3 q −1 at 0.95c every 24 from alternate sides at a q 6 m 60
+    nucleus.
+11. `0fee1c2` Step 8 done: `src/scene-key.js` (bottom right; G = "Rulers and key"), overlay
+    scale bar (bottom left) and tilted dimension line, captions "Fig. 1." + live preset text
+    (en, ja). Equipotentials one a decade and only in the Electric view.
+
 ## Remaining, in order
 
-**8. Key, scale bar, live captions.**
+**8. (done) Key, scale bar, live captions.**
 - Key: an HTML element `#scene-key` in `.stage` (bottom-left, above the figure bar; hide
   under ~700 px and with the grid toggle G; hairline border, `--bg-canvas` ground, no
   radius). New `src/scene-key.js` with an en/ja table like `caption.js`; rebuild the DOM
