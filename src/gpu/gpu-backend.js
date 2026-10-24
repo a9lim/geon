@@ -284,7 +284,14 @@ export default class GPUBackend {
             box.x0 = renderOpts.boxOrigin[0];
             box.y0 = renderOpts.boxOrigin[1];
         }
-        sim.overlay.draw(sim.camera, sim.input, horizons, box);
+        // The Fields overlay's contours and field lines, rebuilt from each heatmap readback (lab only)
+        let atlas = null;
+        if (sim.heatmap.enabled && !frameParams) {
+            const rb = this.physics.heatmapReadback;
+            if (rb && rb !== sim.atlas.source) sim.atlas.update(rb);
+            if (rb) atlas = sim.atlas;
+        }
+        sim.overlay.draw(sim.camera, sim.input, horizons, box, atlas);
         this._renderStats(sim);
     }
 

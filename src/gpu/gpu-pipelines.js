@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 142;
+const SHADER_VERSION = 147;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -1447,6 +1447,7 @@ export async function createHeatmapPipelines(device, wgslConstants = '') {
             { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
             { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // magField (Bz)
+            { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // elecField (E)
         ],
     });
     // Group 2: signal delay history buffers (wlData + wlMeta, interleaved format)

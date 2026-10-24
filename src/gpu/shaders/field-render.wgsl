@@ -33,8 +33,8 @@ struct FieldRenderUniforms {
     _pad1: f32,
     _pad2: f32,
     // Colors (packed as vec4 RGBA floats)
-    color0: vec4<f32>,  // Higgs depleted / Axion positive
-    color1: vec4<f32>,  // Higgs enhanced, or the other vacuum / Axion negative
+    color0: vec4<f32>,  // the negative side: Higgs −v (violet), axion (indigo)
+    color1: vec4<f32>,  // the positive side: Higgs +v (sap), axion (ochre)
 };
 
 struct CameraUniforms {
@@ -77,10 +77,24 @@ fn contour(s: f32, px: f32) -> f32 {
     return 1.0 - smoothstep(px * 0.5 - 0.5, px * 0.5 + 0.5, f);
 }
 
-// The field as a relief: contours at even steps of its value, a heavier contour at zero (for
-// the Higgs, the walls between the ±v domains a quench leaves; for the axion, the nodes), a
-// faint tint by the sign of the deviation from vacuum, and hatching over the far side of
-// zero, so the two vacua differ by pattern as well as ink.
+/** The field averaged over a tent ±1 cell wide: grid-scale noise stays out of its sign. */
+fn fieldSmooth(gx: f32, gy: f32) -> f32 {
+    var sum = 0.0;
+    for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+            let w = f32((2 - abs(dx)) * (2 - abs(dy))) / 16.0;
+            sum += w * fieldAt(gx + f32(dx), gy + f32(dy));
+        }
+    }
+    return sum;
+}
+
+// The field as a relief, by pattern before hue: each side of zero hatched its own way in its
+// own ink (the Higgs: +v one way in sap, −v the other in violet; the axion: indigo and ochre),
+// once the field has left the noise about zero, and the zero contour drawn heavier: for the Higgs, the
+// walls between the domains a quench leaves; for the axion, its nodes. The Higgs also takes
+// thin contours every v/4 from its vacuum, faded where the field sits at the vacuum, so a
+// calm field draws only its hatch. The axion's sign is read from the smoothed field.
 @fragment
 fn fsFieldOverlay(in: VertexOutput) -> @location(0) vec4<f32> {
     let css = in.pos.xy / max(camera.dpr, 1.0);
@@ -90,35 +104,30 @@ fn fsFieldOverlay(in: VertexOutput) -> @location(0) vec4<f32> {
     let gy = world.y / renderUniforms.domainH * f32(GRID);
     // No early return: the contours take derivatives, which need uniform control flow
     let inside = select(0.0, 1.0, gx >= 0.0 && gx < f32(GRID) && gy >= 0.0 && gy < f32(GRID));
-    let val = fieldAt(gx, gy);
+    let higgs = renderUniforms.fieldType == 0u;
+    let val = select(fieldSmooth(gx, gy), fieldAt(gx, gy), higgs);
 
-    var c: f32;          // the field in contour units
-    var dev: f32;        // deviation from the nearest vacuum, for the tint
-    var other: bool;     // past zero: the other vacuum, or the axion's negative side
-    if (renderUniforms.fieldType == 0u) {
-        let v = max(renderUniforms.vev, 0.05);
-        c = val / v * 4.0;               // a contour every v/4
-        dev = abs(val) - v;
-        other = val < 0.0;
-    } else {
-        c = val * 20.0;                  // a contour every 0.05
-        dev = val;
-        other = val < 0.0;
-    }
-    let tintCol = select(renderUniforms.color0.rgb, renderUniforms.color1.rgb, other || (dev > 0.0 && renderUniforms.fieldType == 0u));
-    let strength = clamp(abs(dev) * select(4.0, 8.0, renderUniforms.fieldType == 0u), 0.0, 1.0);
+    let v = max(renderUniforms.vev, 0.05);
+    let pos = val >= 0.0;
+    // Whether it has left zero: past the symmetric phase's noise it has picked a side
+    let depth = smoothstep(0.01, 0.06, abs(val));
     let dark = renderUniforms.isLight == 0u;
 
-    // Contours fade where the field sits at its vacuum, so a calm field draws nothing
-    let lines = contour(c, camera.dpr) * smoothstep(0.02, 0.12, strength) * select(0.32, 0.4, dark);
-    let wall = contour(c * 0.25, 1.6 * camera.dpr) * (1.0 - step(0.5, abs(c))) * select(0.55, 0.7, dark);
-    let hatch = select(0.0, 1.0 - smoothstep(0.6, 1.6, abs(fract((css.x + css.y) / 7.0) - 0.5) * 7.0 * camera.dpr), other)
-              * select(0.14, 0.18, dark);
-    let tint = strength * select(0.10, 0.13, dark);
+    // Hatching: lines of constant x ± y, 6 px apart, one CSS px wide
+    let u = select(css.x - css.y, css.x + css.y, pos) * 0.70710678;
+    let d = abs(fract(u / 6.0 + 0.5) - 0.5) * 6.0;
+    let hatch = (1.0 - smoothstep(0.25, 0.85, d)) * depth * select(0.42, 0.5, dark);
 
+    // The zero contour, and for the Higgs thin contours every v/4 away from its vacuum
+    let c = select(val * 4.0, val / v * 4.0, higgs);
+    let wall = contour(c * 0.25, 1.6 * camera.dpr) * (1.0 - step(0.5, abs(c))) * select(0.65, 0.75, dark);
+    let calm = select(0.0, smoothstep(0.08, 0.3, abs(abs(val) - v) / v), higgs);
+    let lines = contour(c, camera.dpr) * calm * select(0.28, 0.34, dark);
+
+    let tintCol = select(renderUniforms.color0.rgb, renderUniforms.color1.rgb, pos);
     let ink = select(COLOR_TEXT_LIGHT, COLOR_TEXT_DARK, dark);
-    var rgb = tintCol * tint + tintCol * lines + tintCol * hatch;
-    var a = tint + lines + hatch;
+    var rgb = tintCol * (hatch + lines);
+    var a = hatch + lines;
     rgb = rgb * (1.0 - wall) + ink * wall;
     a = a * (1.0 - wall) + wall;
     a = clamp(a, 0.0, 0.95) * inside;

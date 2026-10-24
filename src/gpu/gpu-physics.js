@@ -411,6 +411,12 @@ export default class GPUPhysics {
         // Phase 5: FieldUniforms buffer (shared)
         this._fieldUniformBuffer = null;
         this._heatmapUniformBuffer = null;
+        // The overlay's atlas reads the potentials, E and the bodies back every heatmap update
+        // (src/field-atlas.js): a copy queued after the heatmap passes, mapped after the submit
+        this._heatmapStaging = null;
+        this._heatmapCopyMeta = null;
+        this._heatmapReadPending = false;
+        this.heatmapReadback = null;
         this._expansionUniformBuffer = null;
         this._disintUniformBuffer = null;
 
@@ -3505,6 +3511,7 @@ export default class GPUPhysics {
                         { binding: 2, resource: { buffer: hmBuf.yukawaPotential } },
                         { binding: 3, resource: { buffer: this._heatmapUniformBuffer } },
                         { binding: 4, resource: { buffer: hmBuf.magField } },
+                        { binding: 5, resource: { buffer: hmBuf.elecField } },
                     ],
                 }),
                 g2: this.device.createBindGroup({
@@ -3574,6 +3581,29 @@ export default class GPUPhysics {
                 p.end();
             }
         }
+        // Queue the overlay's readback: the potentials (blurred), E (not), and the bodies
+        if (!this._heatmapReadPending) {
+            const G = GPU_HEATMAP_GRID * GPU_HEATMAP_GRID * 4;
+            const nBytes = this.aliveCount * PARTICLE_STATE_SIZE;
+            if (!this._heatmapStaging) {
+                this._heatmapStaging = this.device.createBuffer({
+                    label: 'heatmapReadback', size: 5 * G + MAX_PARTICLES * PARTICLE_STATE_SIZE,
+                    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+                });
+            }
+            const st = this._heatmapStaging;
+            encoder.copyBufferToBuffer(hmBuf.gravPotential, 0, st, 0, G);
+            encoder.copyBufferToBuffer(hmBuf.elecPotential, 0, st, G, G);
+            encoder.copyBufferToBuffer(hmBuf.yukawaPotential, 0, st, 2 * G, G);
+            encoder.copyBufferToBuffer(hmBuf.elecField, 0, st, 3 * G, 2 * G);
+            if (nBytes > 0) encoder.copyBufferToBuffer(this.buffers.particleState, 0, st, 5 * G, nBytes);
+            this._heatmapCopyMeta = {
+                viewLeft, viewTop, cellW, cellH, grid: GPU_HEATMAP_GRID, n: this.aliveCount,
+                gravity: _heatmapUniformU32[10] === 1, coulomb: _heatmapUniformU32[11] === 1,
+                yukawa: _heatmapUniformU32[12] === 1, delayed: this._relativityEnabled,
+                blackHole: this._blackHoleEnabled, version: this.stateVersion,
+            };
+        }
     }
 
     /** Expose field buffers for renderer overlay drawing */
@@ -3583,6 +3613,33 @@ export default class GPUPhysics {
 
     /** Expose heatmap buffers for renderer overlay drawing */
     getHeatmapBuffers() { return this._heatmapBuffers; }
+
+    /**
+     * Map the readback queued by dispatchHeatmap: heatmapReadback becomes { meta, grav, elec,
+     * yuk, E (x, y interleaved), state (ParticleState words) }, a frame or two late.
+     */
+    _mapHeatmapReadback() {
+        const meta = this._heatmapCopyMeta;
+        if (!meta || this._heatmapReadPending) return;
+        this._heatmapCopyMeta = null;
+        this._heatmapReadPending = true;
+        const st = this._heatmapStaging;
+        const G = meta.grid * meta.grid;
+        st.mapAsync(GPUMapMode.READ).then(() => {
+            const raw = st.getMappedRange().slice(0);
+            this.heatmapReadback = {
+                meta,
+                grav: new Float32Array(raw, 0, G),
+                elec: new Float32Array(raw, 4 * G, G),
+                yuk: new Float32Array(raw, 8 * G, G),
+                E: new Float32Array(raw, 12 * G, 2 * G),
+                state: new Float32Array(raw, 20 * G, meta.n * PARTICLE_STATE_SIZE / 4),
+            };
+        }).catch(() => {}).finally(() => {
+            if (st.mapState === 'mapped') st.unmap();
+            this._heatmapReadPending = false;
+        });
+    }
 
     /**
      * Run one frame: adaptive substepping with full Phase 2 force computation + Boris integrator.
@@ -3728,6 +3785,7 @@ export default class GPUPhysics {
             }
 
             this.device.queue.submit([encoder.finish()]);
+            this._mapHeatmapReadback();
         }
         this._frameA = null;
         if (half !== 1) this.setComovingDomain(this.comovingW, this.comovingH);
@@ -4301,6 +4359,8 @@ export default class GPUPhysics {
         this._nextWorldLineTime = 0;
         this._frameCount = 0;
         this._heatmapFrame = 0;
+        this.heatmapReadback = null;
+        this._heatmapCopyMeta = null;
         this._pendingMergeEvents = [];
         this._pendingDisintEvents = [];
         this._pendingKugelblitzEvents = [];
@@ -4323,6 +4383,7 @@ export default class GPUPhysics {
             if (this._heatmapBuffers) {
                 enc.clearBuffer(this._heatmapBuffers.gravPotential);
                 enc.clearBuffer(this._heatmapBuffers.magField);
+                enc.clearBuffer(this._heatmapBuffers.elecField);
                 enc.clearBuffer(this._heatmapBuffers.elecPotential);
                 enc.clearBuffer(this._heatmapBuffers.yukawaPotential);
                 enc.clearBuffer(this._heatmapBuffers.output);
@@ -4716,6 +4777,7 @@ export default class GPUPhysics {
         // Heatmap
         _dObj(this._heatmapBuffers);
         _d(this._heatmapUniformBuffer);
+        _d(this._heatmapStaging);
 
         // Excitation and disintegration
         _dObj(this._excitationBuffers);

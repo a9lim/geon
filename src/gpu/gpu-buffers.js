@@ -431,6 +431,7 @@ export function createHeatmapBuffers(device, gridSize = 64) {
         elecPotential:   device.createBuffer({ label: 'heatmap-elec',   size: bytes, usage }),
         yukawaPotential: device.createBuffer({ label: 'heatmap-yukawa', size: bytes, usage }),
         magField:        device.createBuffer({ label: 'heatmap-bz',     size: bytes, usage }),  // Bz, not a potential
+        elecField:       device.createBuffer({ label: 'heatmap-e',      size: bytes * 2, usage }),  // E, vec2 per cell
         blurTemp:        device.createBuffer({ label: 'heatmap-blur',   size: bytes, usage }),
         output:          device.createBuffer({ label: 'heatmap-output', size: gridSize * gridSize * 4 * 4, usage }), // RGBA u8 packed as u32
     };

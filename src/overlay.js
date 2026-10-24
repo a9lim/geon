@@ -1,7 +1,8 @@
 // ─── Overlay ───
-// The 2D canvas above the WebGPU canvas: the spawn-drag line, in an expanding universe the
-// Hubble radius and event horizon around the observer, and in the spacetime view the lab
-// box's edges below the plane and its time axis. (The domain's edge is part of the
+// The 2D canvas above the WebGPU canvas: the Fields overlay's contours and field lines
+// (src/field-atlas.js), the spawn-drag line, in an expanding universe the Hubble radius and
+// event horizon around the observer, and in the spacetime view the lab box's edges below the
+// plane and its time axis. (The domain's edge is part of the
 // background grid, grid-render.wgsl, so it follows frames.) Everything maps through the
 // camera, which src/spacetime.js routes through the tilt.
 const _PAL = window._PALETTE;
@@ -40,15 +41,17 @@ export default class Overlay {
     };
 
     /**
-     * Clear the canvas, then draw the spacetime view's box (`box`: { view, w, h } when the
-     * view is tilted), the horizons (`horizons`: { center, hubble, event, labels }, physical
-     * lengths) and the drag line, if one is in progress.
+     * Clear the canvas, then draw the field atlas (`atlas`, when the Fields overlay is on), the
+     * spacetime view's box (`box`: { view, w, h, obs, x0, y0 } when the view is tilted), the
+     * horizons (`horizons`: { center, hubble, event, labels }, physical lengths) and the drag
+     * line, if one is in progress.
      */
-    draw(camera, input, horizons = null, box = null) {
+    draw(camera, input, horizons = null, box = null, atlas = null) {
         const ctx = this.ctx;
         const d = this.dpr || 1;
         ctx.setTransform(d, 0, 0, d, 0, 0);
         ctx.clearRect(0, 0, this.width, this.height);
+        if (atlas) atlas.draw(ctx, camera, this.isLight, _FONT.text);
         if (box) this._drawBox(box);
         if (horizons) this._drawHorizons(camera, horizons);
         if (!input || !input.isDragging) return;
