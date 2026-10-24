@@ -1,0 +1,306 @@
+<header class="top">
+  <a class="colophon" href="https://a9l.im/worldline/" aria-label="Worldline">{{SEAL}}<span>Worldline</span></a>
+  <p class="meta">Proposal for the sim overhaul’s second pass · 24 October 2026</p>
+  <h1>A plate of spacetime</h1>
+  <p class="lede">Worldline was the overhaul’s pilot, and the three sims that followed went further. Lumen, Miasma and Shoals are now dense, labelled plates, each with a key, a scale and a numbered figure. Worldline is still grey disks on graph paper and a wireframe box. This pass would make it the most finished of the four: bodies that say what they are, light that shows how far it has travelled, fields that read like a survey sheet, and a spacetime view drawn like a figure from a relativity textbook. Every figure below is a live sketch with a Today and a Proposed drawing of the same scene.</p>
+</header>
+
+<section id="now" aria-labelledby="h-now">
+  <h2 id="h-now">Where it stands <span class="sub">after a pass through all 24 presets</span></h2>
+  <div class="prose">
+    <p>I ran every preset in plane and spacetime views, in both themes and at phone width, and set Worldline beside its siblings. The spacetime view is the best thing on the page: in lab coordinates with a boost set, the observer’s tilted present cutting the world lines is a picture no textbook animates. Around it the scene says little. In most presets the eye finds identical grey disks, thick smudged trails, and a caption that repeats the preset’s description.</p>
+  </div>
+  <div class="now">
+    <figure><img src="{{THUMB:now-plane}}" alt="Worldline today, plane view of the cyclotron preset: grey disks with grey trails on graph paper." loading="lazy"><figcaption>Worldline, cyclotron drift. Charges of both signs, drawn alike.</figcaption></figure>
+    <figure><img src="{{THUMB:now-st}}" alt="Worldline today, spacetime view: grey world lines rising to a translucent plane." loading="lazy"><figcaption>Worldline tilted: a clean wireframe with nothing named.</figcaption></figure>
+    <figure><img src="{{THUMB:now-lumen}}" alt="Lumen: a labelled membrane cross-section over a transit map of the carbon network." loading="lazy"><figcaption>Lumen: every complex labelled, a key in the margin.</figcaption></figure>
+    <figure><img src="{{THUMB:now-miasma}}" alt="Miasma: an epidemiological atlas plate with isochrones, a reference cartouche and a scale bar." loading="lazy"><figcaption>Miasma: a plate, with a reference key, a scale and labels.</figcaption></figure>
+  </div>
+  <div class="cols diag">
+    <table class="binds">
+      <caption>What the scene doesn’t say</caption>
+      <tbody>
+        <tr><td>Which bodies are charged</td><td>Charge tints a body |q|/5 of the way from graphite to its ink, so a unit charge is 20% tinted. Cyclotron’s “charges of both signs” look identical.</td></tr>
+        <tr><td>Which body is selected</td><td>Nothing marks it in the plane view, though the caption calls it “the red body”. Only its world line turns red once tilted.</td></tr>
+        <tr><td>Where the light is</td><td>Photons are 2-pixel dots. Bremsstrahlung and Hawking evaporation don’t visibly show their own subject.</td></tr>
+        <tr><td>What the fields are doing</td><td>The axion draws as a pixel maze, the Higgs presets show no Higgs field, and a uniform B fills the screen with ⊗.</td></tr>
+        <tr><td>What anything is called</td><td>No labels, no key, no scale. The siblings have all three.</td></tr>
+      </tbody>
+    </table>
+    <div class="notes">
+      <div><p class="label">What already works</p><p>The colophon, the caption bar, the margin on the site’s paper, the inks, the Plane and Spacetime tilt, the boost, the proper-time beads on world lines, and the lensed star field in the microlensing preset. None of it changes; the proposal builds on it.</p></div>
+      <div><p class="label">Why it lags</p><p>As the pilot, Worldline settled the shared chrome and the 3D camera. Its siblings then spent their effort on the scene itself. This pass gives Worldline that same effort.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="bodies" aria-labelledby="h-bodies">
+  <h2 id="h-bodies">Bodies that say what they are <span class="sub">and trails that are world lines</span></h2>
+  <div class="prose">
+    <p>Each body becomes a small glyph, drawn like the molecules in Lumen: a lighter body inside a darker outline. Charge gets its full ink at any nonzero value, plus a + or − mark, so the sign survives in grey. Antimatter is hollow, the hole in Dirac’s sea. A black hole becomes the darkest thing on the page in both themes, with its ergosphere dashed at 2M. The gap between the dashed ring and the horizon at r₊ then reads the spin directly. A tick on the rim turns with proper time.</p>
+    <p>The trail stops being a separate drawing. It becomes the plane view of the world line: a hairline with a bead every equal step of the body’s own time. Then the plane view is the spacetime view seen from straight above, as AGENTS.md already says it is, and the tilt raises the trails into world lines instead of fading one drawing out and another in.</p>
+  </div>
+  <figure class="fig">
+    <div class="frame">
+      <canvas id="cv-bodies" class="cross" role="img" aria-label="An atom, positronium, a neutral body and a spinning black hole with an orbiting body, drawn today and as proposed."></canvas>
+      <div class="colo" aria-hidden="true">{{SEAL}}<span>Worldline</span></div>
+    </div>
+    <div class="bar">
+      <p class="cap"><span class="n">Fig. 1</span><span id="cap-bodies">Proposed.</span></p>
+      <div class="ctl">
+        <span class="seg" role="group" aria-label="Drawing"><button class="b" id="bd-today" type="button" aria-pressed="false">Today</button><button class="b" id="bd-prop" type="button" aria-pressed="true">Proposed</button></span>
+        <button class="b" id="pp-bodies" type="button">Pause</button>
+      </div>
+    </div>
+  </figure>
+  <div class="cols">
+    <table class="binds">
+      <caption>Bound to the model</caption>
+      <thead><tr><th scope="col">On the canvas</th><th scope="col">Reads</th></tr></thead>
+      <tbody>
+        <tr><td>Ink and mark</td><td>The sign of the charge: + in sienna, − in prussian, no mark and graphite when neutral. |q| goes in the label and the Particle tab.</td></tr>
+        <tr><td>A hollow body</td><td>Antimatter. It replaces the dashed ring.</td></tr>
+        <tr><td>Void and dashed ring</td><td>The horizon r₊ = M + √(M² − a² − Q²) and the equatorial ergosphere at 2M. They coincide when the hole doesn’t spin and part as it spins up.</td></tr>
+        <tr><td>Rim tick</td><td>Proper time, as the spoke does today. It moves to the rim so the sign mark can sit at the centre.</td></tr>
+        <tr><td>Beads along the trail</td><td>Equal steps of the body’s own time. Their spacing in the plane is its speed times γ times the step.</td></tr>
+        <tr><td>The red ring</td><td>The selected body, in the plane view too. Its trail turns red with it.</td></tr>
+      </tbody>
+    </table>
+    <div class="notes">
+      <div><p class="label">Build</p><p>In <code>particle.wgsl</code>: an antialiased edge from <code>fwidth</code> in place of the hard discard, the outline, the sign mark and the hollow fill, all in the rest frame, so they contract with the disk. The black hole takes a void ink instead of the text colour. Trails come from the world-line ring through <code>spacetime-render.wgsl</code>’s line pipeline at el = π/2, which retires <code>trail-render.wgsl</code>; the ring holds 128 time units, more than any trail needs. Selection gets a ring in <code>ring-render.wgsl</code>.</p></div>
+      <div><p class="label">What it fixes</p><p>The charge tint, the white black hole in the dark theme, its faceted trail, the unmarked selection, and the jagged disk edges at a pixel ratio of 1.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="light" aria-labelledby="h-light">
+  <h2 id="h-light">Light you can see <span class="sub">kinked field lines, photons as wave packets</span></h2>
+  <div class="prose">
+    <p>Worldline already gives every charge its full Liénard–Wiechert field, so the radiation is there in the forces, but nothing on the canvas shows it. Purcell’s textbook drawing shows it in one picture. When a charge changes course, its field lines bend on a circle that grows at c. Outside the circle the field still points to where the charge would be had nothing happened; inside, it points to where the charge is. The bend is the radiation. Drawing the field lines from the charges would put that picture on the canvas wherever a charge accelerates. In the cyclotron preset Worldline opens on, every charge would trail a spiral of kinks, one turn per orbit.</p>
+    <p>The photons ride those circles. Each one becomes a short wave packet, so its wavelength reads its energy and its ink reads its Doppler shift. A blueshifted photon is indigo with tight wiggles, and a redshifted one is sienna and loose.</p>
+  </div>
+  <figure class="fig">
+    <div class="frame">
+      <canvas id="cv-light" class="cross" role="img" aria-label="An electron circling in a uniform field, or deflected by a nucleus; its field lines kink on circles growing at the speed of light, and photons travel with the kinks."></canvas>
+      <div class="colo" aria-hidden="true">{{SEAL}}<span>Worldline</span></div>
+    </div>
+    <div class="bar">
+      <p class="cap"><span class="n">Fig. 2</span><span id="cap-light">Proposed.</span></p>
+      <div class="ctl">
+        <span class="seg" role="group" aria-label="Scene"><button class="b" id="lt-orbit" type="button" aria-pressed="true">Orbit</button><button class="b" id="lt-fly" type="button" aria-pressed="false">Fly-by</button></span>
+        <span class="seg" role="group" aria-label="Drawing"><button class="b" id="lt-today" type="button" aria-pressed="false">Today</button><button class="b" id="lt-prop" type="button" aria-pressed="true">Proposed</button></span>
+        <button class="b" id="pp-light" type="button">Pause</button>
+      </div>
+    </div>
+  </figure>
+  <div class="cols">
+    <table class="binds">
+      <caption>Bound to the model</caption>
+      <thead><tr><th scope="col">On the canvas</th><th scope="col">Reads</th></tr></thead>
+      <tbody>
+        <tr><td>A kink in the field lines</td><td>An acceleration, on its light sphere: its radius is c times the time since.</td></tr>
+        <tr><td>Field-line density</td><td>|E|, with a number of lines proportional to the charge.</td></tr>
+        <tr><td>Lines bunched sideways</td><td>A moving charge’s field, compressed toward its transverse plane by γ.</td></tr>
+        <tr><td>A photon’s wavelength</td><td>Its energy: shorter wiggles carry more.</td></tr>
+        <tr><td>A photon’s ink</td><td>Its Doppler factor against the emitter’s rest frame, from sienna through graphite to indigo.</td></tr>
+      </tbody>
+    </table>
+    <div class="notes">
+      <div><p class="label">Build</p><p>The heatmap grid already evaluates the Liénard–Wiechert E to get Bz. Read it back every few frames, trace lines on the CPU from seeds around each charge (proportional to |q|), and draw them on the overlay canvas, which already draws through the tilt. That reuses this sketch’s code. Photons become oriented quads in <code>boson-render.wgsl</code>, with the wave drawn in the fragment shader.</p></div>
+      <div><p class="label">To measure first</p><p>The grid’s resolution sets how sharp a kink can be. At 128² over the view a cell is about 10 px, which should hold, but bremsstrahlung’s kinks are thin. If they blur, lines near a recent acceleration can be traced through the exact field instead.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="plate" aria-labelledby="h-plate">
+  <h2 id="h-plate">The spacetime view as a plate <span class="sub">a cone that reads as a cone, named events, a key</span></h2>
+  <div class="prose">
+    <p>Tilted, Worldline is already a spacetime diagram. It can be drawn with the conventions of one. The past light cone gets its two silhouette lines and dashed back arcs, so it reads as a solid. Lines under the sheet of the present are seen through it, lighter, so the sheet reads as a surface. Events are marked: departures, turnarounds, reunions, emissions and absorptions. The bodies that matter are named on the plate with their proper times. A key lists what the scene contains, a dimension line along the plane’s front edge gives the scale of space, and the time axis gives the scale of time.</p>
+    <p>The twin paradox is the test case, with light pulses passing between the twins. It is Bondi’s argument made visible. Home’s pulses reach the traveller every eight of its time on the way out and every two on the way back, and the beads and circles on the red world line count it out.</p>
+  </div>
+  <figure class="fig">
+    <div class="frame">
+      <canvas id="cv-plate" class="grab plate-tall" role="img" aria-label="The twin paradox in spacetime: two world lines, light pulses between them, the traveller's past light cone, events and a key."></canvas>
+      <div class="colo" aria-hidden="true">{{SEAL}}<span>Worldline</span></div>
+    </div>
+    <div class="bar">
+      <p class="cap"><span class="n">Fig. 3</span><span id="cap-plate">Proposed.</span></p>
+      <div class="ctl">
+        <span class="seg" role="group" aria-label="View"><button class="b" id="pl-plane" type="button" aria-pressed="false">Plane</button><button class="b" id="pl-st" type="button" aria-pressed="true">Spacetime</button></span>
+        <span class="seg" role="group" aria-label="Drawing"><button class="b" id="pl-today" type="button" aria-pressed="false">Today</button><button class="b" id="pl-prop" type="button" aria-pressed="true">Proposed</button></span>
+        <button class="b" id="pp-plate" type="button">Pause</button>
+      </div>
+    </div>
+  </figure>
+  <style>
+    .frame canvas.plate-tall { aspect-ratio: 16 / 10; }
+    @media (max-width: 640px) { .frame canvas.plate-tall { aspect-ratio: 3 / 4; } }
+  </style>
+  <div class="cols">
+    <table class="binds">
+      <caption>Bound to the model</caption>
+      <thead><tr><th scope="col">On the canvas</th><th scope="col">Reads</th></tr></thead>
+      <tbody>
+        <tr><td>Two lines from the apex</td><td>The cone’s silhouette, where sin(φ + az) = tan(el). Below 45° of elevation the back arcs are dashed.</td></tr>
+        <tr><td>Circles on a world line</td><td>Events: a pulse received, a departure, a turnaround, a reunion, a merge, an absorption.</td></tr>
+        <tr><td>Lighter under the sheet</td><td>Lying behind the present as the camera sees it.</td></tr>
+        <tr><td>Labels with τ</td><td>The body’s proper time since the preset’s marked event.</td></tr>
+        <tr><td>Dimension line, time axis</td><td>The scales of space and time, at one scale, so light keeps to 45°.</td></tr>
+        <tr><td>The key</td><td>Only what the scene contains, built from what is alive and which overlays are on.</td></tr>
+      </tbody>
+    </table>
+    <div class="notes">
+      <div><p class="label">Build</p><p>The cone in <code>vs_cone</code> splits each ring at the silhouette angles and dashes the back half; the generators are two more strips. Hidden-line lightening is a test against the projected plane in <code>vs_line</code>. Events come from what the sim already reports: merge results, deaths, boson emission and absorption (<code>emitterId</code>), and per-preset marks such as the twin presets’ turnaround. The overlay canvas draws the labels, the key and the dimension line.</p></div>
+      <div><p class="label">Also</p><p>Observer coordinates refit the camera to the sheared scene, which today drifts off the top and right of the frame. Pion exchange, drawn this way, becomes a Feynman diagram in real space: nucleon world lines with pion lines between them, each beaded by its own clock.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="fields" aria-labelledby="h-fields">
+  <h2 id="h-fields">Fields drawn like an atlas <span class="sub">contours, field lines, symbols, hatching</span></h2>
+  <div class="prose">
+    <p>The Fields overlay today is a texture: a wash by sign, line-integral noise combed along the field, and stippled ⊙ and ⊗. It reads as weather. These drawings are what a survey office or a physics text would print. Potentials are contours, with index contours heavier and labelled and gravity’s wells ticked downhill like the depression contours on a map. The electric field becomes field lines, with equipotentials solid where positive and dashed where negative. The magnetic field stays ⊙ and ⊗ on an octave lattice that opens up where the field is weak. The scalar fields are hatched by vacuum, with the walls drawn as contours. Every field stays inside the domain.</p>
+  </div>
+  <figure class="fig">
+    <div class="frame">
+      <canvas id="cv-fields" role="img" aria-label="A field overlay in four modes: gravitational potential contours, electric field lines, magnetic field symbols, and Higgs domains after a quench."></canvas>
+      <div class="colo" aria-hidden="true">{{SEAL}}<span>Worldline</span></div>
+    </div>
+    <div class="bar">
+      <p class="cap"><span class="n">Fig. 4</span><span id="cap-fields">Proposed.</span></p>
+      <div class="ctl">
+        <span class="seg" role="group" aria-label="Field"><button class="b" id="fd-grav" type="button" aria-pressed="true">Gravity</button><button class="b" id="fd-elec" type="button" aria-pressed="false">Electric</button><button class="b" id="fd-mag" type="button" aria-pressed="false">Magnetic</button><button class="b" id="fd-higgs" type="button" aria-pressed="false">Higgs</button></span>
+        <button class="b" id="pp-fields" type="button">Pause</button>
+      </div>
+    </div>
+  </figure>
+  <div class="cols">
+    <table class="binds">
+      <caption>Bound to the model</caption>
+      <thead><tr><th scope="col">On the canvas</th><th scope="col">Reads</th></tr></thead>
+      <tbody>
+        <tr><td>Contour spacing</td><td>The potential’s slope. Levels step geometrically, so wells don’t black out.</td></tr>
+        <tr><td>Ticks on a contour</td><td>Downhill, toward the mass. Their length grows with |∇Φ|.</td></tr>
+        <tr><td>Field lines</td><td>E’s direction, with their density reading its strength. They start on + and end on −.</td></tr>
+        <tr><td>Solid or dashed</td><td>The sign of a potential, so it survives in grey.</td></tr>
+        <tr><td>Lattice density of ⊙ ⊗</td><td>|Bz|, one octave per factor of five. A uniform field is an even, open lattice.</td></tr>
+        <tr><td>Hatching direction</td><td>Which vacuum a scalar field fell to. The wall is the φ = 0 contour.</td></tr>
+      </tbody>
+    </table>
+    <div class="notes">
+      <div><p class="label">Build</p><p>Contours, ticks and labels come from a grid readback on the overlay canvas, as in Fig. 2: marching squares on the 128² grid every few frames costs about a millisecond. The ⊙ ⊗ octave lattice and the hatching stay in their shaders (<code>heatmap-render</code>, <code>field-render</code>), with thresholds per octave and both signs hatched.</p></div>
+      <div><p class="label">The axion maze</p><p><code>field-render.wgsl</code> draws an axion contour every 0.05 whatever the field’s range. Grid-scale noise far above 0.05 turns every cell into a contour, and the hatch flips sign cell by cell. An interval set from the field’s RMS, and a sign read from the smoothed value, fix it.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="chrome" aria-labelledby="h-chrome">
+  <h2 id="h-chrome">Around the scene <span class="sub">caption, key, margin</span></h2>
+  <div class="split">
+    <ul>
+      <li><strong>A numbered figure with live values, in every preset.</strong> Lumen and Miasma caption “Fig. 1.” and state what you are looking at with its numbers. Worldline does this for a few presets; most repeat their description. Each of the 24 presets gets a caption builder. Kepler’s, for example, would give the planets’ periods and how well energy is holding.</li>
+      <li><strong>A key in the scene’s corner.</strong> As in Fig. 1, listing only what is present and which overlays are on. It hides with the grid (G).</li>
+      <li><strong>A scale bar in the plane view,</strong> snapping to 1, 2 and 5. The dimension line and time axis take over when tilted.</li>
+      <li><strong>One red.</strong> Force arrows and clock arcs use the accent today. Arrows move to the text ink as hairlines and clock arcs to the body’s ink, so red means the selection and nothing else.</li>
+    </ul>
+    <ul>
+      <li><strong>One ink per force, in the margin and the scene.</strong> Gravity’s switch is umber, but its potential is drawn in graphite. Relativity and 1PN share sienna with positive charge. The Forces section becomes the legend: each row shows its ink and its line pattern beside its switch, as Lumen’s Lines list does.</li>
+      <li><strong>Lighter switches.</strong> A switch that is on gets a thick black outline today. It becomes a hairline with an ink fill.</li>
+      <li><strong>One row on a phone.</strong> At 390 px the top-right controls wrap to a second row over the scene. Speed and language fold into the Controls sheet.</li>
+      <li><strong>Labels on the bodies</strong> where a preset names them: the nucleus, the home twin, the traveller, the black hole with its spin. Each preset authors a few, placed with the collision check Miasma uses for its isochrones.</li>
+    </ul>
+  </div>
+  <div class="legend-mock" aria-label="Sketch of the Forces section as a legend">
+    <p class="label">Forces, as a legend</p>
+    <div class="lrow"><span class="sw" style="--c: var(--muted)"><i class="solid"></i></span><span>Gravity</span><span class="pat">contours, ticked</span><span class="tg on" style="--c: var(--muted)"></span></div>
+    <div class="lrow"><span class="sw" style="--c: var(--ink-prussian)"><i class="lines"></i></span><span>Coulomb</span><span class="pat">field lines; ± dashed</span><span class="tg on" style="--c: var(--ink-prussian)"></span></div>
+    <div class="lrow"><span class="sw" style="--c: var(--ink-verdigris)"><i class="sym">⊗</i></span><span>Magnetic</span><span class="pat">⊙ ⊗ lattice</span><span class="tg on" style="--c: var(--ink-verdigris)"></span></div>
+    <div class="lrow"><span class="sw" style="--c: var(--ink-madder)"><i class="dash"></i></span><span>Gravitomagnetic</span><span class="pat">dashed contours</span><span class="tg" style="--c: var(--ink-madder)"></span></div>
+    <div class="lrow"><span class="sw" style="--c: var(--ink-viridian)"><i class="dot"></i></span><span>Yukawa</span><span class="pat">dotted contours</span><span class="tg" style="--c: var(--ink-viridian)"></span></div>
+    <div class="lrow"><span class="sw" style="--c: var(--ink-sap)"><i class="hatch"></i></span><span>Higgs</span><span class="pat">hatched by vacuum</span><span class="tg" style="--c: var(--ink-sap)"></span></div>
+  </div>
+  <style>
+    .legend-mock { margin-top: 34px; max-width: 520px; border-top: 1px solid var(--rule-strong); padding-top: 10px; }
+    .lrow { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto 34px; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--rule); font-size: 17px; }
+    .lrow .pat { font-style: italic; color: var(--muted); font-size: 14.5px; }
+    .lrow kbd { font: inherit; font-size: 13.5px; color: var(--text2); border: 1px solid var(--rule); padding: 0 6px; text-align: center; }
+    .sw { display: block; height: 14px; position: relative; color: var(--c); }
+    .sw i { position: absolute; inset: 0; font-style: normal; }
+    .sw .solid { border-top: 1px solid var(--c); top: 7px; }
+    .sw .dash { border-top: 1px dashed var(--c); top: 7px; }
+    .sw .dot { border-top: 1.5px dotted var(--c); top: 7px; }
+    .sw .lines { background: linear-gradient(var(--c), var(--c)) 0 3px / 100% 1px no-repeat, linear-gradient(var(--c), var(--c)) 0 10px / 100% 1px no-repeat; }
+    .sw .sym { font-size: 15px; line-height: 14px; text-align: center; }
+    .sw .hatch { background: repeating-linear-gradient(45deg, var(--c) 0 1px, transparent 1px 5px); }
+    .tg { width: 30px; height: 14px; border: 1px solid var(--rule-strong); position: relative; }
+    .tg::after { content: ""; position: absolute; top: 3px; left: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+    .tg.on { background: color-mix(in oklab, var(--c) 22%, transparent); border-color: var(--c); }
+    .tg.on::after { left: auto; right: 3px; background: var(--c); }
+  </style>
+</section>
+
+<section id="bugs" aria-labelledby="h-bugs">
+  <h2 id="h-bugs">Found on the way <span class="sub">fixes that don’t wait on design</span></h2>
+  <div class="bugs">
+    <figure><img src="{{THUMB:bug-axion}}" alt="The axion overlay as a blocky maze of ochre hatching on lavender." loading="lazy"><figcaption><strong>Axion maze.</strong> A fixed contour interval meets grid-scale noise (axion, axion burst).</figcaption></figure>
+    <figure><img src="{{THUMB:bug-wallpaper}}" alt="The cyclotron preset with fields on, covered edge to edge in small crossed circles." loading="lazy"><figcaption><strong>⊗ wallpaper.</strong> A uniform B fills every 16 px lattice site.</figcaption></figure>
+    <figure><img src="{{THUMB:bug-hole}}" alt="A black hole drawn as a white disk on the dark theme, with a faceted trail." loading="lazy"><figcaption><strong>White hole.</strong> The horizon takes the text colour; its trail is faceted.</figcaption></figure>
+    <figure><img src="{{THUMB:bug-select}}" alt="The atom preset with a selected electron that looks like every other body." loading="lazy"><figcaption><strong>Invisible selection.</strong> The caption says “the red body”; nothing is red.</figcaption></figure>
+    <figure><img src="{{THUMB:bug-observer}}" alt="Observer coordinates with the sheared scene drifting off the top and right of the frame." loading="lazy"><figcaption><strong>Observer drift.</strong> The sheared scene leaves the frame; no refit.</figcaption></figure>
+    <figure><img src="{{THUMB:bug-expansion}}" alt="The expanding-universe preset tilted, with world lines running off the frame." loading="lazy"><figcaption><strong>Expansion, tilted.</strong> The framing is lost under expansion.</figcaption></figure>
+    <figure><img src="{{THUMB:bug-misalign}}" alt="The misalignment preset tilted: world lines drawn as long horizontal strokes on a lavender wash." loading="lazy"><figcaption><strong>Misalignment, tilted.</strong> World lines draw as horizontal strokes.</figcaption></figure>
+    <figure><img src="{{THUMB:bug-potential}}" alt="A blue potential wash with a hard circular edge around an electron." loading="lazy"><figcaption><strong>Hard wash edge.</strong> The tint flips hue where the net potential changes sign.</figcaption></figure>
+  </div>
+  <div class="tablewrap">
+    <table class="plan">
+      <thead><tr><th scope="col">Also</th><th scope="col">Where</th></tr></thead>
+      <tbody>
+        <tr><td>Higgs presets show no field</td><td>A calm Higgs field draws nothing by design (<code>field-render.wgsl</code>), so the Higgs mechanism and Higgs boson presets look like plain bodies.</td></tr>
+        <tr><td>Fields fill the whole canvas</td><td>The comb and the wash run past the domain’s edge in the plane view.</td></tr>
+        <tr><td>Red spent three ways</td><td>Force arrows and clock arcs use the accent as well as the selection.</td></tr>
+        <tr><td>Phone top bar wraps</td><td>The second row overlaps the scene at 390 px.</td></tr>
+        <tr><td>Static captions</td><td>Most presets’ plane-view captions repeat their description, with no values.</td></tr>
+        <tr><td>Framing</td><td>Kepler sits off-centre; the twin presets are two dots on a mostly empty plane.</td></tr>
+        <tr><td>AGENTS.md count</td><td>It says 23 presets; <code>PRESET_ORDER</code> has 24, and the about panel says 24.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <style>
+    .bugs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; margin-top: 26px; }
+    .bugs figure { margin: 0; display: grid; gap: 7px; align-content: start; }
+    .bugs img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; border: 1px solid var(--rule); }
+    .bugs figcaption { font-size: 15px; line-height: 1.4; color: var(--muted); font-style: italic; }
+    .bugs figcaption strong { font-style: normal; font-weight: 600; color: var(--text); }
+    .diag { margin-top: 44px; }
+    code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: .84em; }
+    @media (max-width: 900px) { .bugs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  </style>
+</section>
+
+<section id="order" aria-labelledby="h-order">
+  <h2 id="h-order">Order of work</h2>
+  <ol class="steps">
+    <li><strong>Fixes first.</strong> The axion interval, the plane-view selection, the void ink, the observer refit, expansion and misalignment when tilted, fields kept to the domain, red only for the selection, the phone bar. Each is small and stands alone.</li>
+    <li><strong>Bodies and trails</strong> (Fig. 1). The glyph shader, trails drawn from the world-line ring, the selection ring.</li>
+    <li><strong>The plate’s furniture.</strong> Live captions for all 24 presets, the key, the scale bar, and per-preset labels.</li>
+    <li><strong>The spacetime plate</strong> (Fig. 3). The cone’s silhouette and back arcs, events, lines lightened under the sheet.</li>
+    <li><strong>Light</strong> (Fig. 2). Photon wave packets first, then field lines from the grid readback.</li>
+    <li><strong>The atlas</strong> (Fig. 4). Contours with ticks and labels, the octave lattice, hatched vacua.</li>
+    <li><strong>The margin as a legend,</strong> lighter switches, one ink per force.</li>
+  </ol>
+  <div class="prose" style="margin-top: 26px">
+    <p>After step 1 some of this can run in parallel lanes, as the first round did, but lanes have to split by file: steps 2 and 4 share <code>spacetime-render.wgsl</code>, and steps 3, 5 and 6 share the overlay canvas. Every step is drawing only and leaves the physics alone, so the oracle page should pass unchanged; it runs once on the final candidate anyway. Each step ships with light, dark and phone screenshots, a console check and the frame rate on the default preset.</p>
+  </div>
+</section>
+
+<section id="decide" aria-labelledby="h-decide">
+  <h2 id="h-decide">For you to decide</h2>
+  <div class="qs">
+    <div><h3>Trails as world lines, always?</h3><p>Retiring the trail pass makes the tilt continuous and removes a pipeline. Trails would lose their thickness, which some presets (magnetic, nucleus) use to read as tangles. I’d retire it.</p></div>
+    <div><h3>Field lines in place of the comb?</h3><p>Lines read direction and strength and show radiation; the comb reads texture. I’d replace the comb for E and keep it for gravity only if contours alone feel too sparse.</p></div>
+    <div><h3>How much labelling per preset?</h3><p>A few authored labels per preset (24 small additions) or none, only the key. Labels are where Lumen and Miasma feel finished, so I’d author them.</p></div>
+    <div><h3>Fix first, or design first?</h3><p>Step 1 is independent and could ship this week on its own, before you’ve looked at any of the rest.</p></div>
+  </div>
+</section>
+
+<footer>The sketches are toy models standing in for Worldline’s engine; the drawing is what carries over. Their sources would move to <code>docs/sim-overhaul/</code> beside the first round’s if this is ratified.</footer>
