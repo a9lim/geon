@@ -57,6 +57,11 @@ export default class Caption {
         } else if (sim.spacetime.tilt > 0.5) {
             const D = sim.spacetime.depth();
             text += L.spacetime(Math.round(D), 2 ** Math.round(Math.log2(D / 14)));
+        } else if (this._preset.value !== 'none') {
+            // Seen from above, a preset says what it shows
+            const key = 'preset.' + this._preset.value + '.desc';
+            const desc = window._i18n ? window._i18n.t(key, '') : '';
+            text += desc && desc !== key ? desc + '.' : L.plane(n, this._touch);
         } else {
             text += L.plane(n, this._touch);
         }

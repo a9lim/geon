@@ -120,7 +120,7 @@ export default class GPUBackend {
     }
 
     step(sim) {
-        this.physics.setCamera(sim.camera);
+        this.physics.setCamera(sim.spacetime ? sim.spacetime.planeBox() : sim.camera);
         const substeps = Math.floor(sim.accumulator / PHYSICS_DT);
         if (substeps > 0) {
             this._advance(sim, PHYSICS_DT * substeps);
@@ -236,9 +236,9 @@ export default class GPUBackend {
             const hmBufs = this.physics.getHeatmapBuffers();
             if (hmBufs) {
                 renderOpts.heatmapBuffers = hmBufs;
-                const cam = sim.camera;
-                const viewW = sim.width / cam.zoom;
-                const viewH = sim.height / cam.zoom;
+                const cam = sim.spacetime ? sim.spacetime.planeBox() : sim.camera;
+                const viewW = cam.viewportW / cam.zoom;
+                const viewH = cam.viewportH / cam.zoom;
                 const hmMode = sim.heatmap.mode;
                 const ho = sim._heatmapOpts;
                 ho.viewLeft = cam.x - viewW / 2;
@@ -248,6 +248,7 @@ export default class GPUBackend {
                 ho.doGravity = ph.gravityEnabled && (hmMode === 'all' || hmMode === 'gravity');
                 ho.doCoulomb = ph.coulombEnabled && (hmMode === 'all' || hmMode === 'electric');
                 ho.doYukawa = ph.yukawaEnabled && (hmMode === 'all' || hmMode === 'yukawa');
+                ho.tilt = view ? view.tilt : 0;
             }
         }
 

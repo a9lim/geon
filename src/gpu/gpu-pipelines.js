@@ -9,7 +9,7 @@
  */
 
 /** Shader version — bump to invalidate browser cache after shader edits */
-const SHADER_VERSION = 124;
+const SHADER_VERSION = 129;
 
 /** Fetch a WGSL shader file relative to src/gpu/shaders/ */
 export async function fetchShader(filename, prepend = '') {
@@ -1924,6 +1924,7 @@ export async function createFieldRenderPipeline(device, format, isLight, wgslCon
         entries: [
             { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
             { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+            { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },  // camera (the plane's inverse)
         ],
     });
 
@@ -1962,6 +1963,7 @@ export async function createHeatmapRenderPipeline(device, format, isLight, wgslC
             { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
             { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
             { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+            { binding: 4, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },  // camera (the plane's inverse)
         ],
     });
 

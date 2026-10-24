@@ -45,7 +45,7 @@ struct SpacetimeParams {
     topology: i32,      // TOPO_*, or −1 when the boundary is not periodic
     selected: u32,      // the selected slot, or 0xFFFFFFFF
     scaleA: f32,        // cosmological scale factor (samples are comoving)
-    maxParticles: u32,
+    maxParticles: u32,  // slots in use (the alive count's high-water mark)
     s: f32,             // 0 lab coordinates … 1 the observer's
     psi: f32,           // display rapidity, s·atanh|u|
     n: vec2<f32>,       // the observer's direction of motion

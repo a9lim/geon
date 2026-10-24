@@ -154,6 +154,19 @@ fn edgeAlpha(lab: vec2<f32>, fw: vec2<f32>, seams: bool) -> f32 {
     return a;
 }
 
+fn starHash(k: vec2<f32>) -> vec4<f32> {
+    let q = vec2<u32>(vec2<i32>(k) + vec2(1048576));
+    var h = (q.x * 0x9E3779B1u) ^ (q.y * 0x85EBCA77u);
+    var out: vec4<f32>;
+    for (var i = 0; i < 4; i++) {
+        h = (h ^ (h >> 15u)) * 0x2C1B3C6Du;
+        h = (h ^ (h >> 12u)) * 0x297A2D39u;
+        h = h ^ (h >> 15u);
+        out[i] = f32(h & 0xFFFFu) / 65535.0;
+    }
+    return out;
+}
+
 @fragment
 fn fsGrid(in: VertexOutput) -> @location(0) vec4<f32> {
     let ndc = vec2(in.pos.x / camera.canvasWidth * 2.0 - 1.0, 1.0 - in.pos.y / camera.canvasHeight * 2.0);
@@ -182,11 +195,13 @@ fn fsGrid(in: VertexOutput) -> @location(0) vec4<f32> {
     // takes a faint fill and a firmer edge, so the plane reads as a slice above its past
     let tilt = select(grid.tilt, 0.0, camera.frameOn > 0.5);
     var fill = 0.0;
+    var insideMask = 1.0;
     if (tilt > 0.0) {
         let m = fw * 1.5;
         let inside = smoothstep(-m.x, m.x, lab.x) * smoothstep(-m.x, m.x, grid.domainW - lab.x)
                    * smoothstep(-m.y, m.y, lab.y) * smoothstep(-m.y, m.y, grid.domainH - lab.y);
         lines *= mix(1.0, inside, tilt);
+        insideMask = mix(1.0, inside, tilt);
         fill = inside * tilt * select(0.03, 0.045, dark);
         // A periodic domain's seams repeat without end on the flat sheet; tilted, the box is one
         if (grid.periodic != 0u) {
@@ -194,7 +209,27 @@ fn fsGrid(in: VertexOutput) -> @location(0) vec4<f32> {
         }
         edge = edge * mix(1.0, 3.2, tilt);
     }
-    var a = max(max(edge, lines), fill);
+    // The backdrop's stars: a fixed field in backdrop coordinates, so the lens moves, splits
+    // and stretches their images (a star's image grows; its ink does not brighten)
+    var stars = 0.0;
+    if (lensed) {
+        let cell = 4.5 * grid.scaleA;
+        let c = floor(backdrop / cell);
+        let bw = max(length(bfw), 1e-5);
+        for (var oy = -1; oy <= 1; oy++) {
+            for (var ox = -1; ox <= 1; ox++) {
+                let k = c + vec2(f32(ox), f32(oy));
+                let h = starHash(k);
+                if (h.x > 0.3) { continue; }
+                let pos = (k + h.yz) * cell;
+                let r = mix(0.03, 0.08, h.w) * cell;
+                let d = length(backdrop - pos);
+                stars = max(stars, (1.0 - smoothstep(r - bw, r + bw, d)) * mix(0.22, 0.7, h.w * h.w));
+            }
+        }
+        stars *= (1.0 - smoothstep(0.3, 0.7, shadow)) * insideMask;
+    }
+    var a = max(max(max(edge, lines), fill), stars);
     var color = ink * a;
     if (lensed && grid.starOn != 0u) {
         // A captured ray sees no star (the probe doesn't count it either)

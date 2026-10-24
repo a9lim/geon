@@ -34,7 +34,7 @@ const _ringU32 = new Uint32Array(_ringData);
 const _fieldRenderData = new ArrayBuffer(128);
 const _fieldRenderF32 = new Float32Array(_fieldRenderData);
 const _fieldRenderU32 = new Uint32Array(_fieldRenderData);
-const _heatmapRenderData = new ArrayBuffer(64);
+const _heatmapRenderData = new ArrayBuffer(80);
 const _heatmapRenderF32 = new Float32Array(_heatmapRenderData);
 const _heatmapRenderU32 = new Uint32Array(_heatmapRenderData);
 const _spacetimeData = new ArrayBuffer(112);  // SpacetimeParams (spacetime-render.wgsl)
@@ -355,7 +355,7 @@ export default class GPURenderer {
      * points on the observer's present. `st` carries the view's state: { tilt, depth,
      * beadStep, tNow, selected, topology, scaleA, obs, pierce } (src/spacetime.js observer()).
      */
-    _renderSpacetime(textureView, st) {
+    _renderSpacetime(textureView, st, slots) {
         const sp = this._spacetime;
         if (!sp || !st || (st.tilt < 0.002 && !st.pierce)) return;
         const o = st.obs;
@@ -368,7 +368,8 @@ export default class GPURenderer {
         _spacetimeI32[6] = st.topology;
         _spacetimeU32[7] = st.selected >= 0 ? st.selected : 0xFFFFFFFF;
         _spacetimeF32[8] = st.scaleA || 1;
-        _spacetimeU32[9] = this.buffers.maxParticles;
+        // Slots in use: reset() leaves old slots' flags behind, so passes stop at the count
+        _spacetimeU32[9] = slots;
         _spacetimeF32[10] = o.s;
         _spacetimeF32[11] = o.psi;
         _spacetimeF32[12] = o.n[0]; _spacetimeF32[13] = o.n[1];
@@ -395,11 +396,11 @@ export default class GPURenderer {
         pass.draw(4, GPU_MAX_PHOTONS + GPU_MAX_PIONS + GPU_MAX_LEPTONS);
         pass.setPipeline(sp.line);
         pass.setBindGroup(0, sp.lineGroup);
-        pass.draw(4 * (WORLDLINE_LEN + 1), this.buffers.maxParticles);
-        if (st.pierce) {
+        if (slots > 0) pass.draw(4 * (WORLDLINE_LEN + 1), slots);
+        if (st.pierce && slots > 0) {
             pass.setPipeline(sp.pierce);
             pass.setBindGroup(0, sp.pierceGroup);
-            pass.draw(4, this.buffers.maxParticles);
+            pass.draw(4, slots);
         }
         pass.end();
         this.device.queue.submit([enc.finish()]);
@@ -850,7 +851,7 @@ export default class GPURenderer {
         }
 
         // Pass 0a: the spacetime view's world lines, hanging below the present plane
-        if (opts.spacetime) this._renderSpacetime(textureView, opts.spacetime);
+        if (opts.spacetime) this._renderSpacetime(textureView, opts.spacetime, aliveCount);
         const tilt = opts.spacetime ? opts.spacetime.tilt : 0;
 
         // Pass 0b: Trail rendering (behind particles), lab frame only; trails are the plane
@@ -1362,7 +1363,7 @@ export default class GPURenderer {
 
         this._heatmapRenderUniformBuffer = this.device.createBuffer({
             label: 'heatmapRenderUniforms',
-            size: 64, // HeatmapRenderUniforms struct
+            size: 80, // HeatmapRenderUniforms struct
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
 
@@ -1382,6 +1383,7 @@ export default class GPURenderer {
             entries: [
                 { binding: 0, resource: { buffer: fieldBuffer } },
                 { binding: 1, resource: { buffer: this._fieldRenderUniformBuffers[which] } },
+                { binding: 2, resource: { buffer: this.cameraBuffer } },
             ],
         });
     }
@@ -1437,6 +1439,7 @@ export default class GPURenderer {
                     { binding: 1, resource: { buffer: heatmapBuffers.elecPotential } },
                     { binding: 2, resource: { buffer: heatmapBuffers.yukawaPotential } },
                     { binding: 3, resource: { buffer: this._heatmapRenderUniformBuffer } },
+                    { binding: 4, resource: { buffer: this.cameraBuffer } },
                 ],
             });
         }
@@ -1457,6 +1460,9 @@ export default class GPURenderer {
         _heatmapRenderU32[12] = opts.doGravity ? 1 : 0;
         _heatmapRenderU32[13] = opts.doCoulomb ? 1 : 0;
         _heatmapRenderU32[14] = opts.doYukawa ? 1 : 0;
+        _heatmapRenderF32[15] = opts.tilt || 0;
+        _heatmapRenderF32[16] = this._domainW || 1;
+        _heatmapRenderF32[17] = this._domainH || 1;
         this.device.queue.writeBuffer(this._heatmapRenderUniformBuffer, 0, _heatmapRenderData);
 
         pass.setPipeline(this._heatmapRenderPipeline);

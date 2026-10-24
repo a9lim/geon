@@ -109,6 +109,26 @@ export default class SpacetimeView {
         m[28] = -(i00 * tx + i01 * ty); m[29] = -(i10 * tx + i11 * ty); m[30] = 0; m[31] = 1;
     }
 
+    /**
+     * A camera-shaped box ({ x, y, zoom: 1, viewportW, viewportH }) around the part of the
+     * plane on screen, for the potential overlay's grid: the 2D camera itself in the plane
+     * view, or the bounds of the screen's corners mapped onto the tilted plane.
+     */
+    planeBox() {
+        const cam = this.sim.camera;
+        if (!this.tilted && this.az === 0) return cam;
+        const f = this.frame();
+        const pts = [[0, 0], [f.W, 0], [f.W, f.H], [0, f.H]].map(([x, y]) => this.fromScreen(x, y, f));
+        const pad = 0.25 * Math.max(this.sim.physW, this.sim.physH);
+        const xs = pts.map(p => clamp(p.x, -pad, this.sim.physW + pad));
+        const ys = pts.map(p => clamp(p.y, -pad, this.sim.physH + pad));
+        const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+        const b = this._box || (this._box = { zoom: 1 });
+        b.x = (x0 + x1) / 2; b.y = (y0 + y1) / 2;
+        b.viewportW = Math.max(x1 - x0, 1); b.viewportH = Math.max(y1 - y0, 1);
+        return b;
+    }
+
     /** Ease to the plane view (straight down the time axis). */
     toPlane() {
         const quarter = Math.PI / 2;
