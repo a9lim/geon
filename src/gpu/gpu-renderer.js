@@ -1440,6 +1440,7 @@ export default class GPURenderer {
                     { binding: 2, resource: { buffer: heatmapBuffers.yukawaPotential } },
                     { binding: 3, resource: { buffer: this._heatmapRenderUniformBuffer } },
                     { binding: 4, resource: { buffer: this.cameraBuffer } },
+                    { binding: 5, resource: { buffer: heatmapBuffers.magField } },
                 ],
             });
         }
@@ -1463,6 +1464,8 @@ export default class GPURenderer {
         _heatmapRenderF32[15] = opts.tilt || 0;
         _heatmapRenderF32[16] = this._domainW || 1;
         _heatmapRenderF32[17] = this._domainH || 1;
+        _heatmapRenderU32[18] = opts.doMagnetic ? 1 : 0;
+        _heatmapRenderF32[19] = opts.glyphPx || this.zoom;
         this.device.queue.writeBuffer(this._heatmapRenderUniformBuffer, 0, _heatmapRenderData);
 
         pass.setPipeline(this._heatmapRenderPipeline);

@@ -1,5 +1,8 @@
 // ─── Potential Field Heatmap ───
-// 128x128 grid potential from particles. Gravity, Coulomb, Yukawa contributions.
+// 128x128 grid potential from particles. Gravity, Coulomb, Yukawa contributions, and the
+// magnetic field Bz (out of the plane, so a value, not a direction): moving charges
+// (Biot–Savart, or with signal delay B = n̂ × E of the Liénard–Wiechert field), spin
+// dipoles (−μ/r³ in the plane) and the external Bz, as pair-force.wgsl has them.
 // Two entry points:
 //   computeHeatmap:     O(N*GRID²) pairwise, with signal delay support
 //   computeHeatmapTree: O(log(N)*GRID²) BH tree walk, no signal delay (non-periodic only)
@@ -33,8 +36,8 @@ struct HeatmapUniforms {
     useTree: u32,   // 1 when BH tree available
     blackHole: u32,
     scaleA: f32,
-    _pad2: f32,
-    _pad3: f32,
+    doMagnetic: u32,
+    extBz: f32,
 };
 
 // Group 0: particleState + particleAux + treeNodes (read_write for encoder compat)
@@ -46,6 +49,7 @@ struct HeatmapUniforms {
 @group(1) @binding(1) var<storage, read_write> elecPotential: array<f32>;
 @group(1) @binding(2) var<storage, read_write> yukawaPotential: array<f32>;
 @group(1) @binding(3) var<uniform> hu: HeatmapUniforms;
+@group(1) @binding(4) var<storage, read_write> magField: array<f32>;
 
 // Group 2: world lines (only read when useDelay != 0)
 @group(2) @binding(0) var<storage, read_write> wlData: array<f32>;
@@ -100,6 +104,42 @@ fn accumulatePotential(
     }
 }
 
+/**
+ * Bz at the cell from one source at rel = source − cell, moving at coordinate velocity vel
+ * (acceleration acc, for the delayed field's radiation term), with spin angw. Signs as in
+ * pair-force.wgsl: Biot–Savart Bz = −q (v × r)_z/r³, a dipole's in-plane −μ/r³.
+ */
+fn accumulateBz(rel: vec2<f32>, vel: vec2<f32>, acc: vec2<f32>, charge: f32, mass: f32, angw: f32,
+                delayed: bool, bz: ptr<function, f32>) {
+    let rawRSq = dot(rel, rel);
+    let invR = inverseSqrt(rawRSq + hu.softeningSq);
+    let invR3 = invR * invR * invR;
+    if (delayed) {
+        let R = sqrt(rawRSq);
+        if (R > EPSILON) {
+            let n = -rel / R;
+            let kappa = max(1.0 - dot(n, vel), LW_KAPPA_MIN);
+            let k3 = 1.0 / (kappa * kappa * kappa);
+            let sigma = R * invR;
+            let nb = n - vel;
+            let eVel = nb * ((1.0 - dot(vel, vel)) * k3 / (R * R));
+            let cz = nb.x * acc.y - nb.y * acc.x;
+            let eRad = vec2(n.y, -n.x) * (cz * k3 / R);
+            let E = (eVel + eRad) * (charge * sigma * sigma * sigma);
+            *bz += n.x * E.y - n.y * E.x;
+        }
+    } else {
+        *bz -= charge * (vel.x * rel.y - vel.y * rel.x) * invR3;
+    }
+    let bodyRSq = pow(max(mass, EPSILON), 2.0 / 3.0);
+    let angVel = select(angw, angw * inverseSqrt(1.0 + angw * angw * bodyRSq), hu.useDelay != 0u);
+    *bz -= MAG_MOMENT_K * charge * angVel * bodyRSq * invR3;
+}
+
+fn coordVelOf(w: vec2<f32>) -> vec2<f32> {
+    return select(w, w * inverseSqrt(1.0 + dot(w, w)), hu.useDelay != 0u);
+}
+
 /** Liénard–Wiechert κ = 1 − n̂·β at a retarded state, n̂ from the source to the cell. */
 fn lwKappa(ret: Retarded) -> f32 {
     let R = length(ret.rel);
@@ -111,6 +151,7 @@ fn lwKappa(ret: Retarded) -> f32 {
 fn accumulateRetired(
     wx: f32, wy: f32, doG: bool, doC: bool, doY: bool, isPeriodic: bool, yCutSq: f32,
     gPhi: ptr<function, f32>, ePhi: ptr<function, f32>, yPhi: ptr<function, f32>,
+    doM: bool, bz: ptr<function, f32>,
 ) {
     for (var di = 0u; di < hu.particleCount; di++) {
         let dp = particles[di];
@@ -125,6 +166,7 @@ fn accumulateRetired(
         accumulatePotential(ret.rel.x, ret.rel.y, ret.mass, ret.charge, bhSourceRadius(ret.mass, ret.charge),
             lwKappa(ret), doG, doC, doY, hu.softeningSq, yCutSq, hu.yukawaCoupling, hu.yukawaMu,
             gPhi, ePhi, yPhi);
+        if (doM) { accumulateBz(ret.rel, ret.vel, ret.acc, ret.charge, ret.mass, ret.angw, true, bz); }
     }
 }
 
@@ -141,10 +183,12 @@ fn computeHeatmap(@builtin(global_invocation_id) gid: vec3<u32>) {
     var gPhi: f32 = 0.0;
     var ePhi: f32 = 0.0;
     var yPhi: f32 = 0.0;
+    var bz: f32 = hu.extBz;
 
     let doG = hu.doGravity != 0u;
     let doC = hu.doCoulomb != 0u;
     let doY = hu.doYukawa != 0u;
+    let doM = hu.doMagnetic != 0u;
     let useDelay = hu.useDelay != 0u;
     let isPeriodic = hu.periodic != 0u;
     let yCutSq = select(1e30, yukawaCutoffSq(hu.yukawaMu), doY);
@@ -162,24 +206,27 @@ fn computeHeatmap(@builtin(global_invocation_id) gid: vec3<u32>) {
             accumulatePotential(ret.rel.x, ret.rel.y, ret.mass, ret.charge, particleAux[i].radius,
                 lwKappa(ret), doG, doC, doY, hu.softeningSq, yCutSq, hu.yukawaCoupling, hu.yukawaMu,
                 &gPhi, &ePhi, &yPhi);
+            if (doM) { accumulateBz(ret.rel, ret.vel, ret.acc, ret.charge, ret.mass, ret.angw, true, &bz); }
         } else {
             var d = vec2(p.posX - wx, p.posY - wy);
             if (isPeriodic) { d = fullMinImageP(wx, wy, p.posX, p.posY, hu.domainW, hu.domainH, hu.topologyMode); }
             accumulatePotential(d.x, d.y, p.mass, p.charge, particleAux[i].radius, 1.0,
                 doG, doC, doY, hu.softeningSq, yCutSq, hu.yukawaCoupling, hu.yukawaMu,
                 &gPhi, &ePhi, &yPhi);
+            if (doM) { accumulateBz(d, coordVelOf(vec2(p.velWX, p.velWY)), vec2(0.0), p.charge, p.mass, p.angW, false, &bz); }
         }
     }
 
     // Dead/retired particles: signal delay fade-out
     if (useDelay) {
-        accumulateRetired(wx, wy, doG, doC, doY, isPeriodic, yCutSq, &gPhi, &ePhi, &yPhi);
+        accumulateRetired(wx, wy, doG, doC, doY, isPeriodic, yCutSq, &gPhi, &ePhi, &yPhi, doM, &bz);
     }
 
     let idx = gy * HGRID + gx;
     gravPotential[idx] = gPhi;
     elecPotential[idx] = ePhi;
     yukawaPotential[idx] = yPhi;
+    magField[idx] = bz;
 }
 
 // ─── Entry 2: BH tree walk (no signal delay) ───
@@ -279,15 +326,28 @@ fn computeHeatmapTree(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     }
 
+    // Bz has no tree aggregate (moving charges and dipoles): pairwise, as without the tree
+    var bz: f32 = hu.extBz;
+    let doM = hu.doMagnetic != 0u;
+    if (doM) {
+        for (var i = 0u; i < hu.particleCount; i++) {
+            let p = particles[i];
+            if ((p.flags & FLAG_ALIVE) == 0u) { continue; }
+            accumulateBz(vec2(p.posX - wx, p.posY - wy), coordVelOf(vec2(p.velWX, p.velWY)), vec2(0.0),
+                p.charge, p.mass, p.angW, false, &bz);
+        }
+    }
+
     // Dead/retired particles: always pairwise (signal delay needed)
     if (hu.useDelay != 0u) {
-        accumulateRetired(wx, wy, doG, doC, doY, hu.periodic != 0u, yCutSq, &gPhi, &ePhi, &yPhi);
+        accumulateRetired(wx, wy, doG, doC, doY, hu.periodic != 0u, yCutSq, &gPhi, &ePhi, &yPhi, doM, &bz);
     }
 
     let idx = gy * HGRID + gx;
     gravPotential[idx] = gPhi;
     elecPotential[idx] = ePhi;
     yukawaPotential[idx] = yPhi;
+    magField[idx] = bz;
 }
 
 // ─── 3x3 Separable Box Blur ───

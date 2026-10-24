@@ -37,8 +37,8 @@ struct HeatmapRenderUniforms {
     tilt: f32,           // the spacetime view's tilt: tilted, the overlay keeps to the domain
     domainW: f32,
     domainH: f32,
-    _pad0: f32,
-    _pad1: f32,
+    doMagnetic: u32,     // draw Bz as ⊙/⊗
+    glyphPx: f32,        // screen px per world unit on the plane (zoom, times the tilt's fit)
 };
 
 // HGRID provided by generated wgslConstants block.
@@ -63,6 +63,7 @@ struct CameraUniforms {
 @group(0) @binding(2) var<storage, read> yukawaPotential: array<f32>;
 @group(0) @binding(3) var<uniform> ru: HeatmapRenderUniforms;
 @group(0) @binding(4) var<uniform> camera: CameraUniforms;
+@group(0) @binding(5) var<storage, read> magField: array<f32>;
 
 // Fast tanh approximation: x/(1+|x|)
 fn fastTanh(x: f32) -> f32 {
@@ -86,9 +87,12 @@ fn sampleAt(which: u32, g: vec2<f32>) -> f32 {
     } else if (which == 1u) {
         a = elecPotential[i0.y * HGRID + i0.x]; b = elecPotential[i0.y * HGRID + i1.x];
         c = elecPotential[i1.y * HGRID + i0.x]; d = elecPotential[i1.y * HGRID + i1.x];
-    } else {
+    } else if (which == 2u) {
         a = yukawaPotential[i0.y * HGRID + i0.x]; b = yukawaPotential[i0.y * HGRID + i1.x];
         c = yukawaPotential[i1.y * HGRID + i0.x]; d = yukawaPotential[i1.y * HGRID + i1.x];
+    } else {
+        a = magField[i0.y * HGRID + i0.x]; b = magField[i0.y * HGRID + i1.x];
+        c = magField[i1.y * HGRID + i0.x]; d = magField[i1.y * HGRID + i1.x];
     }
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
@@ -134,6 +138,37 @@ fn lic(which: u32, world: vec2<f32>, pxWorld: f32) -> vec2<f32> {
     return vec2(sum / wsum, strength);
 }
 
+// The magnetic field is out of the plane, so it has no direction to comb: it is drawn in
+// the textbook way, ⊙ out of the page and ⊗ into it, on a lattice fixed to the plane. Each
+// site shows with probability 1 − exp(−|Bz|/B0), so the symbols per unit area are
+// proportional to the field where it is weak (field lines per unit area) and fill the
+// lattice where it is strong. World y runs down the screen, so the right-handed z axis
+// points into it: Bz > 0 is ⊗.
+const B0: f32 = 0.04;
+const GLYPH_PX: f32 = 16.0;   // lattice spacing, about this many CSS px (an octave of world units)
+
+fn magGlyph(world: vec2<f32>, pxWorld: f32) -> vec2<f32> {
+    let spacing = exp2(round(log2(GLYPH_PX / max(ru.glyphPx, 1e-6))));
+    let cell = floor(world / spacing);
+    let centre = (cell + 0.5) * spacing;
+    // The site's own field decides it, so a symbol is always whole
+    let B = sampleAt(3u, gridOf(centre));
+    if (hash2(cell + vec2(0.37, 0.71)) >= 1.0 - exp(-abs(B) / B0)) { return vec2(0.0); }
+    let q = (world - centre) / spacing;               // in [−0.5, 0.5]
+    let w = max(pxWorld / spacing, 1e-4);              // one CSS px, in lattice units
+    let aa = w * 0.75;
+    let r = length(q);
+    let R = 0.3;
+    var cover = 1.0 - smoothstep(w * 0.5 - aa, w * 0.5 + aa, abs(r - R));
+    if (B < 0.0) {
+        cover = max(cover, 1.0 - smoothstep(0.075 - aa, 0.075 + aa, r));
+    } else {
+        let diag = min(abs(q.x - q.y), abs(q.x + q.y)) * 0.70710678;
+        cover = max(cover, (1.0 - smoothstep(w * 0.5 - aa, w * 0.5 + aa, diag)) * step(r, R * 0.72));
+    }
+    return vec2(cover, B);
+}
+
 @fragment
 fn fsHeatmapOverlay(in: VertexOutput) -> @location(0) vec4<f32> {
     let css = in.pos.xy / max(camera.dpr, 1.0);
@@ -145,6 +180,19 @@ fn fsHeatmapOverlay(in: VertexOutput) -> @location(0) vec4<f32> {
     }
     // World units per screen px here (foreshortened on a tilted plane)
     let pxWorld = length((camera.invViewMatrix * vec4(ndc + vec2(2.0 / camera.canvasWidth, 0.0), 0.0, 1.0)).xy - world);
+
+    let lt = ru.isLight != 0u;
+    var inside = 1.0;
+    if (ru.tilt > 0.0) {
+        inside = mix(1.0, step(0.0, world.x) * step(world.x, ru.domainW) * step(0.0, world.y) * step(world.y, ru.domainH), ru.tilt);
+    }
+
+    // Bz, in verdigris (the magnetic ink)
+    var glyph = 0.0;
+    // Lighter when the potentials and combed field share the overlay
+    let alone = ru.doGravity == 0u && ru.doCoulomb == 0u && ru.doYukawa == 0u;
+    if (ru.doMagnetic != 0u) { glyph = magGlyph(world, pxWorld).x * select(0.45, 0.8, alone) * inside; }
+    let mag = select(INK_VERDIGRIS_D, INK_VERDIGRIS_L, lt);
 
     var gI = 0.0;
     var eI = 0.0;
@@ -158,10 +206,9 @@ fn fsHeatmapOverlay(in: VertexOutput) -> @location(0) vec4<f32> {
     }
     if (ru.doYukawa != 0u) { yI = abs(fastTanh(sampleAt(2u, g) * ru.sensitivity)); }
     let totalI = gI + eI + yI;
-    if (totalI < 0.001) { return vec4<f32>(0.0); }
+    if (totalI < 0.001) { return vec4<f32>(mag * glyph, glyph); }
 
     // Gravity graphite, electric sienna (+) or prussian (−), Yukawa viridian
-    let lt = ru.isLight != 0u;
     let eColor = select(select(INK_PRUSSIAN_D, INK_PRUSSIAN_L, lt), select(INK_SIENNA_D, INK_SIENNA_L, lt), eSign >= 0.0);
     let rgb = (select(INK_GRAPHITE_D, INK_GRAPHITE_L, lt) * gI + eColor * eI + select(INK_VIRIDIAN_D, INK_VIRIDIAN_L, lt) * yI) / totalI;
     let wash = min(totalI * ru.maxAlpha, 120.0 / 255.0) * 0.55;
@@ -174,10 +221,7 @@ fn fsHeatmapOverlay(in: VertexOutput) -> @location(0) vec4<f32> {
         let reach = fastTanh(sqrt(l.y) * 4.0);
         combed = clamp((l.x - 0.5) * 6.0 + 0.5, 0.0, 1.0) * reach * select(0.55, 0.65, !lt);
     }
-    var alpha = clamp(wash + combed * (1.0 - wash), 0.0, 0.85);
-    if (ru.tilt > 0.0) {
-        let inside = step(0.0, world.x) * step(world.x, ru.domainW) * step(0.0, world.y) * step(world.y, ru.domainH);
-        alpha *= mix(1.0, inside, ru.tilt);
-    }
-    return vec4<f32>(rgb * alpha, alpha);  // premultiplied
+    let alpha = clamp(wash + combed * (1.0 - wash), 0.0, 0.85) * inside;
+    // The symbols lie over the wash and the combing
+    return vec4<f32>(rgb * alpha * (1.0 - glyph) + mag * glyph, alpha * (1.0 - glyph) + glyph);  // premultiplied
 }

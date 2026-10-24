@@ -555,6 +555,26 @@ per stage would land before the whole encoder ran (that bug left Φ ≡ 0 until
   particles from them.
 - `_phase5Ready` holds field dispatches until the async field pipelines exist.
 
+### The Fields overlay
+
+The View section's Fields toggle (with All, Gravity, Electric, Magnetic and Yukawa) draws
+the heatmap grid (`heatmap.wgsl`, the visible plane's box when tilted) through
+`heatmap-render.wgsl`, mapping pixels through the plane's inverse matrix and keeping to the
+domain when tilted:
+
+- **Potentials** as a faint wash by sign and channel (gravity graphite, electric sienna or
+  prussian, Yukawa viridian).
+- **The in-plane field combed**: line integral convolution of noise fixed to the plane along
+  −∇φ (electric when Coulomb is on, else gravity), its contrast reading the field's strength.
+- **Bz as ⊙ and ⊗**: the field is out of the plane, so it has no direction to comb. The grid
+  computes Bz (`magField`) as `pair-force.wgsl` has it: Biot–Savart from moving charges, or
+  with signal delay B = n̂ × E of the Liénard–Wiechert field; the spin dipoles' −μ/r³; and
+  the external Bz. Symbols sit on a lattice fixed to the plane (about 16 px, an octave of
+  world units), each site shown with probability 1 − exp(−|Bz|/B0), B0 = 0.04, so symbols per
+  area are proportional to a weak field and fill the lattice in a strong one. World y runs
+  down the screen, so the right-handed z axis points into it: Bz > 0 is ⊗. The tree-walk path
+  computes Bz pairwise, since moving charges and dipoles have no tree aggregate.
+
 ### Chrome
 
 Worldline was the overhaul's pilot (`../../docs/sim-overhaul/PLAN.md`) and loads neither

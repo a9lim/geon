@@ -3501,6 +3501,9 @@ export default class GPUPhysics {
         _heatmapUniformU32[17] = this._barnesHutEnabled ? 1 : 0; // useTree
         _heatmapUniformU32[18] = this._blackHoleEnabled ? 1 : 0;
         _heatmapUniformF32[19] = this.scaleA;
+        // Bz: from moving charges and spins once Magnetic is on, and the external field
+        _heatmapUniformU32[20] = ((this._magneticEnabled || this._extBz !== 0) && (hm === 'all' || hm === 'magnetic')) ? 1 : 0;
+        _heatmapUniformF32[21] = (hm === 'all' || hm === 'magnetic') ? this._extBz : 0;
         this.device.queue.writeBuffer(this._heatmapUniformBuffer, 0, _heatmapUniformData);
 
         if (!this._heatmapBGs) {
@@ -3525,6 +3528,7 @@ export default class GPUPhysics {
                         { binding: 1, resource: { buffer: hmBuf.elecPotential } },
                         { binding: 2, resource: { buffer: hmBuf.yukawaPotential } },
                         { binding: 3, resource: { buffer: this._heatmapUniformBuffer } },
+                        { binding: 4, resource: { buffer: hmBuf.magField } },
                     ],
                 }),
                 g2: this.device.createBindGroup({
@@ -3559,11 +3563,12 @@ export default class GPUPhysics {
         }
 
         // Blur each active channel
-        const channels = ['gravPotential', 'elecPotential', 'yukawaPotential'];
-        const channelToggles = [this._gravityEnabled, this._coulombEnabled, this._yukawaEnabled];
+        const channels = ['gravPotential', 'elecPotential', 'yukawaPotential', 'magField'];
+        const channelToggles = [this._gravityEnabled, this._coulombEnabled, this._yukawaEnabled,
+            this._magneticEnabled || this._extBz !== 0];
         const hmBuf = this._heatmapBuffers;
 
-        for (let c = 0; c < 3; c++) {
+        for (let c = 0; c < channels.length; c++) {
             if (!channelToggles[c]) continue;
             const chName = channels[c];
             if (!this._heatmapBlurBGs[chName]) {
@@ -4376,6 +4381,7 @@ export default class GPUPhysics {
             const enc = this.device.createCommandEncoder({ label: 'clearReset' });
             if (this._heatmapBuffers) {
                 enc.clearBuffer(this._heatmapBuffers.gravPotential);
+                enc.clearBuffer(this._heatmapBuffers.magField);
                 enc.clearBuffer(this._heatmapBuffers.elecPotential);
                 enc.clearBuffer(this._heatmapBuffers.yukawaPotential);
                 enc.clearBuffer(this._heatmapBuffers.output);

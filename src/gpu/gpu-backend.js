@@ -245,6 +245,8 @@ export default class GPUBackend {
                 ho.doGravity = ph.gravityEnabled && (hmMode === 'all' || hmMode === 'gravity');
                 ho.doCoulomb = ph.coulombEnabled && (hmMode === 'all' || hmMode === 'electric');
                 ho.doYukawa = ph.yukawaEnabled && (hmMode === 'all' || hmMode === 'yukawa');
+                ho.doMagnetic = (ph.magneticEnabled || ph.extBz !== 0) && (hmMode === 'all' || hmMode === 'magnetic');
+                ho.glyphPx = view && view.tilted ? view.frame().kz : sim.camera.zoom;
                 ho.tilt = view ? view.tilt : 0;
             }
         }
